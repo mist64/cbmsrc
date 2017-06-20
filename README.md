@@ -1,10 +1,10 @@
 # Commodore Source Code
 
-This repository collects original source code of various Commodore Business Machines (CBM) computers.
+This repository collects original source code of various Commodore Business Machines (CBM) computers converted to a modern encoding (ASCII, LF, indentation).
 
 ## BASIC_C64
 
-The Commodore 64 BASIC source (901226-01). Extracted from c64-basic.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+The Commodore 64 BASIC source (901226-01). Extracted from c64-basic.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 The source contains the ranges
 
@@ -16,7 +16,7 @@ The checksum byte at $BF52 is 0 and will have to be calculated in a later step.
 
 ## KERNAL_C64
 
-The Commodore 64 KERNAL source, original version (901227-01). Extracted from c64kernal.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+The Commodore 64 KERNAL source, original version (901227-01). Extracted from c64kernal.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 The source contains the ranges
 
@@ -28,7 +28,7 @@ It does not contain the version byte at $FF80 (which is $AA in the binary) or th
 
 ## DOS_1540
 
-The Commodore 1540 DOS source, 325302-01/325303-01. Extracted from 1541-2031-num1.d64 and 1541-2031-source-disk-copy-num2-side1.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and tab indenting.
+The Commodore 1540 DOS source, 325302-01/325303-01. Extracted from 1541-2031-num1.d64 and 1541-2031-source-disk-copy-num2-side1.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 * The source contains both the IEEE-388 and the IEC serial interface code, so it represents both the CBM 2031 and the Commodor 1540. Different `master` source files build different configurations.
 * The power-on message always says "`CBM DOS V2.6 V170`" though, which corresponds to the 1540.
