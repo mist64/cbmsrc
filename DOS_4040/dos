@@ -1,0 +1,18 @@
+ .SKI 3
+;**************************************;
+;*                                    *;
+;*       2030/2040 DUAL FLOPPY        *;
+;*       FILE CONTOLLER  (6502)       *;
+;*       DISK OPERATING SYSTEM        *;
+;*            VERSION  2.1            *;
+;*       RELEASED  FEB. 05, 1980      *;
+;*   MOS 6332 ROMS #901486            *;
+;*                    -11,-12,-13     *;
+;*                                    *;
+;*  COPYRIGHT 1980                    *;
+;*        COMMODORE BUSINESS MACHINES *;
+;*                                    *;
+;*                                    *;
+;**************************************;
+ .SKIP 5
+ .END
