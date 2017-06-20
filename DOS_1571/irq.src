@@ -1,0 +1,33 @@
+	.page  
+	.subttl 'irq.src'   
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+sysirq  jmp  (irqjmp)	;  irq vector ***rom ds 02/01/85***
+
+;	pha		;  save .a
+;	txa		;  save .x
+;	pha
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+        tya      
+        pha      	;  save .y
+
+        lda  ifr1       ;  test if atn
+        and  #2          
+        beq  1$		;  not atn
+
+        jsr  atnirq     ;  handle atn request
+
+1$	lda  ifr2       ;  test if timer
+        asl  a   
+        bpl  2$		;  not timer
+
+        jsr  lcc        ;  goto controller
+
+2$	pla     	;  restore .y,.x,.a
+        tay      
+        pla      
+        tax      
+        pla      
+        rti      

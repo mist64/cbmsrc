@@ -1,0 +1,287 @@
+        .page  
+        .subttl 'lccwrt1.src'
+ 
+;    write out data buffer
+
+jwright cmp  #$10       ;  test if write
+        beq  1$
+
+        jmp  jvrfy        
+
+1$	jsr  chkblk     ;  get block checksum
+	sta  chksum
+
+        lda  dskcnt	;  test for write protect
+        and  #$10
+        bne  2$		;  not  protected
+
+        lda  #8         ;  write protect error
+        jmp  jerrr        
+
+2$	jsr  bingcr     ;  convert buffer to write image
+
+        jsr  jsrch      ;  find header
+
+        ldy  #gap1-2    ;  wait out header gap
+
+3$	bit  pota1
+	bmi  3$
+
+	bit  byt_clr
+
+        dey     	;  test if done yet
+        bne  3$
+
+        lda  #$ff       ;  make output $ff
+        sta  ddra2       
+
+        lda  pcr2	;  set write mode
+        and  #$ff-$e0   ;  0=wr
+	ora  #$c0
+        sta  pcr2
+
+        lda  #$ff       ;  write 4 gcr sync
+        ldy  #numsyn    
+        sta  data2       
+
+4$	bit  pota1
+	bmi  4$
+
+	bit  byt_clr
+
+        dey      
+        bne  4$
+
+; write out overflow buffer
+
+        ldy  #256-topwrt  
+
+5$	lda  ovrbuf,y   ; get a char
+6$	bit  pota1
+	bmi  6$
+
+        sta  data2      ;  stuff it
+
+        iny      
+        bne  5$		;  do next char
+
+			;  write rest of buffer
+
+7$	lda  (bufpnt),y ;  now do buffer
+8$	bit  pota1	;  wait until ready
+	bmi  8$
+
+        sta  data2      ;  stuff it again
+
+        iny      	;  test if done
+        bne  7$		;  do the whole thing
+
+9$	bit  pota1	;  wait for last char to write out
+	bmi  9$
+
+        lda  pcr2	;  goto read mode
+	ora  #$e0
+        sta  pcr2
+
+        lda  #0         ;  make data2 input $00
+        sta  ddra2       
+
+        jsr  jwtobin    ;  convert write image to binary
+
+        ldy  jobn       ;  make job a verify
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	jmp  ptch62	; *** rom ds 01/21/86 ***, chk for verify
+;       lda  jobs,y      
+        eor  #$30        
+        sta  jobs,y      
+
+        jmp  jseak      ;  scan job que
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+
+;    * jwtobin
+;    convert write image back to
+;    binary data
+
+
+jwtobin lda  #0
+	sta  savpnt     
+	sta  bufpnt     ;  lsb for overflow area
+	sta  nxtpnt  
+
+        lda  bufpnt+1   
+        sta  nxtbf      ;  save for next buffer.
+
+        lda  #>ovrbuf	;  overflow first
+        sta  bufpnt+1   ;  msb for overflow area
+        sta  savpnt+1
+
+        lda  #256-topwrt 
+        sta  gcrpnt     ;  offset
+        sta  bytcnt     ;  ditto
+
+        jsr  jget4gb    ;  get first four- id and 3 data
+
+        lda  btab       ;  save bid
+        sta  bid         
+
+        ldy  bytcnt      
+
+        lda  btab+1      
+        sta  (savpnt),y
+        iny      
+
+        lda  btab+2      
+        sta  (savpnt),y
+        iny      
+
+        lda  btab+3      
+        sta  (savpnt),y
+        iny      
+
+        sty  bytcnt      
+
+; do overflow first and store back into overflow buffer
+
+1$	jsr  jget4gb    ; do rest of overflow buffer
+
+        ldy  bytcnt      
+
+        lda  btab        
+        sta  (savpnt),y
+        iny      
+
+        lda  btab+1      
+        sta  (savpnt),y
+        iny      
+        beq  2$
+
+        lda  btab+2      
+        sta  (savpnt),y
+        iny      
+
+        lda  btab+3      
+        sta  (savpnt),y
+        iny      
+
+        sty  bytcnt      
+        bne  1$		;  jmp till end of overflow buffer
+
+2$      lda  btab+2      
+        sta  (bufpnt),y          
+        iny      
+
+        lda  btab+3      
+        sta  (bufpnt),y          
+        iny      
+
+        sty  bytcnt      
+
+3$	jsr  jget4gb      
+
+        ldy  bytcnt      
+
+        lda  btab        
+        sta  (bufpnt),y          
+        iny      
+
+        lda  btab+1      
+        sta  (bufpnt),y          
+        iny      
+
+        lda  btab+2      
+        sta  (bufpnt),y          
+        iny      
+
+        lda  btab+3      
+        sta  (bufpnt),y          
+        iny      
+
+        sty  bytcnt      
+        cpy  #187
+        bcc  3$
+
+	lda  #69		;  move buffer up
+        sta  savpnt      
+
+        lda  bufpnt+1    
+        sta  savpnt+1    
+
+        ldy  #256-topwrt-1
+
+4$	lda  (bufpnt),y          
+        sta  (savpnt),y          
+
+        dey      
+        bne  4$
+
+        lda  (bufpnt),y          
+        sta  (savpnt),y          
+
+; load in overflow
+
+        ldx  #256-topwrt
+
+5$	lda  ovrbuf,x    
+        sta  (bufpnt),y          
+
+        iny      
+        inx      
+        bne  5$
+
+        stx  gcrflg     ; clear buffer gcr flag
+        rts      
+
+
+
+;    * verify data block
+;   convert to gcr verify image
+;   test against data block
+;   convert back to binary
+
+
+jvrfy   cmp  #$20       ;  test if verify
+        beq  1$
+
+        bne  7$		; bra
+
+1$      jsr  chkblk     ; get block checksum
+	sta  chksum
+
+        jsr  bingcr     ; convert to verify image
+
+        jsr  jdstrt       
+
+        ldy  #256-topwrt
+2$	lda  ovrbuf,y   ;  get char
+3$	bit  pota1
+	bmi  3$
+
+        eor  data2      ;  test if same
+        bne  4$		; verify error
+
+        iny      
+        bne  2$		;  next byte
+
+
+5$	lda  (bufpnt),y ;  now do buffer
+
+6$	bit  pota1
+	bmi  6$
+
+        eor  data2      ;  test if same
+        bne  4$		;  error
+
+        iny      
+        cpy  #$fd       ;  dont test off bytes
+        bne  5$
+	beq  8$		;  bra
+
+7$	jsr  jsrch      ;  sector seek
+8$	lda  #1
+	.byte  skip2
+4$	lda  #7         ;  verify error
+        jmp  jerrr        

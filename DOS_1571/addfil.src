@@ -1,0 +1,104 @@
+        .page  
+        .subttl 'addfil.src'          
+; add file to directory
+
+addfil  lda  sa         ; save variables 
+        pha      
+        lda  lindx       
+        pha      
+        lda  sector      
+        pha      
+        lda  track       
+        pha      
+        lda  #irsa       
+        sta  sa          
+        jsr  curblk     ; use last accessed search
+        lda  type        
+        pha      
+        lda  fildrv      
+        and  #1          
+        sta  drvnum      
+        ldx  jobnum      
+        eor  lstjob,x    
+        lsr  a   
+        bcc  af08       ; same drive as required
+
+        ldx  #1          
+        stx  delind     ; look for deleted entry
+        jsr  srchst      
+        beq  af15       ; all full, new sector 
+        bne  af20       ; found one
+
+af08    lda  delsec      
+        beq  af10       ; deleted entry not located
+        cmp  sector      
+        beq  af20       ; sector is resident
+        sta  sector      
+        jsr  drtrd      ; read sector in
+        jmp  af20        
+
+af10    lda  #1         ; find deleted entry
+        sta  delind      
+        jsr  search      
+        bne  af20        
+af15    jsr  nxdrbk     ; all full, new sector
+        lda  sector      
+        sta  delsec      
+        lda  #2          
+        sta  delind      
+af20    lda  delind      
+        jsr  setpnt      
+        pla      
+        sta  type       ; set type
+        cmp  #reltyp     
+        bne  af25        
+        ora  #$80        
+af25             
+        jsr  putbyt      
+        pla      
+        sta  filtrk     ; ...table & entry
+        jsr  putbyt      
+        pla      
+        sta  filsec     ; set sector link in...
+        jsr  putbyt     ; ...table & entry
+        jsr  getact      
+        tay      
+        lda  filtbl      
+        tax      
+        lda  #16         
+        jsr  trname     ; transfer name
+        ldy  #16         
+        lda  #0         ; clear # of blocks &...
+af30    sta  (dirbuf),y ; ...& replace links
+        iny      
+        cpy  #27         
+        bcc  af30        
+        lda  type       ; a relative file ?
+        cmp  #reltyp     
+        bne  af50       ; no
+        ldy  #16        ; yes
+        lda  trkss      ; get ss track
+        sta  (dirbuf),y ; put in directory
+        iny      
+        lda  secss      ; get ss sector
+        sta  (dirbuf),y ; put in
+        iny      
+        lda  rec        ; get record size
+        sta  (dirbuf),y          
+af50    jsr  drtwrt     ; write it out
+        pla      
+        sta  lindx       
+        tax      
+        pla      
+        sta  sa          
+        lda  delsec      
+        sta  entsec      
+        sta  dsec,x      
+        lda  delind      
+        sta  entind      
+        sta  dind,x      
+        lda  type        
+        sta  pattyp      
+        lda  drvnum      
+        sta  fildrv      
+        rts      

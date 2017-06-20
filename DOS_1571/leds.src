@@ -1,0 +1,51 @@
+	.page   
+	.subttl 'leds.src'
+
+;turn on activity led specified
+; by drvnum
+
+setlds  sei      
+        lda  #$ff-led1-led0      
+        and  ledprt      
+        pha      
+
+        lda  drvnum      
+        beq  leds0       
+        pla      
+        ora  #led1       
+        bne  leds1       
+leds0            
+        pla      
+        ora  #led0       
+leds1            
+        sta  ledprt      
+        cli      
+        rts      
+
+ledson  sei      
+        lda  #led1+led0          
+        ora  ledprt      
+        sta  ledprt      
+        cli      
+        rts      
+
+erroff           
+        lda  #0          
+        sta  erword      
+        sta  erled       
+        rts      
+
+erron   sei      
+        txa      
+        pha     	; save .x
+        lda  #80         
+        sta  erword      
+        ldx  #0          
+        lda  ledmsk,x    
+        sta  erled       
+        ora  ledprt     ; set led on
+        sta  ledprt      
+        pla      
+        tax     	; restore .x
+        cli      
+        rts      

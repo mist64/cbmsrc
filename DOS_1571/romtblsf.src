@@ -1,0 +1,84 @@
+	.page  
+	.subttl 'romtblsf.src'        
+
+dirtrk   .byte  18      ; directory track #
+bamsiz   .byte  4       ; # bytes/track in bam
+mapoff   .byte  4       ; offset of bam in sector
+dsknam   .byte  $90     ; offset of disk name in bam sector
+;
+;   command search table
+cmdtbl   .byte  'VIDMBUP&CRSN'
+; validate-dir init-drive duplicate
+; memory-op block-op user
+; position dskcpy utlodr rename scratch new
+ncmds    =*-cmdtbl       
+;  jump table low
+cjumpl   .byte    <verdir,<intdrv,<duplct          
+	 .byte    <mem,<block,<user       
+	 .byte    <record         
+	 .byte    <utlodr         
+	 .byte    <dskcpy         
+	 .byte    <rename,<scrtch,<new    
+*=cjumpl+ncmds           
+;  jump table high
+cjumph   .byte    >verdir,>intdrv,>duplct          
+	 .byte    >mem,>block,>user       
+ 	 .byte    >record         
+ 	 .byte    >utlodr         
+ 	 .byte    >dskcpy         
+	 .byte    >rename,>scrtch,>new    
+*=cjumph+ncmds           
+val=0           ; validate (verify) cmd #
+
+; structure images for cmds
+pcmd     =9      
+	.byte    %01010001      ;  dskcpy
+struct   =*-pcmd        	;  cmds not parsed
+	.byte    %11011101      ;  rename
+	.byte    %00011100      ;  scratch
+	.byte    %10011110      ;  new
+ldcmd    =*-struct      	;  load cmd image
+	.byte    %00011100      ;  load
+;            --- ---
+;            pgdrpgdr
+;            fs1 fs2
+
+;   bit reps:  not pattern
+;              not greater than one file 
+;              not default drive(s) 
+;              required filename
+
+modlst   .byte  'RWAM'          ;  mode table
+nmodes   =*-modlst       
+;file type table
+tplst    .byte  'DSPUL'          
+typlst   .byte  'DSPUR'         ; del, seq, prog, user, relative
+ntypes   =*-typlst       
+tp1lst   .byte  'EERSE'          
+tp2lst   .byte  'LQGRL'          
+ledmsk   .byte  led0,led1        
+;
+; error flag vars for bit
+;
+er00     .byte  0        
+er0      .byte  $3f      
+er1      .byte  $7f      
+er2      .byte  $bf      
+er3      .byte  $ff      
+;
+numsec          		; (4) sectors/track
+	 .byte    17,18,19,21     
+vernum   .byte  fm4040          ; format type
+nzones   .byte  4       	; # of zones
+
+; maxtrk          		; maximum track #  +1
+trknum          		; zone boundaries track numbers
+	 .byte    36,31,25,18     
+offset          		; for recovery
+	 .byte    1,$ff,$ff,1,0   
+;
+bufind           
+	 .byte    $03,$04,$05,$06,$07,$07         
+;
+
+;.end

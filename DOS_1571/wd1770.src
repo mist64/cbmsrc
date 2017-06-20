@@ -1,0 +1,15 @@
+	.subttl 'wd1770.src'
+	.page
+wdtest  .macro  
+	.ife <*!.$03	; lower two bits cannot be zero
+	nop		; fill address error
+	.endif	
+	.endm
+
+nodrrd  .macro		; read nodrv,x absolute
+	.byte $bd,$ff,$00
+	.endm
+
+nodrwr  .macro		; write nodrv,x absolute
+	.byte $9d,$ff,$00
+	.endm
