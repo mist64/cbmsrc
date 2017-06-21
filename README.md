@@ -49,7 +49,7 @@ The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Ste
 
 ## DOS_D9065
 
-The CBM D9065 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+The CBM D9065 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 * The D9065 is an unreleased 7.5 MB hard drive, probably very similar to the D9060/D9090.
 

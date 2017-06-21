@@ -1,5 +1,5 @@
 .PAGE 'ROM'
-*=ROM
+	*=ROM
 CCHKSM
-.BYTE 0
- .END
+	.BYTE 0
+.END

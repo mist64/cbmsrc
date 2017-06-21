@@ -9,12 +9,12 @@
 ;*********************************
 ;
 SCRUB
- JSR GAFLGS
- BVC SCR1 ; NOT DIRTY
- JSR WRTOUT
- JSR WATJOB
+	JSR GAFLGS
+	BVC SCR1        ; NOT DIRTY
+	JSR WRTOUT
+	JSR WATJOB
 SCR1
- RTS
+	RTS
 ;
 ;*********************************
 ;*
@@ -25,13 +25,13 @@ SCR1
 ;*********************************
 ;
 SETLNK
- JSR SET00
- LDA TRACK
- STA (DIRBUF),Y
- INY
- LDA SECTOR
- STA (DIRBUF),Y
- JMP SDIRTY
+	JSR SET00
+	LDA TRACK
+	STA (DIRBUF),Y
+	INY
+	LDA SECTOR
+	STA (DIRBUF),Y
+	JMP SDIRTY
 ;
 ;********************************
 ;*
@@ -43,13 +43,13 @@ SETLNK
 ;********************************
 ;
 GETLNK
- JSR SET00
- LDA (DIRBUF),Y
- STA TRACK
- INY
- LDA (DIRBUF),Y
- STA SECTOR
- RTS
+	JSR SET00
+	LDA (DIRBUF),Y
+	STA TRACK
+	INY
+	LDA (DIRBUF),Y
+	STA SECTOR
+	RTS
 ;
 ;********************************
 ;*
@@ -61,17 +61,17 @@ GETLNK
 ;*********************************
 ;
 NULLNK
- JSR SET00
- LDA #0
- STA (DIRBUF)Y
- INY
- LDX LINDX
- LDA NR,X
- TAX
- DEX
- TXA
- STA (DIRBUF)Y
- RTS
+	JSR SET00
+	LDA #0
+	STA (DIRBUF)Y
+	INY
+	LDX LINDX
+	LDA NR,X
+	TAX
+	DEX
+	TXA
+	STA (DIRBUF)Y
+	RTS
 ;
 ;*******************************
 ;*
@@ -82,15 +82,15 @@ NULLNK
 ;*******************************
 ;
 SET00
- JSR GETACT
- ASL A
- TAX
- LDA BUFTAB+1,X
- STA DIRBUF+1
- LDA #0
- STA DIRBUF
- LDY #0
- RTS
+	JSR GETACT
+	ASL A
+	TAX
+	LDA BUFTAB+1,X
+	STA DIRBUF+1
+	LDA #0
+	STA DIRBUF
+	LDY #0
+	RTS
 ;
 ;*******************************
 ;*
@@ -101,20 +101,20 @@ SET00
 ;*******************************
 ;
 CURBLK
- JSR FNDRCH
+	JSR FNDRCH
 GETHDR
- JSR GETACT
- STA JOBNUM
+	JSR GETACT
+	STA JOBNUM
 GETHD1
- ASL A
- ASL A
- ASL A
- TAY
- LDA HDRS+2,Y
- STA TRACK
- LDA HDRS+3,Y
- STA SECTOR
- RTS
+	ASL A
+	ASL A
+	ASL A
+	TAY
+	LDA HDRS+2,Y
+	STA TRACK
+	LDA HDRS+3,Y
+	STA SECTOR
+	RTS
 ;
 ;******************************
 ;*
@@ -124,45 +124,45 @@ GETHD1
 ;******************************
 ;
 WRTAB
- LDA #WRITE
- STA CMD
- BNE SJ10
+	LDA #WRITE
+	STA CMD
+	BNE SJ10
 RDAB
- LDA #READ
- STA CMD
- BNE SJ10
+	LDA #READ
+	STA CMD
+	BNE SJ10
 WRTOUT
- LDA #WRITE
- STA CMD
- BNE SJ20
+	LDA #WRITE
+	STA CMD
+	BNE SJ20
 RDIN
- LDA #READ
- STA CMD
- BNE SJ20
+	LDA #READ
+	STA CMD
+	BNE SJ20
 WRTSS
- LDA #WRITE
- STA CMD
- BNE RDS5
+	LDA #WRITE
+	STA CMD
+	BNE RDS5
 RDSS
- LDA #READ
+	LDA #READ
 RDS5
- STA CMD
- LDX LINDX
- LDA SS,X
- TAX
- BPL SJ30
+	STA CMD
+	LDX LINDX
+	LDA SS,X
+	TAX
+	BPL SJ30
 SJ10
- JSR SETHDR
- JSR GETACT
- TAX
- LDA DRVNUM
- STA LSTJOB,X
+	JSR SETHDR
+	JSR GETACT
+	TAX
+	LDA DRVNUM
+	STA LSTJOB,X
 SJ20
- JSR CDIRTY
- JSR GETACT
- TAX
+	JSR CDIRTY
+	JSR GETACT
+	TAX
 SJ30
- JMP SETLJB
+	JMP SETLJB
 ;
 ;***************************
 ;*
@@ -171,11 +171,11 @@ SJ30
 ;***************************
 ;
 RDLNK
- LDA #0
- JSR SETPNT
- JSR GETBYT
- STA TRACK
- JSR GETBYT
- STA SECTOR
- RTS
+	LDA #0
+	JSR SETPNT
+	JSR GETBYT
+	STA TRACK
+	JSR GETBYT
+	STA SECTOR
+	RTS
 .END
