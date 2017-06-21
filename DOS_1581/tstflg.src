@@ -1,0 +1,64 @@
+        .messg "tstflg"
+        .subttl "tstflg"
+        .page  
+        bcc  clrflg      
+setflg  ldx  lindx       
+        ora  filtyp,x    
+        bne  clrf10      
+
+clrflg  ldx  lindx       
+        eor  #$ff        
+        and  filtyp,x    
+clrf10  sta  filtyp,x    
+        rts      
+
+tstflg  ldx  lindx       
+        and  filtyp,x    
+        rts      
+
+tstwrt  jsr  getact      
+        tax      
+        lda  lstjob,x    
+        and  #all-bit0
+        cmp  #wrtsd_dv
+        rts      
+
+; test active files from lindx tbl
+; c=1 file not active x=18,y=?,a=?
+; c=0 file active x=entfnd,y=lindx,a=?
+
+tstchn  ldx  #0         ; start search at top
+tstc20  stx  temp+2     ; save to look on
+        lda  lintab,x   ; get lindx
+        cmp  #$ff        
+        bne  tstc40     ; if plus test it
+
+tstc30  ldx  temp+2     ; not active
+        inx      
+        cpx  #maxsa-2   ; searched all
+        bcc  tstc20     ; no
+
+        rts     	; yes
+
+tstc40  stx  temp+2     ; save x
+        and  #$3f        
+        tay     	; use lindx as index
+        lda  filtyp,y   ; right drive # ?
+        and  #1          
+        sta  temp+1      
+        ldx  entfnd     ; index entry found
+        lda  fildrv,x    
+        and  #1          
+        cmp  temp+1     ; same drive # ?
+        bne  tstc30     ; no
+
+        lda  dsec,y     ; yes - same dir. entry ?
+        cmp  entsec,x    
+        bne  tstc30     ; no
+
+        lda  dind,y      
+        cmp  entind,x    
+        bne  tstc30     ; no
+
+        clc     	; set flag
+        rts      

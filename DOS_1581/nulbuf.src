@@ -1,0 +1,50 @@
+        .messg "nulbuf"
+        .subttl "nulbuf"
+        .page  
+;set nul recs in act-buf for exten
+;in: nr=last rec in previous buf
+;out: nr=last rec for next nulbuf/lstchr
+
+nulbuf  jsr  set00      ; set indirect ptr
+        ldy  #2          
+        lda  #0          
+nb10    sta  (dirbuf),y ; clear buffer
+        iny      
+        bne  nb10        
+
+        jsr  addnr      ; advance nr
+
+nb20    sta  nr,x        
+        tay      
+        lda  #$ff        
+        sta  (dirbuf),y ; init record w/ cr
+        jsr  addnr       
+        bcc  nb20       ; not done
+
+        bne  nb30        
+
+        lda  #0          
+        sta  nr,x        
+nb30    rts      
+
+; add rs & nr, leave in accum
+; c=1: cross buffer boundary
+
+addnr   ldx  lindx       
+        lda  nr,x        
+        sec      
+        beq  an05        
+
+        clc      
+        adc  rs,x        
+        bcc  an10        
+
+        bne  an05        
+
+        lda  #2          
+        bit  er00        
+        rts      
+
+an05    adc  #1         ; adjust for link
+        sec      
+an10    rts      

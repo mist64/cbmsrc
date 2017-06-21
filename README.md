@@ -65,6 +65,10 @@ The Commodore 1540 DOS V2.6 source (1980), 325302-01/325303-01. Extracted from 1
 
 The Commodore 1571 DOS source (3.0, 1986), updated version (310654-05). Extracted from 1571-source.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
 
+## DOS_1581
+
+The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Extracted from 1581-source.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com

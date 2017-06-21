@@ -1,0 +1,328 @@
+        .messg "erproc"
+        .subttl "erproc"
+        .page  
+; error processing
+;-controller errors-----------------
+;  0  (1)  no error
+;  1  (1)  files scratched
+;  2  (1)  partition selected
+; 20  (2)  can't find block header
+; 21  (3)  no synch character
+; 22  (4)  data block not present
+; 23  (5)  checksum error in data
+; 24  (16) byte decoding error
+; 25  (7)  write-verify error
+; 26  (8)  write w/ write protect on
+; 27  (9)  checksum error in header
+; 28  (10) data extends into next block
+; 29  (11) disk i.d. mismatch
+;-command errors--------------------
+badsyn   =$30   ;  general syntax
+badcmd   =$31   ;  invalid command
+longln   =$32   ;  long line
+badfn    =$33   ;  invalid filname
+nofile   =$34   ;  no file given
+nocfil   =$39   ;  comnd file not found
+norec    =$50   ;  record not present
+recovf   =$51   ;  overflow in record
+bigfil   =$52   ;  file too large
+filopn   =$60   ;  file open for write
+filnop   =$61   ;  file not open
+flntfd   =$62   ;  file not found
+flexst   =$63   ;  file exists
+mistyp   =$64   ;  file type mismatch
+noblk    =$65   ;  no block
+badts    =$66   ;  illegal track or sector
+systs    =$67   ;  illegal system t or s
+nochnl   =$70   ;  no channels available
+direrr   =$71   ;  directory error
+dskful   =$72   ;  disk full full
+cbmv2    =$73   ;  copyright cbm dos V0
+nodriv   =$74   ;  drive not ready
+fmter	 =$75   ;  format error
+cntrer	 =$76	;  controller error
+illpar	 =$77	;  illegal partition 
+        .page    
+;-error message table----------------
+;   leading errror numbers,
+;   text with 1st & last chars 
+;   or'ed with $80,
+;   tokens for key words are
+;   less than $10 (and'ed w/ $80)
+errtab  .BYT  0,$a0,'O',$cb    			; ok
+	.BYT  2,$a0,'SELECTED PARTITIO',$ce  	; selected partition 
+	.BYT  $20,$21,$22,$23,$24,$27        	; read error
+	.BYT  $d2,'EAD',$89          	
+	.BYT  $52,$83,' TOO LARG',$c5      	; fil to large
+	.BYT  $50,$8b,6,' PRESEN',$d4       	; rec not present
+	.BYT  $51,$cf,'VERFLOW '    		; overflow in record
+	.BYT  'IN',$8b        
+	.BYT  $25,$28,$8a,$89        		; write error
+	.BYT  $26,$8a,' PROTECT O',$ce     	; wrt protect on
+	.BYT  $29,$88,' ID',$85     		; dsk id mismatch
+	.BYT  $30,$31,$32,$33,$34    		; syntax error
+	.BYT  $d3,'YNTAX',$89         	
+	.BYT  $60,$8a,3,$84          		; wrt fil open
+	.BYT  $63,$83,' EXIST',$d3          	; file exist
+	.BYT  $64,$83,' TYPE',$85   		; fil type mismatch
+	.BYT  $65,$ce,'O BLOC',$cb          	; no block
+	.BYT  $66,$67,$c9,'LLEGAL TRACK'    	; illegal t & sector	
+	.BYT  ' OR SECTO',$d2       
+	.BYT  $61,$83,6,$84          		; fil not open
+	.BYT  $39,$62,$83,6,$87      		; file not found
+	.BYT  1,$83,'S SCRATCHE',$c4         	; files scratched
+	.BYT  $70,$ce,'O CHANNE',$cc        	; no channel
+	.BYT  $71,$c4,'IR',$89       		; dir error
+	.BYT  $72,$88,' FUL',$cc    		; disk full
+	.BYT  $73,$c3,'OPYRIGHT CBM DOS V10 158',$B1 ; dos messg
+	.BYT  $74,$c4,'RIVE',6,' READ',$d9   	; drv not rdy
+	.BYT  $75,$c6,'ORMAT ERRO',$d2 		; format error
+	.BYT  $76,$c3,'ONTROLLER ERRO',$d2	; controller error
+	.BYT  $77,$d3,'ELECTED PARTITION ILLEGA',$cc
+        .BYT  $79,$D3,'OFTWARE DAVID SIRACUSA. HARDWARE GREG BERLI',$ce
+	.BYTE $7a,$c4,'EDICATED TO MY WIFE LIS',$c1
+;-error words---------------
+	.BYT  9,$c5,'RRO',$d2        		; error
+	.BYT  $a,$d7,'RIT',$c5       		; write
+	.BYT  3,$c6,'IL',$c5         		; file
+	.BYT  4,$cf,'PE',$ce         		; open
+	.BYT  5,$cd,'ISMATC',$c8     		; mismatch
+	.BYT  6,$ce,'O',$d4          		; not
+	.BYT  7,$c6,'OUN',$c4        		; found
+	.BYT  8,$c4,'IS',$cb         		; disk
+	.BYT  $b,$d2,'ECOR',$c4      		; record
+etend    =*      
+        .page    
+jerror  
+	pha     	; controller entry..
+	stx  jobnum     ; accm=err#, x=job#
+        txa      
+        asl  a   
+        tax      
+        lda  hdrs,x     ; 4/12 recall trk,sec
+        sta  track       
+        lda  hdrs+1,x   ; 4/12
+        sta  sector      
+        pla      
+        and  #$f        ; convert controller
+        beq  err1       ; errs to dos errs
+
+        cmp  #$3        ; no adam
+	beq  1$
+
+        cmp  #$e        ; check syntax error
+	beq  1$
+
+        cmp  #$f        ; check nodrive error
+        bne  err2        
+
+1$      lda  #nodriv     
+        bne  err3       ; bra
+
+err1    lda  #6         ; code=16-->14
+err2    ora  #$20        
+        tax      
+        dex      
+        dex      
+        txa      
+err3    pha      
+        lda  cmdnum      
+        cmp  #val        
+        bne  err4        
+        lda  #$ff        
+        sta  cmdnum      
+        pla      
+        jsr  errmsg      
+        jsr  initdr     ; init for validate
+        jmp  cmder3      
+err4    pla      
+jcmder2 jsr  errmsg      
+cmder3  jsr  clrcb      ; clear cmdbuf
+        lda  #0          
+        sta  wbam       ; clear after error
+        jsr  erron      ; set error led
+        jsr  freich     ; free internal channel
+        lda  #0         ; clear pointers
+        sta  buftab+cbptr        
+        ldx  tos
+        txs     	;  purge stack
+        lda  orgsa       
+        and  #$f         
+        sta  sa          
+        cmp  #$f         
+        beq  err10       
+	.pag             
+        sei      
+        bit  fsflag	; listn?
+        bvs  lsnerr     ; listn error
+
+        bmi  tlkerr     ; talk error
+
+        ldx  sa          
+        lda  lintab,x    
+        cmp  #$ff        
+        beq  err10       
+
+        and  #$f         
+        sta  lindx       
+        jmp  tlerr       
+
+tlkerr  jsr  fndrch     ; talker err recovery
+        jmp  tlerr      ; finish
+
+lsnerr  jsr  fndwch     ; listn error recovery
+tlerr   jsr  typfil      
+        cmp  #reltyp     
+        bcs  err10       
+
+        jsr  frechn      
+err10   jmp  jidle        
+
+hexdec  php
+	sei
+	tax     	; convert hex to bcd
+        lda  #0          
+        sed      
+hex0    cpx  #0          
+        beq  hex5        
+
+        clc      
+        adc  #1          
+        dex      
+        jmp  hex0        
+
+hex5    cld      
+	plp
+bcddec  tax     	; cnvrt bcd to asci decm
+        lsr  a          ; rtn bcd in x and
+        lsr  a          ; put ascii in (temp)y
+        lsr  a   
+        lsr  a   
+        jsr  bcd2        
+        txa      
+bcd2    and  #$f         
+        ora  #$30        
+        sta  (cb+2),y     
+        iny      
+        rts      
+	.pag             
+okerr   jsr  erroff     ; trnsfr err msg to
+        lda  #0         ; error buffer
+errts0  ldy  #0          
+        sty  track       
+        sty  sector      
+errmsg  ldy  #0          
+        ldx  #<errbuf    
+        stx  cb+2        
+        ldx  #>errbuf    
+        stx  cb+3        
+        jsr  bcddec     ; convert error #
+        lda  #',         
+        sta  (cb+2),y    
+        iny      
+        lda  errbuf      
+        sta  chndat+errchn       
+        txa     	; error # in .x
+        jsr  ermove     ; move message
+        lda  #',         
+        sta  (cb+2),y    
+        iny      
+        lda  track       
+        jsr  hexdec     ; convert track #
+        lda  #',         
+        sta  (cb+2),y    
+        iny      
+        lda  sector     ; convert sector #
+        jsr  hexdec      
+        dey      
+        tya      
+        clc      
+        adc  #<errbuf    
+        sta  lstchr+errchn      
+        inc  cb+2        ; set last char
+        lda  #rdytlk     
+        sta  chnrdy+errchn       
+        rts      
+
+ermove  tax     	; save err#
+        lda  r0         ; save r0,r0+1
+        pha      
+        lda  r0+1        
+        pha      
+        lda  #<errtab   ; point to table
+        sta  r0          
+        lda  #>errtab    
+        sta  r0+1        
+        txa     	; get error #
+        ldx  #0         ; .x=0 for indirect
+e10     cmp  (r0,x)     ; ?error # = table entry?
+        beq  e50        ; yes, send message
+
+        pha     	; save error #
+        jsr  eadv2      ; check & advance ptr
+        bcc  e30        ; more #'s to check
+
+e20     jsr  eadv2      ; advance past this message
+        bcc  e20         
+
+e30     lda  r0+1       ; check ptr
+        cmp  #>etend     
+        bcc  e40        ; <, continue
+
+        bne  e45        ; >, quit
+
+        lda  #<etend     
+        cmp  r0          
+        bcc  e45        ; past end of table
+
+e40     pla     	; restor error #
+        jmp  e10        ; check next entry
+
+e45     pla     	; pop error #
+        jmp  e90        ; go quit
+
+e50     jsr  eadv1      ; # has been located
+        bcc  e50        ; advance past other #'s
+
+e55     jsr  e60         
+        jsr  eadv1       
+        bcc  e55         
+
+        jsr  e60        ; check for token or last word
+e90     pla     	; all finished
+        sta  r0+1       ; restore r0
+        pla      
+        sta  r0          
+        rts      
+
+e60     cmp  #$20       ; (max token #)+1
+        bcs  e70        ; not a token
+
+        tax      
+        lda  #$20       ; implied leading space
+        sta  (cb+2),y    
+        iny      
+        txa     	; restore token #
+        jsr  ermove     ; add token word to message
+        rts      
+
+e70     sta  (cb+2),y   ; put char in msg
+        iny      
+        rts      
+
+eadv1   inc  r0         ; err advance/check
+        bne  ea10        
+
+        inc  r0+1        
+ea10    lda  (r0,x)     ; get current entry
+        asl  a          ; .c=1 is end or beginning
+        lda  (r0,x)      
+        and  #$7f       ; mask off bit7
+        rts      
+
+eadv2   jsr  ea10       ; check table entry
+        inc  r0          
+        bne  ea20        
+
+        inc  r0+1        
+ea20    rts      

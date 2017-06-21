@@ -1,0 +1,93 @@
+        .messg "idle"
+        .subttl "idle"
+        .page
+idle    sei
+	lda  #atna
+        sta  pb         ; release serial bus 
+        cli     	; wait for something to do..
+        lda  cmdwat     ; any commands pending ?
+        beq  1$		; no command waiting
+
+        lda  #0          
+        sta  cmdwat      
+        jsr  parsxq     ; parse and execute command
+	jsr  spinp	; fast serial input
+1$
+        cli      
+	lda  #bit0
+	bit  fsflag	; any attentions pending ?
+	beq  2$
+
+	jmp  jatnsrv	; service the attention
+
+2$      lda  dirty	; dirty?
+	bne  5$
+
+	ldy  #numjob+1	; include bams
+	ldx  #14        ; max user sa
+3$	lda  lintab,x   ; active ?
+        cmp  #$ff       
+        bne  5$		; yes
+
+	dey
+	bmi  4$
+	
+	lda  jobs,y
+        bmi  5$		; it's active
+
+4$      dex     
+        bpl  3$
+	
+	lda  ledprint	
+	and  #all-act_led
+	sta  ledprint	; no activity
+        jmp  6$	
+
+5$	lda  ledprint	
+	ora  #act_led
+	sta  ledprint	; activity led on
+
+6$      lda  wpsw       ; disk changed ?
+        beq  7$		; no
+
+        jsr  cldchn     ; close them..
+7$	ldx  erword      
+        beq  8$		; no error flashing
+
+	lda  ledprint	
+	ora  #pwr_led
+	sta  ledprint	
+	bne  9$		; bra
+
+8$	lda  ledprint	
+	and  #all-pwr_led
+	sta  ledprint	
+
+9$	lda  sieeetim	; serial bus last accessed
+	bne  10$
+
+; dump the cache track buffer
+	jsr  ieeedumptrk
+10$	jmp  1$
+	.page
+ieeedumptrk
+	lda  dirty	; dirty flag set?
+	beq  1$
+
+	lda  #bit6
+	sta  jobrtn	; no check t&s flag	
+	lda  jobnum
+	pha
+	lda  track
+	pha
+	lda  sector
+	pha
+	ldx  #>bam1->buff0
+	jsr  jdumptrk	; special case no buffer op to set dirty
+	pla
+	sta  sector
+	pla
+	sta  track
+	pla
+	sta  jobnum
+1$	rts
