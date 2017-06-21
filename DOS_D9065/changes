@@ -1,0 +1,15 @@
+.PAGE 'CHANGES'
+;
+; EXPANDED RELATIVE RECORD CHANGES ARE:
+;
+;      COPY      PAGE #
+;      FNDREL    PAGE #
+;      CLOSE     PAGE #
+;      OPCHNL    PAGE #
+;      SSUTIL    PAGE #
+;      SSTEST    PAGE #
+;      SSEND     PAGE #
+;      ADDREL    PAGE #
+;      NEWSS     PAGE #
+;      SYSTEM    PAGE #
+.END
