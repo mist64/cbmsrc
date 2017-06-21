@@ -1,0 +1,10 @@
+;***************************************
+;***************************************
+;
+;    EQUATES USED BY THE NON-RESIDENT
+;    FORMATTER SOFTWARE
+;
+;***************************************
+FMTVER = $FFF9 ;ROM VERSION #
+VERN = $03 ;INTENDED VERSION #
+ .END

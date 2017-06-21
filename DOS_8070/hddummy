@@ -1,0 +1,34 @@
+ .PAG 'DUMMY'
+;*************************************
+;  THESE ARE ONLY INCLUDED TO RESOLVE UNDEFINEDS
+;*************************************
+ *=0
+CMDERR
+TRACK
+SECTOR
+DRVNUM
+DSKFUL
+CLDCHN
+GETBUF
+BUMP
+WRITE
+READ
+FILTBL
+FNDLMT
+LIMIT
+CMDBUF
+DOSVER
+DSKID
+SETH
+JOBS
+JOBNUM
+CMD
+BUFTAB
+NOCHNL
+FREBUF
+DOIT
+IPBM
+BAMJOB
+DIRERR
+ .END
+;**************************************

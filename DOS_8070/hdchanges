@@ -1,0 +1,19 @@
+;***************************************
+;
+;  FOR TEST ONLY
+;  ASSEMBLE ALL HARD DISK CHANGES
+;
+;***************************************
+ .LIB HDDUMMY
+ .LIB HDDSECT
+ .LIB HDEQU
+ .LIB HDPAGE0
+ .LIB HDRAM
+ .LIB HDCOM
+ .LIB HDALLOC
+ .LIB HDFREUSED
+ .LIB HDFORMAT
+ .LIB HDFMTSUBS
+ .LIB HDFMTTBLS
+ .LIB HDSUB1
+ .END

@@ -39,6 +39,14 @@ The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d8
 * The same ROM binary will work on the 8250 (DS/QD), the 8050 (SS/QD) and the 4040 (SS/DD), the differences will be handled at runtime (symbols "NSIDES", "DOS").
 * Comments in the source call this "SUPER DOS".
 
+## DOS_8070
+
+The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+
+* The CBM 8070 is an unreleased device with one 8" hard drive (drive #0) and one 8" double-sided floppy drive (drive #1, like CBM 8062).
+* The power-on message says "CBM DOS V3.0 8070".
+* The file copy code is stored on the hard disk and loaded on demand ("ldcopy").
+
 ## DOS_1540
 
 The Commodore 1540 DOS V2.6 source (1980), 325302-01/325303-01. Extracted from 1541-2031-num1.d64 and 1541-2031-source-disk-copy-num2-side1.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
