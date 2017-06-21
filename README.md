@@ -34,7 +34,7 @@ The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from St
 
 ## DOS_8250
 
-The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 * The same ROM binary will work on the 8250 (DS/QD), the 8050 (SS/QD) and the 4040 (SS/DD), the differences will be handled at runtime (symbols "NSIDES", "DOS").
 * Comments in the source call this "SUPER DOS".
