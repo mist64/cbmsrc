@@ -28,7 +28,7 @@ It does not contain the version byte at $FF80 (which is $AA in the binary) or th
 
 ## BASIC_CBM2_[AB], KERNAL_CBM2_[AB], EDITOR_CBM2
 
-The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from <a href="https://www.davidviner.com/cbm9.html">David Viner</a>, and the B version is from disks 67/68 of the <a href="http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/">CBUG</a> library. The files have been converted to LF line breaks.
+The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from <a href="https://www.davidviner.com/cbm9.html">David Viner</a>, and the B version is from disks 67/68 of the <a href="http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/">CBUG</a> library. The files have been converted to LF line breaks and LST-style indenting.
 
 * The B version of BASIC contains two patches.
 * The B version of the KERNAL contains minor modifications, and comes with alternate versions of some files as well as additional (test) sources.
