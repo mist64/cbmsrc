@@ -26,6 +26,14 @@ The source contains the ranges
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
+## BASIC_CBM2_[AB], KERNAL_CBM2_[AB], EDITOR_CBM2
+
+The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from <a href="https://www.davidviner.com/cbm9.html">David Viner</a>, and the B version is from disks 67/68 of the <a href="http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/">CBUG</a> library. The files have been converted to LF line breaks.
+
+* The B version of BASIC contains two patches.
+* The B version of the KERNAL contains minor modifications, and comes with alternate versions of some files as well as additional (test) sources.
+* Except for file naming, the editor sources A and B were identical.
+
 ## DOS_4040
 
 The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.

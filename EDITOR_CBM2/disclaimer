@@ -1,0 +1,40 @@
+;***************************************
+;*                                     *
+;* EEEEE DDD   IIIII TTTTT  OOO  RRRR  *
+;* E     D  D    I     T   O   O R   R *
+;* E     D   D   I     T   O   O R   R *
+;* EEE   D   D   I     T   O   O RRRR  *
+;* E     D   D   I     T   O   O R R   *
+;* E     D  D    I     T   O   O R  R  *
+;* EEEE  DDD   IIIII   T    OOO  R   R *
+;*                                     *
+;***************************************
+;
+;***************************************
+;* CBM EDITOR FOR B/BX-SERIES SYSTEMS  *
+;*   KEYBOARD AND SCREEN EDIT ROUTINES *
+;* DRIVING THE HARDWARE OF THE         *
+;* FOLLOWING CBM MODELS:               *
+;*   B/BX-SERIES OR B128/256           *
+;* COPYRIGHT (C) 1983 BY               *
+;* COMMODORE BUSINESS MACHINES (CBM)   *
+;***************************************
+.SKI 3
+;*****LISTING DATE --15:00 31 MAY 1983
+.SKI 3
+;***************************************
+;* THIS SOFTWARE IS FURNISHED FOR USE  *
+;* USE IN THE CBM B/BX COMPUTERS.      *
+;*                                     *
+;* COPIES THEREOF MAY NOT BE PROVIDED  *
+;* OR MADE AVAILABLE FOR USE ON ANY    *
+;* OTHER SYSTEM.                       *
+;*                                     *
+;* THE INFORMATION IN THIS DOCUMENT IS *
+;* SUBJECT TO CHANGE WITHOUT NOTICE.   *
+;*                                     *
+;* NO RESPONSIBILITY IS ASSUMED FOR    *
+;* RELIABILITY OF THIS SOFTWARE.       *
+;*                                RSR  *
+;***************************************
+.END

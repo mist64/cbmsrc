@@ -1,0 +1,41 @@
+;***************************************
+;*                                     *
+;* KK  K EEEEE RRRR  NN  N  AAA  LL    *
+;* KK KK EE    RR  R NNN N AA  A LL    *
+;* KKK   EE    RR  R NNN N AA  A LL    *
+;* KKK   EEEE  RRRR  NNNNN AAAAA LL    *
+;* KK K  EE    RR  R NN NN AA  A LL    *
+;* KK KK EE    RR  R NN NN AA  A LL    *
+;* KK KK EEEEE RR  R NN NN AA  A LLLLL *
+;*                                     *
+;***************************************
+;
+;*****LISTING DATE --17:00 31 MAY  1983
+;
+;***************************************
+;* CBM KERNAL                          *
+;*   MEMORY AND I/O DEPENDENT ROUTINES *
+;* DRIVING THE HARDWARE OF THE         *
+;* FOLLOWING CBM MODELS:               *
+;*   P-SERIES (5XX) & B-SERIES (7XX)   *
+;* COPYRIGHT (C) 1983 BY               *
+;* COMMODORE BUSINESS MACHINES (CBM)   *
+;***************************************
+.SKI 2
+;***************************************
+;* THIS SOFTWARE IS FURNISHED FOR USE  *
+;* USE IN THE CBM P-SERIES AND B-SERIES*
+;* COMPUTERS.                          *
+;*                                     *
+;* COPIES THEREOF MAY NOT BE PROVIDED  *
+;* OR MADE AVAILABLE FOR USE ON ANY    *
+;* OTHER SYSTEM.                       *
+;*                                     *
+;* THE INFORMATION IN THIS DOCUMENT IS *
+;* SUBJECT TO CHANGE WITHOUT NOTICE.   *
+;*                                     *
+;* NO RESPONSIBILITY IS ASSUMED FOR    *
+;* RELIABILITY OF THIS SOFTWARE.  RSR  *
+;*                                     *
+;***************************************
+.END
