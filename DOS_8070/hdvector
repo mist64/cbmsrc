@@ -3,9 +3,9 @@
 ;    VECTORS FOR THE 6502 INTERRUPTS
 ;
 ;***************************************
- *= $FFF9
- .BYTE $03 ;VERSION #
- .WORD NMI ;NMI VECTOR
- .WORD DSKINT ;POR VECTOR
- .WORD IRQ ;IRQ VECTOR
- .END
+	*= $FFF9
+	.BYTE $03       ;VERSION #
+	.WORD NMI       ;NMI VECTOR
+	.WORD DSKINT    ;POR VECTOR
+	.WORD IRQ       ;IRQ VECTOR
+.END

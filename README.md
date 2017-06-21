@@ -41,7 +41,7 @@ The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d8
 
 ## DOS_8070
 
-The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks.
+The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
 * The CBM 8070 is an unreleased device with one 8" hard drive (drive #0) and one 8" double-sided floppy drive (drive #1, like CBM 8062).
 * The power-on message says "CBM DOS V3.0 8070".

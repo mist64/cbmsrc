@@ -7,13 +7,13 @@
 ;*********************************
 ;
 GETACT
- LDX LINDX
- LDA BUF0,X
- BPL GA1
- LDA BUF1,X
+	LDX LINDX
+	LDA BUF0,X
+	BPL GA1
+	LDA BUF1,X
 GA1
- AND #$BF ; STRIP DIRTY BIT
- RTS
+	AND #$BF        ; STRIP DIRTY BIT
+	RTS
 ;
 ;*********************************
 ;* GAFLG: GET ACTIVE BUFFER #;   *
@@ -25,20 +25,20 @@ GA1
 ;*********************************
 ;
 GAFLGS
- LDX LINDX
-GA2 STX LBUSED ;SAVE BUF #
- LDA BUF0,X
- BPL GA3
+	LDX LINDX
+GA2	STX LBUSED      ;SAVE BUF #
+	LDA BUF0,X
+	BPL GA3
 ;
- TXA
- CLC
- ADC #MXCHNS
- STA LBUSED
- LDA BUF1,X
+	TXA
+	CLC
+	ADC #MXCHNS
+	STA LBUSED
+	LDA BUF1,X
 GA3
- STA T1
- AND #$1F
- BIT T1
- RTS
+	STA T1
+	AND #$1F
+	BIT T1
+	RTS
 ;
- .END
+.END

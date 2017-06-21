@@ -5,6 +5,6 @@
 ;    FORMATTER SOFTWARE
 ;
 ;***************************************
-FMTVER = $FFF9 ;ROM VERSION #
-VERN = $03 ;INTENDED VERSION #
- .END
+FMTVER	= $FFF9         ;ROM VERSION #
+VERN	= $03           ;INTENDED VERSION #
+.END
