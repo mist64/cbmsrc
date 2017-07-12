@@ -14,7 +14,7 @@ The source contains the ranges
 
 The checksum byte at $BF52 is 0 and will have to be calculated in a later step.
 
-## KERNAL_C64
+## KERNAL_C64_01
 
 The Commodore 64 KERNAL source, original version (901227-01). Extracted from c64kernal.d64 from Steve Gray's <a href="http://6502.org/users/sjgray/dj/">Dennis Jarvis Page</a> and converted to LF line breaks and LST-style indenting.
 
@@ -23,6 +23,16 @@ The source contains the ranges
 * $E500-$FF5A: code
 * $FF81-$FFF5: jump table
 * $FFFA-$FFFF: vectors
+
+It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
+
+## KERNAL_C64_03
+
+The Commodore 64 KERNAL source, final version (901227-03). Based on KERNAL_C64_00 and manually patched to reflect differences in the [LST printout of the -03 KERNAL](http://pagetable.com/docs/C64_KERNAL_03_LST.pdf).
+
+In the printout, the added patch function `PIOKEY` ends with `JMP CLKHI` ($EE85), but the -03 binary contains $EE8E, which is `JMP CLKLO`. The printout is probably older than the -03 binary, so the correct `JMP CLKLO` was put into the source.
+
+The sources have been verified to build the correct -03 KERNAL binary, but no guarantees can be given that all changes, especially in comments and formatting, have been patched correctly.
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
