@@ -11,16 +11,16 @@
 ;***************************************
 ;
 ;***************************************
-;* PET KERNAL                          *
+;* C64 KERNAL                          *
 ;*   MEMORY AND I/O DEPENDENT ROUTINES *
 ;* DRIVING THE HARDWARE OF THE         *
 ;* FOLLOWING CBM MODELS:               *
-;*   COMMODORE 64 OR MODIFED VIC-40    *
-;* COPYRIGHT (C) 1982 BY               *
+;*   COMMODORE 64 (NTSC OR PAL VIDEO)  *
+;* COPYRIGHT (C) 1983 BY               *
 ;* COMMODORE BUSINESS MACHINES (CBM)   *
 ;***************************************
 .SKI 3
-;****LISTING DATE --1200 14 MAY 1982****
+;****LISTING DATE --1200 05 AUG 1983****
 .SKI 3
 ;***************************************
 ;* THIS SOFTWARE IS FURNISHED FOR USE  *
