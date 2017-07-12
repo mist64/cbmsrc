@@ -36,6 +36,14 @@ The sources have been verified to build the correct -03 KERNAL binary, but no gu
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
+## BASIC_PET2001
+
+The PET 2001 BASIC source (V2, 1978).
+
+* This is Microsoft's original source that can also build BASIC for other systems, like OSI and Apple.
+* On the PET, this was called BASIC V2, Microsoft called it V1.1.
+* It includes the "WAIT6502,1" easter egg (symbol "ZSTORDO").
+
 ## BASIC_CBM2_[AB], KERNAL_CBM2_[AB], EDITOR_CBM2
 
 The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from <a href="https://www.davidviner.com/cbm9.html">David Viner</a>, and the B version is from disks 67/68 of the <a href="http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/">CBUG</a> library. The files have been converted to LF line breaks and LST-style indenting.
