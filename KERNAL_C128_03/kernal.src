@@ -1,0 +1,40 @@
+	.nam  C/128 KERNAL  (318020_03 RELEASE: 05/14/85)
+	.forml 60
+
+	.include  disclaim
+	.include  sysdoc
+	.include  relnotes
+	.include  declare
+	.include  entries
+
+	*=$e000
+
+.kernal_beg_check
+
+	.include  init
+	.include  serial
+	.include  rs232xmit
+	.include  rs232rcvr
+	.include  rs232io
+	.include  rs232nmi
+	.include  tapefile
+	.include  tapectlr
+	.include  taperead
+	.include  tapewrite
+	.include  tapeirq
+	.include  channelio
+	.include  open
+	.include  openchnl
+	.include  close
+	.include  clall
+	.include  load
+	.include  save
+	.include  time
+	.include  errors
+	.include  messages
+	.include  routines
+	.include  interrupt	;contains an ORG $ff05 (& upper limit @ $fc80)
+	.include  vectors
+
+	.subttl KERNAL CROSS REFERENCE
+	.end

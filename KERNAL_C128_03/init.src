@@ -1,0 +1,516 @@
+	.page
+	.subttl C/128 KERNAL INITIALIZATION  (04/29/85)
+
+;////////////  S Y S T E M     I N I T I A L I Z A T I O N   \\\\\\\\\\\\
+
+start	ldx #$ff	;normal /reset entry
+	sei
+	txs
+	cld
+
+	lda #0
+	sta mmucr	;configure system map: c/128 mode, i/o in, ram0
+	ldx #10
+10$	lda mmutbl,x
+	sta mmu_lo,x	;reset all mmu registers
+	dex
+	bpl 10$
+	sta init_status	;flags a reset (vs. nmi) for initialization routines
+
+	jsr install	;download kernal ram code
+	jsr secure	;an ounce of protection for ram-based software
+	jsr poll	;examine cartridge slots (& go if autostart)
+	jsr ioinit	;initialize I/O devices, determine NTSC or PAL
+
+	jsr ud60	;test for <run/stop> AND cold reset
+	pha		; (save for 'jmp to monitor/c64 mode' test later)
+	bmi 20$		;...branch to full init if <run/stop> not down
+	lda #$a5
+	cmp dejavu	;test for 'cold' or 'warm' reset
+	beq 30$		;...branch to partial init if 'warm'
+
+20$	jsr ramtas	;determine ram size, init system ram & ram code
+30$	jsr restor	;initialize kernal indirect vectors
+
+	jsr cint	;initialize video displays (40 & 80)
+	pla
+	cli		;start system
+	bmi 40$		;...branch if no <run/stop> key at <reset>
+
+	jmp monitr		;...start MONITOR
+
+40$	cmp #$df
+	beq 50$			;...branch if <C=> key at <reset>
+
+	jmp (system_vector)	;...start BASIC (usually)
+50$	jmp c64mode		;...start C/64 mode
+
+
+
+mmutbl	.byte $00,$00,$00,$00,$00,$bf,$04,$00,$00,$01,$00
+
+	.page
+;//////////////////////   R E S T O R E   \\\\\\\\\\\\\\\\\\\\\\\\\\
+
+restor			;initialize kernal system indirect vectors
+	ldx #<vectss
+	ldy #>vectss
+	clc
+
+; vector - set kernal indirect and vectors (user)
+;
+;	enter with .c=0 to init, .c=1 to copy
+
+vector
+	stx tmp2	;x & y specify address low & high
+	sty tmp2+1
+	ldy #vectse-vectss-1
+
+1$	lda iirq,y	;get from storage
+	bcs 2$		;...c=1, want storage to user
+	lda (tmp2),y	;...c=0, want user to storage
+
+2$	sta iirq,y	;put in storage	
+	bcc 3$
+	sta (tmp2),y	;put in user
+
+3$	dey
+	bpl 1$
+	rts
+
+vectss
+	.word  nirq	;irq handler
+	.word  monbrk	;brk handler
+	.word  nnmi	;nmi handler
+	.word  nopen	;open
+	.word  nclose	;close
+	.word  nchkin	;chkin
+	.word  nckout	;ckout
+	.word  nclrch	;clrch
+	.word  nbasin	;basin
+	.word  nbsout	;bsout
+	.word  nstop	;stop key scan
+	.word  ngetin	;getin
+	.word  nclall	;clall
+	.word  moncmd	;monitor command parser
+	.word  nload	;load
+	.word  nsave	;save
+vectse
+
+	.page
+;///////////////////////   R A M T A S   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+ramtas			;ram test and system ram initialization
+	lda #0
+	tay
+1$	sta $0002,y	;clear all page 0 ram
+	iny
+	bne 1$
+
+	ldy #>tbuffr
+	sty tape1+1	;allocate cassette & rs-232 buffers
+	sta tape1
+	ldy #>rs232i
+	sty ribuf+1
+	sta ribuf
+	ldy #>rs232o
+	sty robuf+1
+	sta robuf
+
+	clc		;set top of memory
+	ldy #>mmucr
+	ldx #<mmucr
+	jsr settop
+
+	ldy #>rambot	;set bottom of memory
+	ldx #<rambot
+	jsr setbot
+
+	ldy #>basic	;init system vector to basic cold start
+	ldx #<basic
+	sty system_vector+1
+	stx system_vector
+
+	lda #$a5	;system ram now initialize, set 'warm' flag
+	sta dejavu
+	rts
+
+	.page
+;///////////////////////   I N S T A L L   \\\\\\\\\\\\\\\\\\\\\\\\\\
+
+; initialize top of ram in each bank (assumes maximum of 4-64k ram banks)
+
+install
+	ldy #3		;for banks 0 to 3
+
+1$	lda 10$,y	;get configuration for current bank
+	sta mmucr	;configure & copy kernal rom code (assumes bleed-thru)
+
+	ldx #.interrupt_end-.interrupt_code-1
+2$	lda .interrupt_code,x
+	sta .interrupt_code,x
+	dex
+	bpl 2$
+
+	ldx #5		;also copy  nmi, reset, irq hardware vectors
+3$	lda $fffa,x
+	sta $fffa,x
+	dex
+	bpl 3$
+
+	dey
+	bpl 1$		;loop until done all banks (last bank must be ram0)
+
+
+;  initialize common ram code area in bottom of ram bank 0
+
+
+	ldx #dl_end-dl_beg-1
+4$	lda dl_beg,x
+	sta fetch,x	;download 'FETCH, STASH, CMPARE, JSRFAR, JMPFAR' ram code
+	dex
+	bpl 4$
+
+	ldx #dl_dma-dl_end-1
+5$	lda dl_end,x
+	sta do_dma,x	;download 'DO_DMA' ram code (***preliminary***)
+	dex
+	bpl 5$
+
+
+	rts
+
+
+
+10$	.byte $00,$40,$80,$c0	;configurations for system roms & ram0/1/2/3
+
+	.page
+;////////////////////////   I O I N I T   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+ioinit
+	lda #$7f	;kill timer interrupts
+	sta d1icr
+	sta d2icr
+	sta d1pra	;turn on stop key
+
+	lda #%00001000	;shut off timers
+	sta d1cra
+	sta d2cra
+	sta d1crb
+	sta d2crb
+
+	ldx #0
+	stx d1ddrb	;set up keyboard inputs
+	stx d2ddrb	;set up user port (no rs-232)	
+	dex		;($ff)
+	stx d1ddra	;set up keyboard outputs	
+
+	lda #%00000111	;set serial/va14/15 (clkhi)	
+	sta d2pra
+	lda #%00111111	;set serial in/out, va14/15out
+	sta d2ddra
+	
+	lda #%11100011	;initialize 6510 port: kybd, cassette, vic control
+	sta r6510
+	lda #%00101111	;6510 ddr
+	sta d6510
+
+	ldx #$ff	;setup for PAL/NTSC test
+10$	lda vicreg+17
+	bpl 10$		;...branch until raster at bottom
+20$	lda #$08
+	cmp vicreg+18
+	bcc 30$		;...branch if >264: PAL system
+	lda vicreg+17
+	bmi 20$		;...branch until raster wraps to top
+	inx		;NTSC system
+30$	stx palnts
+
+	lda #0
+	sta speed	;init 1/2MHz flag
+	sta blanking	;clear vic blanking bit used by tape ops
+	sta irqtmp+1	;clear irq redirection flag used by tape ops
+	sta hold_off	;clear user vic control flag
+	sta palcnt	;init counter for pal adjustment
+	sta dfltn	;set default input  device (keyboard)
+	lda #3
+	sta dflto	;set default output device (screen)
+
+	.page
+	ldx #48
+40$	lda victbl,x	;initialize vic
+	sta vicreg,x
+	dex
+	bpl 40$
+
+
+	ldx #0		;initialize 8563 (NTSC)
+	jsr vdc_init
+	lda vdcadr
+	and #$07
+	beq 50$		;...branch if old 8563R7
+
+	ldx #vdcpat-vdctbl
+	jsr vdc_init	;...else apply -R8 patches
+
+50$	bit palnts
+	bpl 60$		;...branch if NTSC
+
+	ldx #vdcpal-vdctbl
+	jsr vdc_init	;...else apply PAL patches
+
+
+60$	lda init_status
+	bmi 70$		;...branch if character set installed (this is an nmi or user call)
+	
+	jsr dlchr	;initialize 8563 character definitions
+	lda #$80
+	ora init_status
+	sta init_status	;flag installation
+
+	ldx #$ff
+	ldy #$ff
+65$	dey		;kludge to provide delay for vic-1541 reset to finish  (only during reset)
+	bne 65$		; (delay >300ms)
+	dex
+	bne 65$
+
+70$	lda #0
+	ldx #24
+80$	sta sidreg,x	;initialize sid
+	dex
+	bpl 80$
+
+	.page
+iokeys			;////// entry from 'tape write' to restore normal irq's
+	ldx #$01
+	stx vicreg+26	;enable vic raster irq (60HZ keyscan)
+
+	dex
+	stx serial	;reset fast serial flags to slow
+	stx enabl	;reset rs232 enable flag
+
+	dex
+	stx d1t2l	;unleash one timer for basic (random # generator)
+	stx d1t2h
+
+	ldx #%00010001
+	stx d1crb
+
+	jsr spinp	;toggle serial i/o (for fast drives)
+	jsr spout	;...out
+	jsr spinp	;...in
+	jmp clklo	;release the clock line & rts
+
+
+
+
+
+
+
+
+vdc_init
+	ldy vdctbl,x	;get 8563 register #
+	bmi 10$		;...branch if end-of-table
+	inx
+	lda vdctbl,x	;get data for this register
+	inx
+	sty vdcadr
+	sta vdcdat
+	bpl vdc_init	;always
+
+10$	inx
+	rts
+
+	.page
+;////////////////////////   S E C U R E   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+;
+;	1/ IF  the system has just powered up, install a key & init vector.
+;	   This is recognized by the missing 'CBM' key planted in 2nd RAM bank.
+;
+;	2/ IF  a RESET entry (i.e., key was found)  JMP indirectly
+;	   through the SYSTEM vector in the 2nd RAM bank.
+;	   a/  At power-up the Kernal will initialize this vector to
+;	       affect a return to the normal INIT mechanisms.
+;	   b/  All normal system paths to C64 mode redirect this vector
+;	       to cause a return to C64 mode upon RESET, thus protecting
+;	       most existing C64 software and necessitating a power-down
+;	       sequence, destroying RAM contents, to escape.
+;	   c/  C128 users may aim this vector much the same way the NMI
+;	       indirect is manipulated, thus providing C128 software with
+;	       RESET control and the means to protect themselves.
+;
+;	Note that the jump thru the SYSTEM vector occurs from within a
+;	Kernal ROM subroutine. An RTS will continue normal initialization.
+;
+
+secure
+	ldx #<locker
+	ldy #>locker
+	stx tmp2
+	sty tmp2+1
+	lda #tmp2
+	sta fetvec
+	ldy #2
+1$	ldx #$7f	;the key is in ram1
+	jsr fetch	;look for key
+	cmp cbmkey,y
+	bne c128mode	;not there, can only assume this is power-up
+	dey
+	bpl 1$
+
+	ldx #<system	;the vector is in ram1- move it to common ram
+	ldy #>system
+	stx tmp2
+	sty tmp2+1
+	ldy #1
+2$	ldx #$7f
+	jsr fetch
+	sta bank,y
+	dey
+	bpl 2$
+	
+	jmp (bank)	;got the key, take 'er out for a spin!
+
+	.page
+
+c128mode
+	lda #$40	;want ram1
+	sta mmucr
+
+	lda #<c128mode	;default 'system' /reset vector points to here!
+	ldy #>c128mode
+	sta system	; (still bleeding thru)
+	sty system+1
+
+	ldx #3		;plant 'CBM' key in ram1
+1$	lda cbmkey-1,x
+	sta locker-1,x	; (bleeds thru)
+	dex
+	bne 1$
+
+	stx mmucr	;restore system configuration (.x=0) & continue initialization
+	rts
+
+	.page
+;////////////////////////     P O L L     \\\\\\\\\\\\\\\\\\\\\\\\\\\
+;
+;	1/ IF  any C64 cards installed  GOTO  C64 mode now. They are
+;	   recognized by either /game or /exrom lines pulled low.
+;
+;	2/ IF  any C128 cards installed  THEN:
+;	   a/  log its ID into the Physical Address Table (PAT).
+;	   b/  IF its ID=1  CALL  its cold_start vector (it may RTS).
+;
+;	   note: there are 4 slots (2 internal, 2 external, 16k each).
+;		 the signature must match the following format:
+;
+;		 $x000 --> cold_start vector
+;		 $x003 --> warm_start vector
+;		 $x006 --> ID. (any ID=1 indicates an auto-start card)
+;		 $x007 --> CBM
+;
+;		 where  x= $8000 and $C000  16k blocks.
+;
+;		 non-autostart cards & any autostarters RTSing to POLL
+;		 will be called by PHOENIX routine after kernal inits.
+
+
+poll	lda mmumcr	;(port sensitized prior to call!)
+	and #$30	;examine /game & /exrom lines for c/64 cartridges
+	cmp #$30
+	beq poll_128	;...branch if none
+
+
+c64mode
+	lda #%11100011	;initialize 6510 port
+	sta r6510
+	lda #%00101111	;6510 ddr
+	sta d6510
+
+	ldx #c64end-c64beg
+
+1$	lda c64beg-1,x	;download 'go_to_64_mode_code'
+	sta bank-1,x
+	dex
+	bne 1$
+	stx vicreg+48	;force 1MHz mode
+	jmp bank	;abracadabra, we're a 64!
+
+
+
+c64beg
+	lda #$f7	;be sure /fsdir bit clear!
+	sta mmumcr	;tell mmu to configure system like a c/64
+	jmp ($fffc)	;simulate a reset
+c64end
+
+	.page
+poll_128
+	ldx #3		;poll for c128 function key roms, in following order:
+	stx curbnk	;  1/ext-lo  2/ext-hi  3/int-lo  4/int-hi
+	lda #0
+1$	sta pat,x	;initialize 'Physical Address Table'
+	dex
+	bpl 1$
+
+	sta ptr1	;addr lo	($00 always)
+
+2$	ldy #9
+	ldx curbnk
+	lda fkaddr,x
+	sta ptr1+1	;addr hi	(function rom high or low)
+	lda fkbank,x
+	sta bank	;bank		(function rom internal or external)
+
+3$	ldx bank
+	lda #ptr1
+	jsr indfet	; LDA (ptr1),Y  from bank BA
+	cmp cbmkey-7,y
+	bne 4$		;...branch if no key found here
+	dey
+	cpy #7
+	bcs 3$		;...loop until entire key matches
+
+	ldx bank	;key found, log it in
+	lda #ptr1
+	jsr indfet	;id
+	ldx curbnk
+	sta pat,x
+	cmp #1
+	bne 4$		;...branch if not an auto-start function rom
+
+	lda ptr1
+	ldy ptr1+1
+	sta pc_lo
+	sty pc_hi
+	jsr jsrfar	;call its cold-start routine
+
+4$	dec curbnk
+	bpl 2$		;...loop until all function roms polled
+	rts
+
+
+fkaddr	.byte $c0,$80,$c0,$80		;function rom lo/hi table
+fkbank	.byte   4,  4,  8,  8		;function rom banks (see 'config')
+cbmkey	.byte 'CBM'			;key
+
+	.page
+
+victbl	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0		;reg  0-16 (sprite pos)
+	.byte $1b,$ff,0,0,0,$08,0,$14,$ff,1,0,0,0,0,0	;reg 17-31 (control)
+	.byte bodcol,bakcol,1,2,3,1,2,0,1,2,3,4,5,6,7	;reg 32-46 (colors)
+	.byte $ff,$fc					;reg 47-48 (keylines & 2MHz)
+
+
+
+vdctbl	.byte  0,$7e, 1,$50, 2,$66, 3,$49, 4,$20, 5,$00, 6,$19, 7,$1d	;8563 NTSC
+	.byte  8,$00, 9,$07,10,$20,11,$07,12,$00,13,$00,14,$00,15,$00
+	.byte 20,$08,21,$00,23,$08,24,$20,25,$40,26,$f0,27,$00,28,$20
+	.byte 29,$07,34,$7d,35,$64,36,$05,22,$78,$ff
+
+vdcpat	.byte 25,$47, $ff						;8563 patches
+
+vdcpal  .byte  4,$27, 7,$20,$ff						;8563 PAL
+
+;.end

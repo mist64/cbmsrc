@@ -40,14 +40,14 @@ It does not contain the version byte at $FF80 (which is $AA in the binary) or th
 
 The Commodore Plus/4, C16 and C116 BASIC 3.5 and KERNAL source (1984). Source: [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/index.html)
 
-##  BASIC_C128, KERNAL_C128_0{5|6}, EDITOR_C128[_DIN], MONITOR_C128
+##  BASIC_C128, KERNAL_C128_0{3|5|6}, EDITOR_C128[_DIN], MONITOR_C128
 
 The Commodore 128 BASIC 7.0, KERNAL, EDITOR and MONITOR sources (1985/1986). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
-* EDITOR_C128 is the US version (318020-05), EDITOR_C128_DIN the German version (315078-03).
+* KERNAL_C128_03 is 318020-03, $FF80 = 0. (It was reconstructed from listings/first_release/kernal.lis in the dump.)
 * KERNAL_C128_05 is 318020-05, $FF80 = 1.
-* KERNAL_C128_06 is 318020-06, $FF80 = 2 - this version seems to have been unreleased.
-* Version 318020-03, $FF80 = 0 was only included as an .lst file in the dump.
+* KERNAL_C128_06 is 318020-06, $FF80 = 2. This version seems to have been unreleased.
+* EDITOR_C128 is the US version (318020-05), EDITOR_C128_DIN the German version (315078-03).
 
 ## BASIC_PET2001
 

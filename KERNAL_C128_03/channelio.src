@@ -1,0 +1,234 @@
+	.page
+	.subttl  channel I/O (09/17/84):  c/128
+
+;  ***********************************************
+;  * getin -- get a character from open channel  *
+;  *						 *
+;  *      channel is determined by dfltn. 	 *
+;  *						 *
+;  *   the keyboard and rs-232 (dfltn= 0 or 2)   *
+;  *   are serviced here by taking a character   *
+;  *   from the appropriate buffer. if nothing   *
+;  *   is available then = is returned.          *
+;  *						 *
+;  *   all other devices advance to 'basin'.	 *
+;  ***********************************************
+
+ngetin
+	lda dfltn	;check default input device
+	bne 1$		;...branch if not keyboard
+
+	lda ndx		;keyboard queue index
+	ora kyndx	;function key index
+	beq getrts	;...branch if nothing to get
+	sei		;freeze buffer
+	jmp lp2		;goto editor to remove a character
+
+1$	cmp #2
+	bne bn10	;...branch if not rs-232
+
+get232	sty xsav	;preserve .y
+	jsr bsi232	;remove a character from rs-232 buffer
+	ldy xsav
+getrts
+	clc		;signal a good return
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  ***********************************************
+;  * basin - input a character from open channel *
+;  *						 *
+;  *      channel is determined by dfltn. 	 *
+;  *						 *
+;  *   input from the  keyboard  or  rs-232 is   *
+;  *   different than an get.  input  requires   *
+;  *   buffering an entire line  which is then   *
+;  *   passed to 'basin' a character at a time   *
+;  *   up to the <cr>.				 *
+;  *						 *
+;  *   the device assignments are:		 *
+;  *						 *
+;  *		   0 = keyboard			 *
+;  *		   1 = cassette			 *
+;  *		   2 = rs-232			 *
+;  *		   3 = video display		 *
+;  *		4-31 = serial bus		 *
+;  ***********************************************
+
+nbasin
+	lda dfltn	;check default input device
+	bne bn10	;...branch if not the keyboard
+
+; input from keyboard
+
+	lda pntr	;save current cursor position
+	sta lstp	;column
+	lda tblx
+	sta lsxp	;row
+	jmp loop5	;goto screen editor, which will pass chr & rts
+
+bn10
+	cmp #3		;input from screen?
+	bne bn20	;no...
+
+	sta crsw	;fake a carriage return for editor
+	lda scrt
+	sta indx	;point to right window margin as eol
+	jmp loop5	;goto screen editor to pick up characters
+
+bn20
+	bcs bn30	;...branch if serial bus (device >3)
+	cmp #2
+	beq bn50	;...branch if rs-232
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; input from cassette buffer
+
+	stx xsav	;preserve .x
+	jsr jtget
+	bcs 3$		;...branch if <stop> or error
+	pha		;save character
+	jsr jtget
+	bcs 2$		;...branch if <stop> or error
+	bne 1$		;not an end of file
+
+	lda #64
+	jsr udst	;eof: update status
+
+1$	dec bufpt	;one less chr in buffer
+	ldx xsav	;restore .x
+	pla		;restore character (.c=0 from 'jtget')
+	rts
+
+2$	tax		;save error info
+	pla		;toss data
+	txa		;restore error
+3$	ldx xsav	;restore .x (.c=1 from 'jtget')
+	rts
+
+
+; routine to get a character from cassette buffer
+
+jtget
+	jsr jtp20	;buffer pointer wrap?
+	bne 1$		;...branch if not
+	jsr rblk	;read next block from tape into buffer
+	bcs 2$		;...branch if <stop> or error (.c=1)
+	lda #0
+	sta bufpt	;reset buffer index to beginning
+	beq jtget	;always
+
+1$	lda (tape1),y	;get a character from cassette buffer
+	clc		;signal a good return
+2$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; input from serial bus
+
+bn30
+	lda status	;recall status from last serial operation
+	bne bn40	;...branch if bad
+	jmp acptr	;ok...read a character off serial bus
+
+bn40	lda #cr		;bad prior...fake null input
+bn41	clc		;         ...fake valid data
+bn42	rts
+
+
+
+; input from rs-232
+
+bn50
+	jsr get232	;get a character from rs-232 buffer
+	bcs bn41	;...branch if error (.c=1, rts)
+	cmp #0
+	bne bn42	;...branch if valid data (.c=0, rts)
+
+	lda rsstat	;null input?
+	and #$60	;check for 'dsr' or 'dcd' error
+	bne bn40	;...branch if error, fake a <cr>
+	beq bn50	;loop until character received
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  ***********************************************
+;  * basout - output a character to open channel *
+;  *						 *
+;  *   channel is determined by dflto:		 *
+;  *						 *
+;  *		   0 = keyboard	<invalid>	 *
+;  *		   1 = cassette			 *
+;  *		   2 = rs-232			 *
+;  *		   3 = video display		 *
+;  *		4-31 = serial bus		 *
+;  ***********************************************
+
+nbsout
+	pha		;preserve .a (character to output)
+	lda dflto	;check default output device
+	cmp #3
+	bne 1$		;...branch if not the screen
+
+; print to video display device
+
+	pla		;restore data
+	jmp print	;goto editor to print to display
+
+1$
+	bcc 2$		;...branch if not serial
+
+; output to serial bus
+
+	pla		;restore character to output
+	jmp ciout	;send chr out serial bus
+
+
+2$
+	lsr a		;flag:  .c=0=rs232,  .c=1=cassette
+	pla		;restore character to output
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+casout			;////// entry from 'close' for cassette eot mark (.c=1)
+
+	sta t1		;pass character in 't1'
+	txa
+	pha		;preserve x & y
+	tya
+	pha
+	bcc out232	;...branch if rs-232 output
+
+	jsr jtp20	;check cassette buffer index
+	bne 3$		;...branch if not at end
+	jsr wblk	;write full buffer
+	bcs rstor	;...abort on <stop> key
+
+	lda #bdf	;output buffer type byte
+	ldy #0
+	sta (tape1),y
+
+	iny		;reset cassette buffer index
+	sty bufpt	; (.y=1)
+
+3$
+	lda t1
+	sta (tape1),y	;put character into cassette buffer
+
+rstoa	clc		;signal good return
+rstor
+	pla		;restore x & y
+	tay
+	pla
+	tax
+	lda t1		;restore character for return
+	bcc 4$		;...branch if no error
+	lda #0		;return .a=0 & .c=1 if <stop> or error
+4$	rts
+
+
+
+; output to rs232 buffer
+
+out232
+	jsr bso232	;character to output is in 't1'
+	jmp rstoa	;always good
+
+;.end

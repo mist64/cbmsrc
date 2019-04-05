@@ -1,0 +1,85 @@
+	.page
+	.subttl  c/128  KERNAL JUMP TABLE   (04/29/85)
+
+;///////////////////   K E R N A L   J U M P   T A B L E   \\\\\\\\\\\\\\\\\\\\
+
+
+	* = $ff80-57	;new 'jmps' for c/128
+
+
+.kernal_jmp_check
+
+
+	jmp spin_spout	;setup fast serial port for input or output
+	jmp close_all	;close all logical files for a given device
+	jmp c64mode	;reconfigure system as a c/64 (no return!)
+	jmp dma_call	;initiate dma request to external ram expansion
+	jmp boot_call	;boot load program from disk
+	jmp phoenix	;call all function card's cold start routines
+	jmp lkupla	;search tables for given la
+	jmp lkupsa	;search tables for given sa
+	jmp swapper	;swap to alternate display device	(editor)
+	jmp dlchr	;init 80-col character ram		(editor)
+	jmp pfkey	;program function key			(editor)
+	jmp setbnk	;set bank for load/save/verify
+get_cfg	jmp getcfg	;convert bank to mmu configuration
+	jmp jsrfar	;JSR to any bank, RTS to calling bank
+	jmp jmpfar	;JMP to any bank
+	jmp indfet	;LDA (fetvec),Y from any bank
+	jmp indsta	;STA (stavec),Y to any bank
+	jmp indcmp	;CMP (cmpvec),Y to any bank
+	jmp primm	;print immediate  (always JSR to this routine!)
+
+	.page
+	* = $ff80	;conforms to c/64 jump table
+
+	.byte 0		;release number of kernal
+
+	jmp cint	;init screen editor & display chips	(editor)
+	jmp ioinit	;init i/o devices (ports, timers, etc.)
+	jmp ramtas	;initialize ram for system
+	jmp restor 	;restore vectors to initial system
+	jmp vector 	;change vectors for user
+	jmp setmsg 	;control o.s. messages
+	jmp secnd 	;send sa after listen
+	jmp tksa 	;send sa after talk
+	jmp memtop 	;set/read top of memory
+	jmp membot 	;set/read bottom of memory
+	jmp key		;scan keyboard				(editor)
+	jmp settmo 	;set timeout in ieee ?????????????????? unused ???????????
+	jmp acptr 	;handshake serial byte in
+	jmp ciout 	;handshake serial byte out
+	jmp untlk 	;send untalk out serial
+	jmp unlsn 	;send unlisten out serial
+	jmp listn 	;send listen out serial
+	jmp talk 	;send talk out serial
+	jmp readss 	;return i/o status byte
+	jmp setlfs 	;set la, fa, sa
+	jmp setnam 	;set length and fn adr
+open	jmp (iopen) 	;open logical file
+close	jmp (iclose) 	;close logical file
+chkin	jmp (ichkin) 	;open channel in
+ckout	jmp (ickout) 	;open channel out
+clrch	jmp (iclrch) 	;close i/o channel
+basin	jmp (ibasin) 	;input from channel
+bsout	jmp (ibsout) 	;output to channel
+	jmp loadsp 	;load from file
+	jmp savesp 	;save to file
+	jmp settim 	;set internal clock
+	jmp rdtim 	;read internal clock
+stop	jmp (istop) 	;scan stop key
+getin	jmp (igetin) 	;get char from queue
+clall	jmp (iclall) 	;clear all logical files (see close_all)
+clock	jmp udtim 	;increment clock
+	jmp scrorg 	;return current screen window size	(editor)
+	jmp plot 	;read/set x,y coord			(editor)
+	jmp iobase 	;return i/o base
+
+
+	* = $fff8
+
+system	.word c128mode
+	.word nmi	;processor hardware vectors
+	.word reset
+	.word irq
+

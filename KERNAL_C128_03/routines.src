@@ -1,0 +1,640 @@
+	.page
+	.subttl C/128 KERNAL SUBROUTINES  (04/29/85)
+
+;//////////////////   J U M P   T A B L E   R O U T I N E S   \\\\\\\\\\\\\\\\\
+
+setnam	sta fnlen	;set up a filename
+	stx fnadr
+	sty fnadr+1
+	rts
+
+
+
+setlfs	sta la		;set up la, fa & sa variables
+	stx fa	
+	sty sa	
+	rts
+
+
+
+setbnk	sta ba		;set up ba variable & filename bank
+	stx fnbank
+	rts
+
+
+
+readss	lda fa		;read status byte for latest i/o operation
+	cmp #2
+	bne readst	;...branch if serial or cassette
+
+	lda rsstat	;read rs232 status
+	pha
+	lda #0		;simulate acia: clear status when read
+	sta rsstat
+	pla
+	rts
+
+
+
+readst	lda status	;read serial bus or cassette status
+
+udst	ora status	;update serial or cassette status byte
+	sta status
+	rts
+
+
+
+setmsg	sta msgflg	;enable/disable kernal messages
+	rts
+
+
+
+settmo	sta timout	;??????????? left over from ieee days ??????????????
+	rts
+
+	.page
+
+memtop	bcc settop	;/////jump entry to read/set top of user ram
+
+gettop	ldx memsiz	;read top of memory (.c=1)
+	ldy memsiz+1
+
+settop	stx memsiz	;set top of memory (.c=0)
+	sty memsiz+1
+	rts
+
+
+
+
+
+membot	bcc setbot	;///// jump entry to read/set bottom of user ram
+
+getbot	ldx memstr	;read bottom of memory (.c=1)
+	ldy memstr+1
+
+setbot	stx memstr	;set bottom of memory (.c=0)
+	sty memstr+1
+	rts
+
+
+
+
+
+iobase	ldx #$00	;return base address of i/o block in x & y
+	ldy #$d0
+	rts
+
+	.page
+;  look up secondary address:
+;
+;	enter with sa sought in y.  routine looks for match in tables.
+;	exits with .c=1 if not found, else .c=0 & .a=la, .x=fa, .y=sa
+
+lkupsa
+	tya
+	ldx ldtnd	;get lat, fat, sat table index
+
+1$	dex
+	bmi lkupng	;...branch if end of table (not found)
+	cmp sat,x
+	bne 1$		;...keep looking
+
+lkupok	jsr getlfs	;set up la, fa, sa   (** lkupla enters here **)
+	tax
+	lda la
+	ldy sa
+	clc		;flag 'we found it'
+	rts
+
+lkupng	sec		;flag 'not found'
+	rts
+
+
+
+
+
+;  look up logical file address:
+;
+;	enter with la sought in a.  routine looks for match in tables.
+;	exits with .c=1 if not found, else .c=0 & .a=la, .x=fa, .y=sa
+
+lkupla
+	tax
+	jsr lookup	;search lat table
+	beq lkupok	;...branch if found
+	bne lkupng	;else return with .c=1
+
+	.page
+dma_call
+	lda config,x	;lookup internal bank
+	and #$fe	;MUST enable I/O to access DMA controller!
+	tax
+	jmp do_dma	;go do it from common area (ram)
+
+
+
+fnadry
+	stx fnadrx	;must save .x
+	ldx fnbank	; LDA (FNADR),Y  from bank FNBANK
+	lda #fnadr
+	jsr indfet
+	ldx fnadrx	;restore .x
+	rts
+
+
+
+salsy
+	ldx #sal	; STA (SAL),Y  from bank BA
+	.byte $2c
+
+
+ealsy
+	ldx #eal	; STA (EAL),Y  from bank BA
+	stx stavec
+	ldx ba
+	jmp indsta
+
+
+
+eally
+	lda #eal	; LDA (EAL),Y  from bank BA
+	.byte $2c
+
+
+sally
+	lda #sal
+	ldx ba		; LDA (SAL),Y  from bank BA
+			;fall into 'indfet'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+indfet
+	sta fetvec	; LDA (fetvec),Y  utility
+	lda config,x
+	tax
+	jmp fetch
+
+indsta
+	pha		; STA (stavec),Y  utility
+	lda config,x
+	tax
+	pla		; (*note* user must setup 'stavec')
+	jmp stash
+
+indcmp
+	pha		; CMP (cmpvec),Y  utility
+	lda config,x
+	tax
+	pla		; (*note*  user must setup 'cmpvec')
+	jmp cmpare
+
+
+
+getcfg
+	lda config,x	;convert bank (0-15) in .x to mmu configuration in .a
+	rts
+
+
+
+config
+	.byte %00111111	;ram0 only
+	.byte %01111111	;ram1 only
+	.byte %10111111	;ram2 only
+	.byte %11111111	;ram3 only
+
+	.byte %00010110	;int rom, ram0, i/o
+	.byte %01010110	;int rom, ram1, i/o
+	.byte %10010110	;int rom, ram2, i/o
+	.byte %11010110	;int rom, ram3, i/o
+
+	.byte %00101010	;ext rom, ram0, i/o
+	.byte %01101010	;ext rom, ram1, i/o
+	.byte %10101010	;ext rom, ram2, i/o
+	.byte %11101010	;ext rom, ram3, i/o
+
+	.byte %00000110	;kernal & int_lo, ram0, i/o
+	.byte %00001010	;kernal & ext_lo, ram0, i/o
+	.byte %00000001	;kernal & basic,  ram0, charrom
+	.byte %00000000 ;kernal & basic,  ram0, i/o
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;/////////////////////   K E R N A L   R A M   C O D E  \\\\\\\\\\\\\\\\\\\\\\\
+
+;  FETCH  ram code      ( LDA (fetch_vector),Y  from any bank )
+;
+;  enter with 'fetvec' pointing to indirect adr & .y= index
+;             .x= memory configuration
+;
+;  exits with .a= data byte & status flags valid
+;             .x altered
+
+dl_beg	lda mmucr	;save current memory configuration
+	stx mmucr	;configure memory this way
+	tax
+	lda ($ff),y	;get the byte ($ff here is a dummy address, 'FETVEC')
+	stx mmucr	;restore previous memory configuration
+	rts
+
+
+
+;  STASH  ram code      ( STA (stash_vector),Y  to any bank )
+;
+;  enter with 'stavec' pointing to indirect adr & .y= index
+;             .a= data byte to store
+;             .x= memory configuration (writes to rom bleed thru to ram)
+;
+;  exits with .x & status altered
+
+	pha
+	lda mmucr	;save current memory configuration
+	stx mmucr	;configure memory this way
+	tax
+	pla
+	sta ($ff),y	;put the byte ($ff here is a dummy address, 'STAVEC')
+	stx mmucr	;restore previous memory configuration
+	rts
+
+
+
+;  CMPARE  ram code      ( CMP (cmpare_vector),Y  to any bank )
+;
+;  enter with 'cmpvec' pointing to indirect adr & .y= index
+;             .a= data byte to compare to memory
+;             .x= memory configuration
+;
+;  exits with .a= data byte & status flags valid, .x is altered
+
+	pha
+	lda mmucr	;save current memory configuration
+	stx mmucr	;configure memory this way
+	tax
+	pla
+	cmp ($ff),y	;compare bytes ($ff here is a dummy address, 'CMPVEC')
+	stx mmucr	;restore previous memory configuration
+	rts
+	.page
+; LONG CALL  utility
+;
+
+	jsr jmpfar	;execute jmp_long routine as a subroutine
+	sta a_reg
+	stx x_reg
+	sty y_reg
+	php
+	pla
+	sta s_reg
+	tsx
+	stx stkptr
+	lda #sysbnk
+	sta mmucr
+	rts
+
+
+
+; LONG JUMP utility
+;
+
+	ldx #0
+1$
+	lda pc_hi,x	;put address & status on stack
+	pha
+	inx
+	cpx #3
+	bcc 1$
+
+	ldx bank
+	jsr get_cfg	;convert 'bank' to mmu data	??????????? rom routine ??????????
+	sta mmucr	;set up memory configuration
+	lda a_reg
+	ldx x_reg	;set up registers
+	ldy y_reg
+	rti		;goto it
+
+dl_end
+
+
+
+; DMA REQUEST utility for external ram access
+;
+; enter with .a= desired internal memory configuration during dma
+;	     .y= dma command
+
+	ldx mmucr	;save current configuration
+	sty dma_cmd	;tell dma controller what to do (arm it)
+	sta mmucr	;setup (internal) bank for dma controller (trigger it)
+	stx mmucr	;all done! (like magic, huh?) restore user config & return
+	rts
+
+dl_dma
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+;	*** phoenix ***
+;
+;	> call every logged cartridge's cold start routine.
+;	> check serial disk unit #8 for 'boot' disk.
+;
+;	order: external low/high, internal low/high, boot disk.
+;
+
+
+phoenix
+	sei
+	ldx #3
+	stx curbnk
+
+1$	ldx curbnk
+2$	lda pat,x
+	beq 3$		;...branch if this slot empty
+
+	ldy #0
+	lda fkaddr,x
+	sta pc_hi	;cold start address hi
+	sty pc_lo	;cold start address lo  ($00 always)
+	lda fkbank,x
+	sta bank	;card slot
+	jsr jsrfar	;call its cold start routine
+
+3$	dec curbnk
+	bpl 1$		;...loop until all function cards called
+	cli
+
+;
+;  fall into BOOT and attempt an auto-load/run from disk
+;
+
+	.page
+;			*** auto boot disk program ***
+;
+;	1/ read disk block at track 1 sector 0 into ram at $0b00 ('tbuffr').
+;	2/ check for auto-boot signature. RTS if not. the relative format is:
+;
+;	$00 $01 $02 $03  $04  $05  $06 ----------  A  ----------  B  -----> $FF
+;	 |   |   |   |    |    |    |  (optional)  |  (optional)  |
+;	 C   B   M  adrl adrh bank #blk diskname   0   filename   0  6502 code
+;
+;	3/ IF  #blk > 0  THEN   block_read sequential sectors into ram at
+;				given adrl, adrh, bank location.
+;	4/ IF  filename  THEN	load filename into ram bank0 (normal load).
+;	5/ JSR to user code following filename (system map).
+
+boot
+	ldx #8		;default device #
+	lda #'0'	;default drive #
+
+boot_call		;//////user entry: enter with .x=device, .a=drive (ascii)
+	sta drive
+	stx fa
+	txa		;device #
+	jsr close_all	;close all current channels to boot device
+	ldx #0
+	stx ptr2	;init filename length to 0
+	stx sector	;init to sector 0
+	inx
+	stx track	;init to track 1
+1$	iny		;provide adequate delay for 1541 init to complete
+	bne 1$
+	inx
+	bne 1$
+
+	ldx #disk_init-block_data-1
+10$	lda block_data,x
+	sta bad,x	;setup for disk block read: download cmd string
+	dex
+	bpl 10$
+
+	lda drive
+	sta bad+6	;setup drive number
+
+	lda #ram0	;********** open command channel & init drive **********
+	ldx #romram0
+	jsr setbnk	;setup bank parameters
+	lda #1
+	ldx #<disk_init
+	ldy #>disk_init
+	jsr setnam	;set up address & length of command string
+	lda #0		;la: use reserved
+	ldy #15		;sa: use command channel
+	ldx fa		;fa: use given device
+	jsr setlfs
+	jsr open	;open command channel & send command string: 'I'
+	bcs 15$		;...branch if any problem
+
+	lda #1		;********** open data channel to a disk buffer **********
+	ldx #<disk_bufr
+	ldy #>disk_bufr
+	jsr setnam	;set up address & length of command string
+	lda #13
+	tay
+	ldx fa
+	jsr setlfs	;setup device #, data channel
+	jsr open	;open data channel & send command string: '#' 
+	bcc 16$		;...branch if no problems
+
+
+15$	jmp boot_close	;error exit: close all channels & rts
+
+
+16$	lda #<tbuffr	;********** read disk track 1 sector 0 into ram **********
+	ldy #>tbuffr
+	sta sal		;setup destination address of 1st block read (bank setup earlier)
+	sty sal+1
+	jsr block_read	;read track 1 sector 0 into ram at 'tbuffr'
+
+	ldx #0
+20$	lda tbuffr,x	;see if it is a 'boot' disk: look for 'CBM' key
+	cmp cbmkey,x
+	bne 15$		;...branch & quit if not
+	inx
+	cpx #3
+	bcc 20$
+
+	jsr primm
+	.byte cr,'BOOTING ',0
+
+	.page
+30$	lda tbuffr,x	;got a boot disk: setup load parameters for remaining boot code
+	sta sal-3,x
+	inx
+	cpx #7
+	bcc 30$		;starting at sal we have: adrl, adrh, bank, #blocks to load
+
+40$	lda tbuffr,x	;print optional disk name
+	beq 45$
+	jsr bsout
+	inx
+	bne 40$
+45$	stx ptr1	;save index into buffer
+
+	jsr primm
+	.byte '...',cr,0
+
+	lda sal+2	;********** load sequential disk blocks into memory **********
+	sta ba		;destination bank
+
+50$	lda sal+3	;# of blocks remaining to load
+	beq 60$		;...branch if no more
+	dec sal+3	;one less disk block
+	jsr block_next	;increment track & sector and perform block_read
+	inc sal+1	;increment address
+	bne 50$		;bra
+
+60$	jsr boot_close	;done block loads: close all files
+
+
+
+	ldx ptr1	;********** bload given filename from disk **********
+	.byte $2c	;skip 1st increment
+
+70$	inc ptr2
+	inx
+	lda tbuffr,x	;find end of filename to load
+	bne 70$
+
+	inx
+	stx pc_lo	;*** save *** this is the address to call when done!
+	ldx ptr1
+	lda #':'	;install drive #
+	sta tbuffr,x
+	dex
+	lda drive
+	sta tbuffr,x
+	stx ptr1
+	ldx ptr2
+	beq 99$		;...branch if null filename: nothing else to load
+	inx
+	inx
+	txa		;pad fnlen to accomodate drive #
+	ldx ptr1
+	ldy #>tbuffr
+	jsr setnam
+	lda #ram0
+	tax
+	jsr setbnk
+;	lda fa
+;	tax
+;	tay		;specify disk default load (load adr comes from disk)
+;	jsr setlfs
+	lda #0
+	jsr load	;bload disk file to ram bank 0 at his address (sa<>0)
+
+99$	lda #>tbuffr
+	sta pc_hi
+	lda #romram0
+	sta bank
+	jsr jsrfar	;call his routine loaded with 1st block read
+	clc		;in case he returns, clear error flag	
+	rts
+
+
+
+
+boot_close
+	php		;save error flag (.c)
+	pha		;save error code (if any)
+	jsr clrch	;in case this is an error exit
+	lda #13
+	clc
+	jsr close
+	ldx #0		;send 'UI' to clear things up
+	jsr ckout
+	bcs 10$		;...unless channels never established
+	lda #'U'
+	jsr bsout
+	lda #'I'
+	jsr bsout
+10$	jsr clrch
+	lda #0
+	sec		;don't xmit close, just update tables
+	jsr close
+	pla		;restore error code (if any)
+	plp		;restore error flag (.c)
+	rts
+
+	.page
+block_next
+	ldx sector	;********** increment track & sector **********
+	inx
+	cpx #21		;1541: tracks 1-17 have 21 sectors (0-20)
+	bcc 1$
+	ldx #0		;start a new track
+	inc track
+1$	stx sector
+	txa
+	jsr dec_asc	;convert sector # to decimal ascii
+	sta bad+0
+	stx bad+1
+	lda track
+	jsr dec_asc	;convert track # likewise
+	sta bad+3
+	stx bad+4	;fall into 'block_read'
+
+
+block_read
+	ldx #0		;********** command disk to read a block **********
+	jsr ckout
+	ldx #disk_init-block_data-1
+1$	lda bad,x
+	jsr bsout	;send command string: 'U1:13 0 tt ss' via cmd channel
+	dex
+	bpl 1$
+	jsr clrch
+	ldx #13
+	jsr chkin	;********** move block from disk to ram **********
+	ldy #0
+2$	jsr basin	;read bytes via data channel
+	jsr salsy	; sta (SAL),y to bank BA
+	iny
+	bne 2$
+	jmp clrch
+
+
+dec_asc
+	ldx #'0'	;convert hex byte to 2-digit ascii decimal
+	sec
+1$	sbc #10
+	bcc 2$
+	inx
+	bcs 1$
+2$	adc #'9'+1
+	rts
+
+
+block_data	.byte '00 10 0 31:1U'		;block read cmd (reversed!)
+disk_init	.byte 'I'			;initialize cmd
+disk_bufr	.byte '#'			;get buffer cmd
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;     *** print immediate ***
+;  a jsr to this routine is followed by an immediate ascii string,
+;  terminated by a $00. the immediate string must not be longer
+;  than 255 characters including the terminator.
+
+primm
+	pha		;save registers
+	txa
+	pha
+	tya
+	pha
+	ldy #0
+
+1$	tsx		;increment return address on stack
+	inc $104,x	;and make imparm = return address
+	bne 2$
+	inc $105,x
+2$	lda $104,x
+	sta imparm
+	lda $105,x
+	sta imparm+1
+
+	lda (imparm),y	;fetch character to print (*** always system bank ***)
+	beq 3$		;null= eol
+	jsr bsout	;print the character
+	bcc 1$
+
+3$	pla		;restore registers
+	tay
+	pla
+	tax
+	pla
+	rts		;return
+
+;.end

@@ -1,0 +1,537 @@
+	.subttl  C/128 SYSTEM MEMORY MAPS  (05/15/85)
+	.page
+;				     COMPOSITE  SYSTEM  MEMORY  MAP
+;
+;	  C64 Cartridges	       C64		     C128 ROMs		 RAM Banks (0-3)
+; $FFFF> _______________	 _______________	 _______________	 _______________
+;	|		|	|		|	|		|	|		|
+;	|     Game	|	|     KERNAL	|	|		|	|		|
+;	|		|	|	&	|	|     KERNAL	|	|		|
+;	|     Card	|	|     EDITOR	|	|		|	|		|
+;	|		|	|		|	|		|	|		|
+; $E000>|_______________|-------|_______________|-------|_______________|	|		|
+;				|		|	|      I/O      |	|		|
+;				| I/O and CHARs	|	| CHARs & CP/M	|	|		|
+; $D000>------------------------|_______________|-------|_______________|	|		|
+;							|		|	|		|
+;	 _______________	 _______________	|     EDITOR	|	|		|
+; $C000>|		|-------|		|-------|_______________|-------|		|
+;	|		|	|		|	|		|	|		|
+;	|  Application	|	|		|	|    MONITOR	|	|		|
+; $B000>|		|-------|     BASIC	|-------|_______________|	|		|
+;	|   Card - HI	|	|		|	|		|	|		|
+;	|		|	|		|	|		|	|	_	|
+; $A000>|_______________|-------|_______________|	|		|	|      | SYSTEM	|
+;	|		|				|     BASIC	|	| RAM0-| & BASIC|
+;	|  Application	|				|		|	|      |_  TEXT	|
+;	|		|				|       HI	|	|	_	|
+;	|   Card - LO	|				|		|	|      | BASIC	|
+;	|		|				|		|	| RAM1-|  VARs	|
+; $8000>|_______________|-------------------------------|_______________|-------|      |_	|
+;							|		|	|		|
+;							|		|	|	_	|
+;							|		|	| RAM2-| FUTURE |
+;							|     BASIC	|	| RAM3-|_EXPAND |
+;							|		|	|		|
+;							|       LO	|	|		|
+;							|		|	|		|
+;							|		|	|		|
+;							|		|	|		|
+;							|		|	|		|
+;							|		|	|		|
+; $4000>------------------------------------------------|_______________|-------|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+;										|		|
+; $0400>------------------------------------------------------------------------|_______________|
+;										|    COMMON	|
+; $0000>------------------------------------------------------------------------|_______________|
+
+	.page
+; $0A00>|---------------| $1300>|---------------| $1C00>|---------------| $FFFF>|---------------|
+;	|		|	|		|	|		| $FFFA>|  NMI RST IRQ  |
+;	|		|	|     Basic	|	|		| $FFD0>| CP/M RAM Code	|
+;	|		|	|    Absolute	|	|		|       | Krnl RAM Code |
+;	|    Basic	|	|   Variables	|	|		| $FF05>|---------------|
+;	|		|	|		|	|		|	|MMU Config Regs|
+; $0900>|   Run-Time	| $1200>|---------------| $1B00>|		| $FF00>|---------------|
+;	|		|	|     Basic	|	|		|	|		|
+;	|    Stack	|	|   DOS / VSP	|	|   Reserved    |	|		|
+;	|		|	|   Variables	|	|		|	|		|
+;	|		| $1108>|---------------|	|     For       |	|		|
+;	|		|	|CP/M Reset Code|	|		|	|		|
+; $0800>|---------------| $1100>|---------------| $1A00>|   Function    |	|		|
+;	|		|	|		|	|		|	|		|
+;	|		|	|    Function	|	|     Key       |	|		|
+;	|		|	|      Key	|	|		|	|		|
+;	|		|	|     Buffer	|	|   Software    |	|		|
+;	|      VIC	|	|		|	|		|	|		|
+;	|		| $1000>|---------------| $1900>|		|	|		|
+;	|     Text	|	|		|	|		|	|		|
+;	~		~	|		|	|		|	|     Basic	|
+;	|    Screen	|	|		|	|		|	|		|
+;	|		|	|    Sprite	|	|		|	|		|
+;	|    (VM#1)	|	|		|	|		|	|		|
+;	|		| $0F00>|   Definition	| $1800>|---------------|	~     Text	~
+;	|		|	|		|	|		|	|		|
+;	|		|	|     Area	|	|		|	|		|
+;	|		|	|		|	|		|	|		|
+;	|		|	|		|	|		|	|     Area	|
+;	|		|	|		|	|		|	|		|
+; $0400>|---------------| $0E00>|---------------|	|		|	|		|
+;	| Basic	RAM Code|	|		|	|		|	| (Basic Text	|
+; $0380>| - - - - - - - |	|    RS-232	|	|   Reserved    |	|   begins at	|
+;	| Kernal Tables |	|    Output	|	|		|	|     $1C00	|
+; $033C>| - - - - - - - |	|    Buffer	|	|      for      |	|  if Bit-Map	|
+;	|   Indirects	|	|		|	|		|	|  unallocated)	|
+; $02FC>|---------------| $0D00>|---------------|	|    Foreign    | $4000>|---------------|
+;	|Kernal	RAM Code|	|		|	|		|	|		|
+; $02A2>| - - - - - - - |	|    RS-232	|	|    Language   |	|		|
+;	|Basic & Monitor|	|    Input	|	|		|	|		|
+;	|     Input	|	|    Buffer	|	|    Systems    |	|      VIC	|
+;	|     Buffer	|	|		|	|		|	|		|
+; $0200>|---------------| $0C00>|---------------|	|		|	~    Bit-Map	~
+;	| System Stack	|	|  (Disk Boot	|	|		|	|		|
+; $0149>| - - - - - - - |	|     Page)	|	|		|	|     Screen	|
+;	|Basic DOS,USING| $0BC0>| - - - - - - - |	|		|	|		|
+; $0110>| - - - - - - - |	|   Cassette	|	|		|	|		|
+;	|    FBUFFER	|	|    Buffer	|	|		|	|		|
+; $0100>|---------------| $0B00>|---------------| $1400>|---------------| $2000>| - - - - - - - |
+;	|		|	|   Monitor &	|	|		|	|		|
+;	|  Kernal Z.P.	|	|    Kernal	|	|		|	|      VIC	|
+; $0090>| - - - - - - - |	|   Absolute	|	|   ?????????   |	~    Bit-Map	~
+;	|  Basic  Z.P.	|	|   Variables	|	|		|	|     Color	|
+; $0002>| _ _ _ _ _ _ _	|	|		|	|		|	|     (VM#2)	|
+; $0000>|_______________| $0A00>|---------------| $1300>|---------------| $1C00>|---------------|
+
+
+;			  	C/128  SYSTEM  ROM  LAYOUT
+;
+;	$FFFF _  _______________
+;	$FF4D _	|_______________|__________ Kernal Jump Table & Hardware Vectors --------
+;		|		|							|
+;	$FF05 _ |_______________|__________ Kernal Interrupt Dispatch Code		|
+;	$FF00 _	|///////////////|__________ MMU Configuration Registers			|
+;		|		|							|
+;		|		|							|
+;	$FC80 _	|_______________|__________ ROM Reserved for Foreign Language Versions	|
+;		|		|							|
+;		|		|							|
+;	$FA80 _	|_______________|__________ Editor Tables				|
+;		|		|							|
+;		|		|							|
+;		/		/							-\  HIGH
+;		|		|							-/  ROM
+;	$E000 _ |_______________|__________ Kernal ROM Code				|
+;		|///////////////|							|
+;		|///////////////|							|
+;		/////////////////							|
+;		|///////////////|							|
+;	$D000 _	|///////////////|__________ I/O Space					|
+;		|		|							|
+;		|		|							|
+;		/		/							|
+;		|		|							|
+;	$C000 _ |_______________|__________ Editor ROM Code -----------------------------
+;		|		|							|
+;		|		|							|
+;		/		/							|
+;		|		|							|
+;	$B000 _ |_______________|__________ Monitor ROM Code				-\  MID
+;		|		|							-/  ROM
+;		|		|							|
+;		|		|							|
+;		|		|							|
+;		|		|							|
+;	$8000 -	/		/ ------------------------------------------------------|
+;		|		|							|
+;		|		|							-\  LOW
+;		|		|							-/  ROM
+;		|		|							|
+;	$4000 _	|_______________|---------- BASIC ROM Code -----------------------------|
+
+	.page
+
+;	         I/O  BLOCK  MAP		6526  CIA  REGISTER MAP  (typical)
+;
+;	$DFFF _  _______________		REG#	FUNCTION
+;		|		|      ________
+;		|    I/O - 2	|     /		 F .... CRB   (control register B)
+;	$DF00 _ |_______________|    /		 E .... CRA   (control register A)
+;		|		|   /		 D .... ICR   (interrupt control register)
+;		|    I/O - 1	|  /		 C .... SDR   (serial data register)
+;	$DE00 _ |_______________|_/		 B .... TOD   (hours)
+;		|		|		 A .... TOD   (minutes)
+;		|    CIA - 2	|		 9 .... TOD   (seconds)
+;	$DD00 _ |_______________|		 8 .... TOD   (tenths)
+;		|		|		 7 .... TB-HI (timer B)
+;		|    CIA - 1	|		 6 .... TB-LO
+;	$DC00 _ |_______________|_		 5 .... TA-HI (timer A)
+;		|		| \		 4 .... TA-LO
+;		|      VIC	|  \		 3 .... DDRB  (data direction port B)
+;		/     COLOR	/   \		 2 .... DDRA  (data direction port A)
+;		|      RAM	|    \		 1 .... PRB   (port B)
+;	$D800 _ |_______________|     \________	 0 .... PRA   (port A)
+;		|		|
+;		|  (RESERVED)	|
+;	$D700 _ |_______________|
+;		|		|
+;		|   8563 VDC	| ..... (register map on following pages)
+;	$D600 _ |_______________|
+;		|		|
+;		|      MMU	| ..... (register map on following pages)
+;	$D500 _ |_______________|
+;		|		|
+;		|      SID	| ..... (register map on following pages)
+;	$D400 _ |_______________|
+;		|		|
+;		|		|
+;		/      VIC	/ ..... (register map on following pages)
+;		|		|
+;	$D000 _ |_______________|
+
+	.page
+;///////////////       T H E       C / 1 2 8       K E Y B O A R D       \\\\\\\\\\\\\\\
+
+;	    -------------------------------------------------------------------     -------
+;	    | C0  | C1  | C2  | C3  | C4  | C5  | C6  | C7  | K0  | K1  | K2  |     | GND |
+;	    |PIN13|PIN19|PIN18|PIN17|PIN16|PIN15|PIN14|PIN20|PIN21|PIN22|PIN23|     |PIN-1|
+;	    ---|-----|-----|-----|-----|-----|-----|-----|-----|-----|-----|---     ---|---
+;	      \|/   \|/   \|/   \|/   \|/   \|/   \|/   \|/   \|/   \|/   \|/          |
+; -------   -------------------------------------------------------------------        |
+; | R0  |/__| INS |  #  |  %  |  '  |  )  |  +  | lb  |  !  | HELP| ESC | ALT |        |
+; |PIN12|\  | DEL |  3  |  5  |  7  |  9  |     |     |  1  |     |     |     |        |
+; -------   -------------------------------------------------------------------        |
+; | R1  |/__| RET |  W  |  R  |  Y  |  I  |  P  |  *  | <-- |  8  |  +  |  0  |        |
+; |PIN11|\  |     |     |     |     |     |     |     |     |     |     |     |        |
+; -------   -------------------------------------------------------------------        |
+; | R2  |/__| /_\ |  A  |  D  |  G  |  J  |  L  |  ]  | CTRL|  5  |  -  |  .  |        |
+; |PIN10|\  | \ / |     |     |     |     |     |  ;  |     |     |     |     |        |
+; -------   -------------------------------------------------------------------        |
+; | R3  |/__| F8  |  $  |  &  |  (  |  0  |  -  | CLR |  "  | TAB | LINE| /|\ |        |
+; |PIN-5|\  | F7  |  4  |  6  |  8  |     |     | HOM |  2  |     | FEED|  |  |        |
+; -------   -------------------------------------------------------------------        |
+; | R4  |/__| F2  |  Z  |  C  |  B  |  M  |  >  |RIGHT|SPACE|  2  |ENTER|  |  |        |
+; |PIN-8|\  | F1  |     |     |     |     |  .  |SHIFT| BAR |     |     | \|/ |        |
+; -------   -------------------------------------------------------------------        |
+; | R5  |/__| F4  |  S  |  F  |  H  |  K  |  [  |  =  | C=  |  4  |  6  | /__ |        |
+; |PIN-7|\  | F3  |     |     |     |     |  :  |     |     |     |     | \   |        |
+; -------   -------------------------------------------------------------------        |
+; | R6  |/__| F6  |  E  |  T  |  U  |  O  |  @  | pi  |  Q  |  7  |  9  | __\ |        |
+; |PIN-6|\  | F5  |     |     |     |     |     |  ^  |     |     |     |   / |        |
+; -------   -------------------------------------------------------------------        |
+; | R7  |/__| /|\ |LEFT |  X  |  V  |  N  |  <  |  ?  | RUN |  1  |  3  |  NO |_____   |
+; |PIN-9|\  | \|/ |SHIFT|     |     |     |  ,  |  /  | STOP|     |     | SCRL|    |   |
+; -------   -------------------------------------------------------------------    |   |
+;		     |								   |   |
+;		  -------   /  (LOCKING)					   |   |
+;		  |SHIFT|__o  o____________________________________________________|   |
+;		  | LOCK|							       |
+;		  -------							       |
+; -------         -------   /							       |
+; | NMI |/________|RESTR|__o  o________________________________________________________o
+; |PIN-3|\        |     |							       |
+; -------         -------							       |
+; -------         -------   /  (LOCKING)                                               |
+; |40/80|/________|40/80|__o  o________________________________________________________o
+; |PIN24|\        |DSPLY|							       |
+; -------         -------							       |
+; -------         -------   /  (LOCKING)                                               |
+; |P6510|/________|CAPS |__o  o________________________________________________________o
+; |PIN25|\        |LOCK |
+; -------         -------
+
+;NOTES:	1/  THE 64 KEYS UNDER C0 THRU C7 ABOVE OCCUPY THE SAME MATRIX POSITION AS IN THE C/64,
+;	    AS DOES THE 'RESTORE' KEY. INCLUDING THE 'SHIFT LOCK' KEY, THERE ARE 66 SUCH KEYS.
+;	2/  THE 24 KEYS UNDER THE K0, K1 AND K2 OUTPUTS ARE PART  OF  THE  EXTENDED  KEYBOARD,
+;	    AS ARE THE '40/80 DSPLY' AND 'CAPS LOCK' KEYS.  THERE ARE 26 NEW KEYS.  THEY  WILL
+;	    NOT BE SCANNED IN C/64  MODE,  ALTHO THE USER MAY WRITE CODE TO SCAN THEM HIMSELF.
+	.page
+;			8722  MMU  REGISTER  MAP
+;
+;	REGISTER		DESCRIPTION
+;				 _______
+;	 11  (VR) ............. | 7 - 4 | .....	BANK Version
+;	    Version Register	| 3 - 0 | .....	MMU  Version
+;				|-------|
+;				 _______               __
+;	 10  (PAGE-1 HI) ...... | 7 - 4 | .....	???	 |
+;	  8  (PAGE-0 HI)	| 3 | .........	A19	Swaps PAGE 0 and/or PAGE 1
+;				| 2 | .........	A18	with any other page in the
+;				| 1 | .........	A17	256K address space.
+;				| 0 | ......... A16	 |
+;				|---|			 |
+;				 ___			 |
+;	  9  (PAGE-1 LO) ......	| 7 | ......... A15	 |
+;	  7  (PAGE-0 LO)	| 6 | ......... A14	 |
+;				| 5 | ......... A13	 |
+;				| 4 | ......... A12	 |
+;				| 3 | ......... A11	 |
+;				| 2 | ......... A10	 |
+;				| 1 | ......... A9	 |
+;				| 0 | ......... A8     __|
+;				|---|
+;				 ___
+;	  6  (RCR)		| 7 | .........	VA17 \	VIC RAM Bank
+;				| 6 | .........	VA16 /
+;	    RAM Configuration	| 5 | .........	\	RAM Block     (for future expansion)
+;	      Register		| 4 | .........	/
+;				| 3 | .........	\	SHARE Status  (none,bot,top,both)
+;				| 2 | .........	/
+;				| 1 | .........	\	SHARE Amount  (1k,4k,8k,16k)
+;				| 0 | .........	/
+;				|---|
+;	  			 ___
+;	  5  (MCR)		| 7 | .........	40/80 Key Sense
+;				| 6 | .........	OS Mode      0 = 128,  1 = 64
+;	   Mode Configuration	| 5 | .........	/EXROM line sense
+;	     Register		| 4 | .........	/GAME  line sense
+;				| 3 | .........	FSDIR        0 = IN,   1 = OUT
+;				| 2 | .........	???
+;				| 1 | .........	???
+;				| 0 | .........	Processor:   0 = Z80,  1 = 85xx
+;				|---|
+;				 ___
+;	  4  (PCR-D)		| 7 | .........	A17 \	RAM BANK (0-3)
+;	  3  (PCR-C)		| 6 | .........	A16 /
+;	  2  (PCR-B)		| 5 | .........	\	ROM-HI	(system,int,ext,RAM)
+;	  1  (PCR-A)		| 4 | .........	/
+;	  0  (CR)		| 3 | .........	\	ROM-MID	(system,int,ext,RAM)
+;				| 2 | .........	/
+;	    Pre-configuration	| 1 | .................	ROM-LO	(system,RAM)
+;	      & Configuration	| 0 | ................. I/O	(I/O, else see ROM-HI)
+;	          Registers	|---|
+	.page
+;			(preliminary) DMA CONTROLLER REGISTER  MAP
+;
+;
+; REG #	 _______________________________________________________
+;  0_	| BUSY | FAULT|  --  |  --  |  --  |  --  |  --  |  --  |______ Status Register
+;  1_	| EXEC |  SUM |  --  |  --  |  IRQ |  INC |    MODE     |______ Command Register
+;  2_	|  A7  |  A6  |  A5  |  A4  |  A3  |  A2  |  A1  |  A0  |______ Host Address lo
+;  3_	|  A15 |  A14 |  A13 |  A12 |  A11 |  A10 |  A9  |  A8  |______ Host Address hi
+;  4_	| EX7  | EX6  | EX5  | EX4  | EX3  | EX2  | EX1  | EX0  |______ Expansion Address lo
+;  5_	| EX15 | EX14 | EX13 | EX12 | EX11 | EX10 | EX9  | EX8  |______ Expansion Address hi
+;  6_	|  --  |  --  |  --  |  --  |  --  | BA2  | BA1  | BA0  |______ Expansion Bank pointer
+;  7_	|  L7  |  L6  |  L5  |  L4  |  L3  |  L2  |  L1  |  L0  |______ Transfer Length lo
+;  8_	|  L15 |  L14 |  L13 |  L12 |  L11 |  L10 |  L9  |  L8  |______ Transfer Length hi
+;  9_	|  S7  |  S6  |  S5  |  S4  |  S3  |  S2  |  S1  |  S0  |______ Checksum
+; 10_   |______|______|______|______|______|______|______|______|______ Version & Max-Memory
+
+
+
+;	MODE =>		00: Transfer FROM internal  TO  external
+;			01: Transfer  TO  internal FROM external
+;			10: Swap
+;			11: Verify
+
+
+
+;	The  DMA  CONTROLLER  appears in the C/128 I/O memory map at IO2  ($DF00).
+
+	.page
+;			8564  VIC  REGISTER  MAP
+;
+; REG #	 _______________________________________________________
+;  0_	| S0x7 | S0x6 | S0x5 | S0x4 | S0x3 | S0x2 | S0x1 | S0x0 |______ Sprite 0  X location
+;  1_	|______|______|______|______|______|______|______|______|______ Sprite 0  Y location
+;  2_	|      |      |      |      |      |      |      |      |______ Sprite 1  X location
+;  3_	|______|______|______|______|______|______|______|______|______ Sprite 1  Y location
+;  4_	|      |      |      |      |      |      |      |      |______ Sprite 2  X location
+;  5_	|______|______|______|______|______|______|______|______|______ Sprite 2  Y location
+;  6_	|      |      |      |      |      |      |      |      |______ Sprite 3  X location
+;  7_	|______|______|______|______|______|______|______|______|______ Sprite 3  Y location
+;  8_	|      |      |      |      |      |      |      |      |______ Sprite 4  X location
+;  9_	|______|______|______|______|______|______|______|______|______ Sprite 4  Y location
+; 10_	|      |      |      |      |      |      |      |      |______ Sprite 5  X location
+; 11_	|______|______|______|______|______|______|______|______|______ Sprite 5  Y location
+; 12_	|      |      |      |      |      |      |      |      |______ Sprite 6  X location
+; 13_	|______|______|______|______|______|______|______|______|______ Sprite 6  Y location
+; 14_	|      |      |      |      |      |      |      |      |______ Sprite 7  X location
+; 15_	|______|______|______|______|______|______|______|______|______ Sprite 7  Y location
+; 16_	| S7x8 | S6x8 | S5x8 | S4x8 | S3x8 | S2x8 | S1x8 | S0x8 |______ MSB of Sprite X loctn
+; 17_	|  RC8 |  ECM |  BMM | Blank| ROWS |  Y2  |  Y1  |  Y0  |______ mode, #row, y-scroll
+; 18_	|  RC7 |  RC6 |  RC5 |  RC4 |  RC3 |  RC2 |  RC1 |  RC0 |______ Raster latch
+; 19_	| LPx8 | LPx7 | LPx6 | LPx5 | LPx4 | LPx3 | LPx2 | LPx1 |______ Lightpen X latch
+; 20_	| LPy7 | LPy6 | LPy5 | LPy4 | LPy3 | LPy2 | LPy1 | LPy0 |______ Lightpen Y latch
+; 21_	|  SD7 |  SD6 |  SD5 |  SD4 |  SD3 |  SD2 |  SD1 |  SD0 |______ Sprite Disable
+; 22_	|  --  |  --  | Reset|  MCM | COLS |  X2  |  X1  |  X0  |______ mode, #col, x-scroll
+; 23_	| S7Ey | S6Ey | S5Ey | S4Ey | S3Ey | S2Ey | S1Ey | S0Ey |______ Sprite Y expand
+; 24_	| VM13 | VM12 | VM11 | VM10 | CB13 | CB12 | CB11 |  --  |______ VM Base, CHR Base
+; 25_	|  IRQ |  --  |  --  |  --  |  LP  |  S/S |  S/B | RIRQ |______ IRQ source (wrt to clr)
+; 26_	|  --  |  --  |  --  |  --  | _LP  | _S/S | _S/B | _IRQ |______ IRQ enable (0=disable)
+; 27_	| BSP7 | BSP6 | BSP5 | BSP4 | BSP3 | BSP2 | BSP1 | BSP0 |______ Sprite/Bgnd Priority
+; 28_	| MCS7 | MCS6 | MCS5 | MCS4 | MCS3 | MCS2 | MCS1 | MCS0 |______ Multicolor Sprite Sel
+; 29_	| S7Ex | S6Ex | S5Ex | S4Ex | S3Ex | S2Ex | S1Ex | S0Ex |______ Sprite X expand
+; 30_	|  SS7 |  SS6 |  SS5 |  SS4 |  SS3 |  SS2 |  SS1 |  SS0 |______ S/S Collision latch
+; 31_	|  SB7 |  SB6 |  SB5 |  SB4 |  SB3 |  SB2 |  SB1 |  SB0 |______ S/B Collision latch
+; 32_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Border Color
+; 33_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Background Color #0
+; 34_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Background Color #1
+; 35_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Background Color #2
+; 36_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Background Color #3
+; 37_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite Multicolor #0
+; 38_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite Multicolor #1
+; 39_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 0 Color
+; 40_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 1 Color
+; 41_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 2 Color
+; 42_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 3 Color
+; 43_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 4 Color
+; 44_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 5 Color
+; 45_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 6 Color
+; 46_	|  --  |  --  |  --  |  --  |      |      |      |      |______ Sprite 7 Color
+; 47_	|  --  |  --  |  --  |  --  |  --  |  K2  |  K1  |  K0  |______ Keyboard lines (new)
+; 48_	|  --  |  --  |  --  |  --  |  --  |  --  | TEST | 2MHz |______ Clock speed
+;       |-------------------------------------------------------|
+	.page
+;			6581  SID  REGISTER  MAP
+;
+; REG #	 _______________________________________________________
+;  0_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-1
+;  1_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+;  2_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+;  3_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+;  4_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+;  5_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+;  6_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+;  7_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-2
+;  8_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+;  9_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+; 10_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+; 11_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+; 12_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+; 13_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+; 14_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-3
+; 15_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+; 16_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+; 17_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+; 18_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+; 19_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+; 20_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+; 21_	|  --  |  --  |  --  |  --  |  --  |  FC2 |  FC1 |  FC0 |______ Frequency lo    Filter
+; 22_	| FC10 |  FC9 |  FC8 |  FC7 |  FC6 |  FC5 |  FC4 |  FC3 |______ Frequency hi
+; 23_	| RES3 | RES2 | RES1 | RES0 |FILTEX| FILT3| FILT2| FILT0|______ Resonance/Filter
+; 24_	| 3 OFF|  HP  |  BP  |  LP  | VOL3 | VOL2 | VOL1 | VOL0 |______ Mode/Volume
+;	|------|------|------|------|------|------|------|------|
+; 25_	|  PX7 |  PX6 |  PX5 |  PX4 |  PX3 |  PX2 |  PX1 |  PX0 |______ Pot X           Misc.
+; 26_	|  PY7 |  PY6 |  PY5 |  PY4 |  PY3 |  PY2 |  PY1 |  PY0 |______ Pot Y
+; 27_	|  O7  |  O6  |  O5  |  O4  |  O3  |  O2  |  O1  |  O0  |______ Oscillator 3
+; 28_	|  E7  |  E6  |  E5  |  E4  |  E3  |  E2  |  E1  |  E0  |______ Envelope 3
+;	|-------------------------------------------------------|
+	.page
+;			8563  VDC  REGISTER  MAP
+;
+; REG #	 _______________________________________________________
+;  0_	|  HT7 |  HT6 |  HT5 |  HT4 |  HT3 |  HT2 |  HT1 |  HT0 |______ Horizontal Total
+;  1_	|  HD7 |  HD6 |  HD5 |  HD4 |  HD3 |  HD2 |  HD1 |  HD0 |______ Horizontal Displayed
+;  2_	|  HP7 |  HP6 |  HP5 |  HP4 |  HP3 |  HP2 |  HP1 |  HP0 |______ Horizontal Sync Position
+;  3_	|  VW3 |  VW2 |  VW1 |  VW0 |  HW3 |  HW2 |  HW1 |  HW0 |______ Vert/Horz Sync Width
+;  4_	|  VT7 |  VT6 |  VT5 |  VT4 |  VT3 |  VT2 |  VT1 |  VT0 |______ Vertical Total
+;  5_	|  --  |  --  |  --  |  VA4 |  VA3 |  VA2 |  VA1 |  VA0 |______ Vertical Total Adjust
+;  6_	|  VD7 |  VD6 |  VD5 |  VD4 |  VD3 |  VD2 |  VD1 |  VD0 |______ Vertical Displayed
+;  7_	|  VP7 |  VP6 |  VP5 |  VP4 |  VP3 |  VP2 |  VP1 |  VP0 |______ Vertical Sync Position
+;  8_	|  --  |  --  |  --  |  --  |  --  |  --  |  IM1 |  IM0 |______ Interlace Mode
+;  9_	|  --  |  --  |  --  | CTV4 | CTV3 | CTV2 | CTV1 | CTV0 |______ Character Total Vertical
+; 10_	|  --  |  CM1 |  CM0 |  CS4 |  CS3 |  CS2 |  CS1 |  CS0 |______ Cursor Mode, Start Scan
+; 11_	|  --  |  --  |  --  |  CE4 |  CE3 |  CE2 |  CE1 |  CE0 |______ Cursor End Scan Line
+; 12_	| DS15 | DS14 | DS13 | DS12 | DS11 | DS10 |  DS9 |  DS8 |______ Display Start Address hi
+; 13_	|  DS7 |  DS6 |  DS5 |  DS4 |  DS3 |  DS2 |  DS1 |  DS0 |______ Display Start Address lo
+; 14_	| CP15 | CP14 | CP13 | CP12 | CP11 | CP10 |  CP9 |  CP8 |______ Cursor Position hi
+; 15_	|  CP7 |  CP6 |  CP5 |  CP4 |  CP3 |  CP2 |  CP1 |  CP0 |______ Cursor Position lo
+; 16_	| LPV7 | LPV6 | LPV5 | LPV4 | LPV3 | LPV2 | LPV1 | LPV0 |______ Light Pen Vertical
+; 17_	| LPH7 | LPH6 | LPH5 | LPH4 | LPH3 | LPH2 | LPH1 | LPH0 |______ Light Pen Horizontal
+; 18_	| UA15 | UA14 | UA13 | UA12 | UA11 | UA10 |  UA9 |  UA8 |______ Update Address hi
+; 19_	|  UA7 |  UA6 |  UA5 |  UA4 |  UA3 |  UA2 |  UA1 |  UA0 |______ Update Address lo
+; 20_	| AA15 | AA14 | AA13 | AA12 | AA11 | AA10 |  AA9 |  AA8 |______ Attribute Start Adr hi
+; 21_	|  AA7 |  AA6 |  AA5 |  AA4 |  AA3 |  AA2 |  AA1 |  AA0 |______ Attribute Start Adr lo
+; 22_	| CTH3 | CTH2 | CTH1 | CTH0 | CDH3 | CDH2 | CDH1 | CDH0 |______ Character Tot(h), Dsp(v)
+; 23_	|  --  |  --  |  --  | CDV4 | CDV3 | CDV2 | CDV1 | CDV0 |______ Character Dsp(v)
+; 24_	| COPY |  RVS |CBRATE| VSS4 | VSS3 | VSS2 | VSS1 | VSS0 |______ Vertical smooth scroll
+; 25_	| TEXT |  ATR | SEMI |  DBL | HSS3 | HSS2 | HSS1 | HSS0 |______ Horizontal smooth scroll
+; 26_	|  FG3 |  FG2 |  FG1 |  FG0 |  BG3 |  BG2 |  BG1 |  BG0 |______ Foregnd/Bgnd Color
+; 27_	|  AI7 |  AI6 |  AI5 |  AI4 |  AI3 |  AI2 |  AI1 |  AI0 |______ Address Increment / Row
+; 28_	| CB15 | CB14 | CB13 |  RAM |  --  |  --  |  --  |  --  |______ Character Base Address
+; 29_	|  --  |  --  |  --  |  UL4 |  UL3 |  UL2 |  UL1 |  UL0 |______ Underline scan line
+; 30_	|  WC7 |  WC6 |  WC5 |  WC4 |  WC3 |  WC2 |  WC1 |  WC0 |______ Word Count
+; 31_	|  DA7 |  DA6 |  DA5 |  DA4 |  DA3 |  DA2 |  DA1 |  DA0 |______ Data
+; 32_	| BA15 | BA14 | BA13 | BA12 | BA11 | BA10 |  BA9 |  BA8 |______ Block Start Address hi
+; 33_	|  BA7 |  BA6 |  BA5 |  BA4 |  BA3 |  BA2 |  BA1 |  BA0 |______ Block Start Address lo
+; 34_	| DEB7 | DEB6 | DEB5 | DEB4 | DEB3 | DEB2 | DEB1 | DEB0 |______ Display Enable Begin
+; 35_	| DEE7 | DEE6 | DEE5 | DEE4 | DEE3 | DEE2 | DEE1 | DEE0 |______ Display Enable End
+; 36_	|  --  |  --  |  --  |  --  | DRR3 | DRR2 | DRR1 | DRR0 |______ DRAM Refresh rate
+;	|-------------------------------------------------------|
+;
+;
+;	Description of MAPPED registers:
+;					 _______________________________________________________
+; $D600 ->	address (write):	|  --  |  --  |  R5  |  R4  |  R3  |  R2  |  R1  |  R0  |
+;		status  (read) :	|STATUS|  LP  |VBLANK|  --  |  --  | VER2 | VER1 | VER0 |
+;					|      |      |      |      |      |      |      |      |
+; $D601 ->	data	(r/w)  :	|  D7  |  D6  |  D5  |  D4  |  D3  |  D3  |  D2  |  D0  |
+;					|-------------------------------------------------------|
+;					 _______________________________________________________
+; ATTRIBUTE byte layout			|  ALT |  RVS |  UL  | FLASH|   R  |   G  |   B  |   I  |
+;					|-------------------------------------------------------|
+	.page
+;	EXPLANATION OF VARIOUS KERNAL/EDITOR FLAG BYTES, ETC.
+;
+;	Symbol			       Description
+;		    7      6      5      4      3      2      1      0
+;		_________________________________________________________
+;	D6510	|  --  | (in) | (out)| (in) | (out)| (out)| (out)| (out)|
+;		|      |      |      |      |      |      |      |      |
+;	R6510	|  --  |CAPKEY|CASMTR|CASSEN|CASWRT|CHAREN| HIRAM| LORAM|
+;		|      |      |      |      |      |      |      |      |
+;	LOCKS	| CASE | CTL-S|  --  |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	SCROLL	|  OFF |LINKER|      |      |      |      |      |      |
+;		|      |      |      |      |      |      |      |      |
+;	SHFLAG	|  --  |  --  |  --  |  ALT | ALPHA| CTRL |  C=  | SHIFT|
+;		|      |      |      |      |      |      |      |      |
+;	RPTFLG	|  ALL | NONE |  --  |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	BLNON	|  ON  | BLNK |  --  |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	BEEPER	|  ON  |  --  |  --  |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	GRAPHM	|  MCM | SPLIT|  BMM |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	MODE	| 40/80|  --  |  --  |  --  |  --  |  --  |  --  |  --  |
+;		|      |      |      |      |      |      |      |      |
+;	INIT_	|CHRSET| CINT |  --  |  --  |  --  |  --  |  --  | BASIC|
+;	 STATUS	|-------------------------------------------------------|
+
+;	The following SYMBOLS are used by the c/128 EDITOR. Note that the
+;	EDITOR irq VIC screen handler depends upon them. In most cases the
+;	contents of these locations will be placed directly into the appropriate
+;	register and should be used by the user instead of the actual register.
+
+;	GRAPHM ....... See above. If = $FF then editor leaves VIC alone.
+;	CHAREN ....... Mask for R6510 /charen bit.
+;	VM1 .......... VIC text mode Video Matrix & Character Base pointer.
+;	VM2 .......... VIC graphic mode Video Matrix & Bit Map pointer.
+;	VM3 .......... 8563 text display base address.
+;	VM4 .......... 8563 attribute base address.
+;	SPLIT ........ If split screen mode, contains value for 'middle' raster IRQ.
+;	CURMOD ....... 8563 cursor mode.
+;	PAUSE ........ Control-S in effect flag. Is = $13 if so.
+
+;	Some insight into KERNAL symbols:
+
+;	INIT_STATUS .. See also above. Lets system know what has been initialized
+;			and what hasn't. Set to $00 by a reset but untouched by NMI.
+;	SYSTEM_VECTOR. Where the kernal goes when it has to go somewhere. It's set
+;			to BASIC COLD at reset. BASIC itself sets it to BASIC WARM
+;			after it has inited. The MONITOR respects it too.
+;	SYSTEM ....... Vector in RAM1 at $FFF8. Set at powerup to C128MODE, user may
+;			redirect it to his code. Taken at RESET always, providing
+;			user with control (protection) from reset.

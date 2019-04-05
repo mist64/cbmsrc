@@ -1,0 +1,35 @@
+	.page
+	.subttl  kernal messages (09/17/84): c/128
+
+msgtbl
+ms1	.byte  cr,'I/O ERROR ','#'+$80
+ms5	.byte  cr,'SEARCHING',' '+$80
+ms6	.byte  'FOR',' '+$80
+ms7	.byte  cr,'PRESS PLAY ON TAP','E'+$80
+ms8	.byte  'PRESS RECORD & PLAY ON TAP','E'+$80
+ms10	.byte  cr,'LOADIN','G'+$80
+ms11	.byte  cr,'SAVING',' '+$80
+ms21	.byte  cr,'VERIFYIN','G'+$80
+ms17	.byte  cr,'FOUND',' '+$80
+ms18	.byte  cr,'OK',cr+$80
+
+	.page
+; print message to screen (only if output enabled)
+
+spmsg
+	bit msgflg	;printing  messages?
+	bpl msgrts	;no...
+
+msg
+	lda msgtbl,y
+	php
+	and #$7f
+	jsr bsout
+	iny
+	plp
+	bpl msg
+
+msgrts	clc
+	rts
+
+;.end

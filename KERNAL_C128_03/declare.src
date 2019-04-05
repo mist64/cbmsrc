@@ -1,0 +1,690 @@
+	.page
+	.subttl  C/128 KERNAL & EDITOR DECLARATIONS   (05/14/85)
+
+	* = $0000
+
+d6510	*=*+1		;6510 data direction register
+r6510	*=*+1		;6510 data register
+
+bank	*=*+1		;monitor & long call/jump registers
+pc_hi	*=*+1
+pc_lo	*=*+1
+s_reg	*=*+1
+a_reg	*=*+1
+x_reg	*=*+1
+y_reg	*=*+1
+stkptr	*=*+1
+
+	* = $0090	;kernal/editor allocations start here
+
+status	*=*+1		;i/o operation status byte
+stkey	*=*+1		;stop key flag
+svxt	*=*+1		;tape temporary
+verck	*=*+1		;load or verify flag
+c3p0	*=*+1		;serial buffered char flag
+bsour	*=*+1		;char buffer for serial
+syno 	*=*+1		;cassette sync #
+xsav 	*=*+1		;temp for basin
+ldtnd	*=*+1		;index to logical file
+dfltn	*=*+1		;default input device #
+dflto	*=*+1		;default output device #
+prty 	*=*+1		;cassette parity
+dpsw 	*=*+1		;cassette dipole switch
+msgflg	*=*+1		;os message flag
+ptr1			;cassette error pass1
+t1	*=*+1		;temporary 1
+ptr2			;cassette error pass2
+t2	*=*+1		;temporary 2
+time	*=*+3		;24 hour clock in 1/60th seconds
+r2d2			;serial bus usage
+pcntr	*=*+1		;cassette stuff
+bsour1			;temp used by serial routine
+firt	*=*+1
+count			;temp used by serial routine
+cntdn	*=*+1		;cassette sync countdown
+bufpt	*=*+1		;cassette buffer pointer
+inbit			;rs-232 rcvr input bit storage
+shcnl	*=*+1		;cassette short count
+bitci			;rs-232 rcvr bit count in
+rer	*=*+1		;cassette read error
+rinone			;rs-232 rcvr flag for start bit check
+rez	*=*+1		;cassete reading zeroes
+ridata			;rs-232 rcvr byte buffer
+rdflg	*=*+1		;cassette read mode
+riprty			;rs-232 rcvr parity storage
+shcnh	*=*+1		;cassette short cnt
+sal	*=*+1
+sah	*=*+1
+eal	*=*+1
+eah	*=*+1
+cmp0	*=*+1
+temp	*=*+1
+tape1	*=*+2		;address of tape buffer
+bitts			;rs-232 trns bit count
+snsw1	*=*+1
+nxtbit			;rs-232 trns next bit to be sent
+diff	*=*+1
+rodata			;rs-232 trns byte buffer
+prp	*=*+1
+fnlen	*=*+1		;length current file n str
+la	*=*+1		;current file logical addr
+sa	*=*+1		;current file 2nd addr
+fa	*=*+1		;current file primary addr
+fnadr	*=*+2		;addr current file name str
+roprty			;rs-232 trns parity buffer
+ochar	*=*+1
+fsblk	*=*+1		;cassette read block count
+drive
+mych	*=*+1
+cas1	*=*+1		;cassette manual/controlled switch (updated during irq)
+track
+stal	*=*+1
+sector
+stah	*=*+1
+memuss			;cassette load temps (2 bytes)
+tmp2	*=*+2
+data	*=*+1		;tape read/write data
+
+ba	*=*+1		;bank for current load/save/verify operation
+fnbank	*=*+1		;bank where current filename is found (at 'fnadr')
+
+ribuf	*=*+2		;rs-232 input  buffer pointer
+robuf	*=*+2		;rs-232 output buffer pointer
+
+	.page
+;  40/80 column   S C R E E N   E D I T O R   declarations
+;
+;  GLOBAL screen editor variables
+
+keytab	*=*+2		;keyscan table pointer
+imparm	*=*+2		;PRIMM utility string pointer
+
+ndx	*=*+1		;index to keyboard queue
+kyndx	*=*+1		;pending function key flag
+keyidx	*=*+1		;index into pending function key string
+shflag	*=*+1		;keyscan shift key status
+sfdx	*=*+1		;keyscan current key index
+lstx	*=*+1		;keyscan last    key index
+crsw	*=*+1		;<cr> input flag
+
+mode	*=*+1		;40/80 column mode flag
+graphm	*=*+1		;text/graphic mode flag
+
+charen	*=*+1		;ram/rom vic character character fetch flag (bit-2)
+
+
+
+;  the following locations are shared by several editor routines
+
+.share
+sedsal	*=*+2		;pointers for MOVLIN
+sedeal	*=*+2		;
+sedt1	*=*+1		;SAVPOS
+sedt2	*=*+1		;
+.unshare
+
+	*=.share
+keysiz	*=*+1		;programmable key variables
+keylen	*=*+1		;
+keynum	*=*+1		;
+keynxt	*=*+1		;
+keybnk	*=*+1		;
+keytmp	*=*+1		;
+
+	*=.share
+bitmsk	*=*+1		;temporary for TAB & line wrap routines
+saver	*=*+1		;yet another temporary place to save a register
+
+	*=.unshare
+
+	.page
+;  LOCAL screen editor variables  (swapped-out when 40/80 MODE changes)
+
+.swapbeg
+pnt	*=*+2		;pointer to current line (text)
+user	*=*+2		;pointer to current line (attribute)
+
+scbot	*=*+1		;window lower limit
+sctop	*=*+1		;window upper limit
+sclf	*=*+1		;window left  margin
+scrt	*=*+1		;window right margin
+
+lsxp	*=*+1		;current input column start
+lstp	*=*+1		;current input line   start
+indx	*=*+1		;current input line   end
+
+tblx	*=*+1		;current cursor line
+pntr	*=*+1		;current cursor column
+
+lines	*=*+1		;maximum number of screen lines
+columns	*=*+1		;maximum number of screen columns
+
+datax	*=*+1		;current  character to print
+lstchr	*=*+1		;previous character printed  (for <esc> test)
+color	*=*+1		;current  attribute to print (default fgnd color)
+tcolor	*=*+1		;saved attribute to print    ('insert' & 'delete')
+
+rvs	*=*+1		;reverse mode flag
+qtsw	*=*+1		;quote mode flag
+insrt	*=*+1		;insert mode flag
+insflg	*=*+1		;auto-insert mode flag
+
+locks	*=*+1		;disables  <c=><shift>,   <ctrl>-S
+scroll	*=*+1		;disables  screen scroll, line linker
+beeper	*=*+1		;disables  <ctrl>-G
+.swapend
+
+
+;  remaining  ZERO PAGE  to be reserved for application software
+
+
+.applications_zp
+
+
+
+	* = $ff
+
+.basic_reserved_zp
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE ONE  declarations  (processor STACK)
+;
+
+
+	* = $0100
+
+bad	*=*+1		;tape read errors   (this area also used by basic)
+
+
+
+
+
+
+
+
+
+;  PAGE TWO  declarations  (input buffer & kernal RAM code)
+;
+
+
+	* = $0200
+
+buf	*=*+161		;input buffer  (used by basic & monitor)
+
+
+	* = $02a2
+
+fetch	*=*+13		;LDA(-),y from any bank
+fetvec	= fetch+8
+
+stash	*=*+15		;STA(-),y to any bank
+stavec	= stash+10
+
+cmpare	*=*+15		;CMP(-),y to any bank
+cmpvec	= cmpare+10
+
+jsrfar	*=*+22		;JSR xxxx to any bank & return
+
+jmpfar	*=*+25		;JMP xxxx to any bank
+
+
+;	NOTE:  basic indirect vectors start at $2fc !!
+
+
+
+;	*****	ALL UNUSED RAM LOCATIONS BELOW  $1300  ARE RESERVED   *****
+;	*****	FOR SYSTEM USE AND MUST NOT BE USED BY APPLICATIONS   *****
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE THREE  declarations   (indirect vectors, kernal tables, basic RAM code)
+
+	* = $02fc	;basic indirect vectors
+
+	* = $0314	;kernal indirect vectors
+
+iirq	*=*+2		;irq
+ibrk	*=*+2		;brk
+inmi	*=*+2		;nmi
+iopen	*=*+2		;
+iclose	*=*+2		;     conforms to kernal spec 8/19/80
+ichkin	*=*+2
+ickout	*=*+2
+iclrch	*=*+2
+ibasin	*=*+2
+ibsout	*=*+2
+istop	*=*+2
+igetin	*=*+2
+iclall	*=*+2
+exmon	*=*+2		;monitor command indirect
+iload	*=*+2
+isave	*=*+2
+
+			;editor indirect vectors
+
+ctlvec	*=*+2		;editor: print 'contrl' indirect
+shfvec	*=*+2		;editor: print 'shiftd' indirect
+escvec	*=*+2		;editor: print 'escape' indirect
+keyvec	*=*+2		;editor: keyscan logic  indirect
+keychk	*=*+2		;editor: store key indirect
+
+decode	*=*+12		;vectors to keyboard matrix decode tables
+
+
+
+
+	* = $34a
+
+keyd	*=*+10		;irq keyboard buffer
+
+tabmap	*=*+10		;bitmap of tab stops
+bitabl	*=*+4		;bitmap of line wraps
+
+lat	*=*+10		;logical file numbers
+fat	*=*+10		;primary device numbers
+sat	*=*+10		;secondary addresses
+
+
+
+	* = $0380	;basic ram code here
+
+	* = $03f0	;basic/kernal dma request ram code
+do_dma
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE FOUR & HIGHER  declarations  (****** beginning of bankable ram ******)
+;
+
+	* = $0400	;video matrix #1: vic 40-column text screen
+
+vicscn	*=*+1024
+
+	* = $0800	;basic run-time stack (512 bytes)
+
+
+
+;  ABSOLUTE  kernal variables
+;
+
+	* = $0a00
+
+system_vector	*=*+2	;vector to restart system (usually BASIC warm start)
+dejavu	*=*+1		;kernal warm/cold initialization status byte
+palnts	*=*+1		;pal/ntsc system flag
+init_status	*=*+1	;flags reset vs. nmi status for initialization routines
+
+memstr	*=*+2		;pointer to bottom of available memory in system bank
+memsiz	*=*+2		;pointer to top of available memory in system bank
+
+irqtmp	*=*+2		;tape handler preserves irq indirect here
+caston	*=*+1		;tod sense during tape operations
+kika26	*=*+1		;tape read temporary
+stupid	*=*+1		;tape read d1irq indicator
+
+timout	*=*+1		;fast serial timeout flag
+
+enabl	*=*+1		;rs-232 enables
+m51ctr	*=*+1		;rs-232 control register
+m51cdr	*=*+1		;rs-232 command register
+m51ajb	*=*+2		;rs-232 user baud rate
+rsstat	*=*+1		;rs-232 status register
+bitnum	*=*+1		;rs-232 number of bits to send
+baudof	*=*+2		;rs-232 baud rate full bit time (created by OPEN)
+
+ridbe	*=*+1		;rs-232 input buffer index to end
+ridbs	*=*+1		;rs-232 input buffer index to start
+
+rodbs	*=*+1		;rs-232 output buffer index to start
+rodbe	*=*+1		;rs-232 output buffer index to end
+
+serial	*=*+1		;fast serial internal/external flag
+
+timer	*=*+3		;decrementing jiffie register
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  GLOBAL  ABSOLUTE  screen editor declarations
+
+xmax	*=*+1		;keyboard queue maximum size
+pause	*=*+1		;<ctrl>-S flag
+rptflg	*=*+1		;enable key repeats
+kount	*=*+1		;delay between key repeats
+delay	*=*+1		;delay before a key starts repeating
+lstshf	*=*+1		;delay between <C=><shft> toggles
+
+blnon	*=*+1		;vic cursor mode (blinking, solid)
+blnsw	*=*+1		;vic cursor disable
+blnct	*=*+1		;vic cursor blink counter
+gdbln	*=*+1		;vic cursor character before blink
+gdcol	*=*+1		;vic cursor color before blink
+
+curmod	*=*+1		;vdc cursor mode (when enabled)
+
+vm1	*=*+1		;vic text screen/character base pointer
+vm2	*=*+1		;vic bit-map base pointer
+vm3	*=*+1		;vdc text screen base
+vm4	*=*+1		;vdc attribute base
+
+lintmp	*=*+1		;temporary pointer to last line for LOOP4
+sav80a	*=*+1		;temporary for 80-col routines
+sav80b	*=*+1		;temporary for 80-col routines
+curcol	*=*+1		;vdc cursor color before blink
+split	*=*+1		;vic split screen raster value
+
+fnadrx	*=*+1		;save .x during bank operations
+palcnt	*=*+1		;counter for pal systems (jiffie adjustment)
+speed	*=*+1		;save system speed during tape & serial bus ops
+sprites	*=*+1		;save sprite enables during tape & serial bus ops
+blanking *=*+1		;save blanking status during tape ops
+hold_off *=*+1		;flag set by user wanting full control of vic reserved
+
+ldtb1_sa *=*+1		;high byte of sa of vic screen (use with vm1 to move screen)
+
+clr_ea_lo *=*+1		;????? 8563 block fill kludge
+clr_ea_hi *=*+1		;????? 8563 block fill kludge
+
+	.page
+;  LOCAL  screen editor variable swap area
+;
+	* = $0a40
+.swapout		;local variables
+
+	* = $0a60
+.swapmap		;local tab map & wrap tables
+
+
+;  MONITOR absolute declarations
+;
+	* = $0a80
+.monitor_abs
+
+
+;  FUNCTION KEY ROM CARD tables
+;
+	* = $0ac0
+
+curbnk	*=*+1		;current function key rom bank being polled
+pat	*=*+4		;physical address table (id's of logged-in cards)
+dk_flag	*=*+1		;reserved for foreign screen editors
+
+
+;	*****	ALL UNUSED RAM LOCATIONS BELOW  $1300  ARE RESERVED   *****
+;	*****	FOR SYSTEM USE AND MUST NOT BE USED BY APPLICATIONS   *****
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+	* = $0b00
+
+bufsz	=192		;tape buffer size
+
+tbuffr	*=*+bufsz	;cassette buffer
+
+	* = $0c00	;rs-232 input buffer
+rs232i
+
+	* = $0d00	;rs-232 output buffer
+rs232o
+
+	* = $0e00	;sprite definition area  (must be below $1000 !!)
+
+	* = $1000	;programmable function key definitions
+
+pkynum	=10		;number of definable keys  (f1-f8, <shft>run, help)
+pkybuf	*=*+pkynum	;programmable function key lengths table
+pkydef	*=*+256-pkynum	;programmable function key strings
+
+	* = $1100	;cp/m reset code, basic dos & vsp variables
+
+	* = $1200	;basic absolute variables
+
+	* = $1300	;unallocated absolute ram
+
+.applications_abs
+
+	* = $1800	;reserved for function key software applications
+
+	* = $1c00	;video matrix #2 (1KB, bitmap color, if allocated)
+
+rambot			;basic text starts here (kernal sets 'membot' here)
+
+	* = $2000	;vic bitmap (8KB, if allocated)
+
+	* = $4000	;************** beginning of rom over ram *************
+
+	* = $fc80	;foreign language reserved rom (thru $feff)
+
+.foreign_rom
+
+	* = $ff05	;kernal interrupt ram code here  (all ram banks)
+
+	* = $ffd0	;cp/m transfer-processor-control ram code here  (first ram bank only)
+
+.cpm_ram_code
+
+	* = $fff5	;'CBM' key goes here in ram1
+
+locker
+
+	* = $fffa	;kernal hardware interrupt ram vectors here  (all ram banks)
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;////////////////////   I  /  O    D E V I C E   M A P S   \\\\\\\\\\\\\\\\\\\
+
+
+vicchr	= $d000		;vic character rom
+
+vicreg	= $d000		;vic registers
+
+sidreg	= $d400		;sid registers
+
+mmu_lo	= $d500		;mmu primary registers
+
+vdc	= $d600		;8563 registers
+
+viccol	= $d800		;vic color nybbles
+
+cia1	= $dc00		;6526 #1
+
+cia2	= $dd00		;6526 #2
+
+io1	= $de00		;expansion i/o slot (reserved)
+
+io2	= $df00		;expansion i/o slot (reserved: optional DMA ctlr for expansion ram)
+
+mmu_hi	= $ff00		;mmu secondary registers (*** not in i/o block! ***)
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; c/128  memory  management  unit
+;   implements c/128, c/64, & cp/m 3.0 modes
+;
+
+	* = mmu_lo
+
+mmucrl	*=*+1		;configuration register		(primary)
+pcra	*=*+1		;preconfiguration register a
+pcrb	*=*+1		;preconfiguration register b
+pcrc	*=*+1		;preconfiguration register c
+pcrd	*=*+1		;preconfiguration register d
+mmumcr	*=*+1		;mode configuration register
+mmurcr	*=*+1		;ram  configuration register
+mmup0l	*=*+1		;page 0 pointer low
+mmup0h	*=*+1		;page 0 pointer high
+mmup1l	*=*+1		;page 1 pointer low
+mmup1h	*=*+1		;page 1 pointer high
+mmuver	*=*+1		;mmu version number   (*** prototype: reset latch ***)
+
+	* = mmu_hi
+
+mmucr	*=*+1		;configuration register		(secondary)
+lcra	*=*+1		;load configuration register a
+lcrb	*=*+1		;load configuration register b
+lcrc	*=*+1		;load configuration register c
+lcrd	*=*+1		;load configuration register d
+
+
+
+
+
+
+; c/128  80-column video display controller
+;
+
+	* = vdc
+
+vdcadr	*=*+1		;8563 address register
+vdcdat	*=*+1		;8563 data    register
+
+vdcscn	= $0000		;8563 80-column screen	(2KB)
+vdccol	= $0800		;8563 attribute area	(2KB)
+vdcchr	= $2000		;8563 character ram	(4KB: 256 chrs, 8x16)
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 6526 cia  complex interface adapter #1
+;   keyboard / joystick / paddles / lightpen / fast disk
+;
+;   pra0 : keybd output c0 / joystick #1 direction
+;   pra1 : keybd output c1 / joystick #1 direction
+;   pra2 : keybd output c2 / joystick #1 direction / paddle fire button
+;   pra3 : keybd output c3 / joystick #1 direction / paddle fire button
+;   pra4 : keybd output c4 / joystick #1 fire button
+;   pra5 : keybd output c5 /
+;   pra6 : keybd output c6 /                       / select port #1 paddles
+;   pra7 : keybd output c7 /                       / select port #2 paddles
+;
+;   prb0 : keybd input  r0 / joystick #2 direction /
+;   prb1 : keybd input  r1 / joystick #2 direction / paddle fire button
+;   prb2 : keybd input  r2 / joystick #2 direction / paddle fire button
+;   prb3 : keybd input  r3 / joystick #2 direction /
+;   prb4 : keybd input  r4 / joystick #2 fire button
+;   prb5 : keybd input  r5 /
+;   prb6 : keybd input  r6 / timer b: toggle/pulse output
+;   prb7 : keybd input  r7 / timer a: toggle/pulse output
+;
+;   timer 1 & cra : fast disk
+;   timer 2 & crb : cassette
+;
+;   tod    :
+;   sdr    :
+;   icr    :
+
+	* = cia1	;device #1:  6526
+
+colm
+d1pra	*=*+1		;keyboard outputs / joystick / paddles / lightpen
+rows
+d1prb	*=*+1		;keyboard inputs  / joystick / paddles
+d1ddra	*=*+1
+d1ddrb	*=*+1
+d1t1l	*=*+1
+d1t1h	*=*+1
+d1t2l	*=*+1
+d1t2h	*=*+1
+d1tod1	*=*+1
+d1tods	*=*+1
+d1todm	*=*+1
+d1todh	*=*+1
+d1sdr	*=*+1
+d1icr	*=*+1
+d1cra	*=*+1
+d1crb	*=*+1
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 6526 cia  complex interface adapter #2
+;   user port / rs232 / serial bus / vic  memory / nmi
+;
+;   pra0 : va14
+;   pra1 : va15
+;   pra2 : rs232  DATA output
+;   pra3 : serial ATN  output
+;   pra4 : serial CLK  output
+;   pra5 : serial DATA output
+;   pra6 : serial CLK  input
+;   pra7 : serial DATA input
+;
+;   prb0 : user port / rs232 received data
+;   prb1 : user port / rs232 request to send
+;   prb2 : user port / rs232 data terminal ready
+;   prb3 : user port / rs232 ring indicator
+;   prb4 : user port / rs232 carrier detect
+;   prb5 : user port
+;   prb6 : user port / rs232 clear to send
+;   prb7 : user port / rs232 data set ready
+;
+;   timer 1 & cra : rs232 baud rate
+;   timer 2 & crb : rs232 bit check
+;
+;   tod    :
+;   sdr    :
+;   icr    : nmi (/irq)
+
+	* = cia2	;device #2: 6526
+
+d2pra	*=*+1		;serial bus / rs232 / va14,15
+d2prb	*=*+1		;user port  / rs232
+d2ddra	*=*+1
+d2ddrb	*=*+1
+d2t1l	*=*+1
+d2t1h	*=*+1
+d2t2l	*=*+1
+d2t2h	*=*+1
+d2tod1	*=*+1
+d2tods	*=*+1
+d2todm	*=*+1
+d2todh	*=*+1
+d2sdr	*=*+1
+d2icr	*=*+1		;nmi's
+d2cra	*=*+1
+d2crb	*=*+1
+
+timrb	= $19		;6526 crb enable one-shot tb
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; c/128  DMA controller for expansion RAM access  (***PRELIMINARY***)
+;
+;	(optional device mapped into IO2 block via system Expansion Port)
+;
+
+
+	* = io2
+
+
+dma_st	*=*+1		;DMA controller status register
+dma_cmd	*=*+1		;DMA controller command register
+dma_adl	*=*+1		;lsb of internal (c128) address to access
+dma_adh	*=*+1		;msb of internal (c128) address to access
+dma_lo	*=*+1		;lsb of external expansion ram  to access
+dma_hi	*=*+1		;msb of external expansion ram  to access
+dma_bnk	*=*+1		;64K external ram bank
+dma_dal	*=*+1		;lsb of byte count
+dma_dah	*=*+1		;msb of byte count (block count)
+dma_sum	*=*+1		;checksum of last data transfer ????????????
+dma_ver	*=*+1		;DMA version & memory limits
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; MISCELLANEOUS  KERNAL & EDITOR  EQUATES
+
+eot	=5		;end of tape
+blf	=1		;basic load file
+bdf	=2		;basic data file
+plf	=3		;fixed program type
+bdfh	=4		;basic data file header
+
+
+
+bakcol	=11		;VIC background screen color
+forcol	=13		;VIC foreground screen color
+bodcol	=13		;VIC screen border color
+
+
+
+lf	=10		;line feed
+cr	=13		;carriage return
+esc	=27		;escape
+space	=32		;space
+quote	=34		;dbl quote
+
+
+sysbnk	= %00000000	;mmu configuration: ram0, system roms, i/o
+
+
+;  configurations per 'config' table:
+
+ram0	= 0		;ram0, no roms, no i/o
+ram1	= 1		;ram1, no roms, no i/o
+romram0	= 15		;ram0, system roms, i/o (corresponds to 'sysbnk')
+
+;.end

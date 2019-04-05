@@ -1,0 +1,34 @@
+	.page
+	.subttl  C/128 KERNAL & EDITOR ENTRIES  (12/18/84)
+
+; entry definitions for c/128  EDITOR
+
+cint	= $c000		;editor: initialization
+display	= $c003		;editor: display chr in .a, color in .x
+lp2	= $c006		;editor: get a key from irq buffer
+loop5	= $c009		;editor: get a chr from screen
+print	= $c00c		;editor: print a chr to screen
+scrorg	= $c00f		;editor: return screen size of local display device
+key	= $c012		;editor: general key scan
+repeat	= $c015		:editor: repeat key logic & 'ckit2' to store decoded key
+plot	= $c018		;editor: read or set cursor position
+cursor	= $c01b		;editor: move 8563 hardware cursor
+escape	= $c01e		;editor: escape sequence handler, chr in .a
+pfkey	= $c021		;editor: program function key
+edirq	= $c024		;editor: irq entry
+dlchr	= $c027		;editor: download 80-col character ram
+swapper	= $c02a		;editor: swap to alternate display device
+
+; entry definitions for c/128  MONITOR
+
+monitr	= $b000		;monitor: call entry
+monbrk	= $b003		;monitor: brk  entry
+moncmd	= $b006		;monitor: monitor command parser
+
+; entry definitions for c/128  BASIC
+
+basic	= $4000		;basic: cold entry
+basicw	= $4003		;basic: warm entry
+basirq	= $4006		;basic: irq entry
+
+;.end

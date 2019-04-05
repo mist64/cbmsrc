@@ -1,0 +1,211 @@
+	.page
+	.subttl  tape controller  (03/18/85)
+jtp20
+	jsr tapadr	;check for buffer pointer wrap
+	inc bufpt
+	ldy bufpt
+	cpy #bufsz	;returns = if wrap
+	rts
+
+
+
+; wait for cassette <play> switch or keyboard <stop> key
+;
+cste1
+	jsr cs10	;skip ahead if <play> already down
+	beq cs25
+	ldy #ms7-ms1	;prompt: 'press play...'
+cs30
+	jsr msg
+1$	jsr tstop	;watch for stop key
+	jsr cs10	;watch cassette switches
+	bne 1$
+	ldy #ms18-ms1	;prompt: 'ok'
+	jmp msg
+
+
+
+; check cassette switches: return = if switch down
+
+cs10
+	lda #$10	;check port
+	bit r6510	;closed?
+	bne cs25	;no
+	bit r6510	;check again to debounce
+cs25
+	clc		;good return
+	rts
+
+
+
+; wait for cassette play & record switches
+
+cste2
+	jsr cs10
+	beq cs25
+	ldy #ms8-ms1	;prompt '...record'
+	bne cs30	;always
+
+	.page
+rblk			;read header block entry
+	lda #0
+	sta status
+	sta verck
+	jsr ldad1
+
+
+trd			;read load block entry
+	jsr cste1	;say 'press play'
+	bcs twrt3	;stop key pressed
+	sei
+	lda #0		;clear flags...
+	sta rdflg
+	sta snsw1
+	sta cmp0
+	sta ptr1
+	sta ptr2
+	sta dpsw
+	lda #$90	;enable for ca1 irq...read line
+	ldx #14		;redirect irq vector to read
+	bne tape	;always
+
+
+
+wblk			;write header block entry
+	jsr ldad1
+
+twrt			;write load block entry
+	lda #20		;between block shorts
+	sta shcnh
+twrt2
+	jsr cste2	;say 'press play & record'
+twrt3
+	bcs stop3	;stop key pressed
+	sei
+	lda #$82	;enable t2 irqs...write time
+	ldx #8		;redirect irq vector to 'wrtz', fall into 'tape'
+
+	.page
+; start tape operation entry point
+
+tape
+	ldy #0
+	sty vicreg+26	;kill unwanted vic irq's
+	dey
+	sty vicreg+25	;clear any pending vic irq's
+
+	sta d1icr	;turn on wanted irq's
+	lda d1cra	;calculate timer enables
+	ora #$19
+	sta d1crb 	;turn on t2 irq's for cassette write (one shot)
+	and #$91	;save tod 50/60 indication
+	sta caston	;place in auto mode for t1
+
+	jsr rsp232	;wait for any rs-232 operations to finish
+
+	lda vicreg+17	;blank vic
+	tay
+	and #$10	; (save blank bit status for restoration later)
+	sta blanking
+	tya
+	and #$6f	; (leave RC8 clear- it's the irq trigger!)
+	sta vicreg+17
+	jsr get_sp	;save system speed & sprites
+
+	lda iirq	;move irq to irqtemp during cassette operations
+	sta irqtmp
+	lda iirq+1
+	sta irqtmp+1
+	jsr bsiv	;go change irq vector
+
+	lda #2		;fsblk starts at 2
+	sta fsblk
+	jsr newch	;prep local counters and flags
+	lda r6510	;turn motor on
+	and #%00011111	;low turns on
+	sta r6510
+	sta cas1	;flag internal control of cassette motor
+
+	ldx #$ff	;delay between blocks
+1$	ldy #$ff
+2$	dey
+	bne 2$
+	dex
+	bne 1$
+	cli
+
+3$	lda irqtmp+1	;check for interrupt vector...
+	cmp iirq+1	;...pointing at key routine
+	clc
+	beq stop3	;...branch if so- & return
+	jsr tstop	;check for stop key (& never return if down)
+	jsr ud60	;scan stop key (60Hz keyscan is off)
+	jmp 3$		;loop until tape operations are done
+	.page
+tstop
+	jsr stop	;stop key down?
+	clc		;assume no stop
+	bne stop4	;we were right
+
+; stop key down...
+
+	jsr tnif	;turn off cassette
+	sec		;failure flag
+	pla		;back one square...
+	pla
+
+stop3
+	lda #0		;deallocate irqtmp
+	sta irqtmp+1	;if c-set then stop key
+stop4
+	rts
+
+	.page
+; stt1 - set up timeout watch for next dipole
+
+stt1
+	stx temp	;.x has constant for timeout
+	lda cmp0	;calculate: cmp0*5
+	asl a
+	asl a
+	clc
+	adc cmp0
+	clc
+	adc temp	;adjust long byte count
+	sta temp
+	lda #0
+	bit cmp0	;check cmp0 ...
+	bmi 1$		;...minus, no adjust
+	rol a		;...plus so adjust pos
+
+1$	asl temp	;multiply corrected value by 4
+	rol a
+	asl temp
+	rol a
+	tax
+
+2$	lda d1t2l	;watch out for d1t2h rollover...
+	cmp #22		;...time for routine...!!!...
+	bcc 2$		;...too close so wait until past
+	adc temp	;calculate and...
+	sta d1t1l	;...store adjusted time count
+	txa
+	adc d1t2h	;adjust for high time count
+	sta d1t1h
+	lda caston	;enable timers
+	sta d1cra
+	sta stupid 	;non-zero means an t1 irq has not occured yet
+	lda d1icr	;clear old t1 interrupt
+	and #$10	;check for old-flag irq
+	beq stt4	;no...normal exit
+
+	lda #>stt4	;push simulated return address on stack
+	pha
+	lda #<stt4
+	pha
+	jmp simirq
+
+stt4	cli		;allow for re-entry code
+	rts
+
+;.end

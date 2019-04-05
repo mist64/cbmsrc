@@ -1,0 +1,447 @@
+	.page
+	.subttl  RELEASE NOTES:   BETA-5   03/05/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE BETA-4 CODE TO CREATE THE
+; BETA-5 VERSION RELEASED ON 03/05/85. THE BETA-5 RELEASE IS A PRE-PRODUCTION
+; VERSION INTENDED FOR SYSTEM TEST AND EVALUATION AND PRELIMINARY APPLICATION
+; SOFTWARE DEVELOPMENT ONLY.
+;
+;
+; The following changes have been made to the MONITOR:
+;
+;	1/	The MONITOR now accepts binary, octal, decimal and hexidecimal
+;		values for any numeric field. This was accomplished by totally
+;		re-coding PARSE and portions of ASSEM, and installing a new
+;		routine called EVAL. Numbers prefixed by one of the characters
+;		$ + & % are interpreted by EVAL as base 16, 10, 8, or 2 values
+;		respectively. In the absence of a prefix, the base defaults to
+;		hexidecimal always. ASSEM will use the zero-page form wherever
+;		possible unless the value is preceeded by extra zeros to force
+;		the absolute form (except binary notation).
+;
+;	2/	The MONITOR now performs limited number conversion.  Additions
+;		were made to MAIN1 and CMDCHR and a new routine called CONVERT
+;		was installed to handle the conversions. Any of the characters
+;		$ + & % entered as a command and prefixing a numeric value are
+;		PARSEd (see #1 above) and the hexidecimal value printed.  Full
+;		conversion between bases may be added in a later release.
+;
+;
+;
+; The following changes have been made to the EDITOR:
+;
+;	1/	PLOT (SET)  now performs  range checking.  The cursor position
+;		sought must lie within the currently defined window. If it does,
+;		the position is changed and .C=0 returned, else NO CHANGE made
+;		and .C=1 returned.
+;
+;	2/	PLOT (READ) now returns the current cursor position within the
+;		current window  (with respect to the window's origin)  and NOT
+;		necessarily the screen origin.
+;
+;	3/	SCRORG was changed in a previous release to return the current
+;		window size in .X and .Y and NOT the screen size.  SCRORG will
+;		now return the maximum screen width (39 or 79) as well in .A.
+;
+;	4/	The entire data file, ED7.SRC, has been relocated to  $FA00 to
+;		allow a reserved area in ROM for foreign language systems. The
+;		reserved area shall be $FC80 thru $FEFF. This affects the MODE
+;		tables, COLor tables, BITS, local variable init table, and all
+;		PKY function key tables.
+;
+;	5/	The default screen colors for the  80-column  screen have been
+;		changed to BLACK background and CYAN characters. This was done
+;		to make a more presentable screen for systems using monochrome
+;		monitors and allow a full pallet of colors without  background
+;		interference for systems using RGBI monitors.
+;
+;
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	IOINIT now initializes the 8563 chip from an updated table now
+;		that the tower has been removed. Also changed were the default
+;		screen colors (see #5 above) and adjustments for PAL systems.
+;
+;	2/	IOINIT now has a delay loop of approximately 300ms incorporated
+;		into it to allow older versions of the VIC-1541 disk drives to
+;		finish their reset sequence. The system previously hung in the
+;		auto-boot routine if in 40-column mode with old 1541's.
+;
+	.page
+	.subttl  RELEASE NOTES:   BETA-6   03/20/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE BETA-5 CODE TO CREATE THE
+; BETA-6 VERSION RELEASED ON 03/20/85. THE BETA-6 RELEASE IS A PRE-PRODUCTION
+; VERSION INTENDED FOR SYSTEM TEST AND EVALUATION AND PRELIMINARY APPLICATION
+; SOFTWARE DEVELOPMENT ONLY. NOTE THE CHANGE TO THE CHARACTER ROM ALSO.
+;
+;
+;
+; The following changes have been made to the MONITOR:
+;
+;	1/	Number conversion from/to all bases (hex,dec,oct,bin) fully
+;		functional. Display format different from beta-5 also.
+;
+;	2/	The monitor DOS parser now provides DIRECTORY display using
+;		the syntax:  @[unit#],$[drive:filespec]
+;
+;
+;
+; The following changes have been made to the EDITOR:
+;
+;	1/	The KEYSCAN routine was corrected to properly leave the COLM
+;		driver port energizing only PB7. (Previously if no keys were
+;		down all lines were left energized.) Also the scan of the
+;		CAPS LOCK key was moved to the beginning of the KEYSCAN loop
+;		where it will always be scanned and SHFLAG correctly updated.
+;		(Previously if no matrix keys were down it was not scanned.)
+;
+;	2/	The CLRLIN and MOVLIN routines have had all the 'kludge' code
+;		removed as it is no longer necessary using 8563R7 parts. Two
+;		absolute variables consequently have disappeared, SAV80C & D.
+;
+;	3/	The various tables used by the screen editor have been shifted
+;		around to allow better utilization of free ROM. The MODEx tables
+;		now start at $FA80. All other tables now float above editor code.
+;
+;
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	The interrupt handlers now clear decimal mode (via CLD). This
+;		is done AFTER the indirect jumps are made. The correct mode is
+;		restored upon return from the interrupt code as usual.
+;
+;	2/	The SERIAL & TAPE routines now work at either 1 or 2MHz speed.
+;		This was accomplished by replacing 'SEI' and 'CLI' opcodes in
+;		time sensitive routines with JSR's to new code which saves the
+;		current states & forces sprites off & 1MHz speed, and then re-
+;		stores them all when through. This required minor changes to the
+;		TAPE routines, but the serial ACPTR routine was totally re-coded.
+;		Several absolute variables to store the states have been added
+;		as well as one called HOLD_OFF which, if B7 is set, will cause
+;		these new SEI/CLI routines to be skipped & require the user to
+;		assume full responsibility for controlling system speed & sprites
+;		during tape or serial I/O operations.
+;
+;	3/	The space key now correctly skips the current 'found' file during
+;		TAPE loads. (The C= key or <no> action will initiate program load.)
+;
+;	4/	The CLOSE routine now saves the CARRY status in SVXT and not VERCK.
+;		This corrects a conflict with the LOAD routine's use of VERCK.
+;
+;	5/	The BURST routine now correctly reports a 'device not present'. It
+;		previously reported 'illegal device number'.
+;
+;	6/	Improved TKSA (serial routine) turnaround by putting DEBPIA inline.
+;
+;	7/	The OPEN routine now JSR's to OPENI for serial operations. This
+;		corrects a problem that occurred when the device was not present.
+;		OPENI pops the return address and JMPs to ERROR5 at such time.
+;
+;	8/	The INSTALL routine now downloads to RAM the correct code for the
+;		DMA Controller. Previously the wrong subroutine was downloaded.
+;		Also, a NOP was added to the RAM code after the DMA request.
+;
+;
+;
+; The following changes have been made to the CHARACTER ROM:
+;
+;	1/	Part number 315010-02 has a minor error in the font definition
+;		for the lower case reverse field 'v'. This has been corrected in
+;		part number 315010-03.
+;
+;	2/	Part number 315010-03 also includes a modification to the lower
+;		case 'm' character (both normal & reverse fields) due to several
+;		complaints about its appearance.
+;
+	.page
+	.subttl  RELEASE NOTES:   BETA-7   04/08/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE BETA-6 CODE TO CREATE THE
+; BETA-7 VERSION RELEASED ON 04/08/85. THE BETA-7 RELEASE IS A PRE-PRODUCTION
+; VERSION INTENDED FOR SYSTEM TEST AND EVALUATION AND PRELIMINARY APPLICATION
+; SOFTWARE DEVELOPMENT ONLY. NOTE THE CHANGE TO THE CHARACTER ROM ALSO.
+;
+;
+;
+; The following changes have been made to the MONITOR:
+;
+;	1/	Previously the HUNT command treated <colon> and <question> in
+;		ASCII strings as terminators, hence they could not be  hunted
+;		for. This has been corrected.
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	Previously the GO64 routine redirected the soft  RESET vector
+;		back to itself thus providing a degree of protection to  C/64
+;		software as the system had to be powered down to  escape C/64
+;		mode. Unfortunately DRAM devices are not as  volatile as they
+;		used to be and many systems required as much as 30 seconds to
+;		elapse before they would power up into C/128 mode.  The RESET
+;		vector is still present but the GO64 code no longer redirects
+;		it. Applications using RESET should note the problem and pro-
+;		vide a friendly escape mechanism after protecting themselves.
+;
+;	2/	Previously it was possible to enter C64 mode running at 2MHz.
+;		This has been corrected. Note it is possible from C64 mode to
+;		access the 1-2MHz bit (VIC register 48) to speed  up  certain
+;		operations if so desired.
+;
+;	3/	Several minor changes to SERIAL code.  Some inaccessable code
+;		was removed from TALK/LISTEN routine.  TKSA now errors out if
+;		the SA could not be sent.
+;
+;	4/	Previously the BOOT routine returned  without  reporting  any
+;		errors.  BOOT now returns errors in the same manner as LOADs,
+;		with the carry set and error code in the accumulator.
+;
+;	5/	Previously the BURST load mechanism caused open disk channels
+;		to be flushed. This has been corrected and now preserves open
+;		user channels as the C/64 LOAD had  (e.g. chaining programs).
+;		Note however that  BOOT loads will cause all open  files  for
+;		the given device to be closed (see CLOSE_ALL note below).
+;
+;	6/	BURST must  UNLISTEN the  1571 when a break occurs (STOP key)
+;		to signal the drive to  abort the  operation.  Previously the
+;		drive stayed in its burst routine waiting to  send  the  next
+;		block of data. This fix will prompt the drive to abort too.
+;
+;	7/	The DMA controller routine (for RAMDISK) has been modified to
+;		meet the latest RAMDISK specification.
+;
+;	8/	A new Kernal JUMP TABLE entry has been created for an all new
+;		Kernal subroutine, CLOSE_ALL.   Unlike  CLALL,  which  simply
+;		cleared the LAT, FAT, SAT tables and restored the default I/O
+;		devices without properly closing files, CLOSE_ALL is passed a
+;		device number (fa) and properly closes ALL open files on that
+;		device. If that device was the current I/O device,  only then
+;		will CLOSE_ALL restore the  appropriate default device.  This
+;		new jump vector is located at $FF4A.
+;
+;	9/	The Kernal IOINIT routine will recognize 8563-R8 & initialize
+;		register #25 (horz. smooth scroll) to $47 per 8563 spec mods.
+;		Previously this register was  initialized to  $40.  Note that
+;		the lower 3 bits of the 8563 status register will return  the
+;		revision level of the 8563 part (0=R7, 1=R8, etc.)
+;
+;
+; The following changes have been made to the CHARACTER ROM:
+;
+;	1/	The hardware now supports an 8K byte character ROM. The lower
+;		4K contains the C/64 character set  (P/N 901225-01),  and the
+;		upper 4K contains the  C/128  character set  (P/N 315010-03).
+;		In domestic systems the switching mechanism  is  the  /64-128
+;		MMU signal and is therefore transparent to the user.  It  has
+;		been proposed that international units replace one of the  4K
+;		character sets with their particular national  character  set
+;		and utilize the CAPS_LOCK key to manually switch sets.
+	.page
+	.subttl  RELEASE NOTES:   BETA-8   04/15/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE BETA-7 CODE TO CREATE THE
+; BETA-8 VERSION RELEASED ON 04/15/85. THE BETA-8 RELEASE IS A PRE-PRODUCTION
+; VERSION INTENDED FOR SYSTEM TEST AND EVALUATION AND PRELIMINARY APPLICATION
+; SOFTWARE DEVELOPMENT ONLY.
+;
+;	**************************************************************
+;	* PENDING SYSTEM TEST, THIS SHALL BE THE FINAL BETA RELEASE. *
+;	* ANY  PROBLEMS  OR  NEEDS  *MUST*  BE  REPORTED  TO  SYSTEM *
+;	* ENGINEERING BEFORE  04/19/85  FOR RESOLUTION AND INCLUSION *
+;	* INTO THE PRODUCTION ROM RELEASE!			     *
+;	**************************************************************
+; 
+;
+;
+;
+; The following changes have been made to the MONITOR:
+;
+;	1/	The  Monitor DOS interface  now  uses  the  reserved  logical
+;		channel number 0, and no longer transmits a 'close' to the
+;		disk. Previously it used channel 1 (which was often in use by
+;		the user) and performed a full 'close' (which caused the disk
+;		to close ALL open files).
+;
+;	2/	The  Monitor DOS interface no longer allows  access  to  unit
+;		numbers 3 and 31. They are illegal serial bus devices.
+;
+;	3/	The  Monitor MEMORY DUMP facility correctly displays the full
+;		CBM ASCII character set.  Previously the  ASCII was masked to
+;		7 bits.
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	The  Kernal BOOT routine no longer transmits a 'close' to the
+;		disk. The disk status will now reflect the last I/O operation
+;		status similar to a 'load' operation.  A reduntant attempt to
+;		transmit the disk warm start (UI) command was removed.
+;
+;	2/	The Kernal GO64 routine now insures that the 6510 port /HIRAM
+;		and /LORAM  lines  are set  HIGH  before entering  C64  mode.
+;		Previously entering C64 mode  (where /HIRAM and /LORAM select
+;		RAM and ROM memory configurations)  from a C128 graphics mode
+;		(where  /HIRAM and /LORAM  select  VIC  and  processor  color
+;		nybble banks) would crash the C64 system  because its  system
+;		ROM was not in context and entry was not via hardware reset.
+;
+;
+; The following changes have been made to the EDITOR:
+;
+;	1/	The IRQ screen handler has been modified to accommodate 2 MHz
+;		split screen operation. Previously the split screen operation
+;		in 2 MHz mode caused the IRQ keyscan to be skipped.
+;
+;	2/	A difference between the C64 and C128 screen editors has been
+;		noted but will NOT BE CHANGED because the same anomaly occurs
+;		with the windowing editor on other products.  The  effect  is
+;		illustrated by the following BASIC operation:
+;
+;			10 OPEN 1,0	:REM   OPEN CHANNEL TO KEYBOARD
+;			20 INPUT#1,A$	:REM   INPUT A LINE
+;			30 PRINT A$	:REM   DISPLAY LINE INPUT
+;
+;		The PRINT A$  will overwrite the last character of the string
+;		entered in response to the 'INPUT'.  The C/64 editor does not
+;		overwrite; in fact there are extra spaces found  between  the
+;		input and output strings.  Any requests to change this should
+;		be sent as soon as possible!
+;
+	.page
+	.subttl  RELEASE NOTES:   BETA-8   04/15/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE BETA-8 CODE TO CREATE THE
+; BETA-9 VERSION RELEASED ON 04/19/85. THE BETA-8 RELEASE IS A PRE-PRODUCTION
+; VERSION INTENDED FOR SYSTEM TEST AND EVALUATION AND PRELIMINARY APPLICATION
+; SOFTWARE DEVELOPMENT ONLY.
+;
+;	**************************************************************
+;	* PENDING SYSTEM TEST, THIS SHALL BE THE FINAL BETA RELEASE. *
+;	**************************************************************
+; 
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	The Kernal TAPE handler previously returned the  wrong  error
+;		code upon encountering the EOT. This has been fixed to report
+;		'file not found'.
+;
+; The following changes have been made to the EDITOR:
+;
+;	1/	DOCUMENTATION ONLY:  Please note that  the  Editor  does  not
+;		factor in 'VM1' when utilizing 'LDTBL1'.  This means that the
+;		IRQ screen handler WILL move the screen per VM1 but that  all
+;		printing will continue to update the screen at $400.  Because
+;		LDTBL1 is in ROM it cannot be modified as in the  C/64.   Any
+;		requests to change this mechanism must be made NOW.
+;
+;	2/	The Editor now includes the National keyboard  lookup  tables
+;		and a National-to-ASCII conversion table.  While there is  no
+;		National keyboard driver code in ROM, it is expected that the
+;		inclusion of these tables will provide sufficient support for
+;		RAM or Function Cartridge based drivers.  AN APPLICATION NOTE
+;		WILL BE FORTHCOMING TO DETAIL THE IMPLEMENTATION OF A DRIVER.
+;		
+; The following changes reference ALL sections of code:
+;		
+;	1/	The three (3) C/128 ROMs now contain a revision  byte  and  a
+;		byte reserved for 'rounding' the checksum. The locations  are
+;		given below. Please note that the 'revision'  byte  described
+;		here refers to  the  individual  ROM  contents,  NOT  to  the
+;		software (e.g.: the KERNAL software revision byte is $FF80).
+;
+;			LOW (U33):	$7FFE - REVISION BYTE
+;					$7FFF - CHECKSUM ADJUST
+;
+;			MID (U34):	$BFFE - REVISION BYTE
+;					$BFFF - CHECKSUM ADJUST
+;
+;			HIGH (U35):	$CFFE - REVISION BYTE
+;					$CFFF - CHECKSUM ADJUST
+;
+;		The 8-bit checksum is calculated over the ROM's  contents  by
+;		adding the sequential bytes for each 16KB ROM, discarding any
+;		carry between additions. Thus the sum of each ROM  should  be
+;		equal to the MSB of its starting address (e.g.: LO=$40,  MID=
+;		$80, HI=$C0).  Please note the checksum of the HI  (U35)  ROM
+;		does NOT include the CP/M portion (address range $D000-$DFFF)
+;		as this section of ROM cannot be read by the host processor. 
+	.page
+	.subttl  RELEASE NOTES:   318020-03   05/08/85
+
+; THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE  318020-02 CODE TO CREATE
+; THE 318020-03 VERSION RELEASED ON 05/08/85.  THIS RELEASE IS MADE TO CREATE
+; MASKED ROMS FOR PRODUCTION.
+;
+; 
+;
+; The following changes have been made to the KERNAL:
+;
+;	1/	Previously the IOINIT routine improperly initialized PAL  and
+;		'R8' versions of the 8563 80-column display device. This  has
+;		been corrected. Testing of these modes has been very limited.
+;
+;	2/	Previously the fast SERIAL routine SPINP forced the  50/60 Hz
+;		flag on D1CRA low (60Hz). This has been corrected to preserve
+;		the status of this line.
+;
+;	3/	A new jump table entry has been created for the  fast  SERIAL
+;		routines SPINP and SPOUT at $FF47.  Users must enter with the
+;		carry flag clear to select SPINP and carry flag set for SPOUT
+;
+;	4/	Previously the SERIAL routine DISK_CLI enabled  IRQ's  before
+;		restoring the sprite enable register. This caused  the  BASIC
+;		IRQ sprite handler, under stress, to lose sprites.  This  has
+;		been corrected. The fix required a change as well to the TAPE
+;		routine TNIF which shared portions of the  DISK_CLI  routine.
+;		The shared code has been eliminated by copying the  necessary
+;		portions to TNIF.
+;
+;	5/	Previously the Kernal RAM code for  JMPFAR called the  GETCFG
+;		ROM code directly.  To preserve code  modularity,  the direct
+;		address was replaced by the Kernal jump table address.
+;
+; The following changes have been made to the EDITOR:
+;
+;	1/	Due to remaining problems with the 8563 block fill  function,
+;		the so-called KLUDGE code has again been added to the  CLRLIN
+;		routine.  This patch will clear up the occasional  characters
+;		seen on the 80-column text screen after a SCNCLR, and will be
+;		valid even after the 8563 bug is fixed.  Two (2) absolute RAM
+;		variables were added to DECLARE without disturbing anything.
+;
+;	2/	Previously it was not possible to move the VIC 40-column text
+;		screen and still utilize the screen editor  because  LDTB1 is
+;		is ROM based (unlke the C64 which is RAM based).  To  provide
+;		this capability a new variable, LDTB1_SA has been created and
+;		may be used in conjunction with the variable VM1 to  move the
+;		VIC text screen. VM1 should be written instead of VIC reg #24
+;		(default value $14) and LDTB1_SA loaded with the high byte of
+;		the new screen location (default value $04). Please note that
+;		the placement of VIC video matrices is limited by  the  image
+;		of the character ROM VIC sees at $1000-$1FFF and the presence
+;		of ROM beginning at $4000 in the system's  memory  map.  This
+;		change affected Editor routines SCRSET and MOVLIN which  used
+;		LDTB1 directly, and CINT which now initializes LDTB1_SA.
+;
+;	3/	There was a problem with windows one (1) character wide in 80
+;		column mode which affected areas outside the  window. It  was
+;		been corrected by testing for this special case in CLRL80.
+;
+;	4/	The NATIONAL keyboard lookup tables and the National-to-ASCII
+;		conversion table have been removed.  They were  found  to  be
+;		unnecessary for Foreign-language systems and insufficent  for
+;		other applications. AN APPLICATION NOTE IS FORTHCOMING.
+;
+;	5/	The handling of 8563s special attributes (ALT, RVS, UNDERLINE
+;		and FLASH) has been  made  more  consistant  throughout.  The
+;		BLANK and CLRLN routines now strip all attributes except ALT.
+;		(this will affect, for example, INSERT and DELETE).   Various
+;		other routines now preserve the RVS bit  (not to be  confused
+;		with reverse-field mode; this hardware bit is  unused  by the
+;		system but can be set by the user).
+;
+;	6/	A single <ESCAPE> no longer cancels all  editor  modes  (e.g.
+;		quote, insert, underline, flash & reverse). A double <ESCAPE>
+;		or <ESCAPE>-O is now required. 
+;

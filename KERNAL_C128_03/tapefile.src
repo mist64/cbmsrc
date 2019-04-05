@@ -1,0 +1,198 @@
+	.page
+	.subttl  tape files   (04/19/85)
+
+;////////////   C A S S E T T E     T A P E     H A N D L E R   \\\\\\\\\\\\
+
+; fah -- find any header
+;
+; reads tape device until one of following block types found:
+;
+;	bdfh - basic data file header
+;	blf  - basic load file
+;
+; exits with:	.c=0 if successful, .c=1 if failure
+;		.a=0 if <stop> key pressed
+
+
+fah
+	lda verck	;save old verify
+	pha
+	jsr rblk	;read tape block
+	pla
+	sta verck	;restore verify flag
+	bcs 7$		;read terminated, rts
+
+	ldy #0
+	lda (tape1),y	;get header type
+
+	cmp #eot	;check end of tape?
+	beq 6$		;yes...failure (rts, .c=1 and <> )
+
+	cmp #blf	;basic load file?
+	beq 1$		;yes...success
+
+	cmp #plf	;fixed load file?
+	beq 1$		;yes...success
+
+	cmp #bdfh	;basic data file?
+	bne fah		;no...keep trying
+
+1$	tax		;return file type in .x
+	bit msgflg	;printing messages?
+	bpl 5$		;no...
+
+	ldy #ms17-ms1	;print "found"
+	jsr msg
+
+	ldy #5
+2$	lda (tape1),y	;print filename
+	jsr bsout
+	iny
+	cpy #21
+	bne 2$
+
+	lda time+1	;set up for time out...
+	adc #2		; (delay for 8 to 13 sec of display time)
+3$	ldy stkey	;check for key down in last row
+	iny
+	bne 4$		;...branch if key down (exit loop)
+	cmp time+1
+	bne 3$		;...loop until enough delay
+
+4$	cpy #$f0
+	beq fah		;...user hit 'space'- skip this one
+5$	clc		;success flag
+6$	dey		;make non-zero for good return
+7$	rts
+
+	.page
+; tapeh - write tape header
+;
+; exit:  .c=1 if failure (eg: tape buffer de-allocated)
+;	 .c=0 if good
+
+tapeh
+	sta t1		;save block type
+	jsr tapadr	;get address of tape buffer
+	bcc 4$		;buffer was de-allocated
+
+	lda stah	;preserve start & end load adr in case of load file
+	pha
+	lda stal
+	pha
+	lda eah
+	pha
+	lda eal
+	pha
+
+	ldy #bufsz-1
+	lda #space
+1$	sta (tape1),y	;put blanks into tape buffer
+	dey
+	bne 1$
+
+	lda t1
+	sta (tape1),y	;put block type into header
+
+	iny
+	lda stal
+	sta (tape1),y	;put load address into header
+	iny
+	lda stah
+	sta (tape1),y
+
+	iny
+	lda eal
+	sta (tape1),y	;put end address into header
+	iny
+	lda eah
+	sta (tape1),y
+
+	iny
+	sty t2
+	ldy #0
+	sty t1
+2$	ldy t1
+	cpy fnlen
+	beq 3$
+	jsr fnadry	; <lda (fnadr),y>: put filename into header
+	ldy t2
+	sta (tape1),y
+	inc t1
+	inc t2
+	bne 2$
+
+3$	jsr ldad1	;set up start and end address of header
+
+	lda #$69	;set up time for leader
+	sta shcnh
+
+	jsr twrt2	;write header on tape
+
+	tay		;save error code in .y
+	pla
+	sta eal		;restore start & end adr of load file
+	pla
+	sta eah
+	pla
+	sta stal
+	pla
+	sta stah
+	tya		;restore error code for return
+
+4$	rts
+
+	.page
+; routine returns tape buffer address in tape1
+;
+;	buffer is deallocated if 'tape1+1' < 2
+;	returns .c=0 if deallocated
+
+tapadr	ldx tape1	;assume tape1
+	ldy tape1+1
+	cpy #>buf	;check for allocation...
+	rts
+
+
+
+ldad1
+	jsr tapadr	;get ptr to cassette buffer
+	txa
+	sta stal	;save start low
+	clc
+	adc #bufsz	;compute pointer to end
+	sta eal		;save end low
+	tya
+	sta stah	;save start high
+	adc #0
+	sta eah		;save end high
+	rts
+
+
+
+faf
+	jsr fah		;find any header
+	bcs 3$		;failed
+
+; success...see if right name
+
+	ldy #5		;offset into tape header
+	sty t2
+	ldy #0		;offset into file name
+	sty t1
+1$	cpy fnlen	;compare this many
+	beq 2$		;done
+
+	jsr fnadry	; <lda (fnadr),y>
+	ldy t2
+	cmp (tape1),y
+	bne faf		;mismatch--try next header
+	inc t1
+	inc t2
+	ldy t1
+	bne 1$		;branch always
+
+2$	clc		;success flag
+3$	rts
+
+;.end
