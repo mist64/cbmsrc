@@ -1,0 +1,95 @@
+	.page
+	.subttl  MONITOR DECLARATIONS  (03/01/85)
+
+; constants
+
+cr	= $0d
+
+; zero page stuff
+
+pcb	= $02
+pch	= $03		;in basic's area
+pcl	= $04
+flgs	= $05
+acc	= $06
+xr	= $07
+yr	= $08
+sp	= $09
+
+	* = $60		;use basic fac for monitor zp
+
+t0	*=*+3
+t1	*=*+3
+t2	*=*+3
+
+txtptr	= $7a
+
+
+fa	= $ba		;kernal definitions
+fnadr	= $bb
+fnlen	= $b7
+mode	= $d7
+msgflg	= $9d
+ndx	= $d0
+sa	= $b9
+status	= $90
+tmpc	= $9f
+verck	= $93
+ba	= $c6
+fnbnk	= $c7
+
+	.page
+; absolute monitor storage
+
+
+bad	= $100		;fbuffr
+buf	= $200		;input buffer
+keyd	= $34a		;keyboard buffer
+
+exmon	= $32e		;indirect to command parser
+
+stavec	= $2af+10	;'stash' indirect
+cmpvec	= $2be+10	;'cmpare' indirect
+
+	* = $0a80	;monitor's domain
+
+xcnt	*=*+32		;compare buffer
+hulp	*=*+10
+format	*=*+1
+length	*=*+1		;asm/dis
+msal	*=*+3		;for assembler
+sxreg	*=*+1		;1 byte temp used all over
+syreg	*=*+1		;1 byte temp used all over
+wrap	*=*+1		;1 byte temp for assembler
+xsave	*=*+1		;save .x here during indirect subroutine calls
+direction *=*+1		;direction indicator for 'transfer'
+count	*=*+1		;parse number conversion
+number	*=*+1		;parse number conversion
+shift	*=*+1		;parse number conversion
+temps
+
+; system entrys
+
+system_vector	= $0a00	;return vector to os
+mmucr	= $ff00		;mmu configuration register
+
+basin	= $ffcf		;kernal jump table
+bsout	= $ffd2
+chkin	= $ffc6
+chkout	= $ffc9
+close	= $ffc3
+clrch	= $ffcc
+open	= $ffc0
+setlfs	= $ffba
+setnam	= $ffbd
+setbnk	= $ff68
+stop	= $ffe1
+_load	= $ffd5
+_save	= $ffd8
+primm	= $ff7d
+_fetch	= $ff74
+_stash	= $ff77
+_cmpar	= $ff7a
+_gosub	= $ff6e
+_goto	= $ff71
+_setmsg	= $ff90

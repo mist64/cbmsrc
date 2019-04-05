@@ -1,0 +1,48 @@
+	.page
+	.subttl	RREG Command
+
+;
+; RREG - return values of 6502 registers following a SYS call.
+;
+; Syntax : RREG [.A variable [,[.X variable] [,[.Y variable] [,[.S variable] ]]]
+
+rreg	lda #0
+	sta count
+
+10$	jsr chrgot
+	beq 50$			;reached end of statement - quit
+	cmp #','		;skip this arg?
+	beq 30$			;branch if so
+	jsr ptrget		;get pointer to target variable
+	sta forpnt		;a little bit of set up so we can share LET code
+	sty forpnt+1
+	lda valtyp		;what kind of variable name did ptrget find?
+	bne 99$			;error if non-zero (string)
+
+	ldy count		;which register's value are we looking for?
+	lda _a_reg,y		;.A, .X, & .Y are contiguious
+	cpy #3
+	bne 20$
+	lda _s_reg		;... .S isn't.
+
+20$	tay			;low byte in .Y,
+	lda #0			;high byte of zero,
+	jsr givayf		;..and go float it.
+	lda intflg		;set conditions for type of var (int/float)
+	jsr qintgr		;..and use part of 'LET' to do the work
+
+30$	inc count		;only 4 registers to do
+	lda count
+	cmp #4
+	bcs 50$
+	jsr chrgot		;was this e-o-statement?
+	beq 50$
+	jsr chrget		;not e-o-s, skip over comma,
+	bne 10$			;..and go do next
+
+50$	rts
+
+99$	jmp chkerr		;type mismatch error (gotta rename that someday)
+
+
+;end

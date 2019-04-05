@@ -1,0 +1,67 @@
+	.page
+	.subttl SLEEP Command
+
+;*****************************************************************************
+;*
+;*	SLEEP Command - postpone all activity for a specified period of time.
+;*
+;*	Syntax: SLEEP n
+;*
+;*	Where n is the number of seconds to remain inactive,
+;*	expressed as a positive value < 65536.
+;*
+;*****************************************************************************
+
+sleep	jsr getwrd	;get argument in (y,a)
+
+; multiply # of seconds to sleep by 60. this will be the number of 'jiffys'
+; to hibernate. store this value in 3 consecutive loc'ns the kernal knows to
+; decrement as a 24 bit value, and wait for an underflow.
+
+	ldx #0
+	sei			;silence, please!
+	sty _sleep_counter
+	sta _sleep_counter+1
+	stx _sleep_counter+2	;sleep_counter = n
+
+	jsr sleep_times_2	;sleep_counter = 2n
+	jsr add_xay_to_sleep	;sleep_counter = 3n
+	jsr sleep_times_4	;sleep_counter = 12n
+
+	ldy _sleep_counter
+	lda _sleep_counter+1
+	ldx _sleep_counter+2	;(xay) = 12n
+
+	jsr sleep_times_4	;sleep_counter = 48n
+	jsr add_xay_to_sleep	;sleep_counter = 60n !!!!!
+
+	cli
+1$	jsr is_stop_key_down
+	ldx _sleep_counter+2
+	inx			;underflow?
+	bne 1$			;no, loop.
+	rts
+
+
+sleep_times_4
+	jsr sleep_times_2
+sleep_times_2
+	asl _sleep_counter
+	rol _sleep_counter+1
+	rol _sleep_counter+2
+	rts
+
+add_xay_to_sleep
+	pha
+	tya
+	adc _sleep_counter
+	sta _sleep_counter
+	pla
+	adc _sleep_counter+1
+	sta _sleep_counter+1
+	txa
+	adc _sleep_counter+2
+	sta _sleep_counter+2
+	rts
+
+;end

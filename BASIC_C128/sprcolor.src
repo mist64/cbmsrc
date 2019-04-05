@@ -1,0 +1,36 @@
+	.page
+	.subttl SPRCOLOR Command
+
+;**************************************************************
+;*
+;*   SPRCOLOR - Set sprite multicolor registers
+;*
+;*	syntax : SPRCOLOR [multicolor_1] [,multicolor_2]
+;*
+;**************************************************************
+
+sprcolor
+	cmp #','		;is there a first arg?
+	beq 10$			;nope, skip to second
+
+	jsr getbyt		;get 1 byte arg in .X
+	dex			;adjust 1..16 to 0..15
+	cpx #16
+	bcs 98$			;too big
+	jsr put_io_in_map
+	stx vic+37
+
+10$	jsr optbyt		;get (optional) 1 byte arg in .X
+	bcc 20$
+
+	dex
+	cpx #16
+	bcs 98$			;too big
+	jsr put_io_in_map
+	stx vic+38
+
+20$	rts
+
+98$	jmp fcerr		;illegal value error
+
+;end

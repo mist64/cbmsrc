@@ -1,0 +1,165 @@
+	.page
+	.subttl DO / LOOP Commands
+
+do	ldy #1
+
+1$	lda txtptr,y	;save current pointers for stack entry
+	sta tmptxt,y
+	lda curlin,y
+	sta tmplin,y
+	dey
+	bpl 1$
+
+	jsr chrgot	;look for 'while' or 'until'
+	beq doyes	;unconditional
+	cmp #untltk
+	beq do10
+	cmp #whiltk
+	bne snrjmp
+;
+;  here for 'while'
+;
+	jsr frmjmp
+	lda facexp
+	bne doyes	;conditional evaluated true
+
+dono	jsr chrgot
+	jmp fnd010	;advance to end of block, do rts
+;
+;  here for 'until'
+;
+do10	jsr frmjmp
+	lda facexp
+	bne dono
+
+doyes	lda #5		;'do' needs 5 bytes on the run-time stack
+	jsr getstk
+	sta sw_rom_ram0
+	ldy #4		;..now stuff those 5 bytes!
+	lda tmptxt+1
+	sta (tos),y
+	dey
+	lda tmptxt
+	sta (tos),y
+	dey
+	lda tmplin+1
+	sta (tos),y
+	dey
+	lda tmplin
+	sta (tos),y
+	dey
+	lda #dotk
+	sta (tos),y
+	rts
+
+
+
+exit	jsr popdgo	;pop do entry off stack
+	jsr chrgot
+	beq fnd010
+snrjmp	jmp snerr
+
+
+;  find end of current block
+;
+fndend
+	jsr chrget
+fnd010
+	beq fnd50	;end of statement
+	cmp #looptk
+	beq fnd60	;a hit!
+	cmp #'"'	;quote
+	beq fnd40
+	cmp #dotk
+	bne fndend	;keep looking
+	jsr fndend	;recursivly
+	jmp dono	;do a chrgot,go to fnd010
+
+
+fnd40	jsr un_quote	;look for terminating quote, or end of statement
+	bne fndend	;character after quote wasn't terminator, keep going
+
+fnd50	cmp #':'	;end of line or end of stmt?
+	beq fndend	;just stmt, keep going
+	bit runmod	;direct mode?
+	bpl fnderr	;yes, so not found
+	ldy #2
+	jsr indtxt	;end of text?
+	beq fnderr	;'fraid so
+	iny		;y=3
+	jsr indtxt	;update pointers
+	sta curlin
+	iny
+	jsr indtxt
+	sta curlin+1
+	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc fndend
+	inc txtptr+1
+	bne fndend
+
+fnd60	jmp data	;read to end of statement,rts
+
+	.page
+
+loop	beq popngo	;no conditionals, just do it
+	cmp #whiltk
+	beq loop10
+	cmp #untltk
+	bne snrjmp
+;
+;  here for 'until'
+;
+	jsr frmjmp
+	lda facexp
+	beq popngo	;false, do it again!
+
+popdgo	lda #dotk	;pop, but don't go
+	jsr search
+	bne poperr	;branch if not found
+	jsr movfnd
+	ldy #5
+	jmp rlsstk
+
+
+fnderr
+	lda tmplin	;loop not found error: must make curlin match oldtxt
+	ldx tmplin+1
+	sta curlin
+	stx curlin+1
+	ldx #errlnf
+	.byte $2c
+poperr
+	ldx #errlwd    	;loop without do
+	jmp error
+
+
+;
+;  here for 'while'
+;
+loop10
+	jsr frmjmp
+	beq popdgo	;false, exit
+popngo
+	jsr popdgo
+	dey
+	lda (fndpnt),y	;restore pointers
+	sta txtptr+1
+	dey
+	lda (fndpnt),y
+	sta txtptr
+	dey
+	lda (fndpnt),y
+	jsr retpat	;(** 01/18/84 fixes 'loop' to a direct mode 'do')
+	lda (fndpnt),y
+	sta curlin
+	jmp do
+
+frmjmp
+	jsr chrget
+	jmp frmevl
+
+
+;.end

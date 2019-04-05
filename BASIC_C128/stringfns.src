@@ -1,0 +1,173 @@
+	.page
+	.subttl String Functions - MID$, LEFT$, RIGHT$, ASC, STR$, LEN
+
+
+
+; the str function takes a number and gives a string with
+; the characters the output of the number would have given.
+
+strd	jsr chknum	;arg has to be numeric
+	ldy #0
+	jsr foutc	;do it's output
+	pla
+	pla
+
+timstr	lda #<lofbuf
+	ldy #>lofbuf
+	jmp strlit
+
+
+; chr($) creates a string which contains as its only character the ascii
+; equivalent of the integer argument (#) which must be .lt. 255.
+
+chrd	jsr conint	;get integer in range.
+	txa
+	pha
+	lda #1		;one-character string.
+	jsr strspa	;get space for string.
+	pla
+	ldy #0
+	sta sw_rom_ram1	;set up string bank
+	sta (dsctmp+1),y
+
+chrd1	pla		;get rid of "chknum" return address.
+	pla
+	jmp putnew	;setup fac to point to desc.
+	.page
+
+; The following is the left$($,#) function. It takes the leftmost # characters
+; of the string. If # .gt. the len of the string, it returns the whole string.
+
+leftd	jsr pream	;test parameters.
+	pha
+	jsr inddpt
+	sta syntmp
+	pla
+	cmp syntmp
+	tya		;that's all there is to left$.
+
+rleft	bcc 1$
+	jsr inddpt
+	tax		;put length into x.
+	tya		;zero a, the offset.
+1$	pha		;save offset.
+rleft2	txa
+rleft3	pha		;save length.
+	jsr strspa	;get space.
+	lda dscpnt
+	ldy dscpnt+1
+	jsr fretmp
+	pla
+	tay
+	pla
+	clc
+	adc index	;compute where to copy.
+	sta index
+	bcc 1$
+	inc index+1
+1$	tya
+	jsr movdo	;go move it.
+	jmp putnew
+
+
+
+rightd	jsr pream
+	pha
+	jsr inddpt
+	sta syntmp
+	pla
+	clc		;(length des'd)-(length)-1.
+	sbc syntmp
+	eor #$ff	;negate.
+	jmp rleft
+
+; MID$($,#) returns string with chars from # position onward. If # .gt. len($)
+; then return null string. MID($,#,#) returns string with characters from
+; # position for #2 characters. if #2 goes past end of string return as much
+; as possible.
+
+midd	lda #255	;default.
+	sta faclo	;save for later compare.
+	jsr chrgot	;get current character.
+	cmp #')'	;is it a right paren )?
+	beq 1$		;no third paren. 
+	jsr chkcom	;must have comma.
+	jsr getbyt	;get the length into "faclo".
+
+1$	jsr pream	;check it out.
+	beq gofuc
+	dex 		;compute offset.
+	txa
+	pha		;preserve a while.
+	ldx #0
+	pha
+	jsr inddpt	;get length of what's left.
+	sta syntmp
+	pla
+	clc
+	sbc syntmp
+	bcs rleft2	;give null string.
+	eor #$ff	;in sub c was 0 so just complement. 
+	cmp faclo	;greater than what's desired.
+	bcc rleft3	;no, just copy that much
+	lda faclo	;get length of what's desired.
+	bcs rleft3	;copy it.
+
+
+
+
+; common routine used by right$, left$, mid$, for parameter chk and setup.
+
+pream	jsr chkcls	;param list should end.
+	pla
+	tay
+	pla
+	sta jmper+1	;get return address.
+	pla		;get rid of fingo's jsr ret addr.
+	pla
+	pla		;get length.
+	tax
+	pla
+	sta dscpnt
+	pla
+	sta dscpnt+1
+	lda jmper+1
+	pha
+	tya
+	pha
+	ldy #0
+	txa
+	rts
+
+
+
+; The function len($) returns the length of the string passed as an argument.
+
+len	jsr len1
+	jmp sngflt
+
+len1	jsr frestr	;free up string
+	ldx #0
+	stx valtyp	;force numeric
+	tay		;set condition codes
+	rts		;done.
+
+
+
+
+
+; The following is the asc($) function. It returns an integer which is the
+; decimal ascii equivalent of the string argument.
+
+asc	jsr len1
+	beq 1$		;it was null (zero length)
+	ldy #0
+	jsr indin1_ram1	;get 1st character
+	tay
+1$	jmp sngflt
+
+
+
+gofuc	jmp fcerr	;'illegal quantity error'
+
+;.end

@@ -1,0 +1,200 @@
+	.page
+	.subttl LIST Command
+
+list	jsr range	;set up line range
+
+1$	ldy #1
+	jsr indlow	;get ms byte of line to lists pointer
+	bne 2$		;ok if not zero, but..
+	dey
+	jsr indlow
+	beq gordy2	;..if ls byte is also zero, we're done.
+
+2$	jsr is_stop_key_down
+	jsr crdo	;new line
+	ldy #2
+	jsr indlow	;get ms byte of line number
+	tax
+	iny
+	jsr indlow	;get ls byte.
+
+	cmp linnum+1	;test if we are past the last line requested.
+	bne 3$
+	cpx linnum
+	beq 4$
+3$	bcs gordy2	;next line is > last line requested, exit.
+4$	jsr p1line	;print line #, space, and the line of code.
+	ldy #0	   	;move 'pointer to next line' into (lowtr)
+	jsr indlow
+	tax
+	iny
+	jsr indlow
+	stx lowtr
+	sta lowtr+1
+	jmp 1$
+
+gordy2	jmp crdo	;jmp ready
+
+	.page
+;******************************************************
+; print 1 line of basic.
+; entry:
+;	x,a contains line number low,high
+;	(lowtr) points to begining of line in text
+;
+;	next-line   line-num  basic.......text  null
+;	lo    hi    lo    hi  byte byte...byte   00
+;	/|
+;    (lowtr)	 acc   x
+;
+;******************************************************
+
+p1line	ldy #3
+	sty lstpnt
+	sty dores	;reset quote-switch
+	jsr linprt	;print line number
+	lda #' '	;print a space
+
+p1l010	ldy lstpnt
+	and #$7f
+
+p1l015	jsr outdo
+	cmp #'"'	;if quote character, toggle quote-switch
+	bne p1l019
+	lda dores
+	eor #$ff
+	sta dores
+
+p1l019	iny		;point to next character
+	beq gordy2	;failsafe mechanism...basic text was mangled, crash.
+	bit helper	;called by 'help' or 'list' cmd?
+	bpl p1l020	;list!
+	jsr helpsb	;help!
+
+p1l020	jsr indlow
+	beq p1lrts	;finished when trailing null is found
+	jmp (iqplop)	;usually points to nqplop
+
+
+
+
+nqplop	bpl p1l015	;not a token, just print character
+	cmp #pi
+	beq p1l015	;pi is >$80, but should be printed 'as is' anyway.
+	bit dores	;is quote switch on?
+	bmi p1l015	;yes, print char 'as is'
+	.page
+
+;  at this point, we know we're talking token. scan the token text
+;  list until the correct text is found, and print that text.
+
+	cmp #esc_cmd_tk	;is this an escape token?
+	beq print_esc_cmd
+	cmp #esc_fn_tk
+	beq print_esc_fn
+
+	tax		;use the token as index
+	sty lstpnt
+	lda #>reslst
+	ldy #<reslst
+
+p1l026	sta index1+1	;set index1 pointing to token text list
+	sty index1
+
+	ldy #0
+p1l030
+	dex		;is this the correct text?
+	bpl p1l070	;yes
+p1l040
+	lda (index1),y	;ind.ok
+	pha
+	inc index1	;else scan till next command text
+	bne p1l050
+	inc index1+1
+p1l050
+	pla
+	bpl p1l040	;look for char with msb set (end terminator)
+	bmi p1l030	;check next command
+
+p1l060
+	iny
+p1l070
+	lda (index1),y  ;indirect ok.
+	bmi p1l010	;print last chr after masking msb, continue on line.
+	jsr outdo	;print non-terminator character
+	bne p1l060	;always
+
+p1lrts
+	rts
+
+	.page
+
+; print escape command
+
+print_esc_cmd
+	tax			;save type (cmd) in case it is a foreign esc token
+	iny
+	jsr indlow		;look at second token
+	beq p1l015		;..oops, none. print funny character.
+	sty lstpnt
+	cmp #lowest_esc_cmd_tk	;is this one of ours?
+	bcc print_foreign_esc	;nope.
+	cmp #highest_esc_cmd_tk+1
+	bcs print_foreign_esc	;nope.
+	adc #$80-lowest_esc_cmd_tk ;make this a pointer p1l will be proud of.
+	tax
+	ldy #<esc_cmd_lst
+	lda #>esc_cmd_lst
+	bne p1l026		;always
+
+
+; print escape function
+
+print_esc_fn
+	tax			;save type (function) in case it is a foreign esc token
+	iny
+	jsr indlow		;look at second token
+	beq p1l015		;..oops, none. print funny character.
+	sty lstpnt
+	cmp #lowest_esc_fn_tk	;is this one of ours?
+	bcc print_foreign_esc	;nope.
+	cmp #highest_esc_fn_tk+1
+	bcs print_foreign_esc	;nope.
+	adc #$80-lowest_esc_fn_tk ;make this a pointer p1l will be proud of.
+	tax
+	ldy #<esc_fn_lst
+	lda #>esc_fn_lst
+	bne p1l026		;always
+	.page
+;
+; The token to be printed is an escape token which is NOT recognized by BASIC.
+; We will jump through the indirect chain and see if anyone claims this token.
+;
+; At this point:
+;	.C = 1 to signal 'unclaimed'
+;	.X = type (0==>command, ff==>function)
+;	.A = second token character
+;
+; If anyone claims this token, they should:
+;
+;	> Clear .C to flag 'taken'
+;	> Point (INDEX1) at the string to be printed (with msb of last char set)
+;	> Note: string to print MUST be in RAM-0!
+
+print_foreign_esc
+	cpx #esc_cmd_tk
+	bne 1$
+	ldx #0
+	.byte $2c	;mea culpa
+1$	ldx #$ff
+	sec
+	jmp (iescpr)
+
+nescpr	bcs 10$		;no takers, print a funny graphics character.
+	ldy #0
+	beq p1l070
+
+
+10$	jmp p1l015
+
+;.end

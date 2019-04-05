@@ -1,0 +1,180 @@
+	.page
+	.subttl Non-Escape Keyword List
+reslst
+       .byte 'EN','D'+$80
+endtk  =$80
+       .byte 'FO','R'+$80
+fortk  =endtk+1
+       .byte 'NEX','T'+$80
+nexttk =fortk+1
+       .byte 'DAT','A'+$80
+datatk =nexttk+1
+       .byte 'INPUT','#'+$80
+       .byte 'INPU','T'+$80
+       .byte 'DI',$CD
+       .byte 'REA',$C4
+       .byte 'LE','T'+$80
+       .byte 'GOT',$CF
+gototk =datatk+6
+       .byte 'RU',$CE
+runtk  =gototk+1
+       .byte 'I','F'+$80
+       .byte 'RESTOR','E'+$80
+resttk =runtk+2
+       .byte 'GOSU',$C2
+gosutk =resttk+1
+       .byte 'RETUR',$CE
+       .byte 'RE',$CD
+remtk  =gosutk+2
+       .byte 'STO',$D0
+       .byte 'O',$CE
+ontk   =remtk+2
+       .byte 'WAI','T'+$80
+       .byte 'LOA',$C4
+       .byte 'SAV','E'+$80
+       .byte 'VERIF',$D9
+       .byte 'DE','F'+$80
+       .byte 'POK','E'+$80
+       .byte 'PRINT',$A3
+       .byte 'PRIN','T'+$80
+printk =ontk+8
+       .byte 'CON','T'+$80
+       .byte 'LIS','T'+$80
+       .byte 'CL','R'+$80
+clrtk  =printk+3
+       .byte 'CM',$C4
+       .byte 'SY',$D3
+       .byte 'OPE',$CE
+       .byte 'CLOS','E'+$80
+       .byte 'GE','T'+$80
+       .byte 'NE',$D7
+scratk =clrtk+6
+       .byte 'TAB',$A8
+tabtk  =scratk+1
+       .byte 'T',$CF
+totk   =tabtk+1
+       .byte 'F',$CE
+fntk   =totk+1
+       .byte 'SPC',$A8
+spctk  =fntk+1
+       .byte 'THE',$CE
+thentk =spctk+1
+       .byte 'NO','T'+$80
+nottk  =thentk+1
+       .byte 'STE',$D0
+steptk =nottk+1
+       .byte $ab        	;+
+PLUSTK =STEPTK+1
+       .byte $ad        	;-
+MINUTK =PLUSTK+1
+       .byte $aa        	;*
+       .byte $af        	;/
+       .byte $de        	;~
+       .byte 'AN',$C4
+       .byte 'O','R'+$80
+       .byte 190        	;>
+greatk =minutk+6
+       .byte $bd        	;=
+equltk =greatk+1
+       .byte 188        	;<
+lesstk =equltk+1
+       .byte 'SG',$ce
+onefun =lesstk+1
+       .byte 'IN','T'+$80
+       .byte 'AB',$D3
+       .byte 'US','R'+$80
+       .byte 'FR','E'+$80
+       .byte 'PO',$D3
+       .byte 'SQ','R'+$80
+       .byte 'RN',$C4
+       .byte 'LO',$C7
+       .byte 'EX',$D0
+       .byte 'CO',$D3
+       .byte 'SI',$CE
+       .byte 'TA',$CE
+       .byte 'AT',$CE
+       .byte 'PEE',$CB
+       .byte 'LE',$CE
+       .byte 'STR','$'+$80
+       .byte 'VA',$CC
+       .byte 'AS',$C3
+       .byte 'CHR','$'+$80
+lasnum =onefun+19
+       .byte 'LEFT','$'+$80
+lefttk =lasnum+1
+       .byte 'RIGHT','$'+$80
+       .byte 'MID','$'+$80
+middtk=lefttk+2
+       .byte 'G',$CF
+gotk   =middtk+1
+
+
+       .byte 'RG','R'+$80
+rgrtk  =gotk+1
+       .byte 'RCL','R'+$80
+       .byte $80		;a null for the escape function token
+esc_fn_tk =rgrtk+2
+       .byte 'JO',$D9
+       .byte 'RDO','T'+$80
+       .byte 'DE',$C3
+       .byte 'HEX','$'+$80
+       .byte 'ERR','$'+$80
+       .byte 'INST','R'+$80
+insttk =esc_fn_tk+6
+highest_old_fn_tk=insttk
+       .byte 'ELS','E'+$80
+elsetk =insttk+1
+       .byte 'RESUM','E'+$80
+resutk=elsetk+1
+       .byte 'TRA',$D0
+traptk=resutk+1
+       .byte 'TRO',$CE
+       .byte 'TROF','F'+$80
+       .byte 'SOUN','D'+$80
+       .byte 'VO','L'+$80
+       .byte 'AUT',$CF
+       .byte 'PUDE','F'+$80
+       .byte 'GRAPHI',$C3
+       .byte 'PAIN','T'+$80
+       .byte 'CHA','R'+$80
+       .byte 'BO',$D8
+       .byte 'CIRCL','E'+$80
+       .byte 'GSHAP','E'+$80
+       .byte 'SSHAP','E'+$80
+       .byte 'DRA',$D7
+       .byte 'LOCAT','E'+$80
+       .byte 'COLO','R'+$80
+       .byte 'SCNCL','R'+$80
+       .byte 'SCAL','E'+$80
+       .byte 'HEL',$D0
+       .byte 'D',$CF
+dotk=traptk+20
+       .byte 'LOO',$D0
+looptk=dotk+1
+       .byte 'EXI','T'+$80
+       .byte 'DIRECTOR',$D9
+       .byte 'DSAV','E'+$80
+       .byte 'DLOA',$C4
+       .byte 'HEADE','R'+$80
+       .byte 'SCRATC',$C8
+       .byte 'COLLEC','T'+$80
+       .byte 'COP',$D9
+       .byte 'RENAM','E'+$80
+       .byte 'BACKU',$D0
+       .byte 'DELET','E'+$80
+       .byte 'RENUMBE','R'+$80
+       .byte 'KE',$D9
+keytk  =looptk+13
+       .byte 'MONITO','R'+$80
+montk  =keytk+1
+       .byte 'USIN',$C7
+usetk  =montk+1
+       .byte 'UNTI',$CC
+untltk =usetk+1
+       .byte 'WHIL','E'+$80
+whiltk =untltk+1
+esc_cmd_tk  = $fe
+       .byte 0
+
+;END
+

@@ -1,0 +1,25 @@
+	.nam  C/128 MONITOR  (318019_04 RELEASE: 11/07/86)
+	.forml 60
+
+	.include  disclaim
+	.include  sysdoc
+	.include  relnotes
+	.include  monnotes
+	.include  declare
+
+	*=$b000
+
+.monitor_begin
+
+	.include monitor0
+	.include monitor1
+	.include monitor2
+	.include monitor3
+	.include monitor4
+	.include monitor5
+	.include monitor6
+
+.monitor_end
+
+	.subttl  MONITOR CROSS REFERENCE
+	.end

@@ -1,0 +1,39 @@
+	.page
+	.subttl	VOLUME Command
+
+;***************************************************************
+;*
+;*  VOLUME - set volume of SID
+;*
+;*	syntax : VOLUME vol
+;*
+;*	where  : vol in 0..15
+;*
+;***************************************************************
+
+volume	jsr getbyt		;get 1 byte arg in .X
+	cpx #16
+	bcs 98$			;too large
+	stx z_p_temp_1		;a temp (sorry fred)
+
+; the way this is done must work with 'PLAY' without too much conflict.
+; so, along with setting the SID 'volume' reg, we'll also set up 'PLAY's
+; record of current volume, as well.
+
+	lda filters+3
+	and #$f0
+	ora z_p_temp_1
+	sta filters+3
+
+	lda filters+4
+	and #$f0
+	ora z_p_temp_1
+	sta filters+4
+
+	jsr put_io_in_map
+	sta sid+24
+	rts
+
+98$	jmp fcerr		;illegal value error
+
+;end

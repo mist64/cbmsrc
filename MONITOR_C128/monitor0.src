@@ -1,0 +1,239 @@
+	.page
+	.subttl monitor0 - main
+
+;///////////   M O N I T O R   J U M P   E N T R Y   P O I N T S   \\\\\\\\\\\\
+
+monitor
+	jmp call	;'jmp' entry
+	jmp break	;'brk' entry
+	jmp moncmd	;command parser
+
+
+
+break			;////// entry for 'brk'
+	jsr primm
+	.byte cr,'BREAK',7,0
+
+	pla
+	sta pcb		;pull bank off stack
+
+	ldx #5
+
+1$	pla	      	;pull pc, registers & status off stack...
+	sta pch,x	;...and preserve them for display
+	dex
+	bpl 1$		; (notice pc will be wrong- processor bug)
+	bmi start
+
+
+call			;////// entry for 'jmp' or 'sys'
+	lda #0
+	sta mmucr	;must have system roms, ram0, & i/o in
+	sta acc		;clear everything up for user
+	sta xr
+	sta yr
+	sta flgs
+	lda #<monitor	;init pc to ourselves
+	ldy #>monitor
+	sta pcl
+	sty pch
+	lda #$0f
+	sta pcb		;init bank pointer to system roms, i/o, & ram0
+	jsr primm
+	.byte cr,'MONITOR',0
+	
+start	cld
+	tsx
+	stx sp		;get stack pointer for register display
+	lda #$c0
+	jsr _setmsg	;enable kernal control & error messages
+	cli	      	;start monitor: fall thru 'dspreg' to 'main'
+
+	.page
+;***********************************************************
+;
+;	Display contents of storage registers
+;
+;***********************************************************
+
+dspreg
+	jsr primm	;register legends
+	.byte cr,'    PC  SR AC XR YR SP'
+	.byte cr,'; ',$1b,'Q',0
+
+	lda pcb
+	jsr makhex
+	txa
+	jsr bsout	;display bank # (just lower nybble)
+	lda pch
+	jsr puthex	;display pc high
+
+	ldy #2
+1$	lda pcb,y
+	jsr puthxs	;display rest, separated by spaces
+	iny
+	cpy #8
+	bcc 1$
+
+main
+	jsr crlf
+	ldx #0
+	stx txtptr
+
+1$	jsr basin 	;read one line (up to <cr>) into buffer
+	sta buf,x
+	inx
+	cpx #161
+	bcs error	;...branch if 'line too long'
+	cmp #cr
+	bne 1$		;loop until end of line
+
+	lda #0
+	sta buf-1,x	;flag end of line
+
+2$	jsr gnc	  	;get a character from buffer
+	beq main	;end of line
+	cmp #' '	;skip leading spaces
+	beq 2$
+	jmp (exmon)	;lookup command
+	.page
+moncmd
+	ldx #cmdqty-1	;compare first char to list of valid commands
+10$	cmp cmdchr,x
+	beq main1	;found it in list!
+	dex
+	bpl 10$
+			;checked entire list, not found. fall into 'error'
+
+
+error
+	jsr primm	;general error message: print <crsr-rt><question mark>
+	.byte 29,'?',0
+	jmp main
+
+
+
+main1
+	cpx #cmdls	;is command 'L'oad, 'S'ave, or 'V'erify?
+	bcs 10$		;...branch if so:  can't use parse!
+
+	cpx #cmdno	;is it a number to evaluate?
+	bcs 20$		;...branch if so
+
+	txa		;multiply index by two
+	asl a
+	tax
+
+	lda cmdtbl+1,x	;push address of command on stack
+	pha
+	lda cmdtbl,x
+	pha
+	jmp parse	;parse first arg, and rts to correct command routine
+
+
+10$	sta verck	;save copy of what command was,
+	jmp lodsav	;...and jump to common load/save/verify routine
+
+
+20$	jmp convert	;simply evaluate number & print its value
+
+
+
+
+exit			;exit monitor, return to system
+	jmp (system_vector)
+
+	.page
+cmdchr
+	.byte 'A'	;assemble
+	.byte 'C'	;compare
+	.byte 'D'	;disassemble
+	.byte 'F'	;fill
+	.byte 'G'	;go (jmp to program)
+	.byte 'H'	;hunt
+	.byte 'J'	;jsr to subroutine
+	.byte 'M'	;memory dump
+	.byte 'R'	;display registers, pc & stack pointer
+	.byte 'T'	;transfer
+	.byte 'X'	;exit (jmp to basic warm start)
+
+	.byte '@'	;disk status/command
+	.byte '.'	;alter assembly
+	.byte '>'	;alter memory
+	.byte ';'	;alter regs
+
+cmdno	= *-cmdchr
+cmdnum
+	.byte '$'	;base-16 (hex)
+	.byte '+'	;base-10 (dec)
+	.byte '&'	;base-8  (oct)
+	.byte '%'	;base-2  (bin)
+
+cmdls	= *-cmdchr	;  (l,s & v must be last in table)
+
+	.byte 'L'	;load memory
+	.byte 'S'	;save memory
+	.byte 'V'	;verify memory
+
+cmdqty	= *-cmdchr
+
+
+
+cmdtbl
+	.word assem-1
+	.word compar-1
+	.word disasm-1
+	.word fill-1
+	.word go-1
+	.word hunt-1
+	.word gosub-1
+	.word dspmem-1
+	.word dspreg-1
+	.word trnsfr-1
+	.word exit-1
+
+	.word disk-1
+	.word assem-1
+	.word setmem-1
+	.word setreg-1
+
+	.page
+fetch
+	stx xsave	;save .x!
+	ldx t2+2	;set up bank
+	lda #t2		;set up address
+	sei
+	jsr _fetch	;get byte (protect from irq's: bank may not have vectors!)
+	cli
+	ldx xsave	;restore .x! (note: monitor doesn't need status here)
+	rts
+
+
+
+stash
+	stx xsave	;save .x!
+	ldx #t2
+	stx stavec	;set up address
+	ldx t2+2	;set up bank
+	sei
+	jsr _stash	;put byte (protect from irq's: bank may not have vectors!)
+	cli
+	ldx xsave	;restore .x!
+	rts
+
+
+
+cmpare
+	stx xsave	;save .x!
+	ldx #t2
+	stx cmpvec	;set up address
+	ldx t2+2	;set up bank
+	sei
+	jsr _cmpar	;compare bytes (protect from irq's: bank may not have vectors!)
+	cli
+	php
+	ldx xsave	;restore .x!
+	plp		;restore status!
+	rts
+
+;.end

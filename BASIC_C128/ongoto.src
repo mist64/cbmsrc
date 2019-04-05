@@ -1,0 +1,30 @@
+	.page
+	.subttl on...goto/gosub
+
+;**********************************************************
+;*
+;*	ON expression {GOTO | GOSUB} line_number
+;*
+;*********************************************************
+ongoto
+	jsr getbyt
+	pha
+	cmp #gosutk
+	beq 1$
+	cmp #gototk	;must be "gototk".
+	beq 1$
+	jmp snerr	;neither, must be syntax error
+
+1$	dec faclo
+	bne 2$		;skip another line number.
+	pla		;get dispatch character.
+	jmp xeqcm2
+
+2$	jsr chrget	;advance and set codes
+	jsr linget	;read next line
+	cmp #','	;is it a "comma"?
+	beq 1$
+	pla		;remove stack entry (token).
+	rts		;either end of line or syntax error.
+
+;end

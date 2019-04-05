@@ -1,0 +1,192 @@
+	.page
+	.subttl KEY Command
+;*************************************************************
+;
+;   keyfun  --  programmable key functions
+;
+;*************************************************************
+
+keyfun	bne chgkey	;if arg list, must be 'change key defn's'
+	ldx #0
+	ldy #0
+lstky1
+	inx		;get key number = 1-8
+	lda keybuf-1,x	;get key size
+	beq lstest	;skip if key not defined
+	sta keysiz	;save size
+	stx z_p_temp_1	;save key number
+	ldx #5
+lstpre
+	lda preamb,x  	;print key preamble
+	dex
+	bne lstpr1
+	ora z_p_temp_1	;add in key number
+lstpr1
+	jsr bsout	;print character
+	txa
+	bpl lstpre
+	ldx #7
+lsloop
+	lda pkybuf,y	;print key definition
+	iny
+	pha		;save character
+
+	stx voicno	;save .x  (**mod 01/17/84 to handle <esc> and <shft><cr>)
+	ldx #4
+lslook
+	cmp keychr-1,x	;is character a special one?
+	beq listsp	;yes...display it as 'chr$(...)'
+	dex
+	bne lslook
+	ldx voicno	;restore .x
+
+	cpx #8
+	bcc lstlp1	;1st time thru - display leading quote
+	bne lstlp2	;previous was a character - no additions needed
+	lda #'+'	;add since previous was quote or return
+	jsr bsout
+lstlp1
+	lda #'"'
+	jsr bsout	;add leading quote
+lstlp2
+	pla		;restore character
+	jsr bsout	;display it
+	ldx #9
+lstnd
+	dec keysiz
+	bne lsloop	;loop to end of definition
+	cpx #9
+	bcc lstlp3	;skip if previous not normal character
+	lda #'"'
+	jsr bsout	;add ending quote
+lstlp3
+	lda #$8d
+	jsr bsout	;add ending return (shifted)
+	ldx z_p_temp_1
+lstest
+	cpx #8
+	bne lstky1	;loop for all keys
+	rts
+
+
+listsp
+	ldx voicno	;restore .x
+lists1
+	lda keydat-3,x	;display something like  ' "+chr$( '
+	jsr bsout
+	dex
+	cpx #3
+	bcs lists1
+	pla		;restore character
+	jsr prtdec	;display decimal value of chr in .a
+	lda #')'	;finish off with closing paren.
+	jsr bsout
+	ldx #8
+	bne lstnd	;..always
+
+
+
+;**************************************************************
+;
+;   chgkey  --  add, delete or change function key definition
+;
+;**************************************************************
+
+chgkey
+	jsr getbyt	;get key number
+	dex
+	cpx #8
+	bcc chgke1	;ok
+	jmp fcerr	;exit - key number invalid
+
+chgke1
+	stx z_p_temp_1	;save key number
+	jsr chkcom	;look for comma
+	jsr frmstr	;do frmevl, frestr. returns len in .a, addr in 'index'
+	jsr doakey	;re-define the key (***mod 01/16/84 for e-z entry)
+	bcc kydone	;ok return (.c=0)
+	jmp omerr	;bad return (.c=1)
+
+
+
+doakey			;enter with len in .a, addr in 'index', & key # (0-7) in 'z_p_temp_1'
+	sta keysiz	;save string length
+	ldx #8
+	jsr findky	;find end of all strings
+	sta keylen	;save offset
+	ldx z_p_temp_1
+	inx
+	jsr findky	;find end of function key
+	sta keynxt	;save offset
+	ldx z_p_temp_1
+	lda keysiz
+	sec
+	sbc keybuf,x	;get new size - old size
+	beq keyins	;skip if the same
+	bcc kyless	;skip if new is shorter
+	clc
+	adc keylen	;get new ending offset for all keys
+	bcs kydon2	;wrapped? error if so...
+	cmp #maxkys+1
+	bcs kydon2	;exit - memory full error
+	tax		;get destination address+1
+	ldy keylen	;get source address+1
+1$	cpy keynxt
+	beq keyins	;done if all following keys have been moved
+	dey		;expand key area
+	dex		;move source to destination
+	lda pkybuf,y
+	sta pkybuf,x
+	bcs 1$
+
+
+
+kyless	adc keynxt	;get destination offset
+	tax
+	ldy keynxt	;get source address
+kylss1
+	cpy keylen	;contract key area
+	bcs keyins	;exit if moved all
+	lda pkybuf,y
+	sta pkybuf,x
+	iny
+	inx
+	bcc kylss1	;always
+;
+;  keyins  --  insert new key definition
+;
+keyins
+	ldx z_p_temp_1	;get key number
+	jsr findky	;get starting offset
+	tax
+	ldy z_p_temp_1
+	lda keysiz	;get new size
+	sta keybuf,y	;set new size
+	ldy #0
+kyins1
+	jsr indin1	;lda (index),y...move in new key def. from string
+	dec keysiz
+	bmi kydone	;exit - end of string
+	sta pkybuf,x
+	inx
+	iny
+	bne kyins1	;...always
+kydone
+	clc
+kydon2
+	rts
+
+keydat .byte '($RHC+"'
+
+keychr .byte cr, $8d, $22, $1b
+
+findky
+	lda #0
+	clc
+fndky1
+	dex
+	bmi kydon2
+	adc keybuf,x	;(.c=0)
+	bcc fndky1	;always
+
+;.end

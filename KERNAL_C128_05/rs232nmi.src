@@ -1,0 +1,154 @@
+	.page
+	.subttl  rs-232 nmi handler  (02/12/85)
+
+nmi232
+	tya		;y has icr contents
+	and enabl	;show only enables
+	tax		;preserve for later
+
+	and #$01	;t1 nmi check - transmit a bit
+	beq 3$		;...branch if not t1 (transmitter)
+
+	lda d2pra
+	and #$ff-$04	;fix for current i/o
+	ora nxtbit	;load data and...
+	sta d2pra	;...send it
+
+	lda enabl	;restore nmi's
+	sta d2icr	;ready for next...
+
+; because of 6526 icr structure...
+; handle another nmi as a subroutine
+
+	txa		;test for another nmi
+	and #$12	;test for t2 or flag
+	beq 2$
+	and #$02	;check for t2
+	beq 1$		;must be a flag
+
+	jsr t2nmi	;handle a normal bit in...
+	jmp 2$		;...then continue output
+
+1$	jsr flnmi	;handle a start bit...
+
+2$	jsr rstrab	;go calc info (code could be in line)
+	jmp nmirti
+
+3$	txa		;t2 nmi check - recieve a bit
+	and #$02	;mask to t2
+	beq 4$		;...branch if not t2 (receiver)
+
+	jsr t2nmi	;handle interrupt
+	jmp nmirti
+
+; flag nmi handler - recieve a start bit
+
+4$	txa		;check for edge
+	and #$10	;on flag...
+	beq nmirti	;no...
+
+	jsr flnmi	;start bit routine
+
+
+nmirti	lda enabl	;restore nmi's
+	sta d2icr
+	rts		;rti via 'prend'
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+;  baudo - baud rate table for NTSC
+;
+;  calc: 14.31818e6 / 14 / baud_rate / 2
+;
+
+baudo	.word  10277-cbit	;   50   baud
+	.word  6818-cbit	;   75   baud
+	.word  4649-cbit	;  110   baud
+	.word  3800-cbit	;  134.6 baud
+	.word  3409-cbit	;  150   baud
+	.word  1705-cbit	;  300   baud
+	.word  852-cbit		;  600   baud
+	.word  426-cbit		; 1200   baud
+	.word  284-cbit		; 1800   baud
+	.word  213-cbit		; 2400   baud
+
+
+
+;  baudop - baud rate table for PAL
+;
+;  calc:  .985248e6 / baud_rate / 2
+;
+
+baudop	.word  9853-cbit	;   50   baud
+	.word  6568-cbit	;   75   baud
+	.word  4478-cbit	;  110   baud
+	.word  3660-cbit	;  134.6 baud
+	.word  3284-cbit	;  150   baud
+	.word  1642-cbit	;  300   baud
+	.word  821-cbit		;  600   baud
+	.word  411-cbit		; 1200   baud
+	.word  274-cbit		; 1800   baud
+	.word  205-cbit		; 2400   baud
+
+
+
+;  cbit - an adjustment to make next t2 hit near center
+;  of the next bit. (aprox. the time to service a cb1 nmi)
+
+
+cbit	 =100			;cycles
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; t2nmi - subroutine to handle an rs232 bit input.
+
+t2nmi	lda d2prb	;get data in
+	and #$01	;mask off...
+	sta inbit	;...save for later
+
+; update t2 for mid bit check
+; (worst case <213 cycles to here: calc 125 cycles+43-66 dead)
+
+	lda d2t2l	;calc new time & clr nmi
+	sbc #22+18
+	adc baudof
+	sta d2t2l
+	lda d2t2h
+	adc baudof+1
+	sta d2t2h
+
+	lda #$11	;enable timer
+	sta d2crb
+
+	lda enabl	;restore nmi's early...
+	sta d2icr
+
+	lda #$ff	;enable count from $ffff
+	sta d2t2l
+	sta d2t2h
+
+	jmp rsrcvr	;go shift in...
+
+
+; flnmi - subroutine to handle the start bit timing..
+
+flnmi
+	lda m51ajb	;get half bit rate value
+	sta d2t2l
+	lda m51ajb+1
+	sta d2t2h
+
+	lda #$11	;enable timer
+	sta d2crb
+
+	lda #$12	;disable flag, enable t2
+	eor enabl
+	sta enabl
+
+	lda #$ff	;preset for count down
+	sta d2t2l
+	sta d2t2h
+
+	ldx bitnum	;get #of bits in
+	stx bitci	;put in rcvrcnt
+	rts
+
+;.end

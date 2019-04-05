@@ -1,0 +1,32 @@
+	.page
+	.subttl RGR Function
+
+;**********************************************************
+;
+;  rgr(n)  --  return graphic mode
+;
+;	result = graphm + mode*5
+;
+;**********************************************************
+
+rgr	jsr chknum
+	jsr unpack_graphm
+	tay
+	jmp sngflt	;return value (0-9)
+
+
+
+
+unpack_graphm
+	lda _graphm	;convert _graphm back to GRAPHIC args
+	clc
+	rol a
+	rol a
+	rol a
+	adc #0
+	bit _mode	;factor into this the current text screen (40/80)
+	bpl 10$
+	adc #5		;(it is 80)
+10$	rts
+
+;end

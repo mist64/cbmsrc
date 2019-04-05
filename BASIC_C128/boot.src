@@ -1,0 +1,45 @@
+	.page
+	.subttl BOOT Command
+
+;****************************************************************************
+;
+;  BOOT -  Boot a 'BOOT' disk, or 'BLOAD' a file, and SYS to it.
+;
+;  Syntax : Same as 'BLOAD'
+;	if 'filename' present, assume 'BLOAD' and sys to starting addr.
+;	else call kernal 'BOOT' routine, with our device & unit #'s as args.
+;
+;****************************************************************************
+
+boot	lda #$e6		;set up parms for parse routine
+	ldx #$fc
+	jsr dosprx		;parse
+
+	lda parsts		;was there a filename?
+	lsr a
+	bcc 20$			;no, do kernal BOOT
+
+	jsr bload_1		;finish 'BLOAD' command
+	bcs 30$			;if error (c=1), tell 'em about it!
+	ldx current_bank	;assume no B(ank) arg was given
+	lda parstx
+	lsr a
+	bcc 10$			;branch if no arg.
+	ldx dosbnk		;..otherwise, get users bank number
+10$	stx _bank
+	lda _starting_addr	;set up address BLOAD loaded to
+	sta _pclo
+	lda _starting_addr+1
+	sta _pchi
+	jmp _jjsr		;go do it!
+
+20$	lda dosds1		;get drive number
+	ora #'0'		;make ascii
+	ldx dosfa		;get unit number
+	jsr put_io_in_map
+	jsr _boot_call
+	bcs 30$			;branch if error
+	rts
+
+30$	jmp erexit
+;end

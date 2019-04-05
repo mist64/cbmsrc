@@ -1,0 +1,49 @@
+
+primm	pha	      	;protect a,x,y
+	txa
+	pha
+	tya
+	pha
+	tsx	      	;get sp
+	inx	      	;make it point to return addr low
+	inx
+	inx
+	inx
+
+	lda $0100,x     ;get it
+	sta imparm      ;in base ptr.
+	inx	      	;point to hi
+	lda $0100,x     ;get it
+	sta imparm+1    ;in base ptr.
+	inc imparm      ;this was actually a return addr minus 1
+	bne 1$		;...note that a string of only a $0 will work
+	inc imparm+1
+
+1$	ldy #0	   	;we're pointing to 1st byte of string
+
+2$	lda (imparm),y  ;loop to output string
+	beq 3$
+	jsr bsout
+	iny
+	bne 2$
+
+3$	tya	      	;y has offset to add onto imparm base
+	tsx		;shove true return addr in the stack
+	inx	      	;x points to ret adr lo
+	inx
+	inx
+	inx
+	clc
+	adc imparm
+	sta $0100,x     ;new lo ret adr
+	lda #0
+	adc imparm+1
+	sta $0101,x     ;new hi ret adr
+
+	pla
+	tay
+	pla
+	tax
+	pla
+	rts
+

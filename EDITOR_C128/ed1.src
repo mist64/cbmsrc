@@ -1,0 +1,658 @@
+	.page
+	.subttl ed1  editor initialization & I/O routines  (04/29/85)
+
+;////////////////   E D I T O R     J U M P     T A B L E   \\\\\\\\\\\\\\\\\
+
+	jmp cint	;initialize editor & screen
+	jmp disply	;display character in .a, color in .x
+	jmp lp2		;get a key from irq buffer into .a
+	jmp loop5	;get a chr from screen line into .a
+	jmp print	;print character in .a
+	jmp scrorg	;get size of current window (rows,cols) in .x, .y
+	jmp scnkey	;scan keyboard subroutine
+	jmp repeat	;repeat key logic & 'ckit2' to store decoded key
+	jmp plot	;read or set (.c) cursor position in .x, .y
+	jmp cursor	;move 8563 cursor subroutine
+	jmp escape	;execute escape function using chr in .a
+	jmp keyset	;redefine a programmable function key
+	jmp irq		;irq entry
+	jmp init80	;initialize 80-column character set
+	jmp swapper	;swap editor local variables (40/80 mode change)
+	jmp window	;set top left or bottom right (.c) of window
+
+.spare	.byte $ff,$ff,$ff
+
+	.page
+length	= 40
+
+linz0	= vicscn	;40 column screen lines
+linz1	= linz0+length
+linz2	= linz1+length
+linz3	= linz2+length
+linz4	= linz3+length
+linz5	= linz4+length
+linz6	= linz5+length
+linz7	= linz6+length
+linz8	= linz7+length
+linz9	= linz8+length
+linz10	= linz9+length
+linz11	= linz10+length
+linz12	= linz11+length
+linz13	= linz12+length
+linz14	= linz13+length
+linz15	= linz14+length
+linz16	= linz15+length
+linz17	= linz16+length
+linz18	= linz17+length
+linz19	= linz18+length
+linz20	= linz19+length
+linz21	= linz20+length
+linz22	= linz21+length
+linz23	= linz22+length
+linz24	= linz23+length
+
+	.page
+ldtb2			;screen lines low byte table
+	.byte <linz0
+	.byte <linz1
+	.byte <linz2
+	.byte <linz3
+	.byte <linz4
+	.byte <linz5
+	.byte <linz6
+	.byte <linz7
+	.byte <linz8
+	.byte <linz9
+	.byte <linz10
+	.byte <linz11
+	.byte <linz12
+	.byte <linz13
+	.byte <linz14
+	.byte <linz15
+	.byte <linz16
+	.byte <linz17
+	.byte <linz18
+	.byte <linz19
+	.byte <linz20
+	.byte <linz21
+	.byte <linz22
+	.byte <linz23
+	.byte <linz24
+
+ldtb1			;screen lines high byte table
+	.byte >linz0
+	.byte >linz1
+	.byte >linz2
+	.byte >linz3
+	.byte >linz4
+	.byte >linz5
+	.byte >linz6
+	.byte >linz7
+	.byte >linz8
+	.byte >linz9
+	.byte >linz10
+	.byte >linz11
+	.byte >linz12
+	.byte >linz13
+	.byte >linz14
+	.byte >linz15
+	.byte >linz16
+	.byte >linz17
+	.byte >linz18
+	.byte >linz19
+	.byte >linz20
+	.byte >linz21
+	.byte >linz22
+	.byte >linz23
+	.byte >linz24
+
+	.page
+
+vectss	.word contrl	;print <ctrl> indirect
+	.word shiftd	;print <shft> indirect
+	.word escape	;print <esc>  indirect
+	.word keylog	;keyscan logic indirect
+	.word keyput	;key buffer indirect
+vectse
+
+
+
+keycod	.word mode1	;decode matrix for normal keys
+	.word mode2	;decode matrix for shifted keys (right keycap legends)
+	.word mode3	;decode matrix for C= keys	(left  keycap legends)
+	.word mode4	;decode matrix for control keys
+	.word mode1	;decode matrix for alt keys	(none- default to norm)
+	.word mode5	;decode matrix for caps lock
+keyend
+
+	.page
+;//////   S C R E E N   &   E D I T O R   I N I T I A L I Z A T I O N   \\\\\\
+
+cint	lda #$03
+	ora d2pra	;set vic bank
+	sta d2pra
+	lda #$fb
+	and r6510	;turn on character rom
+	ora #$02	;point vic to text nybble bank
+	sta r6510
+
+	jsr _clrch	;restore default input/output devices
+
+
+;  initialize editor  GLOBAL  variables
+
+	lda #0
+	sta sidreg+24	;turn sound off
+	sta graphm	;set display to full text mode
+	sta mode	;set display to 40-column vic mode
+	sta ndx		;clear keyboard queue
+	sta kyndx	;clear function key index
+	sta crsw	;clear <cr> flag
+	sta pause	;clear <ctl>-S flag
+	sta blnon	;reset vic cursor status
+	sta charen	;reset vic character fetch to rom
+
+	sta vm3		;8563 text area
+	lda #$14
+	sta vm1		;vic text/character area
+	lda #$78
+	sta vm2		;vic graphic area
+	lda #>vdccol
+	sta vm4		;8563 attribute area
+	lda ldtb1
+	sta ldtb1_sa	;default high byte of vic screen lines
+
+	lda #10
+	sta xmax	;set maximum keyboard buffer size
+	sta blnct	;reset vic cursor blink count
+	sta blnsw	;start vic cursor blinking
+	sta delay	;reset delay before a key repeats
+	lda #4
+	sta kount	;reset delay between key repeats
+
+	jsr taball	;set default tab stops
+	sta rptflg	;enable key repeats (all keys, .a=$80)
+	ora mmumcr
+	sta mmumcr	;enable 40/80 key sense
+
+	lda #$60
+	sta curmod	;reset vdc cursor mode
+
+	lda #$d0
+	sta split	;set split screen division 5 lines up from bottom
+
+	.page
+;  initialize editor  LOCAL  variables
+
+	ldx #localabs-localzp
+1$	lda localzp,x
+	sta .swapbeg,x	;init 40-column vic  mode locals
+	lda localabs,x
+	sta .swapout,x	;init 80-column 8563 mode locals
+	dex
+	bpl 1$
+
+	ldx #vectse-vectss-1
+
+3$	lda vectss,x
+	sta ctlvec,x	;initialize editor indirect vectors
+	dex
+	bpl 3$
+
+	bit init_status	;skip if nmi or user call
+	bvs 6$
+
+	ldx #keyend-keycod-1
+
+4$	lda keycod,x
+	sta decode,x	;initialize keyboard matrix lookup tables
+	dex
+	bpl 4$
+
+
+	ldx #pkyend-pkytbl-1
+
+5$	lda pkytbl,x	;initialize programmable key definitions
+	sta pkybuf,x
+	dex
+	bpl 5$
+
+	lda #$40	;flag installation
+	ora init_status
+	sta init_status
+
+
+6$	jsr swapper	;swap in 80-col vars
+	jsr taball	;initialize 80-col tab stops
+	jsr sreset	;clear 80-col wrap table
+	jsr clsr	;clear 80-col text screen
+
+	jsr swapper	;swap in 40-col vars
+	jsr sreset	;clear 40-col wrap table
+	jsr clsr	;clear 40-col text screen
+
+	bit mmumcr	;test 40/80 key & stay in that mode
+	bmi 10$		;...branch if 40 (vic) mode (current mode)
+	jsr swapper	;swap in 80-col mode
+10$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+clsr			;clear the current screen window
+	jsr home	;start at top of window
+1$	jsr scrset	;point to a line
+	jsr clrln	;clear the line
+	cpx scbot	;done if it's the last line in the window
+	inx
+	bcc 1$
+
+
+
+home	ldx sctop	;put the cursor at top left of current window
+	stx tblx	;move to top of window
+	stx lsxp	; (for input after home or clear)
+
+
+stu10	ldy sclf	;////// entry from insert/delete line routines
+	sty pntr	;move to left side of window
+	sty lstp
+
+stupt			;////// entry to set pointers to beginning of current line
+	ldx tblx	;.x now points to beginning of line
+
+
+
+scrset	lda ldtb2,x	;generate pointers to current screen line
+	bit mode	;  (double table values for 80-col mode)
+	bpl 10$
+	asl a
+10$	sta pnt		;'pnt' points to screen ram
+	lda ldtb1,x
+	and #$03
+	bit mode
+	bpl 20$
+	rol a
+	ora vm3
+	bcc 30$		;always
+
+20$	ora ldtb1_sa
+30$	sta pnt+1		
+
+
+
+scolor	lda pnt
+	sta user	;'user' points to color ram
+	lda pnt+1
+	bit mode	;  (different base adr for 80-col)
+	bpl 1$
+	and #$07
+	ora vm4
+	bne 2$
+1$	and #$03
+	ora #>viccol
+2$	sta user+1
+	rts
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;/////////////////   E D I T O R   I R Q   R O U T I N E S   \\\\\\\\\\\\\\\\\\
+
+irq
+	sec
+	lda vicreg+25	;is this a vic raster irq?
+	and #$01
+	beq 10$		;...branch if not (just rts with .c=1)
+
+	sta vicreg+25	;clear the raster interrupt bit
+
+	lda graphm	;is user controlling vic?
+	cmp #$ff
+10$	beq irqrts	;...branch if so (rts with .c=1)
+
+	bit vicreg+17	;assume 'middle' irq (note .c=0 here)
+	bmi 20$		;...branch if not
+	and #$40	;make real sure it's a split screen (serial ops may have held irq off)
+	bne text	;...branch if somewhere in middle of a split screen
+
+20$	sec		;flag 'base' irq
+	lda graphm	;what will the next frame be?
+	beq text	;...branch if all text
+	bit graphm
+	bvc 30$		;...branch if not a split screen
+
+	lda split
+	sta vicreg+18	;split screen: make next irq occur in 'middle' of frame
+
+;  set up for a graphic frame
+
+30$	lda r6510
+	and #$fd	;point vic to graphic (mcm) nybble bank
+	ora #$04	;turn off character rom
+	pha
+
+	lda vm2		;point vic to graphic area
+	pha
+
+	lda vicreg+17	;turn on bit map mode
+	and #$7f	; (keep RC8 clear!)
+	ora #$20
+	tay
+
+	lda vicreg+22	;turn on/off multicolor mode
+	bit graphm
+	bmi 40$
+	and #$ef	;off
+	.byte $2c
+
+40$	ora #$10	;on
+	tax
+	bne doit	;always
+	.page
+;  set up for a text frame
+
+text	lda #$ff	;make next irq occur at 'base' of this or next frame
+	sta vicreg+18
+
+	lda r6510
+	ora #$02	;point vic to text nybble bank
+	and #$fb	;turn on character rom (if enabled)
+	ora charen
+	pha
+
+	lda vm1		;point vic to text area
+	pha
+
+	lda vicreg+17	;turn off bit map mode
+	and #$5f	; (keep RC8 clear!)
+	tay
+
+	lda vicreg+22	;turn off multicolor mode
+	and #$ef
+	tax
+
+	bcs doit	;...branch if at 'base' (not a split screen)
+
+	ldx #7
+1$	dex
+	bne 1$		;delay for clean switchover
+	nop
+	nop
+	tax
+
+;  install all precomputed values before vic prefetch of next visible line
+
+doit
+	pla
+	sta vicreg+24	;set vm
+	pla
+	sta r6510	;set charrom + vic nybble bank
+	sty vicreg+17	;set bit map mode
+	stx vicreg+22	;set muticolor mode
+
+irqrts	bcs 10$		;kludge for 2MHz mode split screen:
+	lda vicreg+48	;...in 2MHz mode, RC8=0 always due to faster code
+	and #$01	;...and hence skips keyscan, etc.
+	beq 10$		;...branch if 1MHz mode
+	lda graphm
+	and #$40
+	beq 10$		;...branch if not split scren
+	lda vicreg+17
+	bpl 10$		;...branch if raster still not at bottom
+	sec		;ah-ha! this has to be the 'bottom' irq of a split screen
+	
+10$	cli		;allow interruptable keyscan
+	bcc 20$		;done if 'middle' irq
+	jsr scnkey	;do general keyboard scan
+	jsr blink	;blink vic cursor
+	sec		;tell kernal this was the 60hz irq
+
+20$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;///////////////   E D I T O R   I N P U T   R O U T I N E S   \\\\\\\\\\\\\\\\
+
+lp2			;fetch a character from irq key buffer
+	ldx kyndx	;check for function key strings first
+	beq 1$	  	;...branch if none
+	ldy keyidx     	;get index to current character in key string
+	lda pkydef,y	;get the character
+	dec kyndx	;one less character in string
+	inc keyidx	;index to next character
+	cli
+	clc		;always a good return from keyboard
+	rts
+
+1$
+	ldy keyd	;get a key from irq buffer (.x=0 from 'lp2')
+2$
+	lda keyd+1,x	;push down buffer contents
+	sta keyd,x
+	inx
+	cpx ndx
+	bne 2$
+
+	dec ndx		;one less key in buffer
+	tya		;return character in .a
+	cli
+	clc		;always a good return from keyboard
+	rts
+
+
+
+loop4			;fetch characters & display them until <cr>
+	jsr print	;print the character in .a
+waitky	jsr crsron	;enable cursor
+
+1$	lda ndx	  	;wait here for any buffered keystroke
+	ora kyndx	; (or function key)
+	beq 1$
+
+	jsr crsrof	;disable cursor
+	jsr lp2		;get the key from irq key buffer
+
+	cmp #cr		;return key?
+	bne loop4	;no- buffer to screen until <cr>
+
+	sta crsw	;set flag to pass characters from screen
+	lda #0
+	sta qtsw	;clear quote mode
+	jsr fndend	;find last non-blank character in line
+	stx lintmp	;save last row id ('indx' = last column)
+	jsr fistrt	;find beginning row of this line
+	ldy sclf	;assume first character is at left margin
+
+	lda lsxp	;input actually began on this row
+	bmi 4$		;...branch if it's on a wrapped line
+	cmp tblx	;is cursor still on this row?
+	bcc 4$		;...branch if it's below this row
+
+	ldy lstp	;input actually began in this column
+	cmp lintmp	;does input begin & end on same row?
+	bne 2$		;...branch if not
+	cpy indx	;does input begin & end in same column?
+	beq 3$		;...branch if same
+
+2$	bcs clp2	;...branch if null input
+
+3$	sta tblx	;start input from this row
+
+4$	sty pntr	;start input from this column
+	jmp lop5	;go pass characters
+
+
+
+loop5			;/////  entry for kernal 'basin' routine \\\\\
+	tya
+	pha		; (save current cursor position)
+	txa
+	pha
+	lda crsw	;pass characters? (ie: input device = screen)
+	beq waitky	;no-  buffer      (ie: input device = keyboard)
+	bpl lop5	;yes- if there're any to pass
+
+
+
+clp2
+	lda #0		;clear flag- i/o is finished
+	sta crsw
+	lda #cr
+	ldx #3		;kludge for OPEN4,4 / CMD4 / LIST delemma
+	cpx dfltn
+	beq 1$		;input is from the screen
+	cpx dflto
+	beq 2$		;output is to the screen
+
+1$	jsr print	;force a <cr>
+
+2$	lda #cr		;pass a return as the last character
+	bne clp7	;always
+	
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+lop5
+	jsr  stupt	;set 'pnt' and 'user' to beginning of line
+	jsr  get1ch	;get a screen character
+	sta  datax
+	and  #$3f	;convert chr from screen codes...
+	asl  datax
+	bit  datax
+	bpl  1$		;...branch if not alt. character set
+	ora  #$80
+1$
+	bcc  2$		;...branch if not rvs fld character
+	ldx  qtsw
+	bne  3$
+2$
+	bvs  3$		;...branch if not shifted character
+	ora  #$40
+3$
+	jsr  qtswc	;...toggle quote mode if quote chr
+
+	ldy  tblx	;check for last non-blank character
+	cpy  lintmp
+	bcc  4$		;...branch if not on last input line
+	ldy  pntr
+	cpy  indx
+	bcc  4$		;...branch if not on last input column
+	ror  crsw	;make >0 (.c=1) to fake <cr>: this is the last chr
+	bmi  5$		;always
+
+4$
+	jsr  nxtchr	;move 'pntr' to next character
+
+5$
+	cmp  #$de	;a pi ?
+	bne  clp7	;no
+	lda  #$ff	;translate it to true cbm pi
+clp7
+	sta  datax
+	pla		; (restore cursor position for 'basin')
+	tax
+	pla
+	tay
+	lda  datax	;pass character in .a
+	clc		;always a good return from screen or keyboard
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+qtswc
+	cmp  #quote	;test for quote character
+	bne  1$		;it's not
+	lda  qtsw
+	eor  #$01	;toggle quote flag
+	sta  qtsw
+	lda  #quote
+1$	rts
+
+
+
+loop2			;/////////////   'print' exits here   \\\\\\\\\\\\\\
+	lda datax
+	sta lstchr	;save in case it's <escape> or <home> for next test
+	jsr cursor	;move cursor ahead of output
+	lda insrt
+	beq 1$
+	lsr qtsw	;clear quote mode in case quote was hit in insert mode
+1$
+	pla		;restore all registers
+	tay
+	pla
+	tax
+	pla
+	clc	      	;good
+	rts		;will return to 'loop2'
+
+
+
+nxt33			;various entries from 'print' to output a character
+	ora #$40
+nxt3
+	ldx rvs		;in rvs mode?
+	beq nvs		;no
+nc3
+	ora #$80
+nvs
+	ldx insrt	;in insert mode?
+	beq 1$		;no
+	dec insrt	;yes- decrement insert field count
+1$
+	bit insflg	;in auto insert mode?
+	bpl 2$		;no
+	pha		;yes- save the character to insert
+	jsr insert	;make room for it
+	ldx #0
+	stx insrt	;disallow the other insert mode
+	pla
+2$
+	jsr displc	;display chr & fall thru to 'movchr' (will return to 'loop2')
+;	cpy #69
+;	bne movchr
+;	jsr beep	;ring bell (if enabled) to flag right margin
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; movchr - move to next character position &
+;          insert blank line if at end of line
+; entry:   .y = column position
+; exit:    .c=1 if aborted (scroll disabled)
+
+movchr
+	cpy scrt
+	bcc 1$		;easy if not at end of line
+	ldx tblx
+	cpx scbot
+	bcc 1$		;...skip if not last line of screen
+	bit scroll
+	bmi 3$		;...abort if scrolling disabled
+
+1$	jsr stupt	;set up 'pnt' and 'user' vectors
+	jsr nxtchr	;move to next char position
+	bcc 3$		;...done if not move to new line
+	jsr getbit	;check if on a continued line
+	bcs 2$		;...skip ahead if not
+	sec	      	;in case we abort
+	bit scroll
+	bvs 3$
+	jsr scrdwn	;else insert a blank line
+
+2$	clc	      	;for clean exit
+
+3$	rts
+
+
+
+; skip to next line (wrap to top if scroll disabled)
+
+nxln
+	ldx tblx
+	cpx scbot	;of the bottom of window ?
+	bcc 2$		;no
+	bit scroll	;what if scrolling is disabled?
+	bpl 1$		;branch if scroll is enabled
+	lda sctop	;wrap to top
+	sta tblx
+	bcs 3$		;always
+
+1$	jsr scrup	;scroll it all
+	clc		;indicate scroll ok
+
+2$	inc tblx
+
+3$	jmp stupt	;set pointers to beginning of new line
+
+;.end

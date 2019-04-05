@@ -1,0 +1,95 @@
+	.page
+	.subttl Kernal Entry Points
+
+_6510_data_reg	=$01
+_bank		=$02		;reg's for kernal jsr far routine (used by sys)
+_pchi		=$03
+_pclo		=$04
+_s_reg		=$05
+_a_reg		=$06
+_x_reg		=$07
+_y_reg		=$08
+
+
+; these are the addresses of some entries in the standard
+; kernal vector table.
+
+_close_all	=$ff4a	;close all channels on dev. (a)
+_go_64		=$ff4d	;switch to c-64 mode
+_do_dma		=$ff50	;call dma processor (tee-hee)
+_boot_call	=$ff53	;kernal 'BOOT' routines entry for basic
+_lkupla		=$ff59
+_lkupsa		=$ff5c
+_swapper	=$ff5f	;switch 80/40 column
+_doakey		=$ff65	;add/remove a definition from the p.f. key table
+_set_bank	=$ff68	;set bank for load/save/verify
+_config		=$ff6b	;convert bank 0-15 in .X to config in .A
+_jjsr		=$ff6e	;jsr far routine
+_fetch		=$ff74
+_stash		=$ff77
+_compare	=$ff7a
+
+_setmsg		=$ff90
+_readst		=$ffb7
+_setlfs		=$ffba
+_setnam		=$ffbd
+_open		=$ffc0
+_close		=$ffc3
+_chkin		=$ffc6
+_chkout		=$ffc9
+_clrch		=$ffcc
+_basin		=$ffcf
+_bsout		=$ffd2
+_loadsp		=$ffd5
+_savesp		=$ffd8
+_settim		=$ffdb
+_rdtim		=$ffde
+_stop		=$ffe1
+_getin		=$ffe4
+_clall		=$ffe7
+_screen_org	=$ffed
+_jplot		=$fff0
+
+_set_window	=$c02d
+_ldtb2		=$c033
+_ldtb1		=$c04c
+
+_phenix		=$ff56		;jump to 'post-basic initialize' routine.
+_print		=$c00c
+_primm		=$ff7d		; print immediate
+_monitor	=$b000
+
+
+_stash_vector	=$02b9		;address to set up for _stash routine
+_text_color	=$00f1
+_keyd		=$034a
+_init_status	=$0a04		;msb set tells kernal to let basic have irq's
+_pal_ntsc	=$0a03		;PAL=$ff, NTSC=$00 indicator
+_sleep_counter	=$0a1d
+_split		=$0a34		;line to start split at
+
+
+
+
+_starting_addr	=$ac		;address BLOAD loaded to
+_sa		=$b9
+_fa		=$ba
+_ndx		=$d0
+_mode		=$d7		;40/80 mode
+_graphm		=$d8		;graphic mode switch (multi/hires/split)
+
+
+_screen_bottom	=$e4		;these describe the current window
+_screen_top	=$e5
+_screen_left	=$e6
+_screen_right	=$e7
+
+_autoinsert	=$f6		;enable/disable auto insert mode
+
+_restart_vector	=$0a00		;kernal restart vector
+
+_pky_max	=10		;max of 10 prog. fn. keys
+_pky_lengths	=$1000		;table of prog. fn. key sizes
+_pky_buffer	=_pky_lengths+_pky_max	;actual buffer
+
+;.end

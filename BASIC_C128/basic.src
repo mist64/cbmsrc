@@ -1,0 +1,173 @@
+	.nam  C128 BASIC  (318018,19-04 RELEASE:  11/07/86)
+	.formln	 60
+
+	.include disclaim
+
+	.include basic.map
+	.include display.map
+	.include sysdoc
+	.include relnotes
+	.include declare
+	.include entries
+	.include header
+	.include init
+	.include indjumps
+	.include crunch
+	.include tokens1
+	.include tokens2
+	.include disptable
+	.include errmsgs
+	.include errprint
+	.include execute
+	.include functions
+	.include code0
+	.include rtstack
+	.include findline
+	.include lineget
+	.include list		;command
+	.include newclr		;command
+	.include return		;command
+	.include remdata	;command
+	.include if		;command
+	.include ongoto		;command
+	.include let		;command
+	.include print		;command
+	.include input		;command
+	.include next		;command
+	.include dim		;command
+	.include sys		;command
+	.include trontroff	;command
+	.include rreg		;command
+	.include midequal	;command
+	.include auto		;command
+	.include help		;command
+	.include gosubgoto	;command
+	.include go		;command
+	.include continue	;command
+	.include run		;command
+	.include restore	;command
+	.include renumber	;command
+	.include for		;command
+	.include delete		;command
+	.include pudef		;command
+	.include trap		;command
+	.include resume		;command
+	.include doloop		;command
+	.include key		;command
+	.include paint		;command
+	.include box		;command
+	.include sshape		;command
+	.include gshape		;command
+	.include circle		;command
+	.include draw		;command
+	.include char		;command
+	.include locate		;command
+	.include scale		;command
+	.include color		;command
+	.include scnclr		;command
+	.include graphic	;command
+	.include bank		;command
+	.include sleep		;command
+	.include wait		;command
+	.include sprite		;command
+	.include movspr		;command
+	.include play		;command
+	.include filter		;command
+	.include envelope	;command
+	.include collision	;command
+	.include sprcolor	;command
+	.include width		;command
+	.include volume		;command
+	.include sound		;command
+	.include window		;command
+	.include boot		;command
+	.include sprdef		;command
+	.include sprsav		;command
+	.include fast		;command
+	.include slow		;command
+	.include checkval
+	.include formeval
+	.include variables
+	.include getpointr
+	.include array
+
+	.ifge *-$7f00			;put a break of AT LEAST 1 page for patch code
+	.messg "*** ADDRESS CHECK ***"	;..before next rom starts (at $8000) 
+	.endif
+
+	.include patcheslo
+
+	.ifge *-$8000			;..next rom starts at $8000
+	.messg "*** ADDRESS CHECK ***"
+	.endif
+
+	*=$8000
+
+	.include fre		;function
+	.include val		;function
+	.include dec		;function
+	.include peekpoke
+	.include errfunc	;function
+	.include hexfunc	;function
+	.include rgr		;function
+	.include rclr		;function
+	.include joy		;function
+	.include penpot		;function
+	.include pointer	;function
+	.include rsprite	;function
+	.include rspcolor	;function
+	.include bump		;function
+	.include rsppos		;function
+	.include xor		;function
+	.include rwindow	;function
+	.include rnd		;function
+	.include code12
+	.include def
+	.include stringfns
+	.include strings
+	.include code17
+	.include code18
+	.include code19
+	.include code21
+	.include code22
+	.include code23
+	.include code24
+	.include code26
+	.include grbcol
+	.include trig
+	.include using
+	.include instring
+	.include graphic3
+	.include rdot
+	.include graphic7
+	.include graphic8
+	.include graphic9
+	.include graphic10
+	.include graphic11
+	.include sethires
+	.include clrhires
+	.include dos1
+	.include dos2
+	.include dos3
+	.include dos4
+	.include overflow
+	.include irq
+	.include stash
+	.include fetch
+	.include swap
+	.include patcheshi
+
+	.ifge *-$af00			;make sure JUMPTABLE starts at $af00
+	.messg "*** ADDRESS CHECK ***"
+	.endif
+	*=$af00
+
+	.include jumptable
+
+	.ifge *-$b000			;make sure end of code doesn't overflow ROM
+	.messg "*** ADDRESS CHECK ***"
+	.endif
+
+
+	.subttl *************** cross reference *****************
+	.end

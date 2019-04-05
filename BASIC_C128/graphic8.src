@@ -1,0 +1,205 @@
+	.page
+	.subttl 'graphic8'
+;****************************************************************
+;
+;  docolr  --  set up color for 8x8 charcater cell
+;		 x = row number  --  y = column number
+;
+;****************************************************************
+
+docolr	lda _ldtb2,x     	;put address of video ram into grapnt
+	sta grapnt
+	lda graphic_ldtb1,x	;point to bit mapped color area
+	sta grapnt+1
+
+	lda colsel		;get current color source selected
+
+	bne 10$			;branch if NOT background
+	lda fg_bg
+	bit _graphm		;test if mode = hires
+	bpl 25$			;if so, go set up byte
+	rts			;else exit
+
+10$	cmp #2
+	bne 30$			;branch if NOT multi-color 1
+
+20$	lda fg_mc1		;get correct packed colors for multicolor mode.
+25$	and #$0f
+	sta z_p_temp_1
+	lda (grapnt),y
+	and #$f0
+	ora z_p_temp_1
+	sta (grapnt),y
+	rts
+
+30$	bcs 40$			;branch if multicolor 2
+
+	lda fg_bg		;here for foreground. get packed colors.
+	and #$f0
+	sta z_p_temp_1
+	lda (grapnt),y		;do foreground
+	and #$0f
+	ora z_p_temp_1
+	sta (grapnt),y
+	rts
+
+40$	lda grapnt+1		;do multicolor 2
+	and #3
+	ora #>color_ram_hi	;set up to point to high color area
+	sta grapnt+1
+
+	lda #0			;put i/o in map
+	sta mmu_config_reg
+
+	sei
+	lda _6510_data_reg
+	pha
+	and #%11111110		;point cpu at correct nybble bank
+	sta _6510_data_reg
+	lda multicolor_2
+	sta (grapnt),y
+	pla
+	sta _6510_data_reg
+	cli
+	rts
+
+
+
+graphic_ldtb1			;_ldtb1 adjusted for an org at color_ram_lo
+99$=color_ram_lo
+1$=color_ram_lo+40*1
+2$=color_ram_lo+40*2
+3$=color_ram_lo+40*3
+4$=color_ram_lo+40*4
+5$=color_ram_lo+40*5
+6$=color_ram_lo+40*6
+7$=color_ram_lo+40*7
+8$=color_ram_lo+40*8
+9$=color_ram_lo+40*9
+10$=color_ram_lo+40*10
+11$=color_ram_lo+40*11
+12$=color_ram_lo+40*12
+13$=color_ram_lo+40*13
+14$=color_ram_lo+40*14
+15$=color_ram_lo+40*15
+16$=color_ram_lo+40*16
+17$=color_ram_lo+40*17
+18$=color_ram_lo+40*18
+19$=color_ram_lo+40*19
+20$=color_ram_lo+40*20
+21$=color_ram_lo+40*21
+22$=color_ram_lo+40*22
+23$=color_ram_lo+40*23
+24$=color_ram_lo+40*24
+
+	.byte >99$,>1$,>2$,>3$,>4$,>5$,>6$,>7$,>8$,>9$,>10$
+	.byte >11$,>12$,>13$,>14$,>15$,>16$,>17$,>18$,>19$
+	.byte >20$,>21$,>22$,>23$,>24$
+	.page
+
+;******************************************************************
+;
+;  getpos - get address in graphic bit map into grapnt
+;	     x = bit offset into byte specified (0-7)
+;	     y = offset to byte within 8x8 character cell
+;	     a = bit mask to the bit (or bits if multicolor mode)
+;
+;******************************************************************
+
+getpos	jsr divpos      ;get xpos/ypos to column/row position
+	bcs grprts      ;abort if position too large
+
+getps1	tya		;get addr for row (X) and col (Y) in grapnt
+	clc
+	adc _ldtb2,x	;add column position to low byte offset
+	sta grapnt
+	lda _ldtb1,x	;get high byte screen address
+	adc #0		;add any carry
+	asl grapnt
+	rol a
+	asl grapnt	;mult by 8 to get offset into 8k area
+	rol a
+	asl grapnt
+	rol a
+	sta grapnt+1
+
+	lda ypos
+	and #07
+	tay		;get byte offset into 8x8 char cell
+	lda xpos
+	bit _graphm
+	php
+	bpl grpos3	;skip if not multicolor mode
+	asl a		;shift x-pos for multicolor mode
+
+grpos3	and #07
+	tax
+	lda rbits,x	;get bit mask
+	plp
+	bpl grprts	;done if not multicolor mode
+	inx
+	ora rbits,x	;mask for 2 bits if multicolor mode
+grprts	rts
+
+rbits	.byte   $80,$40,$20,$10,$08,$04,$02,$01
+	.page
+
+;**************************************************************
+;
+;  divpos  --  convert xpos to column number
+;		convert ypos to row number
+;		return carry set if either above limits
+;
+;**************************************************************
+
+divpos	lda xpos+1
+	lsr a
+	bne 20$      	;out of bounds if greater than 1
+	lda xpos
+	ror a
+	lsr a		;get column position = xpos/8
+	bit _graphm
+	bmi 10$		;skip if multicolor mode
+	lsr a		;divide by 8 if a hires or text mode
+10$	tay
+	cpy #llen
+	bcs 20$		;error exit if out of bounds
+	lda ypos+1
+	bne 20$		;out of bounds error if not = 0
+	lda ypos
+	lsr a
+	lsr a		;get row number = ypos/8
+	lsr a
+	tax
+	cmp #nlines	;compare to max number of rows
+	rts		;carry clr if okay
+20$	sec
+	rts
+	.page
+
+;***************************************************************
+;
+;   scalxy  -  scale the x & y coordinates found in vwork+x
+;
+;***************************************************************
+
+scalxy	lda scalem
+	beq sclrts      ;do nothing if scaling off
+
+	lda scale_x
+	ldy scale_x+1
+	jsr doscal      ;scale in the x-direction
+
+	lda scale_y
+	ldy scale_y+1	;scale in the y direction
+
+doscal	jsr twobyt	;multiply * coordinate
+	sta vwork,x
+	tya
+	inx		;store back into original position
+	sta vwork,x
+	inx
+sclrts
+	rts
+
+;.end

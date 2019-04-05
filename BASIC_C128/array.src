@@ -1,0 +1,357 @@
+	.page
+	.subttl Array Routines
+
+; 
+; format of arrays in core:
+; 
+; descriptor:
+;	lowbyte = first character.
+;	high byte = second character (m.s.bit is string flag).
+; length of array in core in bytes (includes everything).
+; number of dimensions.
+; for each dimension starting with the first a list (2 bytes each)
+;	of the max indice+1
+; the values
+; 
+
+
+is_array
+	lda dimflg
+	ora intflg
+	pha		;save (dimflg) for recursion.
+	lda valtyp
+	pha		;save (valtyp) for recursion.
+	ldy #0		;set number of dimensions to zero.
+
+indlop	tya		;save number of dims.
+	pha
+	lda varnam+1
+	pha
+	lda varnam
+	pha		;save looks.
+	jsr intidx	;evaluate indice into facmo&lo.
+	pla
+	sta varnam
+	pla
+	sta varnam+1	;get back all...we're home.
+	pla		;(# of units).
+	tay
+	tsx
+	lda 258,x
+	pha		;push dimflg and valtyp further.
+	lda 257,x
+	pha
+	lda indice	;put indice onto stack.
+	sta 258,x	;under dimflg and valtyp.
+	lda indice+1
+	sta 257,x
+	iny		;y counts # of subscripts
+	sty count	;protect y from chrget
+	jsr chrgot	;get terminating character.
+	ldy count
+	cmp #','	;more subscripts?
+	beq indlop	;yes.
+
+	jsr chkcls	;must be closed paren.
+	pla
+	sta valtyp	;get valtyp and
+	pla
+	sta intflg
+	and #$7f
+	sta dimflg	;dimflg off stack.
+	ldx arytab	;place to start search.
+	lda arytab+1
+lopfda
+	stx lowtr
+	sta lowtr+1
+	cmp strend+1	;end of arrays?
+	bne lopfdv
+	cpx strend
+	beq notfdd	;a fine thing! no array!
+lopfdv
+	ldy #0
+	jsr indlow_ram1 ;get high of name from array bank (ram1)
+	iny
+	cmp varnam	;compare high orders.
+	bne nmary1	;no way is it this. get the bite outta here.
+	jsr indlow_ram1
+	cmp varnam+1	;low orders?
+	beq gotary	;well here it is.
+nmary1
+	iny
+	jsr indlow_ram1	;get length.
+	clc
+	adc lowtr
+	tax
+	iny
+	jsr indlow_ram1
+	adc lowtr+1
+	bcc lopfda	;always branches.
+bserr	ldx #errbs	;get bad sub error number.
+	.byte $2c
+
+fcerr	ldx #errfc	;too big. Illegal Quantity error
+errgo3	jmp error
+
+
+
+gotary	ldx #errdd	;perhaps a "re-dimension" error.
+	lda dimflg	;test the dimflg.
+	bne errgo3
+	jsr fmaptr
+	ldy #4
+	jsr indlow_ram1
+	sta syntmp
+	lda count	;get number of dims input.
+	cmp syntmp	;# of dims the same?
+	bne bserr	;same so get definition.
+	jmp getdef
+	.page
+; 
+; here when variable is not found in the array table.
+; 
+; building an entry.
+; 
+;      put down the descriptor.
+;      setup number of dimensions.
+;      make sure there is room for the new entry.
+;      remember "varpnt".
+;      tally=4.
+;      skip two locs for later fill in of size.
+; loop: get an indice
+;       put down number+1 and increment varptr.
+;       tally=tally*number+1
+;       decrement number of dims
+;       bne loop
+;       call "reason" with (a,b) reflecting last loc
+;                                of variable
+;       update strend
+;       zero all.
+;       make tally include maxdims and descriptor
+;       put down tally
+;       if called by dimension, return.
+;       otherwise index into the variable as if it
+;       were found on the initial search.
+; 
+notfdd
+	jsr fmaptr	;form arypnt.
+	jsr reason
+	ldy #0
+	sty curtol+1
+	ldx #5
+	lda varnam
+	sta sw_rom_ram1	;point to string/array bank
+	sta (lowtr),y
+	bpl notflt
+	dex
+notflt
+	iny
+	lda varnam+1
+	sta (lowtr),y
+	bpl stomlt
+	dex
+	dex
+stomlt
+	stx curtol
+	lda count
+	iny
+	iny
+	iny
+	sta (lowtr),y	;save number of dimensions.
+loppta
+	ldx #11		;default size.
+	lda #0
+	bit dimflg
+	bvc notdim	;not in a dim statement.
+	pla		;get low order of indice.
+	clc
+	adc #1
+	tax
+	pla		;get high order of indice.
+	adc #0
+notdim
+	iny
+	sta (lowtr),y	;store high part of indice.
+	iny
+	txa
+	sta (lowtr),y	;store low part of indice.
+	jsr umult	;(a,x)+(curtol)*(lowtr,y).
+	stx curtol	;save new tally.
+	sta curtol+1
+	ldy index
+	dec count	;any more indices left?
+	bne loppta	;yes.
+	adc arypnt+1
+	bcs omerr1	;overflow.
+	sta arypnt+1	;compute where to zero.
+	tay
+	txa
+	adc arypnt
+	bcc grease
+	iny
+	beq omerr1
+grease
+	jsr reason	;get room.
+	sta strend
+	sty strend+1	;new end of storage.
+	lda #0		;storing (acca) is faster than clear.
+	inc curtol+1
+
+	ldy curtol
+	beq deccur
+
+zerita	dey		;zero out new entry
+	sta (arypnt),y
+	bne zerita	;no. continue.
+deccur
+	dec arypnt+1
+	dec curtol+1
+	bne zerita	;do another block.
+	inc arypnt+1	;bump back up. will use later.
+	sec
+	lda strend	;restore (acca).
+	sbc lowtr	;determine length.
+	ldy #2
+	sta (lowtr),y	;low.
+	lda strend+1
+	iny
+	sbc lowtr+1
+	sta (lowtr),y	;high.
+	lda dimflg	;quit here if this is a dim statement
+	bne dimrts	;bye!
+	iny
+
+
+; At this point (lowtr,y) points beyond the size to the number of dimensions. strategy:
+;     numdim=number of dimensions.
+;     curtol=0.
+;inlpnm:get a new indice.
+;     make sure indice is not too big.
+;     multiply curtol by curmax.
+;     add indice to curtol.
+;     numdim=numdim-1.
+;     bne    inlpnm.
+;     use (curtol)*4 as offset.
+
+getdef	jsr indlow_ram1	;get # of dim's from ram bank 1
+	sta count	;save a counter.
+	lda #0		;zero (curtol).
+	sta curtol
+inlpnm
+	sta curtol+1
+	iny
+	pla		;get low indice.
+	tax
+	sta indice
+	jsr indlow_ram1
+	sta syntmp
+	pla		;and the high part.
+	sta indice+1
+	cmp syntmp	;compare with max indice.
+	bcc inlpn2
+	bne bserr7	;if greater, "bad subscript" error.
+	iny
+	jsr indlow_ram1
+	sta syntmp
+	cpx syntmp
+	bcc inlpn1
+
+bserr7	jmp bserr
+
+omerr1	jmp omerr
+
+inlpn2
+	iny
+inlpn1	lda curtol+1	;don't multiply if curtol=0.
+	ora curtol
+	clc		;prepare to get indice back.
+	beq addind	;get high part of indice back.
+	jsr umult	;multiply (curtol) by (5&6,lowtr).
+	txa
+	adc indice	;add in (indice).
+	tax
+	tya
+	ldy index1
+addind
+	adc indice+1
+	stx curtol
+	dec count	;any more?
+	bne inlpnm	;yes.
+	sta curtol+1
+	ldx #5
+	lda varnam
+	bpl notfl1
+	dex
+notfl1
+	lda varnam+1
+	bpl 10$
+	dex
+	dex
+10$	stx addend
+	lda #0
+	jsr umultd	;on rts, a & y = hi. x = lo.
+	txa
+	adc arypnt
+	sta varpnt
+	tya
+	adc arypnt+1
+	sta varpnt+1
+	tay
+	lda varpnt
+dimrts	rts
+	.page
+
+			;integer arithmetic routines.
+			;
+			;two byte unsigned integer multiply.
+			;this is for multiply dimensioned arrays.
+			; (a,b)=(curtol)*(5&6,x).
+umult
+	sty index
+	jsr indlow_ram1
+	sta addend	;low, then high.
+	dey
+	jsr indlow_ram1	;put (5&6,lowtr) in faster memory.
+umultd
+	sta addend+1
+	lda #16
+	sta deccnt
+	ldx #0		;clear the accs.
+	ldy #0		;result initially zero.
+umultc
+	txa
+	asl a		;multiply by two.
+	tax
+	tya
+	rol a
+	tay
+	bcs omerr1	;to much!
+	asl curtol
+	rol curtol+1
+	bcc umlcnt	;nothing in this position to multiply.
+	clc
+	txa
+	adc addend
+	tax
+	tya
+	adc addend+1
+	tay
+	bcs omerr1	;man, just too much!
+umlcnt
+	dec deccnt	;done?
+	bne umultc	;keep it up.
+	rts		;yes, all done.
+
+
+fmaptr	lda count
+	asl a
+	adc #5		;point to entries. c cleared by asl. 
+	adc lowtr
+	ldy lowtr+1
+	bcc 1$
+	iny
+1$	sta arypnt
+	sty arypnt+1
+	rts
+
+;end

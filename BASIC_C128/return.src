@@ -1,0 +1,46 @@
+	.page
+	.subttl RETURN command
+;*********************************************************************
+; return routine
+;
+; "return" restores the line number and text pointer from the stack,
+; and eliminates all the "for" entries in front of the "gosub" entry.
+;
+;*********************************************************************
+
+return
+
+;ok, pay attention: we got here by a pseudo-jsr which left a return to 'newstt'
+; on the stack for us to return to. There is also a return to 'newstt' left
+; on the stack from the 'gosub' we are returning from. This is true UNLESS we
+; got here on a sprite collision, in which case we still have the 'newsub'
+; return recently left by our current call, but the second return goes back to
+; the trapping mechanism. The bottom line is: we have an extra return address
+; on the stack, which we have to get rid of before leaving.
+
+	pla		;mea culpa, mea culpa, mea culpa
+	pla
+	lda #gosutk
+	jsr search	;look for 'gosub' on runtime stack
+	beq ret010	;branch if 'gosub' found on stack
+	ldx #errrg	;else error
+	jmp error
+
+ret010	jsr movfnd	;(fndpnt) => (tos)
+	ldy #lengos
+	jsr rlsstk	;effectivly pop gosub off run-time stack
+
+	dey
+	lda (fndpnt),y
+	sta txtptr+1
+	dey
+	lda (fndpnt),y
+	sta txtptr
+	dey
+	lda (fndpnt),y
+	jsr retpat	;01/18/84 patch: correct 'return' to 'gosub' from direct mode
+	lda (fndpnt),y
+	sta curlin	;jump to 'data' to waste rest of stmt (in case of on..gosub)
+	jmp data
+
+;end

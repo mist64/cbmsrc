@@ -1,0 +1,180 @@
+	.page
+	.subttl Run-Time Stack Routines
+
+; find a specific token in the run-time stack. token to be found is
+; in srchtk.
+;
+; if called by 'for' or 'next', scan entries in stack, looking for
+; a specific 'for-variable' (in (forpnt)). if found, (fndpnt) will
+; point to it, and z is set. otherwise, (fndpnt) will point to
+; either :
+;           1) the non-for token
+;           2) bottom-of-stack
+;
+; special case : 'next' with no argument will match first 'for'
+; entry on stack found, if any. this case is signaled by a (forpnt)
+; with a msb of $ff (an impossible value).
+;
+; all other calls to search will result in either
+;           1) (success) z = 1, (fndpnt) = address
+;           2) (failure) z = 0
+
+
+
+;
+; set up temporary pointer with current top of stack
+;
+search	sta srchtk	;save token to search for
+	jsr movtos	;tos => fndpnt
+;
+; test if pointer at bottom of stack. if so, item not found.
+;
+srch05	lda fndpnt
+	cmp #<stkbot
+	bne srch10	;(fndpnt) <> bottom, ok
+	lda fndpnt+1    ;lsb's the same, test msb's
+	cmp #>stkbot
+	beq srch98	;stack empty, rts
+
+srch10	sta sw_rom_ram0	;make sure we're not talking apples & oranges
+	ldy #0
+	lda srchtk	;what are we looking for?
+	cmp #fortk	;'for' tokens are special cases
+	bne srch20
+
+; looking for a 'for' token. if next token examined is not a 'for' token,
+; return with z = 0. otherwise, check the pointer to it's 'for' variable.
+; If the variable pointer = (forpnt), or if (forpnt) = ffxx, return with z = 1. 
+; Otherwise, set up x with length of a 'for' entry, and use the usual
+; mechanisim for examining the next entry.
+
+	cmp (fndpnt),y
+	bne srch99	;not 'for', do rts with z = 0
+	ldy #2		;point to msb of 'for' variable
+	lda forpnt+1
+	cmp #$ff
+	beq srch99	;do rts with z = 1
+	cmp (fndpnt),y
+	bne srch15	;not right variable, keep looking.
+	dey
+	lda forpnt	;test lsb
+	cmp (fndpnt),y
+	beq srch99	;a hit! rts with z = 1
+
+srch15	ldx #lenfor
+	bne srch30	;keep looking.
+
+srch20	lda (fndpnt),y
+	cmp srchtk	;is this the correct type of entry?
+	beq srch99	;rts with z = 1
+
+; the entry on top of the run-time stack is not the entry we are looking for.
+; Find out what is there, and advance temp. pointer past it.
+
+	ldx #lenfor     ;is it a 'for' entry?
+	cmp #fortk
+	beq srch30
+	ldx #5		;must be gosub or do by default
+
+srch30	txa
+	clc
+	adc fndpnt
+	sta fndpnt
+	bcc srch05
+	inc fndpnt+1
+	bne srch05	;always
+
+srch98	ldy #1		;clear z flag
+srch99	rts
+
+	.page
+;
+; getstk routine
+;
+; add (.A) elements to top of run-time stack. error if result exceeds tos.
+
+getstk	eor #$ff	;make value 2's comp.
+	sec
+	adc tos
+	sta tos
+	ldy tos+1
+	bcs 10$
+	dey
+10$	sty tos+1
+	cpy #>stktop
+	bcc gomerr
+	bne 20$
+	cmp tos
+	bcc gomerr
+20$	rts
+	.page
+;
+;(a,y) is a certain address. "reason" makes sure it is less than (fretop).
+;
+reason	cpy fretop+1
+	bcc 4$
+	bne 1$		;go garbage collect.
+	cmp fretop
+	bcc 4$
+
+1$	pha
+	ldx #9		;if tempf2 has zero in between.
+	tya
+
+2$	pha
+	lda highds-1,x	;save highds on stack.
+	dex
+	bpl 2$		;put 8 of them on stack.
+	jsr garba2	;go garbage collect.
+	ldx #$f7
+
+3$	pla
+	sta highds+9,x	;restore after garbage collect.
+	inx
+	bmi 3$
+	pla
+	tay
+	pla		;restore a and y.
+	cpy fretop+1	;compare highs.
+	bcc 4$
+	bne gomerr	;higher is bad.
+	cmp fretop	;compare the lows.
+	bcs gomerr
+4$	rts
+
+gomerr	jmp omerr
+
+	.page
+
+;  utilities involved in the run-time stack.
+
+
+; move top-of-stack pointer to (fndpnt)
+
+movtos	lda tos
+	sta fndpnt
+	lda tos+1
+	sta fndpnt+1
+	rts
+
+
+
+; move (fndpnt) to (tos)
+
+movfnd	lda fndpnt
+	sta tos
+	lda fndpnt+1
+	sta tos+1
+	rts
+
+; reduce size of run-time stack by (y). no error checking performed!
+
+rlsstk	tya
+	clc
+	adc tos
+	sta tos
+	bcc 10$
+	inc tos+1
+10$	rts
+
+;.end

@@ -1,0 +1,106 @@
+	.page
+	.subttl COLOR Command
+
+;*************************************************************
+;
+; set a color
+;
+;	  color n, v [,lum ] (trashed, but in for ted compatability)
+;
+;      where:
+;	      n =  0 for vic background color
+;		   1     graphic foreground
+;		   2         "   multicolor 1
+;		   3         "   multicolor 2
+;		   4     vic border
+;		   5     text color (for current text screen)
+;		   6	 8563 background color
+;
+;	      v = color (1-16)
+;
+;************************************************************
+
+color	jsr getbyt      	;get selection in x
+	cpx #7
+	bcs sclerr      	;illegal value
+	stx z_p_temp_1		;save temp
+
+	jsr combyt      	;comma, color in x
+	dex
+	cpx #16
+	bcs sclerr
+	jsr put_io_in_map
+
+	txa			;color in .a
+	ldx z_p_temp_1		;where does this color/lum go?
+	cpx #1
+	beq 10$
+	bcs 20$
+
+	sta vic_background	;**0** vic background
+	bne 99$			;always
+
+10$	sta foreground		;**1** graphic foreground
+	beq 99$			;always
+
+20$	cpx #3
+	beq 30$
+	bcs 40$
+
+	sta multicolor_1	;**2** multicolor 1
+	bne 99$			;always
+
+30$	sta multicolor_2	;**3** multicolor 2
+	beq 99$			;always
+
+40$	cpx #5
+	beq 50$
+	bcs 60$
+
+	sta vic_border		;**4** vic border
+	bne 99$			;always
+
+50$	bit _mode		;**5** current text screen's text color
+	bpl 55$			;  if not 80 col, use arg 'as is'
+	tax
+	lda _text_color
+	and #$f0
+	ora _8563_adjust,x
+55$	sta _text_color
+	jmp 99$
+
+60$	tax			;**6** 8563's background color
+	lda #26
+	sta _8563_addr
+	lda _8563_data
+	and #$f0
+	ora _8563_adjust,x
+	sta _8563_data
+
+99$	jsr set_packed_color	;update packed fg/bg and fg/mc1 bytes
+	jmp optbyt		;in case they are running a ted program (lum)
+
+sclerr	jmp fcerr		;illegal value error
+
+_8563_adjust
+	.byte $0,$f,$8,$7,$b,$4,$2,$d
+	.byte $a,$c,$9,$6,$1,$5,$3,$e
+
+set_packed_color		;set up packed fg/bg & fg/mc1 bytes
+	lda foreground
+	asl a
+	asl a
+	asl a
+	asl a
+	sta z_p_temp_1
+	jsr put_io_in_map
+	lda vic_background
+	and #$0f
+	ora z_p_temp_1
+	sta fg_bg
+	lda multicolor_1
+	ora z_p_temp_1
+	sta fg_mc1
+	rts
+
+;end

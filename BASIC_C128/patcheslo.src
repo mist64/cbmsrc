@@ -1,0 +1,78 @@
+	.page
+	.subttl  PATCHES to BASIC ($4000-$7FFF)
+
+;  CHAR_PATCH  fixes CHAR with 80-column text screen
+;
+
+char_patch
+	jsr put_io_in_map	;must enable I/O to move 80-col cursor!
+	jmp _jplot		;move cursor (k_jplot does not bring in I/O)
+	
+
+
+;  K_PRINT  fixes CHAR with 80-column text screen
+;
+
+k_print
+	jsr put_io_in_map	;must enable I/O to print to 80-col screen
+	jmp _print		;print character in .A
+
+
+
+;  P2CODE_PATCH  fixes RENUMBER 'out of memory' check
+;
+
+p2code_patch
+	jsr p2code		;renumber 'pass two': trial run to see if enough room
+	jmp chrgot		;re-get last character from BASIC text & rts
+
+
+
+;  DELETE_PATCH  fixes DELETE top of text check
+;
+
+delete_patch
+	inc index2		;increment destination address
+	bne 10$
+	inc index2+1
+
+10$	sec			;compare destination ptr with new text_top ptr
+	lda index2
+	sbc text_top
+	lda index2+1
+	sbc text_top+1		;.C=1 if done, .C=0 if more
+	rts
+
+
+;  PLAY_PAL	fixes loading of scale values for NTSC vs. PAL environment
+;
+
+play_pal
+	bit _pal_ntsc		;determine if PAL or NTSC system
+	bmi 10$			;...branch if PAL
+	lda scaleh,x		;continue as before patch
+	rts
+
+10$	lda scalelp,x		;load from PAL tables
+	sta pitch
+	lda scalehp,x
+	rts
+
+scalelp	.byte $9c,$bf,$22,$c8,$b4,$eb	;c,c#,d,d#,e,f,f#,g,g#,a,a#,b (PAL)
+	.byte $71,$4c,$7f,$12,$08,$68
+
+scalehp .byte $45,$49,$4e,$52,$57,$5c	;c,c#,d,d#,e,f,f#,g,g#,a,a#,b (PAL)
+	.byte $62,$68,$6e,$75,$7c,$83
+
+
+
+;  ERROR_PATCH		fixes problem of accumulating string temporaries when
+;			TRAP in in effect.
+
+error_patch
+	stx trapno+1	;flag no more traps
+	ldx #tempst	;clear any accumulated string temps
+	stx temppt
+	rts
+
+;.end

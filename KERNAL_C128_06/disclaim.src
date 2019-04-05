@@ -1,0 +1,47 @@
+	.subttl *** COPYRIGHT (C) 1985  by  COMMODORE BUSINESS MACHINES, INC. ***
+
+;  ****************************************************************** 
+;  *                        //                                      *
+;  *        CCCCCCC        //    111     2222222     8888888        *
+;  *       CCC   CCC      //    1111    222   222   888   888       *
+;  *      CCC            //      111         222    888   888       *
+;  *      CCC           //       111       222        88888         *
+;  *      CCC          //        111     222        888   888       *
+;  *       CCC   CCC  //         111    222   222   888   888       *
+;  *        CCCCCCC  //        1111111  222222222    8888888        *
+;  *                //                                              * 
+;  *                                                                * 
+;  * KKK   KKK  EEEEEEEEE  RRRRRRRR   NNN    NN     AAA     LLL     * 
+;  * KKK  KKK   EEE        RRR   RRR  NNNN   NN   AA   AA   LLL     * 
+;  * KKK KKK    EEE        RRR   RRR  NNNNN  NN  AAA   AAA  LLL     * 
+;  * KKKKK      EEEEEE     RRRRRRRR   NNN NN NN  AAAAAAAAA  LLL     * 
+;  * KKK KKK    EEE        RRR RRR    NNN  NNNN  AAA   AAA  LLL     * 
+;  * KKK  KKK   EEE        RRR  RRR   NNN   NNN  AAA   AAA  LLL     * 
+;  * KKK   KKK  EEEEEEEEE  RRR   RRR  NNN    NN  AAA   AAA  LLLLLLL * 
+;  *                                                                * 
+;  *                                                                * 
+;  *    COPYRIGHT (C)1985  BY   COMMODORE BUSINESS MACHINES, INC.   * 
+;  *    COPYRIGHT (C)1986  BY   COMMODORE BUSINESS MACHINES, INC.   * 
+;  *    COPYRIGHT (C)1988  BY   COMMODORE BUSINESS MACHINES, INC.   * 
+;  *                                                                * 
+;  *          A L L     R I G H T S     R E S E R V E D             *
+;  *                                                                * 
+;  ****************************************************************** 
+  
+  
+;  ****************************************************************** 
+;  *                                                                * 
+;  * THIS LISTING CONTAINS CONFIDENTIAL AND PROPRIETARY INFORMATION *
+;  * OF CBM, INC.   REPRODUCTION,  DISSEMINATION  OR  DISCLOSURE TO *
+;  * OTHERS WITHOUT EXPRESS WRITTEN PERMISSION IS PROHIBITED.  THIS *
+;  * SOFTWARE IS INTENDED FOR USE IN  COMMODORE C/128 SYSTEMS ONLY. *
+;  *                                                                * 
+;  *  THE  INFORMATION  IN  THIS  DOCUMENT  IS  SUBJECT  TO CHANGE  * 
+;  *                       WITHOUT NOTICE.                          * 
+;  *                                                                * 
+;  *  NO  RESPONSIBILITY  IS  ASSUMED  FOR THE RELIABILITY OF THIS  * 
+;  *                          SOFTWARE.                             * 
+;  *                                                                * 
+;  ****************************************************************** 
+
+;.end

@@ -1,0 +1,82 @@
+	.page
+	.subttl Error Messages
+ERR01
+	.byte 'TOO MANY FILE','S'+$80
+errtmf	=1
+	.byte 'FILE OPE','N'+$80
+	.byte 'FILE NOT OPE','N'+$80
+	.byte 'FILE NOT FOUN','D'+$80
+errfnf	=4
+	.byte 'DEVICE NOT PRESEN','T'+$80
+	.byte 'NOT INPUT FIL','E'+$80
+	.byte 'NOT OUTPUT FIL','E'+$80
+	.byte 'MISSING FILE NAM','E'+$80
+err_missing_fname=8
+	.byte 'ILLEGAL DEVICE NUMBE','R'+$80
+err_illegal_device=9
+	.byte 'NEXT WITHOUT FO','R'+$80
+ERRNF  =10
+	.byte 'SYNTA','X'+$80
+ERRSN  =11
+	.byte 'RETURN WITHOUT GOSU','B'+$80
+ERRRG  =12
+	.byte 'OUT OF DAT','A'+$80
+ERROD  =13
+	.byte 'ILLEGAL QUANTIT','Y'+$80
+ERRFC  =14
+	.byte 'OVERFLO','W'+$80
+ERROV  =15
+	.byte 'OUT OF MEMOR','Y'+$80
+ERROM  =16
+	.byte 'UNDEF',$27,'D STATEMEN','T'+$80
+ERRUS  =17
+	.byte 'BAD SUBSCRIP','T'+$80
+ERRBS  =18
+	.byte 'REDIM',$27,'D ARRA','Y'+$80
+ERRDD  =19
+	.byte 'DIVISION BY ZER','O'+$80
+ERRDVO =20
+	.byte 'ILLEGAL DIREC','T'+$80
+ERRID  =21
+	.byte 'TYPE MISMATC','H'+$80
+ERRTM  =22
+	.byte 'STRING TOO LON','G'+$80
+ERRLS  =23
+	.byte 'FILE DAT','A'+$80
+ERRBD  =24
+	.byte 'FORMULA TOO COMPLE','X'+$80
+ERRST  =25
+	.byte 'CAN',$27,'T CONTINU','E'+$80
+ERRCN  =26
+	.byte 'UNDEF''D FUNCTIO','N'+$80
+ERRUF  =27
+	.byte 'VERIF','Y'+$80
+ERVFY  =28
+	.byte 'LOA','D'+$80
+ERLOAD =29
+	.byte 'BREAK',0,' '+$80
+ERBRK  =30
+	.byte 'CAN''T RESUM','E'+$80
+ERRCR  =31
+	.byte 'LOOP NOT FOUN','D'+$80
+ERRLNF =32
+	.byte 'LOOP WITHOUT D','O'+$80
+ERRLWD =33
+	.byte 'DIRECT MODE ONL','Y'+$80
+ERROID =34
+	.byte 'NO GRAPHICS ARE','A'+$80
+ERRNG  =35
+	.byte 'BAD DIS','K'+$80
+errbdk =36
+	.byte 'BEND NOT FOUN','D'+$80
+err_no_bend =37
+	.byte 'LINE NUMBER TOO LARG','E'+$80
+err_too_large =38
+	.byte 'UNRESOLVED REFERENC','E'+$80
+err_ref =39
+	.byte 'UNIMPLEMENTED COMMAN','D'+$80
+err_bad_command =40
+	.byte 'FILE REA','D'+$80
+errlst = err_bad_command+1		;keep track of # of last error msg
+
+;.end

@@ -1,0 +1,198 @@
+	.page
+	.subttl  C/128 GERMAN KEYBOARD DRIVER (05/14/85)
+
+	* = $FC80	;reserved ROM area
+
+nat_init
+	sta dk_flag	;'cint' patch (.a=0)
+	sta sidreg+24
+	rts
+
+
+nat_scnkey
+	bit dk_flag
+	bmi do_scan	;...branch if national keys disabled
+
+	lda shflag	;test 'CAPS LOCK' for keyboard selection
+	and #$10
+	beq 10$		;...branch if up- use ASCII
+	lda decode+1
+	cmp #>nat_mode1
+	beq do_scan	;...branch if national keys already setup
+	lda #<nat_decode
+	ldy #>nat_decode
+	bne switch	;...else setup national keys
+
+10$	lda decode+1
+	cmp #>mode1
+	beq do_scan	;...branch if ascii keys already setup
+	lda #<keycod	;...else setup ascii keys
+	ldy #>keycod
+
+switch	sta keytab
+	sty keytab+1
+	ldy #11		;point keyscan to decode tables
+10$	lda (keytab),y
+	sta decode,y
+	dey
+	bpl 10$
+
+	iny
+	sty dk_flag	;clear any pending dead keys
+	php
+	sei
+	jsr init80	;move new character set to 8563 RAM
+	plp
+	rts
+
+do_scan
+	jmp scnkey	;resume normal keyscan
+
+	.page
+nat_keychk
+	ldx decode+1
+	cpx #>nat_mode1
+	bne 70$		;...branch to normal keyscan if ASCII mode
+	ldx dk_flag
+	bmi 70$		;...branch to normal keyscan if national scan disabled
+	beq 25$		;...branch if previous key was not a dead key
+
+	ldy deadp,x	;previous key was a dead key- index in .x
+	dex
+10$	dey
+	pha		;save .a (current character)
+	tya
+	cmp deadp,x	;look to see if index (.y) is out of range
+	pla		;restore current character
+	bcc 20$		;...branch if not in table (out of range)
+	cmp oldead-1,y	;look to see if current key can be substituted
+	bne 10$		;...branch if not
+
+	lda nwdead-1,y	;substitute it
+20$	pha
+	and #$7f	;weed out control codes
+	cmp #$20
+	pla
+	bcc 45$		;...branch if control code & ignore it
+
+25$	ldx #5
+30$	cmp dktbl-1,x	;look to see if current key is a dead key
+	beq 40$		;...branch if it is
+	dex
+	bne 30$
+
+40$	stx dk_flag	;save for next time...
+	cpx #$00
+	beq 70$		;if current key is not a dead key we are done
+
+	tay		;save dead key code
+	bit insflg	;cannot display dead key if auto-insert mode active
+	bmi 45$		;...branch if active
+	bit mode	;which screen (40/80) is active?
+	bpl 50$		;...branch if 40
+
+	ldx #10
+	jsr vdcin	;read 8563 register 10 to determine if cursor is on
+	and #$40
+	bne 60$		;...branch if cursor is on
+45$	rts		;...else return & buffer nothing (dead key flag is set)
+
+50$	lda blnsw
+	bne 45$		;...branch if cursor is off
+
+60$	tya		;display dead key using screen code
+	ora #$40
+	and #$7f	;convert dead key character to screen code
+	jmp displc	;put character on screen at cursor without moving cursor
+			;and without buffering dead key (dead key flag is set)
+
+
+70$	ldx shflag	;setup registers as normal
+	ldy lstx
+	jmp (keychk)	;resume normal keyscan thru indirect
+
+	.page
+	.subttl  GERMAN NATIONAL KEYBOARD TABLES
+
+nat_mode1
+	.byte $14,$0d,$1d,$88,$85,$86,$87,$11	;unshifted keys
+	.byte $33,$57,$41,$34,$59,$53,$45,$01
+	.byte $35,$52,$44,$36,$43,$46,$54,$58
+	.byte $37,$5a,$47,$38,$42,$48,$55,$56
+	.byte $39,$49,$4a,$30,$4d,$4b,$4f,$4e
+	.byte $be,$50,$4c,$af,$2e,$bc,$bd,$2c
+	.byte $5b,$2b,$bb,$13,$01,$23,$5d,$2d
+	.byte $31,$3c,$04,$32,$20,$02,$51,$03
+	.byte $84,$38,$35,$09,$32,$34,$37,$31
+	.byte $1b,$2b,$2d,$0a,$0d,$36,$39,$33
+	.byte $08,$30,$2e,$91,$11,$9d,$1d,$ff
+	.byte $ff
+
+nat_mode2
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;shifted keys
+	.byte $40,$d7,$c1,$24,$d9,$d3,$c5,$01
+	.byte $25,$d2,$c4,$26,$c3,$c6,$d4,$d8
+	.byte $2f,$da,$c7,$28,$c2,$c8,$d5,$d6
+	.byte $29,$c9,$ca,$3d,$cd,$cb,$cf,$ce
+	.byte $3f,$d0,$cc,$c0,$3a,$dc,$dd,$3b
+	.byte $5e,$2a,$db,$93,$01,$27,$5c,$5f
+	.byte $21,$3e,$04,$22,$a0,$02,$d1,$83
+	.byte $84,$38,$35,$18,$32,$34,$37,$31
+	.byte $1b,$2b,$2d,$0a,$8d,$36,$39,$33
+	.byte $08,$30,$2e,$91,$11,$9d,$1d,$ff
+	.byte $ff
+
+nat_mode3
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;C= keys
+	.byte $96,$a7,$a8,$97,$a2,$aa,$a3,$01
+	.byte $98,$a9,$c4,$99,$c5,$d3,$ce,$a4
+	.byte $9a,$c2,$df,$9b,$a1,$c9,$d6,$d7
+	.byte $d1,$c3,$d5,$c1,$cb,$da,$d8,$cd
+	.byte $ab,$d9,$c8,$bf,$ba,$ca,$b0,$ac
+	.byte $ad,$a6,$db,$93,$01,$dd,$de,$b9
+	.byte $81,$b1,$04,$95,$a0,$02,$a5,$03
+	.byte $84,$38,$35,$18,$32,$34,$37,$31
+	.byte $1b,$2b,$2d,$0a,$8d,$36,$39,$33
+	.byte $08,$30,$2e,$91,$11,$9d,$1d,$ff
+	.byte $ff
+
+
+nat_decode
+	.word nat_mode1, nat_mode2, nat_mode3, mode4
+	.word nat_mode1, nat_mode1
+
+	.page
+dktbl	.byte $af,$c0,$bf,$00,$00		;dead keys
+
+deadp	.byte $01,$03,$07,$0c,$0c,$0c		;pointers to 'build' keys
+
+oldead	.byte $45,$c0				;german new key table #1
+	.byte $41,$45,$55,$af			;german new key table #2
+	.byte $41,$45,$49,$4f,$55		;german new key table #3
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff	;unused
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+
+nwdead	.byte $ac,$bf				;german substitute table #1
+	.byte $b2,$ae,$b3,$bf			;german substitute table #2
+	.byte $b4,$b5,$b6,$b7,$b8		;german substitute table #3
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff	;unused
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+
+
+	.page
+
+; GERMAN patch code.	The following area contains patches specifically
+;			related to national keyboard implementations.
+;
+;   (patch included in part #315078-02,  10/01/85   F.Bowen)
+
+ascii_din
+	lda r6510	;scan for ASCII/DIN key (a.k.a. CAPS LOCK)
+	and #$40	;P6 is it
+	eor #$40	;invert sense.....up=0, dwn=1
+	lsr a
+	lsr a
+	sta shflag	;end of special abrieviated keyscan
+	rts
+
+;.end

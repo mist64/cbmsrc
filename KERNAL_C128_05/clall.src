@@ -1,0 +1,94 @@
+	.page
+	.subttl  close all files  (04/04/85)
+
+;  **********************************************
+;  * 	clall -- clear all logical files	*
+;  *						*
+;  *	   > deletes all table entries		*
+;  *	   > clears serial port channels	*
+;  *	   > restores default i/o channels	*
+;  *						*
+;  *	***WARNING: this call DOES NOT CLOSE	*
+;  *		    open files!!!		*
+;  *						*
+;  **********************************************
+
+nclall
+	lda #0
+	sta ldtnd	;reset table index, fall into 'clrch'
+
+
+
+
+
+
+;  **********************************************
+;  *	     clrch -- clear I/O channels	*
+;  *						*
+;  *	 > unlisten or untalk serial devices	*
+;  *	 > restore default I/O channels		*
+;  *						*
+;  **********************************************
+
+nclrch
+	ldx #3
+	cpx dflto	;check default output channel
+	bcs 1$		;...branch if not serial
+
+	jsr unlsn	;unlisten serial device
+
+1$	cpx dfltn	;check default input channel
+	bcs 2$		;...branch if not serial
+
+	jsr untlk	;untalk serial device
+
+; restore default i/o devices
+
+2$	stx dflto	;default output channel = 3 (screen)
+	lda #0
+	sta dfltn	;default input  channel = 0 (keyboard)
+	rts
+
+	.page
+;  **********************************************
+;  *	close_all   - closes all files on a	*
+;  *		      given device.		*
+;  *						*
+;  *	 > search tables for given fa & do a	*
+;  *	   proper close for all matches.	*
+;  *						*
+;  *	 > IF one of the closed entries is the	*
+;  *	   current I/O channel THEN the default	*
+;  *	   channel will be restored.		*
+;  *						*
+;  *	entry:  .a = device (fa) to close	*
+;  *						*
+;  **********************************************
+
+close_all
+	sta fa		;save device to shut down
+	cmp dflto
+	bne 10$		;...branch if not current output device
+	lda #3
+	sta dflto	;restore screen output
+	.byte $2c
+
+10$	cmp dfltn
+	bne 20$		;...branch if not current input device
+	lda #0
+	sta dfltn	;restore keyboard input
+
+20$	lda fa
+	ldx ldtnd	;lat, fat, sat table index
+30$	dex
+	bmi 40$		;...branch if end of table
+	cmp fat,x
+	bne 30$		;...loop until match
+
+	lda lat,x	;a match- extract logical channel data
+	jsr close	;close it via indirect
+	bcc 20$		;always
+
+40$	rts	
+	
+;.end

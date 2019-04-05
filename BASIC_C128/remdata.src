@@ -1,0 +1,41 @@
+	.page
+	.subttl data statment
+;
+data
+	jsr datan	;skip to end of statement.
+addon	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc remrts
+	inc txtptr+1
+remrts	rts		;"newstt" rts addr is still there.
+
+
+
+rem	jsr remn	;skip rest of statement.
+	beq addon	;will always branch.
+
+
+datan	ldx #':'	;"data" teminates on ":" and null
+	.byte $2c	;skip the next 2 instructions
+
+remn	ldx #0		;the only terminator is null.
+	stx charac	;preserve it.
+	ldy #0		;this makes charar=0 after swap.
+	sty endchr
+
+exchqt	lda endchr
+	ldx charac
+	sta charac
+	stx endchr
+remer	jsr indtxt
+	beq remrts	;null always termiantes.
+	cmp endchr	;is it another terminator?
+	beq remrts	;yes, it's finished.
+	iny		;progress to next character.
+	cmp #'"'	;is it a quote?
+	bne remer	;no, just continue.
+	beq exchqt	;yes, time to change.
+
+;end

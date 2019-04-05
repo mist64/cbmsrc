@@ -1,0 +1,543 @@
+	.page
+	.subttl DOS 1
+
+	doslfn = 0
+
+;    this set of routines takes tokens and values after the
+;    following basic keywords
+;
+;    dopen, dclose, record, format, collect, backup, copy, bload
+;    concat, dsave, dload, catlog, rename, append, scrtch, bsave
+;
+;    it then parses the following line and finds syntax errors, checks for
+;	out of range values, and sets variables in the zero-page to be passed
+;	to the disk message generator (dmg).
+
+catalog		;catalog a device (==directory)
+	jsr dospar 		;parse the line
+	lda parsts 		;check options
+	and #$e6
+	beq 10$
+	jmp snerr
+10$	ldy #fcat 		;table offset
+	ldx #1			;just $
+	lda parsts 		;chk for default
+	and #$11 		;no drive?
+	beq dcat2
+	lsr a
+	bcc dcat1 		;just drive
+	inx			;drive and filename
+	inx
+dcat1	inx
+dcat2	txa			;a now has length
+	jsr sendp 		;build
+
+	lda #0
+	tax
+	jsr k_setbank
+
+	ldy #$60 		;sa, load floppy
+	ldx dosfa
+	lda #doslfn 		;lfn
+	jsr k_setlfs 		;set file parameters
+	sec
+	jsr k_open 		;open it...
+	bcc 10$			;ok
+	pha
+	jsr dcat10
+	pla
+	tax
+	jmp error
+
+;    get length in blocks
+
+10$	ldx #doslfn
+	jsr put_io_in_map
+	jsr _chkin
+
+	ldy #3 			;loop counter
+dcat3	sty t3			;save counter
+
+10$	jsr k_basin 		;get char
+	sta t4
+	jsr k_readst
+	bne dcat10 		;if bad status
+	jsr k_basin 		;get char
+	sta t4+1
+	jsr k_readst
+	bne dcat10 		;if bad status
+	dec t3
+	bne 10$			;if not done
+
+;    output blocks number
+
+	ldx t4
+	lda t4+1
+	jsr linprt 		;output number
+	lda #' '
+	jsr k_bsout		;output a space
+
+;    loop reading name and output
+
+dcat4	jsr k_basin 		;get char
+	pha 			;save char
+	jsr k_readst 		;get status
+	bne dcat9 		;if bad status
+	pla 			;get back char
+	beq dcat5 		;if eol
+	jsr k_bsout		;echo char
+	jmp dcat4 		;continue to process name
+
+;    here on end of name
+
+dcat5	lda #cr
+	jsr k_bsout		;output new line
+
+;    check for halt
+
+	jsr k_stop 		;get status of stop key
+	beq dcat10 		;if stop request
+
+;    process next
+
+	ldy #2			;perform 2 times
+	bne dcat3 		;jmp
+
+dcat9	pla			;clean up stack
+
+dcat10	jsr k_clrch
+	lda #doslfn
+	clc			;a real close
+	jmp k_close 		;close special channel
+
+	.page
+
+;    dopen code dfn(,t(,r))
+
+dopen	lda #$22 		;set error flag
+	jsr dosprs 		;parse the line
+	jsr chk6 		;chk req'd parms
+	jsr fndsca		;find secondary address
+	ldy #fopn 		;fcb format pointer
+	ldx #4			;normal length
+	bit parsts 		;relative record
+	bvc dop2 		;if not random access
+	ldx #8 			;random access length
+	bne dop2 		;alway jump
+
+
+
+;    append code
+
+append	lda #$e2 		;set error flags
+	jsr dosprs 		;parse the line
+	jsr chk6 		;chk req'd parms
+	jsr fndsca		;find secondary address
+	ldy #fapn 		;tabld index
+	ldx #5			;length
+
+dop2	txa			;set length into a
+	jsr sendp
+	jsr k_clrch
+	lda #0
+	tax
+	jsr k_setbank
+	jsr k_open
+	nop			;placeholder
+	jmp dopen_patch		;318019-03 fix; FAB
+
+
+
+
+; find an available secondary address
+
+fndsca	ldy #$61
+
+fsca10	iny
+	cpy #$6f
+	beq fsca20 		;if none available
+	jsr put_io_in_map
+	jsr _lkupsa 		;get physical unit from secondary
+	bcc fsca10 		;if secondary address used
+	sty dossa 		;save secondary address
+	rts	 		;return .y = sa
+
+fsca20	ldx #errtmf		;too many files open
+	jmp error
+
+	.page
+
+;    close disk file
+
+dclose	
+	lda #$f3 		;set error flags
+	jsr dosprs 		;parse the line
+	jsr oldclr
+	lda parsts 		;any la given?
+	and #$04
+	beq dclall 		;no....
+	lda dosla
+	jmp k_close 		;close file
+
+dclall	lda dosfa 		;get disk #
+	jsr put_io_in_map
+	jmp _close_all		;close all channels
+
+
+
+;    dsave dfn
+
+dsave	lda #$66 		;set error flags
+	jsr dosprs 		;parse the line
+	jsr chk2		;check required parms
+	ldy #fopn		;table offset
+	lda #4			;..length,
+	jsr sendp
+
+	lda #0			;set up banks
+	tax
+	jsr k_setbank
+
+	jmp savenp
+
+	.page
+
+
+; 	dverify 
+
+dverify	lda #1			;flag 'verify'
+	.byt $2c
+
+
+;	dload dfn
+
+dload	lda #0			;flag 'load'
+	sta verck		;eventually the 'load' routine will look here
+
+	lda #$e6 		;set error flags
+	jsr dosprs 		;parse the line
+	jsr chk2		;check required parms
+
+	lda #0
+	sta dossa		;tell 'em to relocate, s'il vous plait.
+
+	ldy #fopn		;table offset
+	lda #4			;..length,
+	jsr sendp
+
+	lda #0			;set up banks
+	tax
+	jsr k_setbank
+
+	jmp cld10		;finish load, using 'LOAD' code.
+	
+
+
+;    bsave dfn
+
+bsave	lda #$66 		;std error flag
+	ldx #$f8		;auxiliary error flag
+	jsr dosprx		;parse options
+	jsr chk2		;check required parms
+
+	lda parstx		;check for styarting & ending addresses
+	and #6
+	cmp #6
+	beq 10$
+	jmp snerr		;..if not present, syntax error
+
+10$	lda dosofh+1		;check that ea>sa
+	cmp dosofl+1
+	bcc 30$			;...error
+	bne 20$
+	lda dosofh
+	cmp dosofl
+	bcc 30$			;...error
+	beq 30$
+
+20$	ldy #fopn		;table offset
+	lda #4			;..length,
+	jsr sendp
+
+	lda dosbnk		;get requested bank
+	ldx #0			;..and name will be in system bank
+	jsr k_setbank		;..and go set up bank
+
+	ldx dosofl 		;start addr
+	ldy dosofl+1
+	lda #highds		;..and a pointer to start address
+	stx highds
+	sty highds+1
+	ldx dosofh 		;end addr
+	ldy dosofh+1
+	jmp savenb
+
+30$	jmp fcerr		;bad quantity
+
+
+
+;    bload dfn
+
+bload	lda #$e6 		;std error flag
+	ldx #$fc 		;aux error flag
+	jsr dosprx 		;parse options (entry for BOOT filename)
+bload_1	jsr chk2		;check required parms
+
+	ldx dosofl		;get starting address high
+	ldy dosofl+1		;..and lo
+	lda #0			;assume x & y not both=ff (means real add., not def)
+	cpx #$ff
+	bne 10$
+	cpy #$ff
+	bne 10$
+	lda #$ff		;use defaults
+10$	sta dossa
+
+	ldy #fopn		;table offset
+	lda #4			;..length,
+	jsr sendp		;...and go send parms
+
+	lda dosbnk
+	ldx #0
+	jsr k_setbank
+
+	lda #0			;flag "LOAD",
+	ldx dosofl		;get starting address high
+	ldy dosofl+1		;..and lo (in case this isn't a 'default' load)
+	jsr _loadsp		;..and go do it!
+
+	php			;save carry
+	jsr dschk		;clear old status
+	plp
+	bcc 15$			;branch if ok,
+	jmp erexit		;..else error
+
+15$	jsr k_readst
+	and #$ff-$40		;ignore e-o-i
+	beq 20$
+	jmp load_error
+
+20$	clc			;flag 'good return'
+	rts
+
+
+
+
+;	header   nddn (,id)
+
+header	jsr dospar 		;parse the line
+	jsr chk1 		;check parameter errors
+	and #$01
+	cmp #$01
+	bne rec5 		;if required parameters not present
+
+	jsr k_clall 		;close all files
+	jsr are_you_sure
+	bne 30$			;if no and direct mode
+	ldy #fhed 		;tabld index
+	lda #4			;length
+	ldx dosdid 		;check for diskid
+	beq 10$
+	lda #6			;length with id
+
+10$	jsr trans 		;build and send
+	jsr errchl 		;get error status
+	bit runmod		;test if direct mode
+	bmi 30$			;it is direct mode
+
+	ldy #0
+	lda #dsdesc+1
+	jsr indsub_ram1
+	cmp #'2'
+	bcc 30$			;if error occured
+
+20$	ldx #errbdk		;bad disk
+	jmp error
+
+30$	rts
+
+
+
+;    scratch sdfn
+
+scratc	jsr dospar 		;parse the line
+	jsr chk1
+	jsr are_you_sure
+	bne 30$ 		;if no and direct mode
+	ldy #fscr 		;offset
+	lda #4			;length
+	jsr trans
+	jsr errchl 		;read error channel
+	bit runmod
+	bmi 30$ 		;if not direct mode
+	lda #cr
+	jsr k_bsout 		;output cr
+
+	ldy #0			;clr to read errchl
+10$	lda #dsdesc+1
+	jsr indsub_ram1
+	beq 20$			;if end of error message
+	jsr k_bsout
+	iny
+	bne 10$			;always
+
+20$	lda #cr
+	jsr outch
+30$	rts
+
+rec5	jmp snerr 		;syntax error
+
+
+	;    record - random record access.
+
+record	lda #'#'
+	jsr synchr		;syntax error if not 'record#'
+	
+	jsr getbyt		;get lfn in x
+	cpx #0
+	beq rec4 		;cannot be zero
+	stx dosla 		;save logical address
+
+	jsr comwrd		;check for comma, get record number in 'poker'
+
+	ldx #1			;set up to get starting byte # - default is 1
+	jsr optbyt
+
+	cpx #0
+	beq rec4 		;if out of range
+	cpx #$ff
+	beq rec4 		;if out of range
+	stx dosrcl 		;save byte position (pos)
+
+	lda dosla 		;get logical address
+	jsr put_io_in_map
+	jsr _lkupla 		;logical to physical map
+	bcs rec6 		;if file not found
+	sty dossa_temp		;save secondary address
+
+	stx dosfa		;set up device number for trans routine
+	lda #0
+	sta dosla		;set up logical address for trans routine
+	lda #$6f
+	sta dossa		;and secondary address, too!
+
+	ldy #frec 		;set pointer
+	lda #4			;process five bytes
+	bne trans 		;transfer on channel 15
+
+rec4	jmp fcerr		;illegal value error
+rec6	ldx #errfnf		;file not found err
+	jmp error
+
+
+
+dclear	jsr dospar 		;parse the line
+	ldy #fclr 		;set code
+	lda #2
+	jsr trans
+	jmp dclall
+
+
+
+;    collect v<drive#>
+
+collect	jsr dospar		;parse the line
+	jsr chk3 		;chk opt parms
+	jsr k_clall 		;close all files
+	ldy #fcoll 		;tabld offset
+	ldx #1			;length
+	lda parsts
+	and #$10
+	beq 10$
+	inx 			;include drive
+10$	txa 			;place in a
+	bne trans 		;always (x <> 0)
+
+
+
+
+;    copy routines cdddfn=sdsfn
+
+dcopy	jsr dospar 		;parse the line
+	and #$30
+	cmp #$30 		;chk req'd parms
+	bne 10$
+	lda parsts
+	and #$c7
+	beq 20$
+10$	lda parsts
+	jsr chk4
+	lda parsts
+20$	ldy #fcopy 		;tabld offset
+	lda #8			;length
+	bne trans 		;go do it
+
+
+
+;    concat routines
+
+concat	jsr dospar 		;parse the line
+	jsr chk4
+	ldy #fconc 		;offset
+	lda #12 		;length
+	bne trans 		;go do it
+
+
+
+
+;    rename rdddfn=sdsfn
+
+rename	lda #$e4 		;set error flags
+	jsr dosprs 		;parse the line
+	jsr chk5
+	ldy #fren 		;offset
+	lda #8			;length
+	bne trans 		;go do it
+
+
+
+
+;    backup d<dd>=<sd>
+
+backup	lda #$c7 		;set error flags
+	jsr dosprs 		;parse the line
+	and #$30 		;req'd parms
+	cmp #$30
+	beq 5$
+	jmp snerr
+
+5$	jsr are_you_sure
+	beq 10$			;if run mode or not 'yes'
+	rts
+
+10$	jsr dclall 		;close disk
+	ldy #fbak
+	lda #4			;length
+				;fall thru to trans
+
+
+
+;    trans subroutine
+
+trans	jsr sendp 		;build string to output
+	jsr k_clrch
+	lda #0			;name is in bank 0
+	tax
+	jsr k_setbank
+	sec
+	jsr k_open		;send it...
+	php			;save error status (.c)
+	pha			;save error code (if any)
+	lda dosla
+	sec
+	jsr k_close		;special close...
+	pla			;pop error 
+	plp			;pop error status
+
+dopen_patch
+	bcs 10$			;...branch if there was an error opening
+	rts
+
+10$	jmp erexit
+
+;end

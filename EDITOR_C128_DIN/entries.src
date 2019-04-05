@@ -1,0 +1,10 @@
+	.page
+	.subttl  C/128 KERNAL ENTRIES  (12/11/84)
+
+; entry definitions for c/128  KERNAL
+
+_config	= $ff6b		;kernal: lookup mmu configuration
+_fetch	= $ff74		;kernal: indirect load from any bank
+_clrch	= $ffcc		;kernal: clear i/o channel & restore default devices
+
+;.end

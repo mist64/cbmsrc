@@ -1,0 +1,59 @@
+
+
+
+
+
+
+
+
+
+
+
+   C128 ROM RELEASE NOTES:		318020-06, 318023-03	      05/30/88
+
+
+   THE FOLLOWING MODIFICATIONS HAVE BEEN MADE TO THE 318020-05 KERNEL  CODE TO
+   CREATE A NEW ROM SET RELEASED ON 05/30/88.  THIS  RELEASE IS FOR USE IN THE
+   FOLLOWING SYSTEMS:  C128, C128D, C128CR, C128DCR.  ROMS WILL BE BUILT FOR
+   ONLY THE CURRENT 32K BYTE "CR" SYSTEMS, HOWEVER (318023-03).
+
+   1.  # 318023-03 --> EDITOR, KERNEL, CP/M ($C000-$FFFF, U32) cksum= E424
+   2.  # 318020-06 --> EDITOR, KERNEL, CP/M ($C000-$FFFF)      cksum= DFC4
+
+	1.  SECURE.  This kernel initialization routine has been modified
+	    to accomodate technological advances in DRAMs.  The discharge
+	    rates for data cells has lengthened considerably and it is no
+	    longer possible to rely upon the  loss  of data as indicative
+	    of a  power cycle as opposed to a  reset.  The SECURE routine
+	    has been  patched  to  examine  the contents of the  8568 VDC
+	    registers  which  will  contain  $FF if power cycled but will
+	    retain their previously  programmed data through resets.  The
+	    existing detection of a "CBM" RAM key in bank one remains for
+	    compatability.  This patch required new code in patch area.
+
+	2.  DLABYE.  This kernel  serial  I/O routine has been patched to
+	    provide a longer delay.  This will eliminate certain randomly
+	    occurring DEVICE NOT READY errors, particularly at 2MHz. This
+	    was accomplished via single byte inline patch.
+
+	3.  OPN232.  This kernel  routine  has  been patched to correctly
+	    return error status.  When  implementing  an X-line interface
+	    it was possible to receive an error when there was none. This
+	    was accomplished via single byte inline patch.
+
+	4.  The ROM  signature at location $CFFC  and  $CFFD  (lo/hi)  is
+	    $8C3E.
+
+	5.  The ROM revision byte at location $CFFE, has incremented from
+	    $01 to $02.
+
+	6.  The ROM checksum byte at  location  $CFFF,  has  changed from
+	    $3C to $3B.
+
+	7.  The Kernel revision byte at location  $FF80  has  incremented
+	    from $01 to $02.
+
+
+
+
+   Fred Bowen        05/30/88

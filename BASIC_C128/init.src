@@ -1,0 +1,360 @@
+	.page
+	.subttl Initialization Code
+
+soft_reset
+	jsr _clrch		;warm start basic...
+	jsr init_mmu		;initialize MMU our way
+	jsr stop_sprites	;stop all moving sprites
+	jsr init_voices
+	jsr stkini		;restore stack 
+	lda #0
+	sta channl		;clear channels
+
+go_ready
+	cli			;enable irq's
+	jmp ready
+
+	.byte $00,$ff,$ff	;BASIC revision number
+
+
+hard_reset
+	jsr init_mmu		;initialize MMU our way
+	jsr init_vectors	;go init vectors
+	jsr init_storage	;go init charget & z-page
+	jsr signon_message	;go print initilization messages
+
+	lda _init_status
+	ora #1
+	sta _init_status	;tell kernal to give basic a crack at irq's
+
+	ldx #<$4003		;point restart vector at warm start entry
+	stx _restart_vector
+
+	ldx #stkend-256 	;set up end of stack
+	txs
+
+	jsr _phenix		;let any cartridges out there have a say
+	jmp go_ready		;jmp...ready
+
+	.page
+init_storage
+	lda #76			;'jmp' opcode
+	sta jmper
+	sta usrpok
+
+	lda #<fcerr     	;init usr vector to 'qty err'
+	ldy #>fcerr
+	sta usrpok+1
+	sty usrpok+2
+
+	lda #<flpint
+	ldy #>flpint
+	sta adray1
+	sty adray1+1
+
+	lda #<givayf
+	ldy #>givayf
+	sta adray2
+	sty adray2+1
+
+;
+; download CHRGET and INDSUB code into ram.
+;
+	ldx #endmov-chrget_pattern
+1$	lda chrget_pattern-1,x	
+	sta chrget-1,x			;move to ram.
+	dex
+	bne 1$
+
+	stx bits		;.x=0
+	stx channl
+	stx lastpt+1
+	stx trcflg		;start trace mode off
+	stx basbgn
+	stx mvdflg		;flag '8k graphics screen not allocated'
+ 	stx autinc		;turn off auto increment
+ 	stx autinc+1
+	stx width		;init to single-width lines
+ 	stx scalem		;turn off scaleing
+ 	stx filflg
+	stx rndx		;zero-ing msb will guarantee a legal value
+	stx dosfa		;zero device number
+
+	stx int_trip_flag
+	stx int_trip_flag+1
+	stx int_trip_flag+2
+	stx intval
+
+	ldy #88			;zero out sprite information area
+2$	sta sprite_data,y
+	dey
+	bpl 2$
+
+	inx			;.x=1
+	stx buf-3
+	stx buf-4
+
+	ldx #15
+	stx current_bank	 ;set default bank for POKE,PEEK,SYS
+
+	ldx #13
+	stx foreground		;init bit map's fg color to light green
+	ldx #1
+	stx multicolor_1	;init mc1 to white
+	ldx #2
+	stx multicolor_2	;init mc2 to red
+	jsr set_packed_color	;set up packed fg/bg and fg/mc1 bytes
+	ldx #tempst
+	stx temppt
+
+	baswrk=basbgn+1
+	ldx #<baswrk    	;set up bottom of bank 0 (text area)
+	ldy #>baswrk
+	stx txttab
+	sty txttab+1
+
+	lda #<common_top	;set up bottom of bank 1 (storage area)
+	ldy #>common_top
+	sta vartab
+	sty vartab+1
+
+	lda #<bank_0_top	;set up top of bank 0
+	ldy #>bank_0_top
+	sta max_mem_0
+	sty max_mem_0+1
+
+	lda #<bank_1_top	;set up  top of bank 1
+	ldy #>bank_1_top
+	sta max_mem_1
+	sty max_mem_1+1
+
+;
+; set up sprite pointers
+;
+
+	ldx #sprite_base/64+7
+	ldy #7
+10$	txa
+	sta screen_start+$3f8,y
+	dex
+	dey
+	bpl 10$
+;
+; zero out sprite movement stuff and some vic stuff too
+;
+	lda #0
+	ldx #init_as_0
+15$	sta sprite_data,x
+	dex
+	bpl 15$
+
+	jsr init_voices
+
+	lda #$d0		;initialize pointers to character rom
+	sta upper_graphic
+	lda #$d8
+	sta upper_lower
+
+	jmp scrtch		;go to 'new', rts
+
+
+	.page
+init_voices
+;
+; initialize music stuff
+;
+
+	lda #<beats/4		;set beat to quarter note
+	ldy #>beats/4
+	sta ntime
+	sty ntime+1
+
+	lda #4			;set default octave
+	sta octave
+
+	lda #16			;set default tempo
+	sta tempo_rate
+
+	lda #0			;make sure all gates are off
+	sta sid+4
+	sta sid+11
+	sta sid+18
+	sta irq_wrap_flag	;enable basic irq handler
+
+	lda #$0f		;set volume to max
+	sta filters+3
+	sta filters+4
+	sta sid+24
+
+	ldy #29			;initialize music tables
+20$	lda atkmus,y
+	sta atktab,y
+	dey
+	bpl 20$
+
+	ldx #9			;initialize pulse widths
+30$	lda pwhmus,x
+	sta pulshi,x
+	dex
+	bpl 30$
+
+	stx sound_time_hi	;turn all SOUND counters off (.X = $ff)
+	stx sound_time_hi+1
+	stx sound_time_hi+2
+	stx voices+1		;turn all PLAY counters off
+	stx voices+3
+	stx voices+5
+
+	ldy #2			;set default envelope (piano) for all voices
+	sty voice
+10$	ldx #0
+	jsr set_envelope_1
+	dec voice
+	bpl 10$
+	inc voice		;set default voice (0)
+	rts
+
+	.page
+
+init_mmu			;initialize mmu pre-configs for our purposes
+	jsr put_io_in_map
+	ldx #3			;now do 4 pre-configs
+1$	lda 2$,x
+	sta mmu_preconfig_a,x
+	dex
+	bpl 1$
+	rts
+
+2$	.byte %00111111		;sw_ram0 (ram 0, no rom, no i/o)
+	.byte %01111111		;sw_ram1 (ram 1, no rom, no i/o)
+	.byte %00000001		;sw_rom_ram0 (ram 0, system rom, no i/o)
+	.byte %01000001		;sw_rom_ram1 (ram 1, system rom, no i/o)
+
+
+
+
+stop_sprites				;stop all moving sprites
+	lda #0
+	ldy #7
+1$	ldx sproff,y
+	sta sprite_data,x
+	dey
+	bpl 1$
+	rts
+
+
+
+
+signon_message
+	ldy #0
+10$	lda signon_msg,y
+	cmp #'@'
+	bne 30$
+
+	bit _mode		;80 or 40 column?
+	bpl 35$			;40, don't expand
+
+	ldx #19
+20$	lda #' '
+	jsr k_bsout
+	dex
+	bne 20$
+
+30$	jsr k_bsout
+35$	iny
+	cpy #signon_end-signon_msg
+	bne 10$
+	rts
+
+
+signon_msg
+	.byte 147,cr,'@ COMMODORE BASIC V7.0 122365 BYTES FREE',cr
+	.byte        '@   (C)1986 COMMODORE ELECTRONICS, LTD.',cr
+	.byte	     '@         (C)1977 MICROSOFT CORP.',cr
+	.byte	     '@           ALL RIGHTS RESERVED',cr
+	.byte 0
+signon_end
+	.page
+
+init_vectors
+	ldx #3$-2$-1
+1$	lda 2$,x
+	sta ierror,x
+	dex
+	bpl 1$
+
+	lda #<n_esc_fn_vec
+	sta esc_fn_vec
+	lda #>n_esc_fn_vec
+	sta esc_fn_vec+1
+
+	rts
+
+2$	.wor nerror,nmain,ncrnch,nqplop,ngone,neval
+	.wor nesclk,nescpr,nescex 	;escape vectors
+3$
+
+
+
+; this is the chrget/chrgot code. it is moved to ram
+;
+chrget_pattern
+	inc txtptr
+	bne 1$
+	inc txtptr+1
+1$	sta sw_ram0
+	ldy #0
+	lda (txtptr),y
+	sta sw_rom_ram0
+	cmp #':'
+	bcs 2$
+	cmp #' '
+	beq chrget_pattern
+	sec
+	sbc #'0'
+	sec
+	sbc #$d0
+2$	rts
+
+	.page
+
+;indsub_ram0
+	sta indsub_ram0+3$-*+1	;set up for self-modifying (mea culpa) code.
+	sta sw_ram0
+3$	lda ($00),y
+	sta sw_rom_ram0
+	rts
+
+;indsub_ram1
+	sta indsub_ram1+4$-*+1
+	sta sw_ram1
+4$	lda ($00),y
+	sta sw_rom_ram1
+	rts
+
+;indin1_ram1
+	sta sw_ram1
+	lda (index1),y
+	sta sw_rom_ram1
+	rts
+
+;indin2
+	sta sw_ram0
+	lda (index2),y
+	sta sw_rom_ram0
+	rts
+
+;indtxt
+	sta sw_ram0
+	lda (txtptr),y
+	sta sw_rom_ram0
+	rts
+
+
+;
+; constants which must be moved to ram
+;
+	.byte   0,0,0	;zero, of course!
+endmov
+
+;end

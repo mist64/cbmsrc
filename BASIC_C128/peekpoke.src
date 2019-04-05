@@ -1,0 +1,32 @@
+	.page
+	.subttl PEEK and POKE
+ 
+
+peek	lda poker+1		;..also happens to be LINNUM !
+	pha
+	lda poker
+	pha
+	jsr chknum
+	jsr getadr
+	ldx current_bank	;set up bank number for kernal's fetch
+	ldy #0			;..and index,
+	lda #poker		;..and address
+	jsr _fetch		;doo-it too-it
+	tay
+	pla
+	sta poker	;get that byte.
+	pla
+	sta poker+1
+	jmp sngflt	;float it.
+
+
+
+poke	jsr getnum
+	txa		;set up value to store for kernal stash routine
+	ldy #0		;..and index
+	ldx #poker	;..and put address in _stash_vector
+	stx _stash_vector
+	ldx current_bank ;..finally, get the bank number		
+	jmp _stash
+
+;end

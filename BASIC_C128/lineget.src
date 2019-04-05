@@ -1,0 +1,47 @@
+	.page
+	.subttl 'lineget subroutine
+
+; linget  reads a line # from the current txtptr position
+;	  and stores it in linnum  (valid range is 0-63999).
+;
+;	  on exit txtptr is pointing to the terminating char
+;	  which is in .a with condition codes set.
+;	  endchr will be =0 if no digit input, else >0. use it
+;	  to distinguish between line # 0 & null input.
+
+linget	ldx #0
+	stx endchr	;flags line # input
+	stx linnum	;init line # to 0
+	stx linnum+1
+
+1$	bcs 4$		;it's not a digit, do rts
+	inc endchr	;indicate line # input
+	sbc #$2f	;'0'-1 since c=0
+	sta charac	;save for later
+	lda linnum+1
+	sta index
+	cmp #25		;line number will be .lt. 64000?
+	bcc 2$
+	jmp snerr	;..no, syntax error.
+2$	lda linnum
+	asl a	    	;multiply by 10
+	rol index
+	asl a
+	rol index
+	adc linnum
+	sta linnum
+	lda index
+	adc linnum+1
+	sta linnum+1
+	asl linnum
+	rol linnum+1
+	lda linnum
+	adc charac	;add in digit
+	sta linnum
+	bcc 3$
+	inc linnum+1
+3$	jsr chrget
+	jmp 1$
+
+4$	rts
+;end

@@ -1,0 +1,25 @@
+	.pag
+	.subttl GO 
+
+go_without_to
+	jsr chrget		;what is next character?
+	cmp #totk		;..is it GO TO?
+	bne 1$
+	jsr chrget		;..yes, set up for goto
+	jmp goto		;..bye!
+
+1$	jsr getbyt		;is it GO 64?
+	cpx #64
+	beq 2$			;..it's twooo! it's twooo!
+	jmp snerr
+
+; The user wants to go to C64 mode.
+
+2$	jsr are_you_sure
+	bne 5$			;must have had second thoughts. never mind.
+	jsr put_io_in_map
+	jmp _go_64
+
+5$	rts
+
+;end

@@ -1,0 +1,33 @@
+	.page
+	.subttl BUMP Function
+
+;******************************************************************
+;*
+;*	BUMP - read sprite collision
+;*
+;*	Syntax : BUMP (argument)
+;*
+;*	Where  : argument = [1..2]
+;*			1 : sprite/sprite collision
+;*			2 : sprite/background collision
+;*
+;******************************************************************
+
+bump	jsr chkcls
+	jsr conint		;get arg in .X
+	dex			;adjust [1..2] to [0..1
+	cpx #2
+	bcs 98$			;value error
+
+	sei
+	ldy vic_save+17,x	;get collision info
+	lda #0
+	sta vic_save+17,x	;..and reset for next read
+	cli
+
+	jmp sngflt	;float 1 byte arg in .Y
+
+
+98$	jmp fcerr	;bad value error
+
+;end

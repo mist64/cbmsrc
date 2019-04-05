@@ -1,0 +1,190 @@
+	.page
+	.subttl  rs232 I/O  (09/17/84): c/128
+
+; output a file over usr port using rs232
+
+cko232
+	sta dflto	;set default out
+	lda m51cdr	;check for 3/x line
+	lsr a
+	bcc cko100	;3 line...no turn around	
+
+; turn around logic:  check for dsr and rts
+
+	lda #$02	;bit rts is on
+	bit d2prb
+	bpl ckdsrx	;no dsr...error
+	bne cko100	;rts...outputing or full duplex	
+
+; check for active input:  rts will be low if currently inputting
+
+1$	lda enabl
+	and #$02	;look at ier for t2
+	bne 1$		;hang until input done	
+
+; wait for cts to be off as spec requires
+
+2$	bit d2prb
+	bvs 2$
+
+; turn on rts
+
+	lda d2prb
+	ora #$02
+	sta d2prb
+
+; wait for cts to go on
+
+3$	bit d2prb
+	bvs cko100	;done...
+	bmi 3$		;we still have dsr
+
+ckdsrx
+	lda #$40	;'data set ready'  error	
+	sta rsstat	;major error....will require reopen
+
+cko100
+	clc		;no error	
+	rts
+
+	.page
+; bso232 - output a char via rs232:  data passed in t1 from bsout
+;
+; hang loop for buffer full
+
+bsobad
+	jsr bso100	;keep trying to start system...
+
+; buffer handler
+
+bso232
+	ldy rodbe
+	iny
+	cpy rodbs	;check for buffer full
+	beq bsobad	;hang if so...trying to restart
+	sty rodbe	;indicate new start
+	dey
+	lda t1		;get data...	
+	sta (robuf),y	;store data
+
+; set up if necessary to output
+
+bso100
+	lda enabl	;check for a t1 nmi enable
+	lsr a		;bit 0	
+	bcs 1$		;running....so exit
+
+; set up t1 nmi's
+
+	lda #$10 	;turn off timer to prevent false start...
+	sta d2cra
+	lda baudof	;set up timer1
+	sta d2t1l
+	lda baudof+1
+	sta d2t1h
+	lda #$81
+	jsr oenabl
+	jsr rstbgn 	;set up to send (will stop on cts or dsr error)
+	lda #$11	;turn on timer
+	sta d2cra
+1$	rts
+
+	.page
+
+; input a file over user port via rs232
+
+cki232
+	sta dfltn	;set default input
+
+	lda m51cdr	;check for 3/x line
+	lsr a
+	bcc cki100	;3 line...no handshake
+
+	and #$08	;full/half check (byte shifted above)
+	beq cki100	;full...no handshake
+
+; turn around logic: check if dsr and not rts
+
+	lda #$02	;bit rts is on
+	bit d2prb
+	bpl ckdsrx	;no dsr...error
+	beq cki110	;rts low...in correct mode
+
+; wait for active output to be done
+
+1$	lda enabl
+	lsr a		;check t1 (bit 0)
+	bcs 1$
+
+; turn off rts
+
+	lda d2prb
+	and #$ff-02
+	sta d2prb
+
+; wait for dcd to go high (in spec)
+
+2$	lda d2prb
+	and #$04
+	beq 2$
+
+; enable flag for rs232 input
+
+cki080
+	lda #$90
+	clc		;no error	
+	jmp oenabl	;flag in enabl
+
+; if not 3 line half then see if we need to turn on flag
+
+cki100
+	lda enabl	;check for flag or t2 active
+	and #$12
+	beq cki080	;no need to turn on
+cki110
+	clc		;no error	
+	rts
+
+	.page
+; bsi232 - input a char via rs232
+;
+; buffer handler
+
+bsi232
+	lda rsstat	;get status up to change...
+	ldy ridbs	;get last byte address
+	cpy ridbe	;see if buffer empty
+	beq 1$		;return a null if no char
+
+	and #$ff-$08	;clear buffer empty status
+	sta rsstat
+	lda (ribuf),y	;get last char
+	inc ridbs	;inc to next pos	
+	rts		;receiver always runs
+
+1$	ora #$08	;set buffer empty status	
+	sta rsstat
+	lda #0		;return a null
+	rts
+
+
+
+; protect serial & cassette  from rs232 nmi's
+
+rsp232
+	pha		;save .a	
+	lda enabl	;does rs232 have any enables?
+	beq 2$		;no...
+
+1$	lda enabl	;wait until done	
+	and #%00000011	;with t1 & t2
+	bne 1$
+
+	lda #%00010000	;disable flag (need to renable in user code)
+	sta d2icr	;turn of enabl
+	lda #0	
+	sta enabl	;clear all enabls	
+2$	pla		;all done
+	rts
+
+;.end

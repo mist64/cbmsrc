@@ -1,0 +1,301 @@
+	.page
+	.subttl  ed3  irq keyscan & cursor blink routines  (GERMAN)
+
+;/////////////////   K E Y B O A R D     S C A N   \\\\\\\\\\\\\\\\\\\
+
+scnkey			;scan the keyboard
+	lda r6510	;first check is for 'caps lock' key
+	and #$40
+	eor #$40	;invert sense so '1' means key is down
+	lsr a
+	lsr a
+	sta shflag	;initializes shift key status
+
+	ldy #88		;initialize key counter
+	sty sfdx	;assume no keys (88=index to null ($ff) key in table)
+	lda #0
+	sta colm	;raise all key lines
+	sta vicreg+47
+	ldx rows	;quick check for any key down in matrix
+	cpx #$ff
+	bne 1$		;...branch if anything depressed
+	jmp ckit2	;nothing- skip 'way ahead  (restore 'colm' @'ckit2')
+
+1$	tay		;(.a=0->.y) init key counter
+	lda decode
+	sta keytab	;assume mode #1 (normal keys)
+	lda decode+1
+	sta keytab+1
+
+	lda #$ff
+	sta vicreg+47
+	rol a		;start with 1st column (.a=$fe)
+
+
+2$	bit shflag	;msb set means we are scanning extended key lines
+	bmi 3$		;...branch if so
+	sta colm
+	bpl 4$
+3$	sta vicreg+47	;raise one column
+
+4$	ldx #8		;scan 8 rows each column
+	pha		;preserve column output configuration
+
+5$	lda rows	;scan the row
+	cmp rows	;debounce the keyboard
+	bne 5$
+
+6$	lsr a		;look for a key down
+	bcs 9$		;...branch if not this key
+	pha		;got one...but preserve remainder
+
+	lda (keytab),y	;fetch the character code for this key
+
+	cmp #$08	;check for modifier keys................$01 = shift
+	beq 7$		;...branch if 'alt' key			$02 = C=
+	cmp #$05						$04 = control
+	bcs 8$		;...branch if not a modifier key	$08 = alt
+	cmp #$03						$10 = caps lock
+	beq 8$		;...branch if not a modifier key
+7$	ora shflag
+	sta shflag	;save modifier (merge in into flag byte)
+	.byte $2c
+
+8$	sty sfdx	;save key number
+	pla		;recall the rest of the row
+9$
+	iny		;index to next key
+	dex		;index to next row
+	bne 6$		;...branch if still more keys in this row
+
+	cpy #89
+	bcs 10$		;...branch if finished all keys
+
+	pla		;recall column configuration
+	sec
+	rol a		;rotate scan to next column
+	bcs 2$		;...branch if still more columns
+	sta colm	;(.a=$ff) drop all lines driving old matrix
+	rol shflag
+	sec
+	ror shflag	;flag we are now scanning extended matrix
+	rol a		;(.a=$fe)
+	bne 2$		;always
+
+
+10$	asl shflag	;remove temporary flag bit
+	lsr shflag
+	pla		;clean up- all done.  pass key number in .a and...
+	lda sfdx  	;...fall into 'keylog' to determine how to decode key
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+	jmp (keyvec)	;'keylog' indirect
+
+keylog			;evaluate various shift keys & determine lookup table
+	cmp #87
+	bne 10$		;special test for <scroll> key
+	bit locks
+	bvs 99$		;...branch if disabled
+	lda lstshf
+	bne 99$		;...branch if too soon
+	lda #13		;<ctrl>-S
+	eor pause
+	sta pause	;toggle pause flag
+	bvc 20$		;setup slight delay
+
+10$	lda shflag
+	beq repeat	;...branch if none depressed, 'keytab' already set up
+	cmp #$10
+	beq 40$		;...branch if <caps-lock> only
+	cmp #$08
+	beq 50$		;...branch if <alt> only
+	and #$07
+
+	cmp #3		;<commodore><shift> combination?
+	bne 30$		;...branch if not
+	lda locks	;got it, but is it locked out?
+	bmi repeat	;...branch if locked out
+	lda lstshf	;has there been enough delay since last time?
+	bne repeat	;...branch if more delay needed
+
+	bit mode
+	bpl 15$		;...branch if 40-col (vic) mode
+	lda color
+	eor #$80	;toggle case by toggling 8563 attribute ALT bit
+	sta color	; (note: does not affect characters already displayed-
+	jmp 20$		;        it does allow all 512 chrs to appear simultaneously.)
+
+15$	lda vm1		;toggle case by redirecting vic character base register
+	eor #$02	; VIC(cb11)
+	sta vm1		;change will occur at next display frame
+
+20$	lda #%00001000	;provide a delay between toggles
+	sta lstshf	; (reset by 'ckit2' shifting 'lstshf' right)
+	bne repeat	;always
+
+
+
+30$	asl a		;make flag value a table pointer
+	cmp #8		;<control> key?		(overrides all other modes)
+	bcc 50$		;...branch if not down	(.a points to correct matrix)
+
+	lda #6		;set table pointer to <ctrl> matrix
+	ldx sfdx	;check for <ctrl>-S combination (pause output)
+	cpx #13
+	bne 50$		;...branch if not 'S'
+	bit locks
+	bvs 50$		;...branch if locked out
+	stx pause	;set flag for pause
+99$	rts
+
+40$	lda #10		;set table pointer to <caps-lock> matrix
+
+50$	tax		;.a = table pointer
+	lda decode,x
+	sta keytab	;setup vector to that table
+	lda decode+1,x
+	sta keytab+1	;fall thru to 'repeat' handler & 'ckit2'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+repeat			;handler for key repeats
+	ldy sfdx  	;get key index
+	lda (keytab),y  ;lookup key value from proper table
+	tax		;save key value for 'ckit2' in .x
+
+	cpy lstx	;is the index the same as found during last key scan?
+	beq 20$		;...branch if it is
+	ldy #$10
+	sty delay	;reset the delay before a key repeats
+	bne ckit2	;always
+
+
+20$	and #$7f	;mask off shift bit
+	bit rptflg	;are key repeats enabled?
+	bmi 30$		;...branch if all keys repeat
+	bvs scnrts	;...branch if no  keys repeat
+	cmp #$7f
+	beq ckit2	;...branch if nothing to repeat (no real key down)
+
+	cmp #$14	;repeat only cursor keys, space bar, and delete key
+	beq 30$		;...branch if <inst/del>
+	cmp #space
+	beq 30$		;...branch if <space>
+	cmp #$1d
+	beq 30$		;...branch if <crsr l/r>
+	cmp #$11
+	bne scnrts	;...branch if not <crsr u/d>
+
+30$	ldy delay	;repeat this key
+	beq 40$		;...branch if key has been down long enough to repeat
+	dec delay	;else keep counting down
+	bne scnrts
+
+40$	dec kount
+	bne scnrts	;...branch if between key repeats
+	ldy #4
+	sty kount	;reset between_key_repeats counter
+	ldy ndx
+	dey		;got a repeating key- is there room for it in buffer?
+	bpl scnrts	;...branch if no room (ignore it)
+			;else fall into 'ckit2' & put key (in .x) into buffer
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+ckit2			;key is in .x
+	lsr lstshf	;do <cbm><shift> delay  (if any)
+
+	ldy sfdx	;get index of current key
+	sty lstx	;update last_key_found value
+	cpx #$ff	;.x has the key code (from 'repeat')
+	beq scnrts	;...branch if it's null (nothing down)
+
+	lda #0
+	sta pause	;any key clears the <ctrl>-S pause flag
+
+	txa		;decoded key
+	ldx shflag	;status of special keys
+			;.a=character, .y=keycode, .x=shift status
+
+	jmp nat_keychk	;'keychk' indirect (GERMAN)
+
+
+keyput
+	ldx #9		;check for function keys, <shift><run>, or <help>
+
+1$	cmp funtab,x	;compare with function key codes
+	beq dopfky	;...branch if it is a function key
+	dex
+	bpl 1$
+
+	ldx ndx		;finally put key into the damn buffer!
+	cpx xmax
+	bcs scnrts	;...branch if buffer is full (ignore key)
+	sta keyd,x	;put it in
+	inx		;one more key in buffer
+	stx ndx		;update key queue count
+
+scnrts	lda #$7f
+	sta colm	;restore scan to last column (run/stop)
+	rts
+
+	.page
+
+dopfky
+	jmp dopfky_patch	;-05 FIX (FAB)
+
+;	lda pkybuf,x    ;find length of function key string
+	sta kyndx
+	lda #0    	;find index to start of string
+
+1$	dex
+	bmi 2$
+	clc
+	adc pkybuf,x
+	bcc 1$		;always
+
+2$	sta keyidx
+	rts
+
+
+funtab
+	.byte   $85,$89,$86,$8a		;f1-f4
+	.byte   $87,$8b,$88,$8c		;f5-f8
+	.byte	$83,$84			;<shift><run>, <help>
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+blink			;////////// vic cursor blinker \\\\\\\\\\\\\
+	bit mode
+	bmi 2$		;...branch if 8563 mode (hardware cursor)
+	lda blnsw
+	bne 2$		;...branch if cursor not enabled (rts)
+	dec blnct
+	bne 2$		;...branch if not time to blink	(rts)
+	lda blnon
+	and #$c0
+	cmp #$c0
+	beq 2$		;...branch if solid cursor & 'gdbln' is correct
+
+	lda #20		;reset blink counters
+	sta blnct
+	ldy pntr	;get current cursor position
+	ldx gdcol	;get correct color
+	lda (pnt),y	;get screen character at cursor
+	bit blnon
+	bmi 1$		;...branch if cursor was on
+
+	sta gdbln	;cursor was off, save good character
+	jsr scolor
+	lda (user),y	;get screen color at cursor
+	sta gdcol	;save color
+	ldx color	;cursor always appears in current fgnd color
+	lda gdbln	;character under cursor
+
+1$	eor #$80	;toggle character field bit to 'blink' cursor
+	jsr displ	;display this character & color & rts
+	lda blnon
+	eor #$80
+	sta blnon	;toggle cursor
+2$
+	rts
+
+;.end

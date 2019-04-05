@@ -1,0 +1,136 @@
+	.page
+	.subttl Set Hires Mode 
+
+
+; test if 10k graphics screen already allocated. if so, return
+; immediately.
+
+sethir	lda mvdflg      ;done already if <>0
+	beq 1$
+	rts
+
+1$	lda text_top+1	;first see if it will all fit
+	clc
+	adc #$24	;we're moving from $1c00 on up, to $4000 on up.
+	bcs 2$		;wrapped!
+	sta grbtop+1	;..save a copy while we're at it, for the transfer operation
+	cmp max_mem_0+1	;this is the top of usable bank 0
+	bcc 3$		;less than the top, ok.
+	bne 2$		;greater than the top, won't fit.
+	cpy max_mem_0	;equal to the top, check ls byte
+	bcc 3$		;ok
+2$	jmp omerr	;no fit, out of memory error
+
+3$	dec mvdflg      ;it will fit. flag 'moved'
+	lda text_top	;now set up to move text
+	sta index1      ; first the destination,
+	lda grbtop+1
+	sta index1+1
+	ldx text_top	;...then the source. x,y will also be used to pass length
+	stx index2
+	lda text_top+1
+	sta index2+1
+	sec
+	sbc #$1c	;calculate the length (top - $1c00)
+	tay
+	txa	      	;make counter 1's complement
+	eor #$ff
+	sta grbpnt
+	tya
+	eor #$ff
+	sta grbpnt+1
+	ldy #0
+
+			;main loop
+10$	inc grbpnt      ;decrement 2 byte counter
+	bne 20$
+	inc grbpnt+1
+	beq 50$		;done
+
+20$	lda index1      ;decrement dest. pointer
+	bne 30$
+	dec index1+1
+30$	dec index1
+
+	lda index2      ;decrement source pointer
+	bne 40$
+	dec index2+1
+40$	dec index2
+
+	jsr indin2      ;load from source,
+	sta (index1),y	;...and put into dest.
+	jmp 10$
+
+50$	clc
+	lda text_top+1
+	adc #$24
+	sta text_top+1
+
+	lda txttab+1	;(assume .c=0)
+	adc #$24
+	sta txttab+1
+
+	lda datptr+1
+	adc #$24
+	sta datptr+1
+
+
+seth30	jsr lnkprg
+	jsr fixlnk      ;re-link basic text & fix vartab
+;
+; fix run-time stack if not in direct mode
+;
+	bit runmod      ;done if direct mode
+	bpl seth45      ;done
+
+	ldx #$24	;adjust text pointers
+	bit mvdflg      ;alloc. or dealloc?
+	bmi 1$		;branch if alloc (add $2400)
+	ldx #$dc	;else sub. $2400
+
+1$	txa
+	clc
+	adc txtptr+1
+	sta txtptr+1
+	txa
+	clc
+	adc oldtxt+1
+	sta oldtxt+1
+	txa
+	clc
+	adc errtxt+1
+	sta errtxt+1
+
+	jsr movtos      ;copy top-of-stack pointer to fndpnt
+seth40
+	lda fndpnt      ;test if fndpnt points to stack bottom
+	cmp #<stkbot
+	bne seth50      ;no
+	lda fndpnt+1
+	cmp #>stkbot
+	bne seth50      ;no
+seth45
+	rts		;all moved!
+
+seth50	ldy #0		;adjust any pointers in this stack entry
+	lda (fndpnt),y	;what kind of entry is this?
+	cmp #fortk
+	bne seth60
+
+	ldy #16
+	jsr addoff      ;A "FOR" entry needs the pointer to the 'for' line in text fixed.
+	lda #18		;set up to adjust temp. stack pointer
+	bne seth70      ;always
+
+seth60	ldy #4		;'do' & 'gosub' only need 1 adjustment,
+	jsr addoff      ;..to the text pointer.
+	lda #5
+
+seth70	clc
+	adc fndpnt
+	sta fndpnt
+	bcc seth40
+	inc fndpnt+1
+	bne seth40      ;always
+
+;.end

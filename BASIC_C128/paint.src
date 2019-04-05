@@ -1,0 +1,203 @@
+	.page
+	.subttl PAINT Command
+
+;******************************************************************
+;
+;  paint (s) (,(p)(,m)) -  fill a shape with a specified color
+;                  shape is defined by all points within a
+;                        colored border (see m below)
+;                  s = color of filled area (1-4) (default=1(fg))
+;                  p = optional starting coordinate position
+;                  m = mode: 0=shape defined by (s) color (default)
+;                            1=shape defined by any non-bgnd color
+;
+;******************************************************************
+
+paint	jsr grpcol	;make sure a graphic area has been allocated, get color
+	ldx #xdest-vwork
+	jsr incor2	;get x & y coordinates
+	jsr dstpos	;move xdest/ydest to xpos/ypos
+	jsr optzer	;look for mode: default is 0
+	cpx #2
+	bcc paint2	;branch if legal number
+	jmp fcerr	;...else illegal qty error
+
+paint2	txa
+	lsr a
+	ror a
+	sta stopnb	;flag is now $00 for 'stop on same', $80 for 'stop on any'
+	bpl pntok1	;test for stopnb=1 & colsel=0 ... just quit if found
+	lda colsel
+	beq pnterr
+pntok1
+	jsr readpt	;test if 1st point is off
+	bcs pnterr	;abort if 1st point out of bounds
+	bne pntok2	;skip if point is not = color
+pnterr
+	rts
+
+; a large block of ram is necessary for the stack required by 'paint'.
+; rather than allocate a fixed block of ram just for paint, it would
+; be more frugal to use any free ram in basic's area. this would be
+; the area between the end of arrays (strend) and the bottom of
+; strings (fretop).
+;
+; to guarantee the largest block possible, we will call the garbage
+; collect routine first.
+
+pntok2
+	jsr garba2
+	sta sw_rom_ram0			;tidy up after garbage collect
+
+; now we'll set up our pointers. index1 will be the top of stack pointer, and
+; tempst will be fretop-3 (at or after this address, it is no longer possible
+; to push any more 4 byte addresses on the stack).
+
+	lda strend
+	sta index1
+	lda strend+1
+	sta index1+1
+
+	sec
+	lda fretop
+	sbc #3
+	sta tempst
+	lda fretop+1
+	sbc #0
+	sta tempst+1
+
+;to fill the shape:
+;  1) move current position down until a dot is found that is on
+;  2) move up until a dot is found that is on
+;     a. set each dot that is off to the color specified
+;     b. test the dot to the right and save each coordinate
+;that begins a string of reset points
+;     c. test each dot on the left in the same way as (b)
+;  3) remove a saved coordinate and repeat from (1)
+;  4) done when there are no more saved coordinates
+
+ptloop
+	ldx #0
+	stx left_flag	;init flags = 0 - prev point set
+	stx right_flag	;use to test if previous point was on or off
+
+ptdown			;move down until a point is found is found that is set.
+	ldx ypos
+	bne ptdwn2
+	dec ypos+1
+ptdwn2
+	dec ypos
+	jsr readpt	;test if point set or reset
+	bcs ptbotm	;skip if ypos < 0
+	bne ptdown	;loop if point is not = colsel
+ptbotm
+	inc ypos
+	bne ptfill
+	inc ypos+1
+ptfill
+	jsr plot01	;set the point
+	ldx xpos
+	bne ptfil2
+	dec xpos+1
+ptfil2
+	dec xpos
+	lda left_flag	;get left flag value
+	jsr tstval	;test if need to save coordinates, crash if overflow
+	sta left_flag	;save new flag value
+	clc	      	;move to xpos 2 to the right
+	lda xpos
+	adc #2
+	sta xpos
+	bcc ptfil3
+	inc xpos+1
+ptfil3
+	lda right_flag	;get right flag value
+	jsr tstval	;test if need to save coordinates, crash if overflow
+	sta right_flag	;save new flag value
+
+	ldx xpos	;decrement xpos, increment ypos
+	bne ptfil4
+	dec xpos+1
+ptfil4
+	dec xpos
+	inc ypos
+	bne ptfil6
+	inc ypos+1
+ptfil6
+	jsr readpt	;test if set
+	bcs ptmax	;skip if ypos >= max
+	bne ptfill	;loop if point is not equal to colsel
+ptmax
+	ldx #3
+	ldy #0
+;
+; test if stack empty. if so, done. else continue.
+;
+	lda index1+1
+	cmp strend+1
+	bne ptmax2
+	lda index1
+	cmp strend
+	beq ptdone	;empty..exit.
+ptmax2
+	lda index1
+	bne 30$
+	dec index1+1
+30$	dec index1
+	jsr indin1_ram1	;move 4 byte addr into xpos/ypos
+	sta sw_rom_ram0
+	sta xpos,x
+	dex
+	bpl ptmax2
+
+	jsr is_stop_key_down
+	jmp ptloop	;loop for another pass
+ptdone
+	jmp dstpos	;restore original coordinates,do rts
+
+
+
+;tstval - test value of position
+;  if set then set flag to zero
+;  if reset and flag = 1 then do nothing
+;  if reset and flag = 0 then save position on stack
+;     and set flag = 1
+
+tstval
+	pha		;save flag value
+	jsr readpt	;test position is set
+	bcs tstgo	;skip if position out of bounds
+	beq tstgo	;exit if point equal colsel
+	pla
+	bne tstxit	;exit if previous point reset
+
+	tax		;make x & y =0 for later use
+	tay
+	lda index1+1    ;test if there is room on stack for another 4 bytes.
+	cmp tempst+1
+	bcc ptsave	;..ok
+	bne pterr	;..full
+	lda index1	;..ms byte equal, test ls byte
+	cmp tempst
+	bcc ptsave	;..ok
+pterr	jmp omerr	;out of memory error
+
+tstgo	pla
+	lda #0		;set flag - last point set
+tstxit	rts
+
+
+ptsave	lda xpos,x	;save 4 bytes of address on stack
+	sta sw_rom_ram1
+	sta (index1),y
+	sta sw_rom_ram0
+	inc index1
+	bne 20$
+	inc index1+1
+20$	inx
+	cpx #4
+	bne ptsave
+	lda #$80	;set flag - last point reset
+	rts
+
+;.end

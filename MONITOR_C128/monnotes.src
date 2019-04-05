@@ -1,0 +1,123 @@
+	.page
+	.subttl  MONITOR DOCUMENTATION
+
+;	I. SUMMARY OF C128 MONITOR COMMANDS
+;
+;
+;
+; 1/  A <start_address> <opcode> [operand]			:Assemble
+;
+; 2/  C <start_address> <end_address> <to_start_address>	:Compare
+;
+; 3/  D [<start_address> [end_address]]				:Disassemble
+;
+; 4/  F <start_address> <end_address> <byte>			:Fill
+;
+; 5/  G [address]						:Goto (JMP)
+;
+; 6/  H <start_address> <end_address> <byte1> [<byte_n>...]	:Hunt
+;     H <start_address> <end_address> '<ascii_string>
+;
+; 7/  J [address]						:gosub (JSR)
+;
+; 8/  L "<filename>" [,<device_#> [,<load_address>]]		:Load
+;
+; 9/  M [<start_address> [end_address]]				:Memory dump
+;
+; 10/ R								:Register dump
+;
+; 11/ S "<filename>",<device_#>,<start_address> <last_address+1>:Save
+;
+; 12/ T <start_address> <end_address> <to_start_address>	:Transfer
+;
+; 13/ V "<filename>" [,<device_#> [,<load_address>]]		:Verify
+;
+; 14/ X								:eXit monitor
+;
+; 15/ @[device_#]						:disk status
+;     @[device_#][,<command_string>]				:disk command
+;     @[device_#],$[[<drive>][:<file_spec>]]			:disk catalog
+;
+;
+;
+;
+;
+;	NOTES:		<> enclose required parameters.
+;			[] enclose optional parameters.
+;
+	.PAGE
+;
+;	II. SUMMARY OF MONITOR FIELD DESCRIPTORS
+;
+;
+;	The follow designators precede monitor data fields (e.g. memory
+;	dumps). When encountered as a command they instruct the monitor
+;	to alter memory or register contents using the given data.
+;
+;
+;	1/  .	:<period> precedes lines of disassembled code.
+;
+;	2/  >	:<right_angle> precedes lines of a memory dump.
+;
+;	3/  ;	:<semicolon> precedes line of a register dump.
+;
+;
+;
+;	The following designators precede number fields  (e.g. address)
+;	and specify the  radix (number base) of the  value.  Entered as
+;	commands they instruct the monitor simply to  display the given
+;	value in each of the four radices.
+;
+;
+;	1/  	:<null> (default) precedes hexidecimal values.
+;
+;	2/  $	:<dollar> precedes hexidecimal (base-16) values.
+;
+;	3/  +	:<plus> precedes decimal (base-10) values.
+;
+;	4/  &	:<ampersand> precedes octal (base-8) values.
+;
+;	5/  %	:<percent> precedes binary (base-2) values.
+;
+;
+;
+;	The  following  characters  are  used by the  monitor as  field
+;	delimiters  or  line terminators  (unless encountered within an
+;	ascii string).
+;
+;
+;	1/	:<space> delimiter- separates two fields.
+;
+;	2/  ,	:<comma> delimiter- separates two fields.
+;
+;	3/  :	:<colon> terminator- logical end of line.
+;
+;	4/  ?	:<question> terminator- logical end of line.
+;
+	.page
+;
+;	III. MONITOR COMMAND DESCRIPTIONS
+;
+;
+;
+;	This section of documentation will be expanded at a later date.
+;	In the meantime please refer to the C128 SOFTWARE SPECIFICATION
+;	for complete descriptions and examples of the Monitor commands.
+;	The following additions should be noted however.
+;	
+;
+;	Except as noted earlier,  there are  no changes at this time to
+;	the functionality of the monitor commands.  Please note however
+;	that any number field (e.g. addresses, device numbers, and data
+;	bytes) may now be specified as a based number. This affects the
+;	operand field of the  Assemble  command as well.  Also note the
+;	addition of the directory syntax to the disk command.
+;
+;
+;	As a  further  aid to  programmers, the  Kernal  error  message
+;	facility has been  automatically  enabled while in the Monitor.
+;	This means the Kernal will display  'I/O ERROR #' and the error
+;	code should  there be any  failed I/O attempt from the Monitor.
+;	The  message  facility  is turned off when exiting the Monitor.
+;
+;.end

@@ -1,0 +1,378 @@
+	.page
+	.subttl PLAY Command
+
+; music interpreter
+;
+; syntax : PLAY music_string
+;
+; where : music_string is a string of characters composed of:
+;
+;	A..G	  : notes to play
+;	W,H,Q,I,S : set note lengths to whole,half,quarter,eighth,sixteenth
+;	"."	  : dot the next note
+;	U	  : set volume level
+;	O	  : set octave
+;	T	  : set current envelope
+;	V	  : select voice to play
+;	X	  : filter
+;	R	  : rest
+;	M	  : measure
+;	#	  : sharp
+;	$	  : flat
+
+
+play	jsr frmstr		;frmevl,frestr,return w/ .A=len, (index)=>string
+	sta sw_rom_ram0
+	sta z_p_temp_1		;save number of characters
+	jsr clear_play_flags	;set 'dot' and 'sharp' to 0. return with Acc=0
+	sta hulp		;zero counter
+
+10$	ldy hulp
+	cpy z_p_temp_1
+	beq 20$			;done!
+	jsr indin1_ram1
+	sta sw_rom_ram0
+	jsr play_one_character
+	inc hulp
+	bne 10$			;always
+20$	rts
+
+
+
+play_one_character
+	cmp #' '
+	bne 5$
+	rts			;spaces are a 'no-op'
+
+5$	cmp #'A'		;note name a-g?
+	bcc 10$
+	cmp #'H'
+	bcs 10$
+	jmp play_note		;yes...play it
+
+10$	ldx #4			;test for notes,'w,h,q,i,s'
+20$	cmp notes,x
+	bne 22$
+	jmp set_note_length
+22$	dex
+	bpl 20$
+
+	cmp #'R'		;rest?
+	bne 25$
+	jmp play_rest
+
+25$	cmp #'.'		;dotted note?
+	bne 27$
+	jmp play_dot
+
+27$	ldx #5			;test for v,o,t,x,u,m commands
+30$	cmp mutabl,x
+	bne 40$
+	jmp play_command
+40$	dex
+	bpl 30$			;test all 5 characters in table
+
+	cmp #'#'		;sharp?
+	bne 50$
+	jmp play_sharp
+
+50$	cmp #'$'		;flat?
+	bne 60$
+	jmp play_flat
+
+;must be a digit here for
+;octave , voice , music envelope or filter
+
+60$	sec
+	sbc #'0'		;mask nybble
+	cmp #10			;must be in range 0..9
+	bcc 70$
+	jmp play_bad_value
+
+70$	asl flag		;octave, voice, music envelope, filter, or vol?
+	bcs set_voice
+
+	asl flag		;octave, music envelope, filter, or volume?
+	bcs set_octave
+
+	asl flag		;music envelope, filter, or volume?
+	bcs set_envelope
+
+	asl flag		;filter or volume?
+	bcc set_volume
+
+set_filter
+	cmp #2
+	bcc 5$
+	jmp play_bad_value	;value too large
+5$	lsr a
+	ldy voice
+	ldx times2,y    	;0,2, & 4 for voice 0,1, & 2
+10$	lda voices+1,x  	;test if voice is active
+	bpl 10$			;if so, loop.
+	lda sbits,y     	;get bit to change
+	ora filters+2    	;set filter on
+	bcs 20$			;skip - turn filter on
+	eor sbits,y     	;turn off filter
+20$	sta filters+2
+	lda filters+3
+	sta filters+4    	;save new filter-type/volume
+
+	ldx #3
+30$	lda filters,x    	;set filter value
+	jsr put_io_in_map
+	sta sid+21,x
+	dex
+	bpl 30$
+	bmi clear_flag		;always
+
+set_voice
+	tax
+	dex
+	cpx #3
+	bcs play_bad_value
+	stx voice
+	bcc clear_flag		;always
+
+
+set_octave
+	cmp #7
+	bcs play_bad_value	;too big octave
+	sta octave      	;set octave
+	bcc clear_flag		;always
+
+
+set_envelope
+	tax
+set_envelope_1			;entry for initialization code
+	jsr put_io_in_map
+	ldy voice
+	lda wavtab,x
+	sta wave0,y     	;set waveform
+	lda offtab,y    	;get sid offset
+	tay
+	lda atktab,x
+	sta sid+5,y  		;set attack/decay
+	lda sustab,x
+	sta sid+6,y  		;set sustain/release
+	lda pulslw,x
+	sta sid+2,y  		;set pulse width - low byte
+	lda pulshi,x
+	sta sid+3,y  		;set pulse width - high byte
+	jmp clear_flag
+
+
+set_volume
+	tax
+	lda filters+3
+	and #$f0	 	;mask out old volume
+	ora voltab,x    	;add new volume
+	sta filters+3    	;save for filter change
+	lda filters+4    	;get current filter-type/volume
+	and #$f0
+	ora voltab,x
+	jsr put_io_in_map
+	sta sid+24   		;set new volume
+
+clear_flag
+	lda #0
+	sta flag
+	rts
+
+
+	.page
+
+play_bad_value
+	jsr clear_flag
+	jmp fcerr		;illegal quantity
+
+play_dot
+	sta dnote
+	rts
+
+
+
+set_note_length
+	ldy #<beats		;found note, divide beats accordingly
+	sty ntime
+	ldy #>beats
+	sty ntime+1
+10$	dex
+	bmi 20$			;finished dividing, exit
+	lsr ntime+1
+	ror ntime
+	jmp 10$
+20$	rts
+
+
+
+
+
+
+play_note
+	sec
+	sbc #'A'
+	tax
+	lda scalen,x    	;note #0-11
+	tax
+	lda #6
+	sec
+	sbc octave
+	tay
+	txa
+	clc
+	adc sharp
+	bpl 10$			;added sharp or nat
+	lda #11			;underflow
+	iny	      		;bump octave down
+10$	cmp #12	  		;overflow?
+	bcc 20$			;no...
+	lda #0
+	dey			;bump octave up
+20$	tax
+	lda scalel,x
+	sta pitch
+	jsr play_pal		;-04 mod (FAB): correct tables for PAL and NTSC
+30$	dey
+	bmi play_rest_1
+	lsr a
+	ror pitch
+	jmp 30$
+
+
+
+play_command
+	cmp #'M'		;measure?
+	beq 10$
+
+	lda rbits,x		;all others, set flag for next number
+	sta flag
+	rts
+
+; wait for msb of all 3 voice counters to underflow
+
+10$	ldy #5
+20$	lda voices,y
+	bpl 20$
+	dey
+	dey
+	bpl 20$
+	rts
+
+
+
+play_sharp
+	lda #1
+	.byte $2c
+play_flat
+	lda #$ff
+	sta sharp
+	rts
+
+
+
+
+play_rest_1
+	sta pitch+1
+	lda #0			;flag 'not rest'
+	.byte $2c	 	;hop
+play_rest
+	lda #$ff	 	;flag 'rest'
+	pha			;save flag
+	ldx voice
+	ldy times2,x    	;y=x*2
+
+10$	lda voices+1,y  	;test if there is a note playing
+	bpl 10$			;and loop if so.
+
+	lda ntime		;load counter for current length
+	sta voices,y
+	lda ntime+1
+	sta voices+1,y
+	lda dnote		;test if this is a dotted note
+	beq 20$			;no
+	lda ntime+1
+	lsr a		    	;duration is 1.5 x current length
+	pha
+	lda ntime
+	ror a
+	clc
+	adc voices,y
+	sta voices,y
+	pla
+	adc voices+1,y
+	sta voices+1,y
+
+20$	pla		      	;test if this is a rest
+	bmi clear_play_flags	;and branch if so
+
+	jsr put_io_in_map
+	ldy offtab,x    	;y=x*7
+	lda pitch
+	sta sid,y
+	lda pitch+1
+	sta sid+1,y
+	lda #$08	 	;reset this voice
+	sta sid+4,y
+	lda wave0,x     	;and finally, turn on gate
+	sta sid+4,y
+
+clear_play_flags
+	lda #0
+	sta sharp		;clear flags
+	sta dnote
+	rts
+
+
+tempo	jsr getbyt
+	txa
+	beq 1$			;can't be zero
+	stx tempo_rate
+	rts
+1$	jmp fcerr		;bad value error
+
+
+
+times2	.byte 0,2,4
+
+notes  .byte 'WHQIS'   	;sixteenth,eigth,quarter,half,and whole notes
+
+mutabl .byte 'VOTXUM'   ;voice,octave,envelope,filter,volume,& measure
+
+scalen	.byte 9,11,0,2,4,5,7 		;a,b,c,d,e,f,g
+
+scalel	.byte $0f,$0c,$45,$bf,$7d,$83	;c,c#,d,d#,e,f,f#,g,g#,a,a#,b (NTSC)
+	.byte $d6,$79,$73,$c7,$7c,$97
+
+scaleh	.byte $43,$47,$4b,$4f,$54,$59	;c,c#,d,d#,e,f,f#,g,g#,a,a#,b (NTSC)
+	.byte $5e,$64,$6a,$70,$77,$7e
+
+;  music envelope tables
+; 0: piano   1: accordion    2: calliope  3: drum     4: flute
+; 5: guitar  6: harpsichord  7: organ  8: trumpet  9: xylophone
+;
+;  attack/decay rates
+;
+atkmus	.byte $09,$c0,$00,$05,$94,$09,$09,$09,$89,$09
+;
+;  sustain/release rates
+;
+susmus	.byte $00,$c0,$f0,$50,$40,$21,$00,$90,$41,$00
+;
+;  wave forms
+;
+wavmus	.byte $41,$21,$11,$81,$11,$21,$41,$41,$41,$11
+;
+;  pulse width hi table
+;
+pwhmus	.byte $06,$00,$00,$00,$00,$00,$02,$08,$02,$00
+;
+;  offset table
+;
+offtab	.byte 0,7,14
+;
+;  volume levels
+;
+voltab	.byte 0,1,3,5,7,8,10,12,14,15
+
+;end

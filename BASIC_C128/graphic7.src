@@ -1,0 +1,224 @@
+	.page
+	.subttl 'graphics7'
+;******************************************************************
+;
+;  drawln - draw a line from x/y-pos to x/y-dest. draw the line
+;           by plotting x/y-pos and increasing or decreasing it
+;           until it equals x/y-dest.
+;
+;           absx    = abs(destx-posx) : absy = abs(desty-posy)
+;           sgnx    = sgn(destx-posx) : sgny = sgn(desty-posy)
+;                     ( sgn=(1,0,-1) if (+,0,-) )
+;           greatr  = index to the greatr of absx,absy
+;           lesser  = index to the smaller of absx,absy
+;
+;           fct1    = 2*min(absx,absy)
+;           fct2    = fct1 - 2*max(absx,absy)
+;           error   = fct1 - max(absx,absy)
+;
+;           for i:= 1 to max(absx,absy) do begin
+;                 plot(posx,posy)
+;                 if error > 0 then begin
+;                      pos(lesser):= pos(lesser) + sgn(lesser)
+;                      error:= error + fct2
+;                      end
+;                      else error:= error + fct1
+;                 pos(greatr):= pos(greatr) + sgn(greatr)
+;           end;
+;                                                08nov82   f.a.b.
+;******************************************************************
+
+drawln
+	ldx #ypos-vwork
+	ldy #ydest-vwork
+drw01
+	lda #0
+	sta xysgn,x     ;init direction pointers
+	sta xysgn+1,x
+	jsr abstwo	;get absolute value of coordinate differences
+	bpl drw02
+	dec xysgn,x	;negative direction
+	dec xysgn+1,x
+	bne drw04	;always
+drw02	cmp #0
+	bne drw03
+	cpy #0
+	beq drw04	;zero direction
+drw03	inc xysgn,x	;positive direction
+drw04	sta xyabs,x
+	asl a
+	sta fct,x	;fct(x,y) = 2*abs(x,y)
+	tya
+	sta xyabs+1,x
+	rol a
+	sta fct+1,x
+	dex
+	dex
+	ldy #xdest-vwork ;loop to do in x-direction
+	cpx #xpos-vwork
+	beq drw01
+
+	ldx #yabs-vwork ;determine max(xabs,yabs)
+	ldy #xabs-vwork
+	jsr subtwo
+	lda #0
+	rol a
+	rol a		;a = c * 2
+	sta lesser      ;index to smaller delta
+	eor #2
+	sta greatr      ;index to greatr delta
+
+	clc
+	lda #fct-vwork
+	adc lesser
+	tay
+	pha
+	eor #2
+	tax
+	jsr subtwo      ;fct(greatr) = fct(lesser)-fct(greatr)
+	sta vwork,x
+	tya
+	sta vwork+1,x
+
+	pla
+	tay		;fct(lesser)
+	clc
+	lda #xyabs-vwork
+	adc greatr
+	tax
+	jsr subtwo      ;error = fct(lesser) - abs(greatr)
+	sta errval
+	sty errval+1
+
+dloop
+	jsr gplot	;plot (xpos,ypos)
+	ldy greatr
+	sec
+	lda xyabs,y     ;for i = 1 to abs(greatr)
+	sbc #1
+	sta xyabs,y
+	bcs drw05
+	lda xyabs+1,y
+	sbc #0
+	sta xyabs+1,y
+	bcs drw05
+	rts		;done!
+
+drw05
+	ldx lesser
+	lda errval+1
+	bmi drw06	;branch if error negative
+	jsr drwinc	;pos(lesser) = pos(lesser) + sgn(lesser)
+	ldx greatr
+
+drw06	clc		;error = error + fct(.x)
+	lda errval
+	adc fct,x
+	sta errval
+	lda errval+1
+	adc fct+1,x
+	sta errval+1
+
+	ldx greatr
+	jsr drwinc	;pos(greatr) = pos(greatr) + sgn(greatr)
+	beq dloop	;always
+
+
+
+drwinc	ldy #2
+	clc
+drwin1	lda xypos,x	;calculate new position
+	adc xysgn,x
+	sta xypos,x	;  (.x points to lesser/greatr)
+	inx
+	dey
+	bne drwin1
+	rts
+
+	.page
+;******************************************************************
+;
+;     plot - plot a point within the graphic bit map table
+;    x/y-pos holds the coordinates - colsel contains color
+;
+;******************************************************************
+
+gplot
+	lda filflg      ;flag =1 to plot double width
+	ora width
+	beq plot01
+	inc xpos
+	bne 10$
+	inc xpos+1
+10$	jsr plot01
+	ldx xpos
+	bne 20$
+	dec xpos+1
+20$	dec xpos
+
+plot01			;entry here ignores wide-line mode
+	jsr divpos	;convert xpos/ypos to column&row
+	bcs plotgo	;exit if out of bounds
+	jsr docolr	;set colors
+	jsr getps1	;get bit map address
+	sta bitmsk
+	lda (grapnt),y	;get bit map byte
+	ora bitmsk	;set bits
+	bit _graphm	;check graphic mode
+	bpl plot30	;go if a hires mode
+	pha		;save new byte
+	ldx colsel	;get color selction
+	lda bitmsk	;get mask
+	and colval,x	;get inverted bits
+	sta bitmsk
+	pla
+plot10
+	eor bitmsk	;set correct bits
+plot20
+	sta (grapnt),y	;save byte
+plotgo
+	rts
+plot30
+	ldx colsel	;get color selection
+	bne plot20	;done if to be set
+	beq plot10
+
+	.page
+;*****************************************************************
+;
+;  readpt  -  read the point located at xpos,ypos
+;	      return the color value in a-reg - right justified
+;	      carry set = coordinates out of bounds
+;	      zero flag =  ((stopnb = 0  &  color = colsel)
+;			   or (stopnb = $80 & color <> background))
+;
+;******************************************************************
+
+readpt
+	jsr getpos	;get address in graphic bit map
+	bcs readgo	;error exit if out of bounds error
+	sta bitmsk	;save mask
+	lda (grapnt),y	;get bit map byte
+	and bitmsk	;mask out bits
+readlp
+	rol a		;shift bits to be right-justified
+	dex
+	bpl readlp
+	rol a
+	bit stopnb	;is stop-on-any flag set?
+	bmi readl1	;branch if so
+	and #3
+	cmp colsel	;else compare against specific color
+	clc
+	rts
+readl1
+	clc
+	and #3
+	beq readl3	;invert zero flag
+	ldx #0
+	rts
+readl3	ldx #$ff
+readgo
+	rts
+
+;.end

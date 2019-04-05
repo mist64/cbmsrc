@@ -1,0 +1,597 @@
+	.page
+	.subttl DECLARE for Basic
+
+
+;  assignments
+
+lenfor		=18	;length of a 'for' entry in the run-time stack
+lengos		=5	;length of a 'gosub'....
+buflen		=161	;ted input buffer size
+stkend		=$1fb
+column_width	=10	;print window 10 chars
+pi		=255
+strsiz		=3
+maxchr		=80
+cr		=$0d  	;carriage return
+lf		=$0a	;line feed
+llen		=40
+nlines		=25
+beats		=1152
+
+stktop		=$0800	;basic's run-time stack
+stkbot		=$09ff
+
+sprite_base	=$0e00	;start of 2 page area for sprite defn's
+
+basbgn		=$1c00	;default start of basic
+bank_0_top	=$ff00
+bank_1_top	=$ff00
+common_top	=$0400
+
+screen_start	=$0400
+graphic_base	=$2000
+
+color_ram_lo	=$1c00
+color_ram_hi	=$d800
+
+vic		=$d000
+vic_border	=vic+32
+vic_background	=vic+33
+
+sid		=$d400
+
+mmu		=$d500
+mmu_preconfig_a	=mmu+1
+
+_8563_addr	=$d600
+_8563_data	=$d601
+
+d1_6526		=$dc00
+d1pra		=d1_6526
+
+
+d2_6526		=$dd00
+d2pra		=d2_6526
+
+_dma		=$df00
+
+mmu_config_reg	=$ff00
+sw_ram0		=mmu_config_reg+1
+sw_ram1		=mmu_config_reg+2
+sw_rom_ram0	=mmu_config_reg+3
+sw_rom_ram1	=mmu_config_reg+4
+
+	.page
+;  basic zp storage
+;
+
+		*=2	;skip over 6510 registers
+srchtk		*=*+1	;token 'search' looks for (run-time stack) / SYS 'bank#'
+		*=9	;skip over SYS's address,status, a_reg, x_reg, y_reg
+integr
+charac		*=*+1
+endchr		*=*+1
+trmpos		*=*+1
+verck		*=*+1
+count		*=*+1
+dimflg		*=*+1
+valtyp		*=*+1
+intflg		*=*+1
+garbfl
+dores		*=*+1
+subflg		*=*+1
+inpflg		*=*+1
+domask
+tansgn		*=*+1
+channl		*=*+1
+poker
+linnum		*=*+2
+temppt		*=*+1
+lastpt		*=*+2
+tempst		*=*+9
+index
+index1		*=*+2
+index2		*=*+2
+resho		*=*+1
+resmoh		*=*+1
+addend
+resmo		*=*+1
+reslo		*=*+1
+		*=*+1
+txttab		*=*+2
+vartab		*=*+2
+arytab		*=*+2
+strend		*=*+2
+fretop		*=*+2
+frespc		*=*+2
+max_mem_1	*=*+2	;top of string/variable bank (bank 1)
+curlin		*=*+2
+txtptr		*=*+2	;pointer to basic text used by chrget,etc.
+form			;used by print using
+fndpnt		*=*+2	;pointer to item found by search
+datlin		*=*+2
+datptr		*=*+2
+inpptr		*=*+2
+varnam		*=*+2
+fdecpt
+varpnt		*=*+2
+lstpnt
+andmsk
+forpnt		*=*+2
+eormsk		=forpnt+1
+vartxt
+opptr		*=*+2
+opmask		*=*+1
+grbpnt
+tempf3
+defpnt		*=*+2
+dscpnt		*=*+2
+		*=*+1
+helper		*=*+1	;flags 'help' or 'list' ?????????????????????????get outta z.p.
+jmper		*=*+1
+		*=*+1
+oldov		*=*+1
+
+
+tempf1		*=*+1
+ptarg1		=tempf1	;multiply defined for instr
+ptarg2		=tempf1+2
+str1		=tempf1+4
+str2		=tempf1+7
+positn		=tempf1+10
+match		=tempf1+11
+arypnt
+highds		*=*+2
+hightr		*=*+2
+
+
+
+tempf2		*=*+1
+deccnt		*=*+2
+grbtop
+dptflg
+lowtr		*=*+1
+expsgn		*=*+1
+tenexp		=deccnt+1
+
+
+
+fac
+dsctmp
+left_flag		;paint-left flag
+facexp		*=*+1
+right_flag		;paint-right flag
+facho		*=*+1
+facmoh		*=*+1
+indice
+facmo		*=*+1
+faclo		*=*+1
+facsgn		*=*+1
+degree
+sgnflg		*=*+1
+
+
+argexp		*=*+1
+argho		*=*+1
+argmoh		*=*+1
+argmo		*=*+1
+arglo		*=*+1
+argsgn		*=*+1
+strng1
+arisgn		*=*+1
+
+
+
+facov		*=*+1
+strng2
+polypt
+curtol
+fbufpt		*=*+2
+
+autinc		*=*+2	;inc. val for auto (0=off)
+mvdflg		*=*+1	;flag if 10k hires allocated
+
+z_p_temp_1	*=*+1	;using's leading zero counter, 
+			;movspr & sprite temporary,
+			;mid$= temporary
+
+hulp			;counter
+keysiz		*=*+1
+
+syntmp		*=*+1	;used as temp for indirect loads
+dsdesc		*=*+3	;descriptor for ds$
+tos		*=*+2	;top of run time stack
+runmod		*=*+1	;flags run/direct mode
+
+parsts			;dos parser status word
+point		*=*+1	;using's pointer to dec.pt
+parstx		*=*+1
+
+oldstk		*=*+1
+
+
+
+;  graphic zp storage
+
+colsel		*=*+1	;current color selected
+multicolor_1	*=*+1
+multicolor_2	*=*+1
+foreground	*=*+1
+scale_x		*=*+2	;scale factor in x
+scale_y		*=*+2	;scale factor in y
+stopnb		*=*+1	;stop paint if not background/not same color
+grapnt		*=*+2
+vtemp1		*=*+1
+vtemp2		*=*+1
+
+	.page
+		*=$ff
+lofbuf		*=*+1
+
+;  basic/dos interface vars
+;
+fbuffr		*=*+16	;area to build filename in
+xcnt		*=*+1	;dos loop counter
+
+dosf1l		*=*+1	;dos filename 1 len
+dosds1		*=*+1	;dos disk drive 1
+
+dosf2l		*=*+1	;dos filename 2 len
+dosds2		*=*+1	;dos disk drive 2
+dosf2a		*=*+2	;dos filename 2 addr
+
+dosofl		*=*+2	;bload/bsave starting addr
+dosofh		*=*+2	;..and bsave's ending addr
+dosla		*=*+1	;dos logical addr
+dosfa		*=*+1	;dos phys addr
+dossa		*=*+1	;dos sec. addr
+
+dosrcl		*=*+1	;dos record length
+dosbnk		*=*+1
+
+dosdid		*=*+2	;dos dsk identif.
+didchk		*=*+1	;dos did flg
+
+dosspc		=*-fbuffr	;space used by dos rout.
+
+;	Space used by PRINT USING
+
+bnr		*=*+1	;pointer to begin. no.
+enr		*=*+1	;pointer to end no.
+dolr		*=*+1	;dollar flag
+flag		*=*+1	;comma flag
+swe		*=*+1	;counter
+usgn		*=*+1	;sign exponent
+uexp		*=*+1	;pointer to exponent
+vn		*=*+1	;# of digits before decimal point
+chsn		*=*+1	;justify flag
+vf		*=*+1	;# of pos before decimal point (field)
+nf		*=*+1	;# of pos after decimal point (field)
+posp		*=*+1	;+/- flag (field)
+fesp		*=*+1	;exponent flag (field)
+etof		*=*+1	;switch
+cform		*=*+1	;char counter (field)
+sno		*=*+1	;sign no
+blfd		*=*+1	;blank/star flag
+begfd		*=*+1	;pointer to begin of field
+lfor		*=*+1	;length of format
+endfd		*=*+1	;pointer to end of field
+		.page
+
+sysstk		*=$200	;system stack
+buf		*=*+buflen	;basic/monitor buffer
+
+; this area reserved for kernal storage
+
+		*=$2fc
+esc_fn_vec	*=*+2	;vector for additional function routines
+bnkvec		*=*+2	;vector for function cart. users
+ierror		*=*+2	;indirect error (output error in .x)
+imain		*=*+2	;indirect main (system direct loop)
+icrnch		*=*+2	;indirect crunch (tokenization routine)
+iqplop		*=*+2	;indirect list (char list)
+igone		*=*+2	;indirect gone (char dispatch)
+ieval		*=*+2	;indirect eval (symbol evaluation)
+iesclk		*=*+2	;escape token crunch,
+iescpr		*=*+2	;..list,
+iescex		*=*+2	;..and execute
+itime		*=*+2	;60 hz interrupt vector (before jiffy)
+cinv		*=*+2	;irq ram vector
+cbinv		*=*+2	;brk instr ram vector
+
+; kernal indirects go here
+
+		*=$0380
+
+chrget		*=*+6
+chrgot		*=*+10
+qnum		*=*+15
+
+
+
+;  indirect load subroutine area
+;
+indsub_ram0	*=*+12	;shared rom fetch sub
+indsub_ram1	*=*+12	;shared rom fetch sub
+indin1_ram1	*=*+9	;index1 indirect fetch
+indin2		*=*+9	;index2 indirect fetch
+indtxt		*=*+9	;txtptr
+zero		*=*+3	;numeric constant for basic, downloaded from rom
+
+
+current_bank	*=*+1	;context for SYS,POKE,PEEK. Set by BANK command.
+tmpdes		*=*+4	;temp for instr
+fin_bank	*=*+1	;bank pointer for string - number conversion routine (fin)
+savsiz		*=*+4	;temp work locations for sshape
+bits		*=*+1	
+sprtmp_1	*=*+1	;temp for sprsav
+sprtmp_2	*=*+1
+fg_bg		*=*+1	;packed foreground/background color nybbles
+fg_mc1		*=*+1	;packed foreground/multicolor 1 color nybbles
+
+	.page
+		*=$1100	;dos/vsp area
+dosstr		*=*+1	;dos output str. buf
+		*=*+48	;area to build dos string
+
+
+vwork		;graphics vars
+xypos
+xpos		*=*+2	;current x position
+ypos		*=*+2	;current y position
+xdest		*=*+2	;x-coordinate destination
+ydest		*=*+2	;y-coordinate destination
+
+;  line drawing variables
+;
+xyabs
+xabs		*=*+2
+yabs		*=*+2
+xysgn
+xsgn		*=*+2
+ysgn		*=*+2
+fct		*=*+4
+errval		*=*+2
+lesser		*=*+1
+greatr		*=*+1
+
+;  angle routine variables
+;
+angsgn		*=*+1	;sign of angle
+sinval		*=*+2	;sine of value of angle
+cosval		*=*+2	;cosine of value of angle
+angcnt		*=*+2	;temps for angle distance routines
+
+	.page
+
+;  the following 24 bytes are multiply defined, beginning on this
+;  page, and continuing for the next 4 pages.
+
+;  circle drawing variables. (multiply defined)
+
+params		=*
+xcircl		*=*+2	;circle center, x coordinate
+ycircl		*=*+2	;circle center, y coordinate
+xradus		*=*+2	;x radius
+yradus		*=*+2	;y radius
+rotang		*=*+4	;rotation angle
+angbeg		*=*+2	;arc angle start
+angend		*=*+2	;arc angle end
+xrcos		*=*+2	;x radius * cos(rotation angle)
+yrsin		*=*+2	;y radius * sin(rotation angle)
+xrsin		*=*+2	;x radius * sin(rotation angle)
+yrcos		*=*+2	;y radius * cos(rotation angle)
+parend		=*
+
+
+;  general use parameters. (multiply defined)
+
+		*=params
+xcentr		*=*+2
+ycentr		*=*+2
+xdist1		*=*+2
+ydist1		*=*+2
+xdist2		*=*+2
+ydist2		*=*+2
+disend
+		*=*+2  	;placeholder
+colcnt		*=*+1	;char's col. counter
+rowcnt		*=*+1
+strcnt		*=*+1
+
+
+;  box drawing variables. (multiply defined)
+
+		*=params
+xcord1		*=*+2	;point 1 x-coord.
+ycord1		*=*+2	;point 1 y-coord.
+boxang		*=*+2	;rotation angle
+xcount		*=*+2
+ycount		*=*+2
+bxleng		*=*+2	;length of a side
+xcord2		*=*+2
+ycord2		*=*+2
+
+
+	.page
+;  shape and move-shape variables (multiply defined)
+
+		*=params
+		*=*+1	;placeholder
+keylen		*=*+1
+keynxt		*=*+1
+strsz		*=*+1	;string len
+gettyp		*=*+1	;replace shape mode
+strptr		*=*+1	;string pos'n counter
+oldbyt		*=*+1	;old bit map byte
+newbyt		*=*+1	;new string or bit map byte
+		*=*+1  	;placeholder
+xsize		*=*+2	;shape column length
+ysize		*=*+2	;shape row length
+xsave		*=*+2	;temp for column length
+stradr		*=*+2	;save shape string descriptor
+bitidx		*=*+1	;bit index into byte
+		*=parend
+	.page
+
+;  graphic variables
+
+character_rom	*=*+1	;high byte of address of char rom for 'char' command
+bitcnt		*=*+1	;temp for gshape
+scalem		*=*+1	;scale mode flag
+width		*=*+1	;double width flag
+filflg		*=*+1	;box fill flag
+bitmsk		*=*+1	;temp for bit mask
+numcnt		*=*+1
+trcflg		*=*+1	;flags trace mode
+
+renum_tmp_1	*=*+2	;a temp for renumber
+renum_tmp_2	*=*+2	;a temp for renumber
+
+t3		*=*+1
+t4		*=*+2
+vtemp3		*=*+1	;graphic temp storage
+vtemp4		*=*+1
+vtemp5		*=*+1
+
+adray1		*=*+2	;ptr to routine:  convert float -> integer
+adray2		*=*+2	;ptr to routine:  convert integer -> float
+
+sprite_data	*=*+88	;speed/direction tables for sprites
+vic_save	*=*+21	;copy of vic reg's, used to update chip during retrace
+init_as_0	=*-sprite_data-1 ;just a count for init
+
+upper_lower	*=*+1	;pointer to upper/lower case for char command
+upper_graphic	*=*+1	;  '        upper/graphic
+
+dossa_temp	*=*+1	;temp sto for file's sa during RECORD command
+
+	.page
+
+		*=$1200 ;general basic non-zp storage
+
+
+oldlin		*=*+2	;basic storage
+oldtxt		*=*+2	;basic storage
+
+
+;  declarations for print using
+;
+puchrs
+pufill		*=*+1	;print using fill symbol
+pucoma		*=*+1	;print using comma symbol
+pudot		*=*+1	;print using d.p. symbol
+pumony		*=*+1	;print using monetary symbol
+
+
+errnum		*=*+1	;used by error trapping routine-last error number
+errlin		*=*+2	;line # of last error - ffff if no error
+trapno		*=*+2	;line to go to on error.. ffxx if none set
+tmptrp		*=*+1	;hold trap # tempor.
+errtxt		*=*+2
+
+text_top	*=*+2	;top of text pointer
+max_mem_0	*=*+2	;highest address available to BASIC in ram 0
+
+tmptxt		*=*+2	;used by do-loop. could be mult. assigned
+tmplin		*=*+2
+
+usrpok		*=*+3
+rndx		*=*+5
+
+circle_segment	*=*+1	;degrees per circle segment
+
+dejavu		*=*+1	;'cold' or 'warm' reset status (must be in page 5!)
+
+
+; music stuff
+
+tempo_rate	*=*+1
+voices		*=*+6
+ntime		*=*+2
+octave		*=*+1
+sharp		*=*+1
+pitch		*=*+2
+voice		*=*+1
+wave0		*=*+3
+dnote		*=*+1
+fltsav		*=*+4
+fltflg		*=*+1
+nibble		*=*+1
+tonnum		*=*+1
+tonval		*=*+3
+parcnt		*=*+1
+
+atktab		*=*+10
+sustab		*=*+10
+wavtab		*=*+10
+pulslw		*=*+10
+pulshi		*=*+10
+filters		*=*+5
+
+;  interrupt stuff
+
+int_trip_flag	*=*+3
+int_adr_lo	*=*+3
+int_adr_hi	*=*+3
+
+intval		*=*+1
+coltyp		*=*+1
+
+
+
+
+; SOUND command stuff
+
+sound_voice	*=*+1
+
+sound_time_lo	*=*+3
+sound_time_hi	*=*+3
+
+sound_max_lo	*=*+3
+sound_max_hi	*=*+3
+sound_min_lo	*=*+3
+sound_min_hi	*=*+3
+sound_direction	*=*+3
+sound_step_lo	*=*+3
+sound_step_hi	*=*+3
+sound_freq_lo	*=*+3
+sound_freq_hi	*=*+3
+
+temp_time_lo	*=*+1
+temp_time_hi	*=*+1
+
+temp_max_lo	*=*+1
+temp_max_hi	*=*+1
+temp_min_lo	*=*+1
+temp_min_hi	*=*+1
+temp_direction	*=*+1
+temp_step_lo	*=*+1
+temp_step_hi	*=*+1
+temp_freq_lo	*=*+1
+temp_freq_hi	*=*+1
+temp_pulse_lo	*=*+1
+temp_pulse_hi	*=*+1
+temp_waveform	*=*+1
+
+pot_temp_1	*=*+1		;temporarys for 'POT' function
+pot_temp_2	*=*+1
+
+
+window_temp	*=*+4
+
+savram		*=*+67 		;used by SPRDEF,SAVSPR, and DOS parser
+defmod		*=*+1		; "
+lincnt		*=*+1		; "
+sprite_number	*=*+1		; "
+
+
+
+irq_wrap_flag	*=*+1		;used by basic_irq to block all but one irq call
+
+
+	.ifge *-$1300		;make sure storagedoesn't overflow
+	.messg "***** ADDRESS CHECK ***"
+	.endif
+
+;end

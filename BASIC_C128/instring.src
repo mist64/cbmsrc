@@ -1,0 +1,104 @@
+	.page
+	.subttl INSTRing Function
+
+;
+;  instring : position of str1 in str2 at or after position n
+;     usage : instr(a$, b$ {,n})
+
+instr	lda facmo	;save pointer to temporary descriptors
+	sta tmpdes
+	lda facmo+1
+	sta tmpdes+1
+
+	jsr frmevl	;get next arg.
+	jsr chkstr	;must be string
+	lda facmo
+	sta tmpdes+2
+	lda facmo+1
+	sta tmpdes+3
+
+	ldx #1	   	;default starting position
+	stx faclo
+	jsr chrgot
+	cmp #')'	;any length argument?
+	beq 1$		;branch if not
+	jsr combyt	;else go get a one byte argument
+
+1$	jsr chkcls	;look for )
+	ldx faclo
+	bne 2$
+	jmp fcerr	;starting position can't be 0
+
+2$	dex
+	stx positn
+
+	ldx #3	   	;copy 'pointers to temp descriptors' to zero page
+3$	lda tmpdes,x
+	sta ptarg1,x
+	dex
+	bpl 3$
+
+	ldy #2	   	;now get the descriptors
+4$	lda #ptarg1
+	jsr indsub_ram1
+	sta str1,y
+	lda #ptarg2
+	jsr indsub_ram1
+	sta str2,y
+	dey
+	bpl 4$
+
+	lda str2	;check if string 2 is null
+	beq instnf	;if so, return 0
+
+inst5
+	lda #0
+	sta match
+	clc
+	lda str2	;length of string 2
+	adc positn
+	bcs instnf	;too long, not found
+	cmp str1	;see if > length of string 1
+	bcc inst6	;< len string 1
+	bne instnf	;must be >, not found
+inst6
+	ldy match
+	cpy str2	;if match len = str len, then found
+	beq instfd
+	tya
+	clc
+	adc positn	;compare str1(s+p+m) with str2(m)
+	tay
+	lda #str1+1
+	jsr indsub_ram1
+	sta syntmp
+	ldy match
+	lda #str2+1
+	jsr indsub_ram1
+	cmp syntmp
+	beq inst7
+	inc positn	;not the same, start over from next positn
+	bne inst5	;always
+
+inst7	inc match	;count characters that match
+	bne inst6	;always
+
+instfd	inc positn
+	lda positn
+	.byte $2c
+
+instnf	lda #0
+	sta sw_rom_ram0
+	pha
+	lda tmpdes+2	;free temp descriptors
+	ldy tmpdes+3
+	jsr fretmp
+	sta sw_rom_ram0
+	lda tmpdes
+	ldy tmpdes+1
+	jsr fretmp
+	pla
+	tay
+	jmp sngflt
+
+;end

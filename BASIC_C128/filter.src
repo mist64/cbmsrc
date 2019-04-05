@@ -1,0 +1,84 @@
+	.page
+	.subttl FILTER Command
+
+;******************************************************************
+;
+;  filter  freq, lp, bp, hp, res
+;      --  set values for filter
+;          freq =  filter frequency (0-1023)
+;            lp =  low pass filter on (1) or off (0)
+;            bp =  band pass filter on (1) or off (0)
+;            hp =  high pass filter on (1) or off (0)
+;           res =  resonance (0-15)
+;
+;******************************************************************
+
+filter	pha
+	ldy #3
+10$	lda filters,y    	;save filter values
+	sta fltsav,y
+	dey
+	bpl 10$
+
+	pla			;check first character of arg
+	cmp #','
+	beq 20$			;skip if no value given
+	jsr getwrd		;get filter frequency
+	cmp #8			;test m.s. byte
+	bcs 90$			;error if > 2047
+	sty fltsav		;save lower byte
+
+; idea: shift lower 3 bits of upper byte into lower byte, forming bits 10-3
+
+	sty fltsav+1
+	lsr a
+	ror fltsav+1
+	lsr a
+	ror fltsav+1    	;save upper 7 bits (10-3)
+	lsr a
+	ror fltsav+1
+
+20$	lda #$10
+	sta fltflg
+
+30$	jsr optbyt		;get filter value
+	bcc 50$			;skip if no value input
+	cpx #1
+	bcc 35$			;..0 is ok,
+	beq 35$			;..and so is 1,
+	jmp fcerr		;..but >1 isn't!
+
+35$	lda fltsav+3    	;get filter flags byte
+	ora fltflg      	;set filter on
+	bcs 40$			;skip if should be on
+	eor fltflg      	;turn filter off
+40$	sta fltsav+3    	;save value
+
+50$	asl fltflg      	;shift for next filter
+	bpl 30$			;loop 3 times
+
+
+	jsr optbyt		;get resonance value
+	bcc 70$			;skip if no value given
+	cpx #16
+	bcs 90$			;error if >15
+	txa
+	asl a
+	asl a		    	;shift to upper nibble
+	asl a
+	asl a
+	sta nibble
+	lda fltsav+2    	;get current value
+	and #$0f	 	;mask it out
+	ora nibble      	;add new value
+	sta fltsav+2    	;save it
+
+70$	ldy #3
+80$	lda fltsav,y    	;resave values
+	sta filters,y
+	dey
+	bpl 80$
+	rts
+
+90$	jmp fcerr		;illegal quantity error
+;end

@@ -1,0 +1,26 @@
+	.page
+	.subttl WAIT function
+
+; The wait location mask1,mask2 statement waits until the contents of location
+; is nonzero when xored with mask2 and then added with mask1. If mask2 is not
+; present, it is assumed to be zero.
+
+wait	jsr getnum
+	stx andmsk
+	ldx #0
+	jsr chrgot
+	beq 10$
+	jsr combyt	;get mask2.
+10$	stx eormsk
+
+
+20$	ldy #0			;set up index for _fetch routine,
+	ldx current_bank	;..and bank number,
+	lda #poker		;..and address of address
+	jsr _fetch
+	eor eormsk
+	and andmsk
+	beq 20$
+	rts			;got a nonzero.
+
+;end

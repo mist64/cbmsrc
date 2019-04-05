@@ -1,0 +1,564 @@
+	.page
+	.subttl  monitor5 - routines
+
+;  parse entry when 1st character has already been read
+;
+
+
+
+pargot
+	dec txtptr
+
+
+
+;  parse next item in buffer & put its value into  t0, t0+1 & t0+2.
+;
+;	.z=1 if no value found.
+;	.c=1 if eol.
+;	.x & .y are preserved, .a contains # digits read.
+;
+;	if error, call is popped & 'jmp error' performed.
+
+
+parse
+	jsr eval	;evaluate ascii input as a number
+	bcs 10$		;...branch if error
+
+	jsr glc		;re-get last character
+	bne 5$		;...branch if not eol
+	dec txtptr	;point to eol: make next 'gnc' see eol
+	lda count
+	bne 30$		;...valid number input, treat eol as a delimiter
+	beq 20$		;...the well is very dry
+
+5$	cmp #' '	;parse delimiters (only allow <space> or <comma>)
+	beq 30$
+	cmp #','
+	beq 30$		;...fall into error if bad delimiter
+
+10$	pla		;pop this call
+	pla
+	jmp error
+
+20$	sec		;set .c=1 for eol
+	.byte $24
+
+30$	clc		;clear .c for not-eol
+	lda count	;set .z=1 for valid number
+	rts
+
+	.page
+;  evaluate next item in buffer & put its value into  t0, t0+1 & t0+2.
+;
+;	.c=0  normal return
+;	.c=1  error  return
+;	.z=1  null input
+;	.x & .y are preserved.
+
+eval
+	lda #0
+	sta t0		;clear value
+	sta t0+1
+	sta t0+2
+	sta count	;reset digit counter (flags valid number vs. null input)
+	txa
+	pha		;preserve .x & .y
+	tya
+	pha
+
+
+10$	jsr gnc		;get next character
+	bne 15$
+	jmp eval_ok	;...branch if end of line
+15$	cmp #' '
+	beq 10$		;...branch & ignore leading spaces
+
+	ldx #3
+20$	cmp cmdnum,x	;is first character a base prefix?
+	beq 30$		;...yes
+	dex
+	bpl 20$
+
+	inx		;...no: default base to hex
+	dec txtptr	;to reget digit
+
+30$	ldy bases,x	;this is the base
+	lda shifts,x	;this is the # of shifts required for given base
+	sta shift
+
+40$	jsr gnc		;get next character
+	beq eval_ok	;...branch if eol
+	sec
+	sbc #'0'	;convert ascii digit to binary value
+	bcc eval_ok	;...branch if not a number  (assume delimiter)
+	cmp #10
+	bcc 50$		;...number 0-9
+	sbc #7
+	cmp #16		;...number a-f
+	bcs eval_ok	;...branch if not a number  (assume delimiter)
+
+50$	sta number	;binary value of current digit
+	cpy number
+	bcc eval_ng	;...branch if number out of range of given base
+	beq eval_ng
+	inc count	;flag valid digit
+	cpy #10
+	bne 70$		;...branch if not base-10
+
+	ldx #2
+60$	lda t0,x	;save a copy current total for base-10 calc
+	sta temps,x
+	dex
+	bpl 60$
+
+70$	ldx shift
+80$	asl t0		;multiply current value by base using binary shifts
+	rol t0+1
+	rol t0+2
+	bcs eval_ng	;...branch if overflow error
+	dex
+	bne 80$		;...next shift
+
+	cpy #10
+	bne 90$		;...branch if not base-10
+
+	asl temps	;more base-10 calc: first one more shift
+	rol temps+1
+	rol temps+2
+	bcs eval_ng	;...overflow
+	lda temps
+	adc t0		;add 'em up
+	sta t0
+	lda temps+1
+	adc t0+1
+	sta t0+1
+	lda temps+2
+	adc t0+2
+	sta t0+2
+	bcs eval_ng	;...overflow
+
+90$	clc		;add current digit (all bases)
+	lda number
+	adc t0
+	sta t0
+	txa		;.x=0
+	adc t0+1
+	sta t0+1
+	txa
+	adc t0+2
+	sta t0+2
+	bcs eval_ng	;...overflow
+	and #$f0
+	bne eval_ng	;...overflow
+	beq 40$		;...next character
+
+	.page
+eval_ng
+	sec
+	.byte $24
+
+eval_ok
+	clc
+	sty shift	;return input base (used by 'assem')
+	pla
+	tay		;restore .x & .y
+	pla
+	tax
+	lda count
+	rts
+
+
+
+bases	.byte 16,10, 8, 2
+shifts	.byte  4, 3, 3, 1
+
+	.page
+;  print t2 as 5 hex digits:	BHHLL
+;
+
+putt2	lda t2+2	;get bank (a19-a16)
+	jsr makhex	;make ascii:  msd in .a (ignored) and lsd in .x
+	txa
+	jsr bsout	;print lsd
+	lda t2		;get address (a15-a0)
+	ldx t2+1
+
+
+putwrd	pha		;print address:  msb first, then lsb
+	txa
+	jsr puthex
+	pla
+
+
+puthxs	jsr puthex	;print byte in .a as two hex digits
+
+
+putspc	lda #' '	;print <space>
+	jmp bsout
+
+
+
+cronly	jsr primm	;print <cr><crsr-up>
+	.byte 13,145,0
+	rts
+
+
+
+crlf	lda #cr
+	jmp bsout
+
+
+
+new_line
+	jsr primm	;print <cr><clear_eol><space>
+	.byte 13,27,'Q ',0
+	rts
+
+	.page
+;  print .a as 2 hex digits
+;
+
+puthex	stx sxreg
+	jsr makhex
+	jsr bsout
+	txa
+	ldx sxreg
+	jmp bsout
+
+
+
+;  convert .a to 2 hex digits & put msb in .a, lsb in .x
+;
+
+makhex	pha
+	jsr 1$
+	tax
+	pla
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+
+1$	and #$0f
+	cmp #$0a
+	bcc 2$
+	adc #6
+
+2$	adc #'0'
+	rts
+
+
+;  get last character
+;
+
+glc	dec txtptr
+
+
+;  get next character: return in .a  (return = if buffer empty or eol)
+;
+
+gnc	stx sxreg
+	ldx txtptr
+	lda buf,x
+	beq 1$		;eol-return with z=1
+	cmp #':'
+	beq 1$		;eol-return with z=1
+	cmp #'?'
+1$	php
+	inc txtptr
+	ldx sxreg
+	plp
+	rts
+
+	.page
+;  move t0,t0+1,t0+2 to t2,t2+1,t2+2
+;
+
+t0tot2	lda t0
+	sta t2
+	lda t0+1
+	sta t2+1
+	lda t0+2
+	sta t2+2
+	rts
+
+
+;  subtract t2 from t0, result in t0
+;
+
+sub0m2	sec
+	lda t0
+	sbc t2
+	sta t0
+	lda t0+1
+	sbc t2+1
+	sta t0+1
+	lda t0+2
+	sbc t2+2
+	sta t0+2	;note .c=0 indicates t0 < t2, thus t0 is negative!
+	rts
+
+
+;  decrement t0
+;
+
+dect0	lda #1
+
+subt0	sta sxreg	;subtract .a from t2
+	sec
+	lda t0
+	sbc sxreg
+	sta t0
+	lda t0+1
+	sbc #0
+	sta t0+1
+	lda t0+2
+	sbc #0
+	sta t0+2
+	rts
+
+
+;  decrement t1
+;
+
+dect1	sec
+	lda t1
+	sbc #1
+	sta t1
+	lda t1+1
+	sbc #0
+	sta t1+1
+	lda t1+2
+	sbc #0
+	sta t1+2
+	rts
+
+
+; increment t2
+;
+
+inct2	lda #1
+
+addt2	clc	      	;add .a to t2
+	adc t2
+	sta t2
+	bcc 1$
+	inc t2+1
+	bne 1$
+	inc t2+2
+1$	rts
+
+
+;  decrement t2
+;
+
+dect2	sec
+	lda t2
+	sbc #1
+	sta t2
+	lda t2+1
+	sbc #0
+	sta t2+1
+	lda t2+2
+	sbc #0
+	sta t2+2
+	rts
+
+
+
+; copy t0 to pc registers
+;
+
+t0topc	bcs 1$		;no arg given, just exit
+	lda t0
+	ldy t0+1
+	ldx t0+2
+	sta pcl
+	sty pch
+	stx pcb
+1$	rts
+	.page
+;  read a range - put sa in t2, count in t1   (save ea in 'temps')
+;
+;  returns .c=0 if okay, .c=1 if error (missing parameter or sa < ea)
+;
+
+range
+	bcs 1$		;...branch if missing sa
+	jsr t0tot2	;move sa from t0 to t2
+	jsr parse	;get ea
+	bcs 1$		;...branch if missing ea
+
+	lda t0		;save ea (for 'transfer' cmd)
+	sta temps
+	lda t0+1
+	sta temps+1
+	lda t0+2
+	sta temps+2
+
+	jsr sub0m2	;calculate length = ea - sa  (.c=0 if sa<ea)
+
+	lda t0	   	;move length from t0 to t1
+	sta t1
+	lda t0+1
+	sta t1+1
+	lda t0+2
+	sta t1+2
+
+	bcc 1$		;invert .c from subtraction above
+	clc		;good stuff exits here
+	.byte $24
+1$	sec		;bad  stuff exits here
+	rts
+
+	.page
+;  convert given number from its base to hex
+;
+
+convert
+	jsr pargot	;parse number & put its value in t0
+	jsr new_line
+	lda #'$'	;print hexidecimal conversion of t0
+	jsr bsout
+	lda t0+2	;how big a number is it?
+	beq 10$		;...branch if 'bank' nybble unnecessary
+	jsr makhex
+	txa
+	jsr bsout	;print lsd of this byte
+10$	lda t0
+	ldx t0+1
+	jsr putwrd	;print hex word
+
+	jsr new_line
+	lda #'+'	;print decimal conversion of t0
+	jsr bsout
+	jsr bindec	;convert t0 into packed BCD in hulp
+	lda #0		;no leading zeros
+	ldx #8		;number of digits
+	ldy #3		;number of shifts-1
+	jsr unpack	;convert packed BCD in hulp to ASCII & print it
+
+	jsr new_line
+	lda #'&'	;print octal conversion of t0
+	jsr bsout
+	lda #0		;no leading zeros
+	ldx #8		;number of digits
+	ldy #2		;number of shifts-1
+	jsr unpack_t0	;convert binary in hulp to ASCII & print it
+
+	jsr new_line
+	lda #'%'	;print binary conversion of t0
+	jsr bsout
+	lda #0		;no leading zeros
+	ldx #24		;number of digits
+	ldy #0		;number of shifts-1
+	jsr unpack_t0	;convert binary in hulp to ASCII & print it
+
+	jmp main
+
+	.page
+;  convert from binary to decimal (BCD)
+;
+;	input :	binary value (3 bytes) in T0
+;	output:	decimal value (4 bytes) in HULP as packed BCD
+;
+
+bindec
+	jsr t0tot2		;copy from T0 to T2 (lo/mid/hi)
+
+	lda #0
+	ldx #7
+1$	sta hulp,x	;initialize working registers
+	dex
+	bpl 1$
+	inc hulp+7	;seed value_of_bit with 1
+
+	ldy #23		;loop index (3 bytes = 24 bits)
+	php		;save caller's processor mode
+	sei		;disable IRQ's (but beware NMI's!)
+	sed		;put processor into decimal mode (for ADC's & SBC's)
+
+
+;  main loop. rotate bits right 1 at a time, and if
+;  set add the current value_of_bit to the sum.
+
+
+10$	lsr t2+2	;hi
+	ror t2+1	;mid
+	ror t2		;lo
+	bcc 30$		;...branch if bit not set (its value is 0)
+
+	clc
+	ldx #3
+20$	lda hulp+4,x	;add current value_of_bit (decimal arithmetic)
+	adc hulp,x
+	sta hulp,x
+	dex
+	bpl 20$
+
+30$	clc
+	ldx #3
+40$	lda hulp+4,x	;calculate value of next bit (decimal arithmetic)
+	adc hulp+4,x
+	sta hulp+4,x
+	dex
+	bpl 40$
+	dey
+	bpl 10$		;loop until done conversion
+
+	plp		;restore processor mode
+	rts
+
+	.page
+;  unpack binary value in T0 by first copying it to HULP.
+;
+
+unpack_t0
+	pha		;save .a
+	lda t0
+	sta hulp+2	;copy t0 (lo/mid/hi) to hulp (hi/mid/lo)
+	lda t0+1
+	sta hulp+1
+	lda t0+2
+	sta hulp
+	lda #0
+	sta hulp+3
+	pla		;restore .a & fall into unpack...
+
+
+;  unpack base encoded number, convert it to ascii & print it.
+;
+;  enter:  packed number in HULP  (hi/mid/lo)
+;	   # digits in .x,  # shifts/digit in .y
+;	   .a=0 to trim leading 0's, else .a>0 to print them.
+
+
+unpack
+	sta count
+	sty shift
+10$	ldy shift	;# bits per digit, .x is digit counter
+	lda #0
+20$	asl hulp+3	;lo
+	rol hulp+2	;mid lo
+	rol hulp+1	;mid hi
+	rol hulp	;hi
+	rol a		;shift a digit into .a
+	dey
+	bpl 20$
+
+	tay		;set flags for .a
+	bne 30$
+	cpx #1
+	beq 30$		;...print zero if it's the last digit
+	ldy count
+	beq 40$		;...else skip leading zeros
+
+30$	inc count	;flag a non-zero digit
+	ora #$30	;make it ascii
+	jsr bsout	;print it
+
+40$	dex
+	bne 10$		;...loop until all digits printed
+	rts
+	
+;.end

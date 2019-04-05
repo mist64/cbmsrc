@@ -1,0 +1,38 @@
+	.page
+	.subttl 'basic overflow & patches'
+;  overflow area for basic routines to bulge into in an attempt to
+;  keep sundry entry points constant for pre-release applications.
+
+preamb
+       .byte ',0 YEK'	;fct key preamble
+
+prtdec
+       tax             	;prints decimal value of chr in .a
+       tya             	;saves .y but destroys .x
+       pha
+       lda #0
+       jsr linprt
+       pla
+       tay
+       rts
+
+
+retpat
+       sta curlin+1    	;01/18/84 patch: fixes a problem when return-ing to a
+       dey             	;         'gosub' in direct mode. 'curlin+1' must not be restored
+       tax             	;         to $ff without also resetting 'runmod'.
+       inx
+       bne retpa1      	;branch if 'gosub' was from a program
+       stx runmod      	;(.x=0) else force return to direct mode
+retpa1
+       rts
+
+
+put_io_in_map
+	pha
+	lda #%0000000	;ram0, system rom in, i/o in
+	sta mmu_config_reg
+	pla
+	rts
+
+;.end

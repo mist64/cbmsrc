@@ -1,0 +1,170 @@
+	.page
+	.subttl SCNCLR Command
+
+;*********************************************************
+;
+; scnclr...   clear a screen
+;
+;  Syntax : SCNCLR [n]
+;
+;  where : n follows the GRAPHIC command conventions
+;
+;*********************************************************
+
+scnclr	bne 20$		;if there is an argument, go process it
+
+; no argument : clear all currently visable screens
+
+	jsr unpack_graphm	;convert _graphm back to SCNCLR args
+	cmp #5
+	bcc 10$
+	sbc #5			;factor out 80 column text...
+	beq clear_80		;...that's all there was- go do it & rts
+	pha
+	jsr clear_80		;...clear it, but come back- there's more
+	pla
+10$	tax
+	jmp scnclr_2		;continue on as if user entered arg
+
+
+
+20$	jsr getbyt		;evaluate users argument
+
+
+scnclr_1			;entry from 'GRAPHIC' with clear
+	cpx #5
+	beq clear_80
+	bcc scnclr_2
+	jmp fcerr		;illegal value
+
+scnclr_2
+	txa
+	beq clear_40
+	jsr isgrap		;verify that there is a graphics area allocated
+	txa
+	pha
+	and #1			;split screen?
+	bne 10$			;branch if not
+	jsr clear_40
+
+	lda _mode		;set cursor pos'n for 40 col screen to current
+	pha			;..split value. first make sure 40 col screen
+	bpl 5$			;..is swapped in.
+	jsr _swapper
+5$	lda _split		;get current split position...
+	sec
+	sbc #$30
+	lsr a
+	lsr a
+	lsr a			;..convert to line number...
+	tax
+	ldy #0
+	clc
+	jsr k_jplot		;..and put cursor at the start of that line.
+	pla
+	bpl 10$
+	jsr _swapper		;restore 80 col., if necessary.
+10$	pla
+	and #2			;multi color?
+	beq 20$			;branch if not
+	jsr clear_high_color
+20$	jsr clear_graphics
+
+	lda #0
+	ldx #3
+50$	sta xpos,x      	;set current pos to top left
+	dex
+	bpl 50$
+	rts
+
+
+
+clear_80
+	lda _mode
+	pha
+	bmi 10$
+	jsr _swapper
+10$	lda #$93
+	jsr k_bsout
+	pla
+	bmi 20$
+	jsr _swapper
+20$	rts
+
+
+
+clear_40
+	lda _mode
+	pha
+	bpl 10$
+	jsr _swapper
+10$	lda #$93
+	jsr k_bsout
+	pla
+	bpl 20$
+	jsr _swapper
+20$	rts
+
+
+
+
+
+;general fill sub.: save a for x pages, starting at (0,y)
+
+screen_fill
+	sty grapnt+1
+	ldy #0
+	sty grapnt
+70$	sta (grapnt),y
+	dey
+	bne 70$
+	inc grapnt+1
+	dex
+	bne 70$
+	rts
+
+clear_high_color
+	jsr put_io_in_map
+	sei
+	lda _6510_data_reg
+	pha
+	and #%11111110
+	sta _6510_data_reg
+	lda multicolor_2
+	ldy #>color_ram_hi
+	ldx #4
+	jsr screen_fill
+	pla
+	sta _6510_data_reg
+	cli
+	rts
+
+
+
+clear_graphics
+	lda #0
+	ldy #>graphic_base
+	ldx #32
+	jsr screen_fill		;fill 8k bit map area with 0
+
+	lda fg_bg		;get packed byte of colors for current mode
+	bit _graphm
+	bpl 10$
+	lda fg_mc1
+10$	jsr put_io_in_map
+	ldy #>color_ram_lo
+	ldx #4
+	jsr screen_fill		;fill 1k vm area with color info.
+
+; set up sprite pointers
+
+	ldx #sprite_base/64+7
+	ldy #7
+35$	txa
+	sta color_ram_lo+$3f8,y
+	dex
+	dey
+	bpl 35$
+	rts
+
+;end

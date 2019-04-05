@@ -1,0 +1,548 @@
+	.page
+	.subttl 'code19'
+
+; Natural log function
+;
+; Calculation is by:
+;	ln(f*2^n)=(n+log2(f))*ln(2)
+; An approximation polynomial is used to calculate log2(f). 
+
+; Constants used by log :
+
+fone	.byte @201,0,0,0,0		;1.0
+
+logcn2	.byte 3				;degree-1
+	.byte @177,@136,@126,@313,@171	;0.43425594188
+	.byte @200,@023,@233,@013,@144	;0.57658454134
+	.byte @200,@166,@070,@223,@026	;0.96180075921
+	.byte @202,@070,@252,@073,@040	;2.8853900728
+
+sqr05	.byte @200,@065,@004,@363,@064	;0.707106781	sqr(0.5)
+sqr20	.byte @201,@065,@004,@363,@064	;1.41421356	sqr(2.0)
+neghlf	.byte @200,@200,@000,@000,@000	;-0.5
+log2	.byte @200,@061,@162,@027,@370	;0.693147181	ln(2)
+
+
+log	jsr sign	;is it positive?
+	beq logerr
+	bpl log1
+logerr	jmp fcerr	;can't tolerate neg or zero.
+
+log1	lda facexp	;get exponent into acca.
+	sbc #@177	;remove bias. (carry is off).
+	pha		;save a while.
+	lda #@200
+	sta facexp	;result is fac in range (0.5,1).
+	lda #<sqr05	;get pointer to sqr(0.5).
+	ldy #>sqr05
+	jsr romadd
+	lda #<sqr20
+	ldy #>sqr20
+	jsr romdiv
+	lda #<fone
+	ldy #>fone
+	jsr romsub
+	lda #<logcn2
+	ldy #>logcn2
+	jsr polyx	;evaluate approximation polynomial.
+	lda #<neghlf	;add in last constant.
+	ldy #>neghlf
+	jsr romadd
+	pla		;get exponent back.
+	jsr finlog
+	lda #<log2	;multiply result by ln(2)
+	ldy #>log2
+
+rommlt
+	jsr romupk
+	jmp fmultt	;multiply together.
+
+faddh
+	lda #<fhalf
+	ldy #>fhalf
+
+romadd
+	jsr romupk
+	jmp faddt
+
+romsub
+	jsr romupk
+	jmp fsubt
+
+romdiv
+	jsr romupk
+	jmp fdivt
+			;
+			; multiplication        fac:=arg*fac.
+			;
+
+fmult
+	jsr conupk	;unpack the constant into arg for use.
+
+fmultt	bne 10$		;if fac=0, return. fac is set.
+	jmp multrt
+
+10$	jsr muldiv	;fix up the exponents.
+	lda #0		;to clear result.
+	sta resho
+	sta resmoh
+	sta resmo
+	sta reslo
+	lda facov
+	jsr mltpl1	;*** THIS fixes the DBL-0 bug without causing other grief!  -04 FAB
+	lda faclo	;multiply arg by faclo.
+	jsr mltply
+	lda facmo	;multiply arg by facmo.
+	jsr mltply
+	lda facmoh
+	jsr mltpl1	;*** THIS fixes the DBL-0 bug without causing other grief!  -04 FAB
+	lda facho	;multiply arg by facho.
+	jsr mltpl1
+	jmp movfr	;move result into fac.
+
+mltply	bne mltpl1
+	nop		;sec: FIXES THE 'DOUBLE ZERO' BUG! (but causes other grief! removed -04 FAB)
+	jmp mulshf	;normalize result and return. shift result right 1 byte
+
+mltpl1	lsr a
+	ora #$80	;will flag end of shifting
+
+mltpl2	tay
+	bcc mltpl3	;if mult bit=0, just shift.
+	clc
+	lda reslo
+	adc arglo
+	sta reslo
+	lda resmo
+	adc argmo
+	sta resmo
+	lda resmoh
+	adc argmoh
+	sta resmoh
+	lda resho
+	adc argho
+	sta resho
+
+mltpl3	ror resho
+	ror resmoh
+	ror resmo
+	ror reslo
+	ror facov	;save for rounding.
+	tya
+	lsr a		;clear msb so we get a closer to 0.
+	bne mltpl2	;slow as a turtle.
+multrt	rts
+
+
+; unpack a rom constant into the fac
+;
+
+romupk	sta index1
+	sty index1+1
+	ldy #4
+	lda (index1),y	;it's in rom, so ok to use ind.
+	sta arglo
+	dey
+	lda (index1),y
+	sta argmo
+	dey
+	lda (index1),y
+	sta argmoh
+	dey
+	lda (index1),y
+	sta argsgn
+	eor facsgn
+	sta arisgn
+	lda argsgn
+	ora #$80
+	sta argho
+	dey
+	lda (index1),y
+	sta argexp
+	lda facexp	;sets code of facexp.
+	rts
+
+
+
+; unpack a ram constant into the fac
+;
+
+conupk	sta index1
+	sty index1+1
+
+	lda mmu_config_reg
+	pha			;preserve caller's memory config
+
+	ldy #4
+	jsr indin1_ram1
+	sta arglo
+	dey
+	jsr indin1_ram1
+	sta argmo
+	dey
+	jsr indin1_ram1
+	sta argmoh
+	dey
+	jsr indin1_ram1
+	sta argsgn
+	eor facsgn
+	sta arisgn
+	lda argsgn
+	ora #@200
+	sta argho
+	dey
+	jsr indin1_ram1
+	sta argexp
+
+	pla
+	sta mmu_config_reg	;restore caller's memory config
+
+	lda facexp	;set codes of facexp.
+	rts
+
+
+			;check special cases and add exponents for fmult,fdiv.
+muldiv
+	lda argexp	;exp of arg=0?
+
+mldexp	beq zeremv	;so we get zero exponent.
+	clc
+	adc facexp	;result is in acca.
+	bcc tryoff	;find (c) xor (n).
+	bmi goover	;overflow if bits match.
+	clc
+	.byte $2c
+
+tryoff
+	bpl zeremv	;underflow.
+	adc #@200	;add bias.
+	sta facexp
+	bne 10$
+	jmp zeroml	;zero the rest of it.
+
+10$	lda arisgn
+	sta facsgn	;arisgn is result's sign.
+	rts		;done
+
+mldvex
+	lda facsgn	;get sign
+	eor #@377	;complement it.
+	bmi goover
+zeremv
+	pla		;get addr off stack.
+	pla
+	jmp zerofc	;underflow.
+
+
+goover
+	jmp overr	;overflow.
+			;multiply fac by 10.
+mul10
+	jsr movaf	;copy fac into arg.
+	tax
+	beq mul10r	;if (fac)=0, got answer.
+	clc
+	adc #2		;augment exp by 2.
+	bcs goover	;overflow.
+finml6
+	ldx #0
+	stx arisgn	;signs are same.
+	jsr faddc	;add together.
+	inc facexp	;multiply by two.
+	beq goover	;overflow.
+mul10r	rts
+
+tenc	.byte @204,@040,@000,@000,@000	;10.
+
+
+
+doverr
+	ldx #errdvo
+	jmp error
+
+
+div10
+	jsr movaf	;move fac to arg.
+	lda #<tenc
+	ldy #>tenc	;point to constant of 10.0.
+	ldx #0		;signs are both positive.
+fdivf
+	stx arisgn
+	jsr movfm	;put it into fac.
+	jmp fdivt	;skip over next two bytes.
+
+
+
+fdiv
+	jsr conupk	;unpack constant.
+fdivt
+	beq doverr	;can't divide by zero.
+			;not enough room to store result.
+	jsr round	;take facov into account in fac.
+	lda #0		;negate facexp.
+	sec
+	sbc facexp
+	sta facexp
+	jsr muldiv	;fix up exponents.
+	inc facexp	;scale it right.
+	beq goover	;overflow.
+	ldx #$fc	;set up procedure.
+	lda #1
+divide			;this is the best code in the whole pile.
+	ldy argho	;see what relation holds.
+	cpy facho
+	bne savquo	;(c)=0,1. n(c=0)=0.
+	ldy argmoh
+	cpy facmoh
+	bne savquo
+	ldy argmo
+	cpy facmo
+	bne savquo
+	ldy arglo
+	cpy faclo
+savquo
+	php
+	rol a		;save result.
+	bcc qshft	;if not done, continue.
+	inx
+	sta reslo,x
+	beq ld100
+	bpl divnrm	;note this req 1 no ram then access.
+	lda #1
+qshft
+	plp		;return condition codes.
+	bcs divsub	;fac .le. arg.
+shfarg
+	asl arglo	;shift arg one place left.
+	rol argmo
+	rol argmoh
+	rol argho
+	bcs savquo	;save a result of one for this position.
+			;and divide.
+	bmi divide	;if msb on, go decide whether to sub.
+	bpl savquo
+
+divsub
+	tay		;notice c must be on here.
+	lda arglo
+	sbc faclo
+	sta arglo
+	lda argmo
+	sbc facmo
+	sta argmo
+	lda argmoh
+	sbc facmoh
+	sta argmoh
+	lda argho
+	sbc facho
+	sta argho
+	tya
+	jmp shfarg
+
+
+ld100
+	lda #@100	;only want two more bits.
+	bne qshft	;always branches.
+divnrm	
+	asl a		;get last two bits into msb and b6.
+	asl a
+	asl a
+	asl a
+	asl a
+	asl a
+	sta facov
+	plp
+
+
+
+movfr	lda resho	;move result to fac.
+	sta facho
+	lda resmoh
+	sta facmoh
+	lda resmo
+	sta facmo
+	lda reslo	;move lo and sign.
+	sta faclo
+	jmp normal	;all done.
+
+
+
+movfm	sta index1	;move memory into fac from rom (unpacked).
+	sty index1+1
+	ldy #4
+	lda (index1),y
+	sta faclo
+	dey
+	lda (index1),y
+	sta facmo
+	dey
+	lda (index1),y
+	sta facmoh
+	dey
+	lda (index1),y
+	sta facsgn
+	ora #@200
+	sta facho
+	dey
+	lda (index1),y
+	sta facexp
+	sty facov
+	rts
+
+; Move number from fac to memory.
+
+mov2f	ldx #tempf2	;move from fac to temp fac 2
+	.byte $2c
+
+mov1f	ldx #tempf1	;move from fac to temp fac 1
+	ldy #0
+
+movmf	jsr round
+	stx index1
+	sty index1+1
+	ldy #4
+	lda faclo
+	sta (index),y
+	dey
+	lda facmo
+	sta (index),y
+	dey
+	lda facmoh
+	sta (index),y
+	dey
+	lda facsgn	;include sign in ho.
+	ora #@177
+	and facho
+	sta (index),y
+	dey
+	lda facexp
+	sta (index),y
+	sty facov	;zero it since rounded.
+	rts		;(y)=0.
+
+movfa	lda argsgn
+
+movfa1	sta facsgn
+	ldx #5
+
+1$	lda argexp-1,x
+	sta facexp-1,x
+	dex
+	bne 1$
+	stx facov
+	rts
+
+movaf	jsr round
+
+movef	ldx #6
+
+movafl	lda facexp-1,x
+	sta argexp-1,x
+	dex
+	bne movafl
+	stx facov	;zero it since rounded.
+movrts	rts
+
+
+round
+	lda facexp	;zero?
+	beq movrts	;yes, done rounding,
+	asl facov	;round?
+	bcc movrts	;no, msb off.
+incrnd
+	jsr incfac	;yes, add one to lsb(fac).
+	bne movrts	;no carry means done.
+	jmp rndshf	;squeez msb in and rts.
+			;	
+			; note (c) =1 since incpac doesn't touch c.
+			;
+			;put sign in fac in acca.
+sign
+	lda facexp
+	beq signrt	;if number is zero, so is result.
+fcsign
+	lda facsgn
+fcomps
+	rol a
+	lda #$ff	;assume negative.
+	bcs signrt
+	lda #1		;get +1.
+signrt	rts
+
+			;sgn function.
+sgn
+	jsr sign
+			;float the signed integer in accb.
+float
+	sta facho	;put (accb) in high order.
+	lda #0
+	sta facho+1
+	ldx #@210	;get the exponent.
+			;float the signed number in fac.
+
+floats
+	lda facho
+	eor #@377
+	rol a		;get comp of sign in carry.
+floatc
+	lda #0		;zero (acca) but not carry.
+	sta faclo
+	sta facmo
+floatb
+	stx facexp
+	sta facov
+	sta facsgn
+	jmp fadflt
+
+			;absolute value of fac.
+abs
+	lsr facsgn
+	rts
+			;
+			;compare two numbers
+			;	
+			;a=1 if arg .lt. fac.
+			;a=0 if arg=fac.
+			;a=-1 if arg .gt. fac.
+			;
+
+fcomp
+	sta index2
+	sty index2+1
+	ldy #0
+	lda (index2),y	;has argexp.
+	iny		;bump pointer up.
+	tax		;save a in x and reset codes.
+	beq sign
+	lda (index2),y
+	eor facsgn	;signs the same.
+	bmi fcsign	;signs differ so result is 
+	cpx facexp	;sign of fac again.
+	bne fcompc
+
+	lda (index2),y
+	ora #@200
+	cmp facho
+	bne fcompc
+	iny
+	lda (index2),y
+	cmp facmoh
+	bne fcompc
+	iny
+	lda (index2),y
+	cmp facmo
+	bne fcompc
+	iny
+	lda #@177
+	cmp facov
+	lda (index2),y
+	sbc faclo	;get zero if equal.
+	beq qintrt
+
+fcompc
+	lda facsgn
+	bcc fcompd
+	eor #@377
+fcompd	jmp fcomps	;a part of sign sets up acca.
+
+;end

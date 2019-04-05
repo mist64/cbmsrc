@@ -1,0 +1,14 @@
+	.page
+	.subttl	TRAP Instruction
+
+trap	jsr errdir
+	jsr chrgot	;if no #, means 'turn off trap'
+	beq 1$
+	jsr getwrd
+	sty trapno
+	.byte $2c
+1$	lda #$ff	;flag no trap
+	sta trapno+1
+	rts
+
+;end

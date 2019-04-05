@@ -1,0 +1,69 @@
+	.page
+	.subttl Clear Hires Mode Routines
+
+; clear (de-allocate) 10k graphics area, if installed
+
+clrhir	lda mvdflg      ;see if already cleared
+	bne 1$		;branch if not,
+	rts		;else done
+
+1$	ldy #0
+	sty mvdflg      ;flag 'moved'
+	sty index1      ;set up pointers for memory transfer
+	sty index2
+	lda #$1c
+	sta index1+1    ;destination
+	lda #$40
+	sta index2+1    ;origin
+
+2$	jsr indin2      ;lda (index2),y
+	sta (index1),y
+	iny
+	bne 2$		;do 1 full page
+	inc index1+1
+	inc index2+1
+	lda text_top+1	;test if page containing last bytes was moved
+	cmp index2+1
+	bcs 2$		;keep going until msb of index2 > msb of strend
+
+	sec
+	lda txttab+1
+	sbc #$24
+	sta txttab+1
+
+	lda text_top+1
+	sbc #$24
+	sta text_top+1
+
+	lda datptr+1
+	sbc #$24
+	sta datptr+1
+
+	jmp seth30
+
+
+
+addoff	lda (fndpnt),y
+	bit mvdflg
+	bne 10$			;if z then subtract.else add $30
+	sec
+	sbc #$24
+	sta (fndpnt),y
+	rts
+
+10$	clc
+	adc #$24
+	sta (fndpnt),y
+	rts
+
+
+
+isgrap	lda mvdflg		;test if graphics mode allocated, error if not
+	beq isgrer      	;oh-oh, bad news
+	rts			;ok!
+
+isgrer	ldx #errng      	;'no graphics area' error
+	jmp error
+
+
+;.end

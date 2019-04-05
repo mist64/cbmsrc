@@ -1,0 +1,41 @@
+	.page
+	.subttl SWAP Command
+
+; set up for call to kernal routine
+;
+;	syntax SWAP length,c128_address,ramdisk_address,ramdisk_bank
+;
+;	c128_bank is that assigned by the BANK command
+
+swap	lda #$86
+
+swap_01
+	pha			;save command
+	jsr getwrd		;get length
+	jsr put_io_in_map
+	sty _dma+7
+	sta _dma+8
+
+	jsr comwrd		;eat comma, get c128 address
+	jsr put_io_in_map
+	sty _dma+2
+	sta _dma+3
+
+	jsr comwrd		;eat comma, get ramdisk address
+	jsr put_io_in_map
+	sty _dma+4
+	sta _dma+5
+
+	jsr combyt		;eat comma, get bank number
+	cpx #16
+	bcs 20$
+	jsr put_io_in_map
+	stx _dma+6
+
+	pla			;restore command
+	tay
+	ldx current_bank
+	jmp _do_dma
+
+20$	jmp fcerr		;illegal value error
+;end

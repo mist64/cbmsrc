@@ -1,0 +1,32 @@
+	.page
+	.subttl SYS Command
+
+
+sys	jsr getwrd	;convert arg. to integer value
+
+	lda linnum	;set up arg's for call to 'long jsr'
+	sta _pclo
+	lda linnum+1
+	sta _pchi
+	lda current_bank
+	sta _bank
+
+	jsr optbyt	;(optional) .A reg arg
+	bcc 10$
+	stx _a_reg
+
+10$	jsr optbyt	;(optional) .X reg arg
+	bcc 20$
+	stx _x_reg
+
+20$	jsr optbyt	;(optional) .Y reg arg
+	bcc 30$
+	stx _y_reg
+
+30$	jsr optbyt	;(optional) .S reg arg
+	bcc 40$
+	stx _s_reg
+
+40$	jmp _jjsr	;far, far away
+
+;end

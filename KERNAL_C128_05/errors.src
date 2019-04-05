@@ -1,0 +1,68 @@
+	.page
+	.subttl  error handler (09/17/84):  c/128
+
+; *******************************************************
+; *			stop				*
+; *							*
+; * >check stop key flag and return = if true. if true  *
+; *  then close active channels & flush keyboard queue  *
+; *							*
+; * >note: returns scan from last keyboard row in .a	*
+; *******************************************************
+
+nstop
+	lda stkey	;value of last row
+	cmp #$7f	;check stop key position
+	bne 1$		;not down
+	php
+	jsr clrch	;clear channels
+	sta ndx		;flush queue
+	plp
+1$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; *******************************************************
+; *		   error handler			*
+; *							*
+; *  > prints kernal error message if display enabled.	*
+; *  > returns with error # in .a and .c=1		*
+; *******************************************************
+
+error1	lda #1		;too many files
+	.byte $2c
+error2	lda #2		;file open
+	.byte $2c
+error3	lda #3		;file not open
+	.byte $2c
+error4	lda #4		;file not found
+	.byte $2c
+error5	lda #5		;device not present
+	.byte $2c
+error6	lda #6		;not input file
+	.byte $2c
+error7	lda #7		;not output file
+	.byte $2c
+error8	lda #8		;missing file name
+	.byte $2c
+error9	lda #9		;bad device #
+	.byte $2c
+error16	lda #16		;out of memory
+
+	pha		;error number on stack
+	jsr clrch	;restore i/o channels
+
+	ldy #ms1-ms1
+	bit msgflg
+	bvc 1$		;...branch if display disabled
+
+	jsr msg		;print 'i/o error #'
+	pla
+	pha
+	ora #$30	;make error # ascii
+	jsr bsout	;print it
+
+1$	pla		;restore error code
+	sec		;signal error
+	rts
+
+;.end

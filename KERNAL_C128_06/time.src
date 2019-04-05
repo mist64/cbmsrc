@@ -1,0 +1,91 @@
+	.page
+	.subttl  time functions (01/28/85)
+
+; ***************************************************************
+; *	time consists of three functions:			*
+; *								*
+; * (1) udtim - update time registers as time-of-day clock and	*
+; *             decrement timer registers. this routine should	*
+; *		be called by irq handler for correct time.	*
+; * (2) settim- set time.  .y=msd, .x=next significant, .a=lsd	*
+; * (3) rdtim - read time. .y=msd, .x=next significant, .a=lsd	*
+; *								*
+; ***************************************************************
+
+udtim
+	inc time+2	;proceed with an increment of the time registers
+	bne 1$
+	inc time+1
+	bne 1$
+	inc time
+
+1$	sec		;check for roll-over 23:59:59
+	lda time+2
+	sbc #$01
+	lda time+1
+	sbc #$1a
+	lda time
+	sbc #$4f
+	bcc 2$
+
+	ldx #0		;time has rolled- reset (zero) time registers
+	stx time
+	stx time+1
+	stx time+2
+
+2$	lda timer	;decrement timer registers
+	bne 4$
+	lda timer+1
+	bne 3$
+	dec timer+2
+3$	dec timer+1
+4$	dec timer
+	
+	bit palnts
+	bpl ud60	;...branch if not PAL mode
+	dec palcnt
+	bpl ud60	;...branch if no correction needed at this time
+	lda #5
+	sta palcnt
+	bne udtim	;always...give one extra tick to 50Hz systems
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+ud60			;set stop key flag here
+	lda rows	;wait for it to settle
+	cmp rows
+	bne ud60	;still bouncing
+	tax		;set flags...
+	bmi 2$		;no stop key...exit stop key=$7f
+
+	ldx #$ff-$42	;check for a shift key
+	stx colm
+
+1$	ldx rows	;wait to settle...
+	cpx rows
+	bne 1$
+	sta colm 	;watch out...stop key .a=$7f...same as colms was...
+	inx		;any key down aborts
+	bne 3$		;leave same as before...
+
+2$	sta stkey	;save for other routines
+3$	rts
+
+
+
+rdtim			;read tod registers
+	sei		;keep time from changing
+	lda time+2	;get lsd
+	ldx time+1	;get next most sig.
+	ldy time	;get msd
+
+
+
+settim			;set tod registers
+	sei		;keep time from changing
+	sta time+2	;store lsd
+	stx time+1	;next most significant
+	sty time	;store msd
+	cli
+	rts
+
+;.end

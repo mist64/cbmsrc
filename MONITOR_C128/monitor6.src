@@ -1,0 +1,150 @@
+	.page
+	.subttl  monitor6 - disk commands
+
+;********************************************
+;
+;	Disk Command/Status Operations
+;
+;	@[device-number][,command-string]
+;
+;********************************************
+
+disk
+	bne 10$		;...branch if given device #
+	ldx #8		;default device number
+	.byte $2c
+
+10$	ldx t0		;get given device #
+	cpx #4
+	bcc disk_err	;...branch if bad device #
+	cpx #31
+	bcs disk_err
+	stx t0
+
+	lda #0
+	sta t0+2	;clear line # register (in case DIR cmd)
+	sta fnlen
+	tax
+	jsr setbnk	;cmd string in in ram0 (in case DIR cmd)
+
+	jsr gnc		;peek at first character of disk command
+	dec txtptr	;backup so we will re-get this character later
+	cmp #'$'
+	beq disk_dir	;...branch if directory read
+
+
+;  open disk command channel & pass it given command
+
+
+	lda #0		;la
+	ldx t0		;fa
+	ldy #15		;sa
+	jsr setlfs
+	jsr open	;open disk command channel
+	bcs disk_done	;...branch on error
+
+	ldx #0
+	jsr chkout	;make it an output channel
+	bcs disk_done	;...branch on error
+
+20$	ldx txtptr	;get next character
+	inc txtptr
+	lda buf,x
+	beq disk_st	;...branch if eol
+	jsr bsout	;xmit character to disk
+	bcc 20$		;...loop until error or eol
+
+	.page
+disk_st
+	jsr clrch	;read & report disk status
+	jsr crlf
+	ldx #0
+	jsr chkin	;make it an input channel
+	bcs disk_done	;...branch on error
+
+10$	jsr basin	;get a character from disk
+	jsr bsout	;print it
+	cmp #cr
+	beq disk_done	;...branch if eol
+	lda status
+	and #$bf	;strip eoi bit
+	beq 10$		;...loop until error or eol
+
+
+
+disk_done
+	jsr clrch
+	lda #0
+	sec
+	jsr close
+	jmp main
+
+
+
+disk_err
+	jmp error
+
+	.page
+;  read & display the disk directory
+
+disk_dir
+	ldy #$ff	;determine directory string length
+	ldx txtptr
+	dex
+	
+10$	iny
+	inx
+	lda buf,x	;get a character
+	bne 10$		;...loop until eol
+
+	tya		;length
+	ldx txtptr	;fnadr low
+	ldy #>buf	;fnadr high
+	jsr setnam
+	lda #0		;la
+	ldx t0		;fa
+	ldy #$60	;sa
+	jsr setlfs
+	jsr open	;open directory channel
+	bcs disk_done	;...branch on error
+	ldx #0
+	jsr chkin	;make it an input channel
+
+	jsr crlf
+
+	ldy #3		;first pass only- trash first two bytes read
+
+20$	sty t1		;loop counter
+25$	jsr basin
+	sta t0		;get # blocks low
+	lda status
+	bne disk_done	;...branch if error
+	jsr basin
+	sta t0+1	;get # blocks high
+	lda status
+	bne disk_done	;...branch if error
+	dec t1
+	bne 25$		;...loop until done
+
+	jsr bindec	;convert # blocks to decimal
+	lda #0		;no leading zeros
+	ldx #8		;max digits
+	ldy #3		;required # shifts for decimal value
+	jsr unpack	;print # blocks
+	lda #' '
+	jsr bsout	;print space  (to match loaded directory display)
+
+30$	jsr basin	;read & print filename & filetype
+	beq 40$		;...branch if eol
+	ldx status
+	bne disk_done	;...branch if error
+	jsr bsout
+	bcc 30$		;...loop always
+
+40$	jsr crlf	;start a new line
+	jsr stop
+	beq disk_done	;...branch if user hit STOP
+	ldy #2
+	bne 20$		;...loop always
+
+;.end

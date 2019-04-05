@@ -1,0 +1,37 @@
+	.page
+	.subttl  tape interrupt handler  (12/26/84)
+
+;/////////////   T A P E   I R Q   I N T E R R U P T   C O D E   \\\\\\\\\\\\
+
+; simirq - simulate an irq (for cassette read)
+;  (enter by a 'jsr simirq')
+
+simirq
+	php
+	pla		;fix the break flag
+	and #$ef
+	pha
+	jmp irq		;make like an irq occurred
+
+
+
+tapeirq
+	lda r6510	;cassette switch handler
+	and #$10
+	beq 1$		;...branch if cassette switch down
+
+	ldy #0
+	sty cas1	;reset cassette 'off' switch
+	lda r6510
+	ora #$20
+	bne 2$		;...branch always & turn motor off
+
+1$	lda cas1
+	bne 3$		;...branch if already 'on'
+	lda r6510
+	and #$df	;turn motor on
+
+2$	sta r6510	;make motor perform per switches
+3$	rts
+
+;.end

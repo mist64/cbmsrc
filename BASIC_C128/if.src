@@ -1,0 +1,149 @@
+	.page
+	.subttl IF statement
+
+;****************************************************************
+;*
+;* if statment
+;*
+;*	IF exp {GOTO line#  | THEN {line# | statements | b-block} }
+;*		[:ELSE {line# | statements | b-block} ]
+;*	
+;* b-block
+;*
+;*	BEGIN : [statement(s) on one or more lines] : BEND
+;*
+;****************************************************************
+
+if	jsr frmevl	;evaluate the conditional expression
+	jsr chrgot	;get current character.
+	cmp #gototk	;is terminating character a gototk?
+	beq 10$		;yes.
+	lda #thentk	;no, it must be "then".
+	jsr synchr
+
+10$	lda facexp	;test truth value of argument
+	bne if_true	;branch if true
+
+if_false
+	jsr chrgot	;is there a b-block?
+	cmp #esc_cmd_tk
+	bne 20$		;no, must be an escape command
+	iny		;might be, look at escape token
+	jsr indtxt
+	cmp #begintk
+	bne 20$		;branch if not
+	jsr find_bend	;skip to end of b-block
+
+20$	jsr data	;may be 'else' clause. first skip over 'then' clause..
+	ldy #0
+	jsr indtxt	;..and see if end of stmt or end of line.
+	beq rem	  	;end of line, no 'else'. go to next line.
+	jsr chrget	;another statement on this line.. is it 'else'?
+	cmp #elsetk
+	bne 20$		;no, keep looking on this line.
+	jsr chrget	;yes! skip over token ,and execute clause (below).
+
+if_true	jsr chrgot
+	beq 20$		;branch if end of statement
+	bcs 10$		;branch if not a number
+	jmp goto	;here if of the form 'THEN line#'
+
+10$	cmp #esc_cmd_tk	;is this the beginning of a b-block?
+	bne 20$		;no, must be an escape command
+	iny		;might be, look at escape token
+	jsr indtxt
+	cmp #begintk
+	bne 20$
+	jsr chrget	;skip over 'BEGIN' if so...
+	jsr chrget	;..and the second token, as well.
+
+20$	jsr chrgot	;get back original character, & set up flags
+	jmp xeqcm3	;..and go execute whatever it is
+	
+	.page
+
+find_bend ;... subroutine to find end of current b-block
+
+	jsr chrget
+	bne 20$
+
+; end of statement.. set up next
+
+10$	cmp #':'	;is this eol?
+	beq find_bend	;no, keep looking
+
+15$	bit runmod	;end of line. are we in direct mode?
+	bpl 99$		;yes,'block terminator not found' error
+
+	ldy #2
+	jsr indtxt	;end of text?
+	beq 99$		;yes, msb of next stmt pointer = 0. error.
+
+	iny
+	jsr indtxt
+	sta curlin	;set up next line of text
+	iny
+	jsr indtxt
+	sta curlin+1
+	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc find_bend
+	inc txtptr+1
+	bne find_bend	;always
+
+20$	cmp #'"'
+	bne 30$
+	jsr un_quote	;look for terminating quote, or e-o-l
+	beq 10$		;e-o-l, or ':' after closing quote
+	bne find_bend	;..else normal char, keep looking
+
+30$	cmp #remtk	;is this a 'rem'?
+	bne 35$		;if not, go on
+	jsr rem		;yes, trash this line
+	jmp 15$		;..and go test for end of text
+
+35$	cmp #esc_cmd_tk	;is this a BEND?
+	bne find_bend	;can't be, has to be an escape
+
+	jsr chrget	;skip over esc token
+	cmp #bendtk
+	beq 40$		;this is what we came for. bye!
+
+	cmp #begintk	;not a BEND. is it a BEGIN?
+	bne find_bend	;it's just a normal, stick-in-the-mud char. keep looking.
+
+	jsr find_bend	;oh-oh, recursion. Dr. Ja-Ja warned me about this.
+	jmp find_bend
+
+40$	rts
+
+99$	ldx #err_no_bend
+	jmp error
+
+un_quote		;txtptr points to a '"'. look for closing '"', or e-o-l
+	ldy #0
+10$	inc txtptr
+	bne 20$
+	inc txtptr+1
+20$	jsr indtxt
+	beq 30$		;e-o-l, get out here with .z set and a '00' in .a
+	cmp #'"'
+	bne 10$		;keep looking until quote
+	jmp chrget	;got closing quote, get byte after quote, set flags
+30$	rts
+
+	.page
+
+else	cmp #esc_cmd_tk	;is this of the form "ELSE b-block"?
+	bne 10$		;no, must be an escape command
+	iny		;might be, look at escape token
+	jsr indtxt
+	cmp #begintk
+	bne 10$		;no, justa plain-old "ELSE statement"
+	jsr find_bend	;yes, it is a b-block. skip over the b-block.
+10$	jmp rem
+
+
+;end

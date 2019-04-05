@@ -1,0 +1,285 @@
+	.page
+	.subttl formula evaluator
+; 
+; formula evaluator routine
+; 
+; the formula evaluator starts with (txtptr) pointing to the first character
+; in the formula. at the end (txtptr) points to the terminator.
+; the result is left in the fac. on return (a) does not reflect the terminator.
+; 
+; the formula evaluator uses the operator (optab) to determine precedence and
+; dispatch addresses for each operator.
+; a temporary result on the stack has the following format.
+;
+;     the address of the operator routine.
+;     the floating point temporary result.
+;     the precedence of the operator.
+; 
+
+
+frmevl	ldx txtptr		;txtptr points to 1st char. in formula
+	bne 1$
+	dec txtptr+1
+1$	dec txtptr
+	ldx #0	   		;dummy precedence = 0
+	.byte $24
+lpoper	pha			;save precedence
+	txa
+	pha
+
+	tsx			;confirm enough system stack available (recursive calls)
+	cpx #<sysstk+44		;bottom of stack + room for error handling
+	bcc sterr		;formula too complex
+	jsr eval
+	lda #0
+	sta opmask
+tstop
+	jsr chrgot		;last char
+loprel
+	sec			;prepare to subtract.
+	sbc #greatk		;is current character a relation?
+	bcc endrel		;no, relations all through.
+	cmp #lesstk-greatk+1	;really relational?
+	bcs endrel		;no, just big.
+	cmp #1			;reset carry for zero only.
+	rol a			;0 to 1, 1 to 2, 2 to 4.
+	eor #1
+	eor opmask		;bring in the old bits.
+	cmp opmask		;make sure that the new mask is bigger. 
+	bcc snerr5		;syntax error, because two of the same.
+	sta opmask		;save mask.
+	jsr chrget
+	jmp loprel		;get the next candidate.
+endrel
+	ldx opmask		;were there any?
+	bne finrel		;yes, handle as special op.
+	bcs qop			;not an operator.
+	adc #greatk-plustk
+	bcc qop			;not an operator.
+	adc valtyp		;(c)=1.
+	bne *+5
+	jmp cat			;only if (a)=0 and (valtyp)=-1 (a str).
+
+	adc #$ff		;get back original (a).
+	sta index1
+	asl a			;multiply by two.
+	adc index1		;by three.
+	tay			;set up for later.
+qprec
+	pla			;get previous precedence.
+	cmp optab,y		;is old precedence greater or equal?
+	bcs qchnum		;yes, go operate.
+	jsr chknum		;can't be string here.
+doprec
+	pha			;save old precedence.
+negprc
+	jsr dopre1		;save a return for op.
+	pla			;pull off previous precedence.
+	ldy opptr		;get pointer to op.
+	bpl qprec1		;that' a real operator.
+	tax			;done?
+	beq qopgo		;done!
+	bne pulstk
+finrel
+	lsr valtyp		;get value type into "c".
+	txa
+	rol a			;put valtyp into low order bit of mask.
+	ldx txtptr		;decrement text pointer.
+	bne finre2
+	dec txtptr+1
+finre2
+	dec txtptr
+	ldy #ptdorl-optab	;make (yreg) point at operator entry.
+	sta opmask		;save the operation mask.
+	bne qprec		;branch always
+
+qprec1				;note b7(valtyp)=0 so chknum call is ok.
+	cmp optab,y		;last precedence is greater?
+	bcs pulstk		;yes, go operate.
+	bcc doprec		;no, save argument and get other operand.
+dopre1
+	lda optab+2,y	
+	pha			;disp addr goes on stack.
+	lda optab+1,y
+	pha
+	jsr pushf1		;save fac on stack unpacked.
+	lda opmask		;(acca) may be mask for rel.
+	jmp lpoper
+
+snerr5
+	jmp snerr		;go to an error.
+
+pushf1
+	lda facsgn		;save fac on stack unpacked
+	ldx optab,y		;precedence
+	tay
+	clc
+	pla			;pointer into stack
+	adc #1
+	sta index1
+	pla
+	adc #0
+	sta index1+1
+	tya
+	pha
+	jsr round		;put rounded fac on stack
+	lda faclo
+	pha
+	lda facmo
+	pha
+	lda facmoh
+	pha
+	lda facho
+	pha
+	lda facexp
+	pha
+	jmp (index1)		;return
+
+qop
+	ldy #255
+	pla			;get high precedence of last op.
+qopgo
+	beq qoprts		;done!
+qchnum
+	cmp #100		;relational operator?
+	beq unpstk		;yes, don't check operand.
+	jsr chknum		;must be number
+unpstk
+	sty opptr		;save operator's pointer fro next time.
+pulstk
+	pla			;get mask for rel. op. if it is one
+	lsr a	    		;setup c for dorel's chkval
+	sta domask		;save for "docmp".
+	pla			;unpack stack into arg
+	sta argexp
+	pla
+	sta argho
+	pla
+	sta argmoh
+	pla
+	sta argmo
+	pla
+	sta arglo
+	pla
+	sta argsgn
+	eor facsgn		;get probable result sign.
+	sta arisgn		;sign used by add, sub, mul, div
+qoprts
+	lda facexp		;get it and set codes.
+	rts			;return
+	.page
+eval
+	jmp (ieval)
+neval
+	lda #0
+	sta valtyp		;assume numeric
+eval0
+	jsr chrget		;get a character
+	bcs eval2
+eval1
+	ldx #0			;flag 'bank 0' (text bank)
+	jmp fin	  		;it is a number
+eval2
+	jsr isletc		;variable name?
+	bcc *+5
+	jmp is_variable		;yes.
+	cmp #pi	  		;pi?
+	bne qdot
+	lda #<pival
+	ldy #>pival
+	jsr movfm		;put value in for p1.
+	jmp chrget
+pival
+	.byte @202,@111,@017,@332,@241
+
+qdot
+	cmp #'.'		;constant?
+	beq eval1
+	cmp #minutk		;negation?
+	beq domin		;yes.
+	cmp #plustk
+	beq eval0
+	cmp #'"'		;string?
+	bne eval3
+strtxt
+	lda txtptr
+	ldy txtptr+1
+	adc #0	   		;c=1
+	bcc strtx2
+	iny
+strtx2	jsr strlit		;process string
+
+st2txt	ldx strng2
+	ldy strng2+1
+	stx txtptr
+	sty txtptr+1
+	rts
+
+eval3
+	cmp #nottk		;not?
+	bne eval4
+	ldy #24
+	bne gonprc		;branch always
+
+notop
+	jsr ayint		;integerize
+	lda faclo		;get argument
+	eor #$ff
+	tay
+	lda facmo
+	eor #$ff
+givayf
+	jsr stoint		;integer to float routine
+	jmp floats
+eval4
+	cmp #fntk		;user defined function?
+	bne *+5
+	jmp fndoer
+
+	cmp #onefun		;function name?
+	bcc parchk		;functions are the highest numbered.
+	jmp isfun		;characters so no need to check.
+
+parchk
+	jsr chkopn		;only thing left is formula in parens
+	jsr frmevl		;a formula in parens
+chkcls
+	lda #')'		;close paren?
+	.byte   $2c
+chkopn
+	lda #'('		;open paren?
+	.byte $2c
+chkcom
+	lda #','		;comma?
+				;
+				;synchr routine
+				;
+			;"synchr" looks at the current character to make sure 
+			;it is the specific thing loaded into acca just before
+			;the call to "synchr", if not, it calls the "syntax
+			;error" routine. otherwise it gobbles the next char
+			;and returns.
+			;
+			; (a)=new char and txtptr is advanced by"chrget".
+			;
+synchr
+	ldy #0
+	sta syntmp
+	jsr indtxt
+	cmp syntmp
+	bne snerr
+	jmp chrget		;ok
+
+snerr
+	ldx #errsn		;'syntax error'
+	jmp error
+
+negoff	=negtab-optab
+
+domin
+	ldy #negoff		;precedence below '-'
+gonprc
+	pla			;get rid of rts addr.
+	pla
+	jmp negprc		;do negation
+;end

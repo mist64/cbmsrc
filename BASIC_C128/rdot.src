@@ -1,0 +1,33 @@
+	.page
+	.subttl  RDOT Function
+
+;**************************************************************
+;
+;  rdot(n)  --  read characteristics of current xpos/ypos
+;		 n = 0 : x-position
+;		     1 : y-position
+;		     2 : color selection (0-3)
+;
+;**************************************************************
+
+rdot	jsr conint      ;get 1 byte arg. in x
+	cpx #2
+	bcc 30$		;0 or 1
+	beq 10$
+	jmp fcerr	;>2, error
+
+10$	jsr readpt      ;get color
+	tay
+	bcc 20$	;branch if in bounds
+	ldy #0		;else return 0
+20$	jmp sngflt      ;float 1 byte value in y
+
+30$	txa		;convert (0 or 1) to (0 or 2)
+	asl a
+	tax
+	lda xpos,x      ;get xpos or ypos ls byte
+	tay
+	lda xpos+1,x    ;get ms byte
+	jmp givayf      ;float 2 byte value in (y,a)
+
+;.end

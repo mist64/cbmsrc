@@ -1,0 +1,254 @@
+	.page
+	.subttl  open file  (05/30/88)
+
+; ***********************************************
+; *		  open function			*
+; *						*
+; * creates an entry in the logical file tables	*
+; * necessary for kernal I/O consisting of:	*
+; *						*
+; * 	     la - logical file number		*
+; *	     fa - device number (0-31)		*
+; *	     sa - secondary address (cmd)	*
+; *						*
+; *  > call 'setlfs' first to set these up.	*
+; *  > call 'setnam' first to set up filename.	*
+; *  > call 'setbnk' first to specify fn bank.	*
+; ***********************************************
+
+nopen	ldx la		;check file number
+	jsr lookup	;see if in table
+	beq err2	;...branch if file already open
+
+	ldx ldtnd	;logical device table end
+	cpx #10		;check for maximum # of open files
+	bcs err1	;...branch if too many files
+
+	inc ldtnd	;one more entry in table
+	lda la
+	sta lat,x	;store logical file #
+	lda sa
+	ora #$60	;make sa an serial command
+	sta sa
+	sta sat,x	;store command #
+	lda fa
+	sta fat,x	;store device #
+
+;  perform device specific open tasks
+
+	beq opnrts	;...branch if keyboard (done)
+	cmp #2
+	beq opn232	;...branch if rs-232
+	bcc opncas	;...branch if cassette
+	cmp #3
+	beq opnrts	;...branch if screen (done)
+
+	jsr openi	;open serial file
+
+
+opnrts	clc		;signal good return
+	rts
+
+
+
+err1	jmp error1	;too many open files
+err2	jmp error2	;file already open
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; open cassette file
+
+opncas	jsr tapadr	;see if tape buffer allocated
+	bcs 1$
+	jmp error9	;...branch if deallocated (error)
+
+1$	lda sa
+	and #$0f	;mask off command
+	bne 4$		;...branch if open for tape write
+
+; open cassette tape file to read
+
+	jsr cste1	;prompt 'press play'
+	bcs 7$		;...branch if <stop> key pressed (rts)
+	jsr luking	;prompt 'searching'
+
+	lda fnlen	;a filename given?
+	beq 3$		;no...
+
+	jsr faf		;looking for a specific file
+	bcc 5$		;...branch if found
+	beq 7$		;...branch if aborted by <stop> key (rts)
+
+2$	jmp error4	;'file not found' error
+
+3$	jsr fah		;looking for any file
+	bcc 5$		;...branch if found
+	beq 7$		;...branch if aborted by <stop> key (rts)
+	bcs 2$		;...branch if file not found (always)
+
+; open cassette tape file for write
+
+4$	jsr cste2	;prompt 'press play and record'
+	bcs 7$		;...branch if <stop> key pressed (rts)
+	lda #bdfh	;data file header type
+	jsr tapeh	;write it
+
+; finish open for cassette tape read/write
+
+5$	lda #bufsz-1	;assume force read
+	ldy sa
+	cpy #$60	;open for read?
+	beq 6$
+
+; set pointers for buffering data
+
+	ldy #0
+	lda #bdf	;type flag for block
+	sta (tape1),y	;to begin of buffer
+	tya
+
+6$	sta bufpt	;point to data
+	clc		;signal good open
+7$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; opn232 - open an rs-232 or parallel port file
+;
+; variables initialized:
+;
+;    bitnum - # of bits to be sent calc from m51ctr
+;    baudof - baud rate full
+;    rsstat - rs-232 status reg
+;    m51ctr - 6551 control reg
+;    m51cdr - 6551 command reg
+;    m51ajb - user baud rate (clock/baud/2-100)
+;    enabl  - 6526 nmi enables (1-nmi bit on)
+
+opn232
+	jsr cln232	;set up rs232, .y=0 on return
+	sty rsstat	;clear status
+
+1$	cpy fnlen	;check if at end of filename
+	beq 2$		;yes...
+
+	jsr fnadry	;lda (fnadr),y- move configuration data to m51-registers
+	sta m51ctr,y
+	iny
+	cpy #4		; (only 4 possible parameters)
+	bne 1$
+
+2$	jsr bitcnt	;calculate # of bits
+	stx bitnum
+
+	lda m51ctr	;calculate baud rate
+	and #$0f
+	beq 5$
+
+; calculate start-test rate...
+
+	asl a		;get offset into tables
+	tax
+	lda palnts	;get tv standard
+	bne 3$
+	ldy baudo-1,x	; (ntsc standard)
+	lda baudo-2,x
+	jmp 4$
+
+3$	ldy baudop-1,x	; (pal standard)
+	lda baudop-2,x
+
+4$	sty m51ajb+1	;hold start rate in m51ajb
+	sta m51ajb
+
+5$	lda m51ajb	;calculate baud rate
+	asl a
+	tax
+	lda m51ajb+1	;m51ajb = freq/baud/2-100
+	rol a
+	tay
+	txa
+	adc #cbit+cbit
+	sta baudof
+	tya
+	adc #0
+	sta baudof+1
+	
+	lda m51cdr	;check for 3- or x-line response
+	lsr a		; (test bit 0 of m51cdr)
+	bcc 6$		;...branch if 3-line
+
+	lda d2prb	;check for x-line proper states
+	bmi 6$		; (318020-05 mod; fab: was ASL/BCS)
+	jsr ckdsrx	;report data set error via 'rsstat'
+
+6$	clc		; (318020-05,06 mod; fab) always good return
+	lda ridbe	;set up buffer pointers (dbe=dbs)
+	sta ridbs
+	lda rodbe
+	sta rodbs
+	rts
+
+
+
+; cln232 - cleans up rs-232 system for open/close
+;        - set up ddrb and cb2 for rs-232
+
+cln232
+	lda #$7f	;clear nmi's
+	sta d2icr
+	lda #%00000110	;ddrb
+	sta d2ddrb
+	sta d2prb	;dtr,rts high
+	lda #$04	;output high pa2
+	ora d2pra
+	sta d2pra
+	ldy #0
+	sty enabl	;clear enables
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; open a serial device file
+
+openi
+	lda sa
+	bmi 1$		;...branch if no sa (done, tables already updated)
+
+	ldy fnlen
+	bne 2$		;...branch if file name given, else done
+
+1$	clc
+	rts
+
+2$	lda #0		;clear the serial status
+	sta status
+	lda fa
+	jsr listn	;device la to listen
+	bit status	;check serial status
+	bmi 3$		;...branch if no response to 'listen' command
+
+	lda sa
+	ora #$f0
+	jsr secnd	;send secondary address (cmd)
+	lda status	;check serial status
+	bpl 4$		;...branch if ok
+
+;  this routine is called by other kernal routines which are called
+;  directly by os. must trash their return address to return to os.
+
+3$	pla
+	pla
+	jmp error5	;'device not present' error
+
+4$	lda fnlen
+	beq 6$		;...branch if no file name to send
+
+	ldy #0
+
+5$	jsr fnadry	;lda (fnadr),y  (routine uses .x!)
+	jsr ciout	;send filename
+	iny
+	cpy fnlen
+	bne 5$
+
+6$	jmp cunlsn	;done: do 'jsr unlsn / clc / rts'
+
+;.end

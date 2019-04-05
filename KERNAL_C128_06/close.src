@@ -1,0 +1,144 @@
+	.page
+	.subttl  close file  (03/15/85)
+
+; ***********************************************
+; *		 close function			*
+; *						*
+; * closes the  file  whose  la  is in  .a  and	*
+; * updates the logical file tables.		*
+; *						*
+; * the keyboard, screen and any unopened files	*
+; * pass thru. cassette files opened for writes	*
+; * are closed  by  writing the last buffer and	*
+; * (optionally) an eot mark.  serial files are	*
+; * closed by sending a 'close' cmd if a sa was	*
+; * specified when it was opened.		*
+; *						*
+; * special handling for basic's dos routines:	*
+; *						*
+; * IF .c=1 AND fa=serial disk AND sa=15	*
+; *    THEN don't do a real close, just		*
+; *	    remove the table entry. this	*
+; *	    allows the disk cmd chnl to come	*
+; *	    and go without the disk closing	*
+; *	    ALL files on its end.		*
+; *						*
+; ***********************************************
+
+nclose
+	ror svxt	;save .c for serial close
+	jsr jltlk	;look file up
+	bne clrts	;...branch if file not open (simply clc / rts)
+
+1$	jsr getlfs	;extract table data
+	txa		;save table index
+	pha
+
+	lda fa		;check device number
+	beq jx150	;...branch if keyboard (done)
+	cmp #3
+	beq jx150	;...branch if screen (done)
+	bcs jx120	;...branch if serial
+	cmp #2
+	bne jx115	;...branch if cassette
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; close rs-232 file
+
+	pla		;restore table index
+	jsr jxrmv	;remove from table
+	jmp cln232	;clean up rs232 for close, rts
+
+
+
+; close cassette file
+
+jx115	lda sa
+	and #$0f
+	beq jx150	;...branch if tape read
+
+	jsr tapadr	;close tape write file
+	lda #0		;end of file character
+	sec		;.c=1 for 'casout' to specify tape (not rs-232)
+	jsr casout	;put eof into buffer
+	jsr wblk	;output last tape block
+	bcc 1$		;...branch if no errors
+
+	pla		;clean stack for error
+	lda #0		;break key error
+	rts		; (.c=1)
+
+1$	lda sa
+	cmp #$62
+	bne jx150	;...branch if no eot mark to be written
+
+	lda #eot
+	jsr tapeh	;write end of tape block
+	jmp jx150
+
+
+; close serial file
+
+jx120	bit svxt	;special close for basic dos?
+	bpl jx130	;...branch if not & do a real close
+	lda fa
+	cmp #8
+	bcc jx130	;...branch if device not a serial disk
+	lda sa
+	and #$0f
+	cmp #$0f
+	beq jx150	;...branch if sa=disk cmd chnl & skip real close
+
+jx130
+	jsr clsei	;close a serial file, fall into 'jx150'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; enter here to remove a given logical file entry from
+; the table of logical, primary and secondary addresses.
+
+jx150
+	pla		;restore table index
+
+jxrmv			;////// entry for rs-232 file close
+	tax
+	dec ldtnd	;one less entry in table
+	cpx ldtnd
+	beq 1$		;...branch if entry is last one in table (easy)
+
+	ldy ldtnd	;swap last entry with one to be closed
+	lda lat,y
+	sta lat,x
+	lda fat,y
+	sta fat,x
+	lda sat,y
+	sta sat,x
+
+1$	clc		;signal good close
+	rts
+
+
+
+lookup			;lookup logical file in table
+	lda #0
+	sta status	;clear previous i/o status
+	txa
+jltlk
+	ldx ldtnd
+1$	dex
+	bmi 2$		;...branch if entry not found
+	cmp lat,x
+	bne 1$
+2$	rts
+
+
+
+getlfs
+	lda lat,x	;routine to fetch table entries
+	sta la
+	lda sat,x
+	sta sa
+	lda fat,x
+	sta fa		; (return with .p status of fa!)
+	rts
+
+;.end

@@ -1,0 +1,116 @@
+	.page
+	.subttl NEXT Command
+
+; Next routine
+;
+; A "for" entry on the stack has the following format:
+;
+; Low address
+;    token (fortk) 1 byte
+;    a pointer to the loop variable 2 bytes
+;    the step 5 bytes
+;    a byte reflecting the sign of the incr. 2 bytes
+;    the upper value (packed) 5 bytes
+;    the line number of the "for" statement 2 bytes
+;    a text pointer into the "for" statement 2 bytes
+; High address
+;
+;(total 16 bytes)
+
+next	bne next10	;hop if 'next' variable given
+	ldy #$ff	;flag no specific 'for' variable
+	bne next20	;always
+
+next50 	ldy #lenfor	;done, clean up stack
+	jsr rlsstk	;release (y) items from stack
+	jsr chrgot
+	cmp #','	;ie., next j,k
+	bne next45
+	jsr chrget
+
+next10	jsr ptrget     	;get pointer to variable in (a,y)
+	sta forpnt
+
+next20	sty forpnt+1
+	lda #fortk
+	jsr search	;look for 'for' entry in run-time stack
+	beq next30	;branch if found
+	ldx #errnf	;otherwise 'error, not found'
+next25
+	jmp error
+next30
+	jsr movfnd	;(fndpnt) => (tos)
+;
+; set up to move 'step' value to fac
+;
+	lda fndpnt
+	clc
+	adc #3	   	;offset to step value
+	ldy fndpnt+1
+	bcc next35
+	iny
+next35
+	jsr movfm	;actually "move from rom",but sys stack is in comm. ram
+;
+; movfm doesn't move sign. get it.
+;
+	ldy #8
+	lda (fndpnt),y
+	sta facsgn
+;
+; get pointer to 'for' variable
+;
+	ldy #1
+	lda (fndpnt),y	;get lsb
+	pha
+	tax
+	iny
+	lda (fndpnt),y	;get msb
+	pha
+	tay	      	;msb in y,
+	txa	      	;lsb in a
+
+	jsr fadd	;add 'step' value to 'for' varible (fadd gets from bank 1)
+	pla	      	;re-get msb
+	tay	      	;msb in y,
+	pla
+	tax	      	;lsb in x
+	sta sw_rom_ram1	;variables are in bank 1
+	jsr movmf	;put result back into 'for' variable.
+;
+; make (a,y) point to 'to' value in stack
+;
+	lda fndpnt
+	clc
+	adc #9
+	ldy fndpnt+1
+	bcc next40
+	iny
+;
+; test if loop done
+;
+next40	sta sw_rom_ram0
+	jsr fcomp	;compare fac to value pointed to by (a,y)
+	ldy #8
+	sec
+	sbc (fndpnt),y
+	beq next50	;branch taken if done
+;
+; not done, set pointers to re-execute loop
+;
+	ldy #17
+	lda (fndpnt),y
+	sta txtptr
+	dey
+	lda (fndpnt),y
+	sta txtptr+1
+	dey
+	lda (fndpnt),y
+	sta curlin+1
+	dey
+	lda (fndpnt),y
+	sta curlin
+next45
+	rts
+
+;end

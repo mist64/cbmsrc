@@ -1,0 +1,135 @@
+	.page
+	.subttl C/128 KERNAL PATCHES  (09/05/86)
+
+;//////////////////   K E R N A L   P A T C H   C O D E   \\\\\\\\\\\\\\\\\
+
+
+
+	* = $fc40	;patch area for kernal is $FC40-$FC7F
+			;additional patch area at $CF80-$CFF7
+
+
+
+basin_patch		;(#318020-04   07/09/85   F.A.B.)
+			;(#318020-05   09/05/86   F.A.B.)
+
+;  The following BASIC program generated a 'STRING TOO LONG' error:
+;
+;	10 OPEN 3,3	:REM  OPEN AN I/O CHANNEL TO THE SCREEN
+;	20 INPUT#3, A$	:REM  READ ONE SCREEN LINE
+;	30 CLOSE 3	:REM  CLOSE THE CHANNEL TO THE SCREEN
+;	40 PRINT A$	:REM  PRINT THE DATA FOUND THERE
+;
+;  This problem was inherited from the P & B series CBM machines. It was
+;  found that BASIN attempted to fake a <CR> when the input channel  was
+;  the screen but in doing so it overwrote the msb of the variable CRSW.
+;  That bit was set by the EDITOR at LOP5 to flag the passing of the last
+;  character on the current screen line. Because the flag was corrupted
+;  the EDITOR continued to pass characters until BASIC reported a STRING
+;  TOO LONG error and aborted the operation. The fix here simply preserves
+;  the previous CRSW msb when it makes CRSW non-zero to fake a <CR>.
+;  Also a bug on the +4, P&B series was the use of LINTMP in place of TBLX,
+;  and not keeping it up to date.  This can be fixed here as well.
+
+
+	ora crsw	;.a=3 (screen device #) from previous compare
+	sta crsw	;fake a <cr> to force editor to pass characters
+	lda tblx	;current cursor row
+	sta lintmp	;fixes several problems: input after clear, screen swap, etc
+	rts
+
+	.page
+
+load_patch		;(#318020-04   09/05/85   F.A.B.)
+
+;  The BOOT "filename" command failed when used with a 1541 disk drive.
+;  The 'slow' load mechanism did not preserve the binary file's start
+;  address, and consequently the subsequent JSR to execute the loaded
+;  code would be unpredictable.
+
+
+	lda eal		;save file load address...
+	ldy eah
+	sta sal		;...here
+	sty sah
+
+	jmp loding	;continue- print 'loading...' & rts
+
+
+
+
+ioinit_pat		;(#318020-04   09/10/85   F.A.B.)
+
+;  Added RS-232 pseudo-register initialization to IOINIT.  This makes
+;  it similar to C64 operation which,   by virtue of zero-ing alot of
+;  RAM in RAMTAS (which the C128 does not), provided a limited degree
+;  of protection against unspecified parameters.
+
+
+	sta speed	;init 1/2 MHz flag (patch overlayed this)
+
+	sta m51cdr	;default: no parity, full duplex, 3-line
+	sta m51ajb	;default: no user baud rate
+	sta m51ajb+1	;default: no user baud rate
+	ldx #%00000110
+	stx m51ctr	;default: 1-stop bit, 8-bit word, 300 baud
+
+	rts
+
+
+
+
+vdc_patch		;(#318020-04   11/15/85   F.A.B.)
+
+;  Corrected 8563 PAL initialization in IOINIT.  With a cheap monitor
+;  there was interference with line frequency.  Both horizontal total
+;  and vertical total have been adjusted. See also 'vdcpal' table.
+
+
+	ldy #0		;vdc register #0
+	lda #$7f	;PAL horizontal total
+	sty vdcadr
+	sta vdcdat
+
+	jmp vdc_init	;resume 'normal' PAL init & RTS
+
+	.page
+
+	* = $cf80	;additional patch area at $CF80-$CFF7
+
+
+
+dma_patch		;(#318020-05	09/15/86   F.A.B.)
+
+;  Patches DMA ROM code to allow DMA access to all RAM banks.  Previously
+;  DMAs were limited to RAM-0 because it was found the VIC bank pointer was
+;  used by DMAs and not the processor bank pointer.  These patches will
+;  save/set/restore VA16,17 per RAM configuration.
+;
+;  Provide some protection from IRQ interrupts to 2-step DMA RAM code.
+;  It was possible for an interrupt to occur between arm/trigger sequence,
+;  resulting in DMA with incorrect memory configuration (interrupt handler
+;  forces SYSTEM configuration, causing DMA trigger at same time).
+
+
+	lda mmurcr	;save current VIC bank pointer
+	pha
+	eor config,x	;swap A16,17 with VA16,17
+	and #$3f
+	eor config,x
+	sta mmurcr
+
+	lda config,x	;back to normal DMA_CALL code:
+	tax		;pass it to shared-RAM code in .X
+
+	php
+	sei		;kill IRQs
+	jsr do_dma	;commence DMA operation from shared-RAM area
+	plp		;restore IRQs
+
+	pla		;restore VIC bank pointer
+	sta mmurcr
+	rts		;all done- return to call
+	
+	
+;.end

@@ -1,0 +1,117 @@
+	.page
+	.subttl User Defined Function
+
+; simple user defined function code
+;
+; note only single arguments are allowed to functions,
+; and functions must be of the single line form:
+;      def fna(x)=x~2 + x-2
+; no strings may be involved with these functions.
+;
+; idea: create a simple variable entry whose first
+;	character has the msb set.
+; the value will be:
+;	a text pointer to the formula
+;	a pointer to the argument variable
+
+def	jsr getfnm	;get a pointer to the function
+	jsr errdir
+	jsr chkopn	;must have a (
+	lda #$80	;prohibit subscripted variables
+	sta subflg
+	jsr ptrget	;get pointer to argument
+	jsr chknum	;is it a number?
+	jsr chkcls	;must have )
+	lda #equltk	;followed by =
+	jsr synchr
+	pha
+	lda varpnt+1
+	pha
+	lda varpnt
+	pha
+	lda txtptr+1
+	pha
+	lda txtptr
+	pha
+	jsr data
+	jmp deffin
+
+
+; subroutine to get a pointer to a function name
+;
+getfnm	lda #fntk	;must start with fn
+	jsr synchr
+	ora #$80	;put function bit on
+	sta subflg
+	jsr ptrgt2	;get pointer to function or create anew
+	sta defpnt
+	sty defpnt+1
+	jmp chknum      ;make sure it's not a string, and return
+
+
+fndoer	jsr getfnm	;get the function's name
+	lda defpnt+1
+	pha
+	lda defpnt
+	pha
+	jsr parchk	;evaluate parameter
+	jsr chknum
+	pla
+	sta defpnt
+	pla
+	sta defpnt+1
+	ldy #2
+	jsr inddef	;get pointer to the variable
+	sta varpnt	;save variable pointer.
+	tax
+	iny
+	jsr inddef
+	beq errguf
+	sta varpnt+1
+	iny		;since def uses only 4.
+
+defstf	lda #varpnt
+	jsr indsub_ram1
+	pha		;push it all on the stack, since we might be recursing
+	dey
+	bpl defstf
+	ldy varpnt+1
+
+	sta sw_rom_ram1
+	jsr movmf	;put current fac into our argument variable
+	lda txtptr+1	;save variable pointer
+	pha
+	lda txtptr
+	pha
+	jsr inddef	;get pointer to function
+	sta txtptr
+	iny
+	jsr inddef
+	sta txtptr+1
+	lda varpnt+1	;save variable pointer
+	pha
+	lda varpnt
+	pha
+	jsr frmnum	;evaluate variable, and check numeric
+	pla
+	sta defpnt
+	pla
+	sta defpnt+1
+	jsr chrgot
+	beq 1$
+	jmp snerr	;it didn't terminate, syntax error
+
+1$	pla	      	;restore text pointer
+	sta txtptr
+	pla
+	sta txtptr+1
+deffin	ldy #0
+	sta sw_rom_ram1
+1$	pla	      	;get old arg value off stack,
+	sta (defpnt),y	;and put it back in variable
+	iny
+	cpy #5
+	bne 1$
+	rts
+
+;.end

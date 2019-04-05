@@ -1,0 +1,245 @@
+	.page 
+	.subttl DOS 3
+
+; cbm 2001 disk verb processors
+; author rsr 7-24-79
+;
+;- token table definitions -
+;
+xsca  =$c2 	;send dossca
+xid  =$d0 	;sends disk id
+xd1  =$d1 	;sends dosds1
+xd2  =$d2 	;sends dosds2
+xrec  =$e0 	;sends s for seq or dosrcl
+xwrt  =$e1 	;sends w or l
+xrcl  =$e2 	;send low ((poker))
+xfat  =$f0 	;sends "@" if specified
+xfn1  =$f1 	;sends filename1
+xfn2  =$f2 	;sends filename2
+;
+; tabld - used to build disk command strings
+;
+tabld 	;
+fclr  =$ff
+	.byte 'I',xd1
+
+fcat  =*-tabld-1
+	.byte '$',xd1,':',xfn1
+
+fopn  =*-tabld-1
+	.byte xfat,xd1,':',xfn1,',',xwrt,',',xrec
+
+fconc =*-tabld-1
+	.byte 'C',xd2,':',xfn2,'=',xd2,':',xfn2,','
+
+fapn  =*-tabld-1
+	.byte xd1,':',xfn1,',','A'
+
+fhed  =*-tabld-1
+	.byte 'N',xd1,':',xfn1,',',xid
+
+fcoll =*-tabld-1
+	.byte 'V',xd1
+
+fbak  =*-tabld-1
+	.byte 'D',xd2,'=',xd1
+
+fcopy =*-tabld-1
+	.byte 'C',xd2,':',xfn2,'=',xd1,':',xfn1
+
+fren  =*-tabld-1
+	.byte 'R',xd1,':',xfn2,'=',xd1,':',xfn1
+
+fscr  =*-tabld-1
+	.byte 'S',xd1,':',xfn1
+
+frec  =*-tabld-1
+	.byte 'P',xsca,xrcl,xrec
+
+	.page
+; send parameters to device
+;
+; entry a number of bytes in format.
+; y --> tabld entry.
+
+sendp	sta xcnt 	;save number of string bytes
+	tya
+	pha
+	jsr oldclr 	;clear old status
+
+	ldx #0
+sdp1	pla
+	dec xcnt
+	bmi tranr
+	tay
+	iny		;move down table
+	tya
+	pha
+	lda tabld,y 	;get next entry
+	bpl sdp5 	;if not escape code
+	cmp #xsca 	;if not secondary address
+	beq rsca
+	cmp #xid
+	beq rid 	;if disk id
+	cmp #xrcl
+	beq rdcn 	;if record number
+	cmp #xwrt
+	beq rwrt 	;if w or l
+	cmp #xfat
+	beq rfat 	;if "@" symbol request
+	cmp #xfn1
+	beq rsfn 	;if filename 1
+	cmp #xfn2
+	beq gordfn 	;if filename 2
+	cmp #xrec
+	bne sdp2 	;if not record type
+	lda dosrcl 	;get rec #
+	bne sdp5 	;always branch
+sdp2	cmp #xd1
+	bne sdp3 	;if not drive 1
+	lda dosds1
+	bpl sdp4 	;always branch
+sdp3	cmp #xd2
+	bne sdp1 	;if not drive 2, continue
+	lda dosds2
+sdp4	ora #'0 	;change # to ascii
+
+sdp5	sta dosstr,x 	;else into buffer
+	inx
+	bne sdp1 	;always
+
+gordfn	beq rdfn
+
+
+tranr	txa		;length to a
+	pha
+	ldx #<dosstr 	;set filename
+	ldy #>dosstr
+	jsr k_setnam
+
+	lda dosla
+	ldx dosfa
+	ldy dossa
+	jsr k_setlfs
+
+	pla
+	rts
+
+
+
+
+rsca	lda dossa_temp 	;secondary address (record)
+	bne sdp5 	;always
+
+rfat	bit parsts
+	bmi rfata
+	bpl sdp1 	;if @ not encountered
+rfata	lda #'@
+	bne sdp5 	;always
+
+
+
+; id subroutine
+
+rid	lda dosdid 	;include id
+	sta dosstr,x
+	inx
+	lda dosdid+1
+	bne sdp5 	;always
+
+
+rwrt	lda dosrcl 	;chk for l or w
+	beq 10$	;zero then write
+	lda #'L'
+	bne sdp5 	;always
+10$	lda #'S' 	;send w,s
+	sta dosrcl
+	lda #'W'
+	bne sdp5 	;always
+
+
+
+; move record number
+
+rdcn	lda poker
+	sta dosstr,x
+	lda poker+1
+	inx
+	bne sdp5 	;always
+
+
+; move file names.
+
+rsfn	ldy dosf1l	;file name 1: get length
+	beq rdrt0 	;if null string
+
+	ldy #0 		;move name to dosstr
+10$	lda savram,y
+	sta dosstr,x
+	inx
+	iny
+	cpy dosf1l
+	bne 10$		;if move not complete
+	beq rdrt1	;always
+
+rdfn	lda dosf2a
+	sta index1
+	lda dosf2a+1
+	sta index1+1
+	ldy dosf2l
+	beq rdrt0 	;if null string
+
+	ldy #0 		;move name to dosstr
+10$	jsr indin1_ram1
+	sta sw_rom_ram0
+	sta dosstr,x
+	inx
+	iny
+	cpy dosf2l
+	bne 10$		;if move not complete
+
+	.byte $24 	;hop
+rdrt0	dex 		;case cdd=sd
+rdrt1	jmp sdp1 	;get next symbol
+
+	.page
+
+; syntax checker
+; routines for dos.write
+
+chk1	and #$e6 	;for header,dload,scrtch
+	beq chk2 	;chk opt parms
+chker1	jmp snerr
+
+
+chk2	lda parsts 	;for dsave
+	and #1
+	cmp #1 	;chk req'd parms
+	bne chker1 	;error if 1 missing
+	lda parsts 	;reload for return
+	rts
+
+
+chk3	and #$e7 	;for colect
+	bne chker1 	;chk opt parms
+	rts
+
+
+chk4	and #$c4 	;for copy,concat
+	bne chker1 	;chk opt parms
+	lda parsts
+chk5	and #3 	;for rename
+	cmp #3 	;chk req'd parms
+	bne chker1
+	lda parsts 	;reload for return
+	rts
+
+
+chk6	and #5 	;for append,dk_open
+	cmp #5 	;chk req'd parms
+	bne chker1
+	lda parsts 	;reload for rts
+	rts
+
+
+;end

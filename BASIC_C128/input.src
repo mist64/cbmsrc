@@ -1,0 +1,284 @@
+	.page
+	.subttl INPUT / GET / READ  commands
+
+get	jsr errdir
+	sta z_p_temp_1	;use as a flag to distinguish between 'get' and 'get key'
+	cmp #'#'	;is it 'get#'?
+	beq getn	;branch if yes
+	cmp #keytk	;is it 'get key'?
+	bne gettty	;branch if not
+	jsr chrget	;skip over 'key' token
+	jmp gettty
+
+getn	jsr chrget	;move up to next byte
+	jsr getbyt	;get channel into x
+	lda #','	;comma?
+	jsr synchr	
+	stx channl
+	jsr coin	;chkin
+
+zz2	=buf+1
+zz3	=buf+2
+
+gettty	ldx #<zz2	;point to 0.
+	ldy #>zz3
+	lda #0		;to stuff and to point
+	sta buf+1	;zero it
+	lda #64		;turn on v-bit.
+	jsr inpco1	;do the get.
+	ldx channl
+	bne iorele	;release.
+	rts
+
+inputn	jsr getbyt	;get channel number.
+	lda #','	;a comma?
+	jsr synchr
+	stx channl
+	jsr coin	;chkin
+	jsr notqti	;do input to variables.
+iodone	lda channl	;release channel.
+iorele	jsr k_clrch
+	ldx #0		;reset channel to terminal.
+	stx channl
+	rts
+
+
+
+input	cmp #'"'	;a quote?
+	bne notqti	;no message.
+	jsr strtxt	;literalize the string in text.
+	lda #';'	;must end in semicolon.
+	jsr synchr
+	jsr strprt	;print it out.
+notqti
+	jsr errdir	;use common routine since def direct.
+	lda #','	;get comma.
+	sta buf-1
+			;is also illegal.
+getagn
+	jsr qinlin	;type "?" and input a line of text.
+	lda channl
+	beq bufful
+	jsr k_readst	;get status byte
+	and #2
+	beq bufful	;a-ok.
+	jsr iodone	;bad, close channel.
+	jmp data	;skip rest of input.
+
+bufful
+	lda buf	  	;get anything?
+	bne inpcon	;yes
+	lda channl	;no, is this keyboard
+	bne getagn	;no
+	jsr datan
+	jmp addon
+qinlin
+	lda channl
+	bne ginlin
+	jsr outqst	;print '?'...
+	jsr realsp	;...and a space
+ginlin
+	jmp inlin
+	.page
+read	ldx datptr	;get last data location.
+	ldy datptr+1
+	lda #$98
+	.byte $2c
+
+inpcon	lda #0
+
+inpco1	sta inpflg	;store the flag.
+
+; In the processing of data and read statements:
+; One pointer points to the data (i.e., the numbers being fetched) and another
+; points to the list of variables.
+;
+; The pointer into the data always starts pointing to a terminator -- a , : or
+; end-of-line.
+;
+; At this point txtptr points to list of variables and xreg points to data
+; or input line.
+
+	stx inpptr
+	sty inpptr+1
+
+inloop	jsr ptrget	;get a pointer to the variable
+	sta forpnt	;store it's address
+	sty forpnt+1
+	ldx #1
+
+1$	lda txtptr,x
+	sta vartxt,x
+	lda inpptr,x
+	sta txtptr,x
+	dex
+	bpl 1$
+
+	jsr chrgot
+	bne datbk1
+	bit inpflg	;read($98),get($40),or input($00)?
+	bvc qdata	;branch if read or input
+
+	lda z_p_temp_1	;is this a 'get' or a 'get key'?
+	cmp #keytk
+	bne inlop1	;branch if 'get'
+
+2$	jsr cgetl	;get a key
+	tax		;test if zero
+	beq 2$		;it is zero, keep scanning
+	bne inlop2	;got a key, go put it in var.
+
+inlop1	jsr cgetl	;get a key if pressed, otherwise gets a zero
+inlop2	sta buf
+
+zz4	=buf-1
+
+	ldx #<zz4
+	ldy #>zz4
+	bne datbk
+qdata
+	bpl qdata1
+	jmp datlop	;branch if 'read'
+qdata1
+	lda channl
+	bne getnth
+	jsr outqst
+getnth
+	jsr qinlin	;get another line.
+datbk
+	stx txtptr	;set for "chrget".
+	sty txtptr+1
+datbk1
+	jsr chrget
+	bit valtyp	;get value type.
+	bpl numins	;input a number if numeric.
+	bit inpflg	;get?
+	bvc setqut	;no, set quote.
+	inx
+	stx txtptr
+	lda #0
+	sta charac
+	beq resetc
+setqut	sta charac	;assume quoted string.
+	cmp #'"'	;terminators ok?
+	beq nowget  	;yes.
+	lda #':'	;set terminators to ":" and
+	sta charac
+	lda #','	;comma.
+resetc	clc
+nowget	sta endchr
+	lda txtptr
+	ldy txtptr+1
+	adc #0		;c is set properly above.
+	bcc nowge1
+	iny
+nowge1	jsr strlt2	;make a string descriptor for the value.
+			;and copy if necessary.
+	jsr st2txt	;copy strng2 to txtptr (st-2-txt... get it?)
+
+	jsr inpcom	;do assignment.
+	jmp strdn2
+
+numins	ldx #0		;flag 'text bank' (0)
+	jsr fin
+
+	lda intflg	;set codes on flags.
+	jsr qintgr	;go decide on float.
+strdn2	jsr chrgot	;read last character.
+	beq trmok	;":" or eol is ok
+	cmp #','	;a comma?
+	beq trmok
+
+	lda inpflg	;is this get, read, or input?
+	beq trmn01	;input
+	bmi tmerr	;read
+	ldx channl	;get. if not kbd, go use 'bad file data error'
+	bne trmn02
+
+tmerr	ldx #errtm	;'get from kbd' or 'read' saw a bad type
+	bne trmn03	;always
+
+trmn01	lda channl
+	beq doagin	;do again if keybd input
+trmn02	ldx #errbd	;input saw bad file data
+trmn03	jmp error
+
+doagin	jsr k_primm
+	.byte '?REDO FROM START', cr, 0
+
+	lda oldtxt
+	ldy oldtxt+1
+	sta txtptr	;put user back to beginning of input
+	sty txtptr+1
+	rts
+
+
+
+trmok	ldx #1
+1$	lda txtptr,x
+	sta inpptr,x	;save for more reads.
+	lda vartxt,x
+	sta txtptr,x	;point to variable list.
+	dex
+	bpl 1$
+
+	jsr chrgot	;look at last vartab character.
+	beq 2$		;that's the end of the list.
+	jsr chkcom	;not end. check for comma.
+	jmp inloop
+
+2$	lda inpptr	;put away a new data pntr name.
+	ldy inpptr+1
+	ldx inpflg
+	bpl 3$
+	sta datptr
+	sty datptr+1
+	rts
+
+3$	ldy #0	    ;last data chr could have been ',' or ':'but should be null
+	lda #inpptr
+	jsr indsub_ram0
+	beq inprts	;it is null
+	lda channl	;if not terminal, no type.
+	bne inprts
+	jsr k_primm
+	.byte '?EXTRA IGNORED', cr, 0
+inprts	rts		;do next statement
+	.page
+
+;
+; Datlop routine
+;
+; Subroutine to find data.
+;
+; The search is made by using the execution code for data to skip over
+; statements, the start word of each statement is compared with "datatk".
+; Each new line number is stored in "datlin" so that if any error occurs while
+; reading data the error message can give the line number of the 
+; ill-formatted data.
+
+datlop	jsr datan	;skip some text.
+	iny
+	tax		;end of line?
+	bne nowlin	;no.
+	ldx #errod	;yes, "no data" error.
+	iny
+	jsr indtxt
+	beq next25
+	iny
+	jsr indtxt	;get high byte of line number.
+	sta datlin
+	iny
+	jsr indtxt	;get low byte.
+	iny
+	sta datlin+1
+
+nowlin	jsr addon	;txtptr+.y
+	jsr chrgot	;span blanks
+	tax	      	;used later
+	cpx #datatk	;is it a "data" statement?
+	bne datlop	;not quite right, keep looking.
+	jmp datbk1	;this is the one.
+
+
+;end

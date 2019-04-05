@@ -1,0 +1,28 @@
+	.page
+	.subttl print correct error message
+
+; routine to translate error message # in .a
+; to address of string containing message in index2
+;
+erstup	tax			;error set up
+	ldy #0
+	lda #<err01     	;start with address of first error message
+	sta index2
+	lda #>err01
+	sta index2+1
+
+1$	dex
+	bmi 4$			;finished when .x decrements out
+
+2$	lda (index2),y		;look at msg, and find end (msb set) (ind.ok)
+	pha
+	inc index2
+	bne 3$
+	inc index2+1
+3$	pla			;was msb set?
+	bpl 2$			;no, not end of message
+	bmi 1$			;yes, tick off another msg
+
+4$	rts
+
+;end

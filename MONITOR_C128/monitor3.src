@@ -1,0 +1,239 @@
+	.page
+	.subttl  monitor3 - assembler
+
+;**********************************************************
+;  simple assembler
+;  syntax:      a 1111 lda ($00,x)
+; 	      a 1111 dex:		(':' = terminator)
+;**********************************************************
+
+assem
+	bcs 7$		;...branch if missing sa
+	jsr t0tot2	;save sa
+
+1$	ldx #0
+	stx hulp+1	;clear left mnemonic
+	stx count	;clear operand
+
+2$	jsr gnc	 	;get a char
+	bne 3$		;check for eol
+	cpx #0
+	bne 3$
+	jmp main	;if eol & no mnemonic, exit cleanly
+
+3$	cmp #' '	;is it a space ?
+	beq 1$		;yes - start again (passes over object code, if any)
+	sta msal,x      ;no - save char
+	inx
+	cpx #3	  	;got three chars ?
+	bne 2$		;no - loop
+
+4$	dex	     	;squished all three ?
+	bmi 10$		;yes
+	lda msal,x     	;no - first in last out
+	sec	     	;no borrow
+	sbc #$3f	;normalize
+	ldy #5	  	;set for 5 shift rights
+
+5$	lsr a
+	ror hulp+1	;left mnemonic
+	ror hulp	;right mnemonic
+	dey	     	;done 5 shifts?
+	bne 5$		;no-loop
+	beq 4$		;always
+
+
+7$	jmp error	;error parsing input
+
+
+10$	ldx #2	  	;move output buffer index past crunched mnemonic
+
+15$	lda count	;after first number copy everything else to output buffer
+	bne 50$
+	jsr eval	;evaluate next parameter, if number crunch it
+	beq 40$		;...branch if not a number
+	bcs 7$		;...branch if illegal number
+
+	lda #'$'
+	sta hulp,x	;buffer a number, either '$00' or '$0000'
+	inx
+	lda t0+2
+	bne 7$		;...branch if number too large
+	ldy #4
+	lda shift	;kludge to allow user to force absolute over zero page
+	cmp #8
+	bcc 18$		;...allow only hex or octal bases to force absolute
+	cpy count
+	beq 20$		;...branch to force absolute	
+18$	lda t0+1
+	bne 20$		;...branch if 2-byte field
+	ldy #2		;else set up  1-byte field
+
+20$	lda #'0'
+30$	sta hulp,x
+	inx
+	dey
+	bne 30$
+
+40$	dec txtptr	;re-get last character from input buffer
+50$	jsr gnc		;copy rest of input buffer to output buffer
+	beq 60$		;...branch if eol
+	cmp #' '
+	beq 15$		;...squish out spaces
+	sta hulp,x	;hopefully it's of one of these:   #,()
+	inx
+	cpx #10
+	bcc 15$		;...loop until eol or
+	bcs 7$		;...buffer overflow
+
+
+60$	stx t1	  	;save input # of characters
+	ldx #0
+	stx wrap	;start trial at zero
+
+as110	ldx #0
+	stx tmpc	;disa index=0
+	lda wrap	;get trial byte
+	jsr dset	;digest it
+	ldx format	;save format for later
+	stx t1+1
+	tax	     	;index into mnemonic table
+	lda mnemr,x	;get compressed
+	jsr tstrx	;mnemonic and test
+	lda mneml,x
+	jsr tstrx
+	ldx #6	  	;six format bits
+as210
+	cpx #3
+	bne as230
+	ldy length
+	beq as230	;skip-single byte instr
+as220
+	lda format
+	cmp #$e8	;a relative instr?
+	lda #'0'	;test zeros
+	bcs as250	;no-3 byte
+	jsr tst2	;test a byte,2 chars
+	dey
+	bne as220
+as230
+	asl format
+	bcc as240
+	lda char1-1,x
+	jsr tstrx	;test syntax
+	lda char2-1,x
+	beq as240
+	jsr tstrx	;test more syntax
+as240
+	dex
+	bne as210
+	beq as300
+as250
+	jsr tst2	;test a word,4 chars
+	jsr tst2
+as300
+	lda t1	  	;check # chars of both
+	cmp tmpc
+	beq as310	;match, skip
+	jmp tst05	;fail
+as310
+	ldy length
+	beq as500	;if only 1 byte instr skip
+	lda t1+1	;get saved format
+	cmp #$9d	;a relative instr?
+	bne as400	;no-skip
+
+	lda t0	  	;calculate a relative
+	sbc t2	  	;(.c=1 already)
+	tax		;save 'diff'
+	lda t0+1
+	sbc t2+1
+	bcc as320	;...taken if a negative branch
+
+	bne aerr	;positive branch, out of range
+	cpx #$82
+	bcs aerr
+	bcc as340
+
+as320	tay		;negative branch
+	iny	     	;out of range, y=$ff
+	bne aerr
+	cpx #$82
+	bcc aerr
+as340
+	dex	     	;subtract 2 from 'diff' for instr
+	dex
+	txa
+	ldy length	;set index to length
+	bne as420	;branch always
+
+as400
+	lda t0-1,y      ;no-put byte out there
+as420
+	jsr stash
+	dey
+	bne as400
+as500
+	lda wrap	;get good op code
+	jsr stash
+	jsr cronly	;get ready to overstrike line
+	jsr primm	;print 'A ' & erase eol
+	.byte 'A ',27,'Q',0
+	jsr dis400	;disassemble one line
+
+	inc length
+	lda length
+	jsr addt2	;update address
+
+	lda #'A'	;set up next line with 'a bnnnn ' for convenience
+	sta keyd	;put it in the keyboard buffer
+	lda #' '
+	sta keyd+1
+	sta keyd+7
+	lda t2+2	;get the bank number
+	jsr makhex	;get hi byte in .a (which we'll ignore), and lo in .x
+	stx keyd+2
+	lda t2+1	;next get mid byte of address
+	jsr makhex
+	sta keyd+3	;..and put in buffer,
+	stx keyd+4
+	lda t2		;then get the low byte of address,
+	jsr makhex
+	sta keyd+5	;..and put that in the buffer, too.
+	stx keyd+6
+	lda #8		;signal that we put 8 char's in the buffer
+	sta ndx
+	jmp main
+
+
+
+aerr
+	jmp error
+
+
+
+
+;  test char in .a with char in hulp
+;
+tst2
+	jsr tstrx	;test for '00' (do two tests)
+
+tstrx
+	stx sxreg
+	ldx tmpc	;get current position
+	cmp hulp,x	;same char
+	beq tst10	;yes-skip
+	pla	     	;pull jsr off stack
+	pla
+
+tst05
+	inc wrap	;try next trial
+	beq aerr	;=0 tried all,sorry
+	jmp as110
+
+tst10
+	inc tmpc
+	ldx sxreg	;restore x
+	rts
+
+;.end

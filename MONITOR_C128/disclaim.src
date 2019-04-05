@@ -1,0 +1,47 @@
+	.subttl *** COPYRIGHT (C) 1985  by  COMMODORE BUSINESS MACHINES, INC. ***
+
+;  ***************************************************************************
+;  *                              //                                         *
+;  *              CCCCCCC        //    111     2222222     8888888           *
+;  *             CCC   CCC      //    1111    222   222   888   888          *
+;  *            CCC            //      111         222    888   888          *
+;  *            CCC           //       111       222        88888            *
+;  *            CCC          //        111     222        888   888          *
+;  *             CCC   CCC  //         111    222   222   888   888          *
+;  *              CCCCCCC  //        1111111  222222222    8888888           *
+;  *                      //                                                 *
+;  *                                                                         *
+;  * MMM   MMM    OOOOOOO    NNN    NN  III  TTTTTTTTT  OOOOOOO    RRRRRRRR  * 
+;  * MMMM MMMM   OOO   OOO   NNNN   NN  III     TTT    OOO   OOO   RRR   RRR * 
+;  * MMMMMMMMM  OOO     OOO  NNNNN  NN  III     TTT   OOO     OOO  RRR   RRR * 
+;  * MMM M MMM  OOO     OOO  NNN NN NN  III     TTT   OOO     OOO  RRRRRRRR  * 
+;  * MMM   MMM  OOO     OOO  NNN  NNNN  III     TTT   OOO     OOO  RRR RRR   * 
+;  * MMM   MMM   OOO   OOO   NNN   NNN  III     TTT    OOO   OOO   RRR  RRR  * 
+;  * MMM   MMM    OOOOOOO    NNN    NN  III     TTT     OOOOOOO    RRR   RRR * 
+;  *									     * 
+;  *									     * 
+;  *        COPYRIGHT (C)1985  BY   COMMODORE BUSINESS MACHINES, INC.        *
+;  *									     *
+;  ***************************************************************************
+  
+  
+  
+;	****************************************************************** 
+;	*                                                                * 
+;	* THIS LISTING CONTAINS CONFIDENTIAL AND PROPRIETARY INFORMATION *
+;	* OF CBM, INC.   REPRODUCTION,  DISSEMINATION  OR  DISCLOSURE TO *
+;	* OTHERS WITHOUT EXPRESS WRITTEN PERMISSION IS PROHIBITED.  THIS *
+;	* SOFTWARE IS INTENDED FOR USE IN  COMMODORE C/128 SYSTEMS ONLY. *
+;	*                                                                * 
+;	*  THE  INFORMATION  IN  THIS  DOCUMENT  IS  SUBJECT  TO CHANGE  * 
+;	*                       WITHOUT NOTICE.                          * 
+;	*                                                                * 
+;	*  NO  RESPONSIBILITY  IS  ASSUMED  FOR THE RELIABILITY OF THIS  * 
+;	*                          SOFTWARE.                             * 
+;	*                                                                * 
+;	****************************************************************** 
+
+
+  
+;.end
+

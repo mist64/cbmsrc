@@ -1,0 +1,46 @@
+	.page
+	.subttl 'run command'
+;************************************************************
+;*
+;*	run command
+;*
+;*	run [line_number]
+;*	   | filename [[ON] Ddrive_number[,Uunit_number]]
+;*
+;*
+;*	ENTRY run_a_program sets up, links, and executes
+;*		a program previously loaded into ram.
+;*
+;***********************************************************
+
+run	beq run$10		;branch if no arguments
+	bcc run$20		;branch if number (i.e., RUN line_number)
+
+; here if of the form "RUN file_name"
+
+	lda #$40
+	sta runmod		;signal to load not to go to ready
+	jsr dload		;use DLOAD's parser, and load the program.
+
+run_a_program
+
+	jsr setexc		;set various run modes
+	jsr runc
+	jsr lnkprg		;link the program,
+	jsr crdo
+	jmp newstt		;...start executing.
+
+; here if of the form "RUN"
+
+run$10	jsr setexc		;set various run codes
+	jmp runc		;..and start executing
+
+; here if of the form "RUN line_number"
+
+run$20	jsr clearc		;first trash all variables (???????)
+	jsr chrgot
+	jsr goto		;set up to execute from new line number
+	jsr setexc		;..and do a little housekeeping,
+	jmp newstt		;..otherwise it's business as usual.
+
+;end

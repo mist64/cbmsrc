@@ -1,0 +1,154 @@
+	.page
+	.subttl  save  (10/17/84):  c/128
+
+;  **********************************************
+;  *	     save memory to mass storage	*
+;  *						*
+;  *	  fa:	0= keyboard  <invalid>		*
+;  *		1= cassette			*
+;  *		2= rs-232    <invalid>		*
+;  *		3= screen    <invalid>		*
+;  *		4-31= serial device		*
+;  *						*
+;  *	  sa:	(cassette save only)		*
+;  *		bit0- 0= basic    (blf)		*
+;  *		      1= absolute (plf)		*  
+;  *		bit1- 0= nop			*
+;  *		      1= write eot		* 
+;  *						*
+;  *	  ba:	bank source			*
+;  *						*
+;  *	> .a points to start address		*
+;  *	> x & y point to end address		*
+;  **********************************************
+
+savesp			;////// jump table entry
+	stx eal
+	sty eah		;setup ending address	(in x & y)
+	tax
+	lda $00,x	;setup starting address	(.a points to indirect)
+	sta stal
+	lda $01,x
+	sta stah
+save			;////// old monitor entry  (not c/128 monitor)
+	jmp (isave)
+nsave
+	lda fa		;dispatch per device number
+	cmp #1
+	beq svtape	;save to cassette tape
+	cmp #4
+	bcs svdisk	;save to serial device
+
+err9s	jmp error9	;illegal device
+err8s	jmp error8	;missing filename
+err4s	jmp error4	;file not found
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  save memory to serial device
+
+svdisk
+	ldy fnlen	;must have filename
+	beq err8s	;...branch if missing filename
+
+	lda #$61	;pass 'save' command to disk in sa
+	sta sa
+	jsr openi	;open the file
+	jsr saving	;'saving...'
+
+	lda fa
+	jsr listn	;establish the channel
+	lda sa
+	jsr secnd	;send 'save' command
+
+	ldy #0
+	jsr rd300	; (copy 'stal,h' to 'sal,h')
+	jsr ciout	;send starting address lo
+	lda sah
+	jsr ciout	;send starting address hi
+
+
+
+1$	jsr cmpste	;compare start to end
+	bcs 3$		;...branch if at end
+	jsr sally	;lda (sal),y
+	jsr ciout	;send a byte
+	jsr stop
+	beq break	;...branch if aborted by <stop> key
+
+2$	jsr incsal	;increment address for next byte
+	bne 1$		;always
+
+
+3$	jsr unlsn	;close channel, fall into file close routine: save done
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+clsei			;////// entry from other kernal routines
+	bit sa
+	bmi clsrts	;...branch if file not properly opened
+	lda fa
+	jsr listn	;get the channel
+	lda sa
+	and #$ef	;make sa a 'close' command
+	ora #$e0
+	jsr secnd	;send 'close' command
+
+cunlsn			;////// entry from 'openi'
+	jsr unlsn	;close channel
+
+clsrts	clc		;signal good return
+	rts
+
+
+
+break
+	jsr clsei	;close the file
+	lda #0		;return =
+	sec		;signal error return
+	rts
+
+
+
+;  subroutine to output  'saving [<filename>]'
+
+saving
+	lda msgflg
+	bpl svrts	;...branch if display disabled
+	ldy #ms11-ms1
+	jsr msg		;print 'saving '
+	jmp outfn	;print filename & rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  save memory to cassette tape
+
+svtape
+	jsr tapadr	;setup pointers to cassette buffer
+	bcc err9s	;...branch if deallocated (error)
+
+	jsr cste2	;prompt user 'press play & record...'
+	bcs svrts	;...branch if aborted by <stop> key
+	jsr saving	;'saving...'
+
+	ldx #plf
+	lda sa		;sa has type of tape file:  1=plf  0=blf
+	and #$01
+	bne 1$		;...branch if 'plf' type
+	ldx #blf
+
+1$	txa
+	jsr tapeh	;write tape header
+	bcs svrts	;...branch if aborted by <stop> key
+
+	jsr twrt	;write file to tape
+	bcs svrts	;...branch if aborted by <stop> key
+
+	lda sa
+	and #$02	;sa has (optional) end_of_tape flag
+	beq 2$		;...branch if not eot
+
+	lda #eot
+	jsr tapeh	;write eot mark to tape
+	.byte $24	;preserve status in .c from tape handler
+
+2$	clc		;signal good save
+svrts	rts		;done save
+
+;.end

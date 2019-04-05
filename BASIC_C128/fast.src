@@ -1,0 +1,20 @@
+	.page
+	.subttl FAST Command
+
+;***********************************************************************
+;
+;    FAST - put the system in 2 MHz. mode, and blank the VIC screen
+;
+;***********************************************************************
+
+fast	jsr put_io_in_map
+
+	lda vic+17		;blank the 40 column screen
+	and #$6f
+	sta vic+17
+
+	lda #1
+	sta vic+48		;set 2 MHz. mode
+
+	rts
+;end

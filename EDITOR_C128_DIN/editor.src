@@ -1,0 +1,36 @@
+	.nam  C/128 GERMAN EDITOR  (315078_03 RELEASE: 11/07/86)
+	.forml 60
+
+	.include disclaim
+	.include sysdoc
+	.include relnotes
+	.include declare
+	.include entries
+
+	* = $c000
+
+.editor_check_begin
+
+	.include ed1		;contains GERMAN patches (4 places)
+	.include ed2
+	.include ed3		;contains GERMAN patches (1 place)
+	.include ed4
+	.include ed5
+	.include ed6
+	.include routines
+	.include ed7		;contains an ORG $FA80
+
+.editor_check_top
+
+	.include patches	;contains an ORG $CF00 (& upper limit @ $CF7F)
+
+
+;	*****	$FC40-$FC7F ROM RESERVED FOR KERNEL PATCH SPACE.   *****
+
+;	*****   ROM SPACE FROM  $FC80 THRU $FEFF IS RESERVED FOR   *****
+;	*****   NATIONAL KEYBOARD DRIVERS AND ASSOCIATED TABLES.   *****
+
+	.include german.src	;contains an ORG $FC80 for GERMAN driver & tables
+
+	.subttl EDITOR REFERENCE
+	.end

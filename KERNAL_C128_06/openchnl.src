@@ -1,0 +1,135 @@
+	.page
+	.subttl  open channel for I/O  (12/18/84)
+
+;  ******************************************************
+;  *		chkin -- open channel for input		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), write-only files, & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dfltn= device # from table	*
+;  *		 or .c=1 if error			*
+;  ******************************************************
+
+nchkin
+	jsr lookup	;search table for la (passed in .x)
+	bne err3	;...branch if 'file not open' error
+
+	jsr getlfs	;copy table info into la, fa, sa
+	beq ckirts	;...branch if keyboard (done)
+
+	cmp #3
+	beq ckirts	;...branch if screen (done)
+	bcs ckiser	;...branch if serial device
+	cmp #2
+	bne ckitap	;...branch if cassette
+
+	jmp cki232	;goto rs-232 handler
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  open cassette file for input
+
+ckitap	ldx sa
+	cpx #$60
+	bne err6	;...branch if file not open for input
+
+ckirts	sta dfltn	;make all future input come from fa in .a
+	clc		;signal good return
+	rts
+
+
+
+;  open serial device for input (make it a talker)
+
+ckiser	tax		;preserve fa (device #)
+	jsr talk	;establish device as a talker
+
+	bit status	;anybody home?
+	bmi err5	;...branch if no response
+
+	lda sa		;get secondary adr (command)
+	bpl 1$		;...branch if something to send
+	jsr tkatn	;no...let go
+	bpl 2$		;always
+
+1$	jsr tksa	;send command & let go
+
+2$	txa		;restore fa (device #)
+	bit status
+	bpl ckirts	;...branch if device responded, else fall into 'err5'
+
+
+
+
+
+
+err5	jmp error5	;device not present
+err6	jmp error6	;not an input file
+err7	jmp error7	;not an output file
+err3	jmp error3	;file not open
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  ******************************************************
+;  *	     ckout -- open channel for output		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), read-only files,  & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dflto= device # from table	*
+;  *		 or .c=1 if error			*
+;  ******************************************************
+
+nckout
+	jsr lookup	;search table for la (passed in .x)
+	bne err3	;...branch if 'file not open' error
+
+	jsr getlfs	;copy table info into la, fa, sa
+	beq err7	;...branch if keyboard (error: not an output file)
+
+	cmp #3
+	beq ckorts	;...branch if screen (done)
+	bcs ckoser	;...branch if serial device
+	cmp #2
+	bne ckotap	;...branch if cassette
+
+	jmp cko232	;goto rs-232 handler
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; open cassette file for output
+;
+ckotap	ldx sa
+	cpx #$60
+	beq err7	;...branch if file not opened for output
+
+ckorts	sta dflto	;make all future output go to fa in .a
+clrts	clc		;signal good return
+	rts
+
+
+; open serial device for output (make it a listener)
+
+ckoser	tax		;preserve fa (device #)
+	jsr listn	;establish device as a listener
+
+	bit status	;anybody home?
+	bmi err5	;...branch if no response
+
+	lda sa		;get secondary adr (command)
+	bpl 1$		;...branch if something to send
+	jsr scatn	;no...release channel
+	bne 2$		;always
+
+1$	jsr secnd	;send command & release channel
+
+2$	txa		;restore fa (device #)
+	bit status
+	bpl ckorts	;...branch if device responded
+	bmi err5	;...branch if device not present (always)
+
+;.end

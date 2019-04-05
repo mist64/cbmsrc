@@ -1,0 +1,100 @@
+;  MOUSE DRIVER   provides an IRQ wedge for manipulating sprite_1 via
+;                 the new 1351 proportional mouse.  -04 FAB
+
+potx	= sid+$19
+poty	= sid+$1a
+
+posx	= vic_save+$00		;x position (low byte)
+posy	= vic_save+$01		;y position
+posxmsb	= vic_save+$10		;x position (high bit = b0)
+
+ram_ptr	= dossa_temp+1		;spare ram
+cinv2	= ram_ptr
+opotx	= ram_ptr+2
+opoty	= ram_ptr+3
+newvalue= ram_ptr+4
+oldvalue= ram_ptr+5
+
+
+mouse_patch_install
+	lda cinv+1	;install IRQ wedge
+	cmp #>mouse_patch_install
+	beq 90$		;we are already installed!
+	php
+	sei
+	lda cinv	;save original
+	sta cinv2
+	lda cinv+1
+	sta cinv2+1
+	lda #<mouse_irq	;wedge mouse
+	sta cinv
+	lda #>mouse_irq
+	sta cinv+1
+	plp
+90$	rts
+
+
+
+mouse_irq
+	lda sprite_data	;if basic is moving sprite_1
+	bne 90$		;   let basic have it (why not ?)
+
+	lda potx	;get delta values for x
+	ldy opotx
+	jsr move_check
+	sty opotx
+
+	clc		;modify low order x position
+	adc posx
+	sta posx
+	txa
+	adc #$00
+	and #%00000001
+	eor posxmsb
+	sta posxmsb
+
+	lda poty	;get delta value for y
+	ldy opoty
+	jsr move_check
+	sty opoty
+
+	sec		;modify y position (decrease y for increase in pot)
+	eor #$ff
+	adc posy
+	sta posy
+
+90$	jmp (cinv2)	;continue w/ IRQ operation
+
+
+; move_check
+;	entry	y = old value of pot register
+;		a = currrent value of pot register
+;	exit	y = value to use for old value
+;		x,a = delta value for position
+
+move_check
+	sty oldvalue	;save old &  new values
+	sta newvalue
+	ldx #0		;preload x w/ 0
+
+	sec		; a = mod64(new-old)
+	sbc oldvalue
+	and #%01111111	
+	cmp #%01000000	;if > 0
+	bcs 50$
+	lsr a		;   then  a = a/2
+	beq 80$		;	if <> 0
+	ldy newvalue	;	    then  y = newvalue
+	rts		;		  return
+
+50$	ora #%11000000	;else or in high order bits
+	cmp #$ff	;    if <> -1
+	beq 80$
+	sec		;	then a = a/2
+	ror a
+	ldx #$ff	;	     x = -1
+	ldy newvalue	;	     y = newvalue
+	rts		;	     return
+
+80$	lda #0		;a = 0
+	rts		;return w/ y = old value

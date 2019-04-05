@@ -1,0 +1,28 @@
+	.page
+	.subttl form/check value types
+;
+; these routines check for certain "valtyp".
+; (c) is not preserved.
+;
+
+
+frmnum	jsr frmevl
+
+chknum	clc
+	bcc chkval
+
+chkstr	sec		;set carry.
+
+chkval	bit valtyp	
+	bmi docstr
+	bcs chkerr
+chkok	rts
+
+docstr	bcs chkok
+chkerr	ldx #errtm
+	.byte $2c
+sterr	ldx #errst
+	jmp error
+
+;.end
+

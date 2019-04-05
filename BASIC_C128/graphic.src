@@ -1,0 +1,100 @@
+	.page
+	.subttl GRAPHIC Command
+
+;*************************************************************
+;
+;  set graphic mode
+;
+; syntax:	 graphic n [[,c] ,s]
+;	     or
+;		  graphic clr
+;
+;	where :	 n = 0  for 40 column text mode
+;		 n = 1  for hi res mode
+;		 n = 2  for hi res split screen mode
+;		 n = 3  for multicolor mode
+;		 n = 4  for multicolor split screen mode
+;		 n = 5  for 80 column text mode
+;
+;    optionally, c = 0  for 'don't clear screen' (default)
+;		 c = 1  for 'clear screen'
+;
+;		 s = number of first line of text in split screen modes (0..24).
+;		     (default = 19)
+;
+; If 'graphic n' is executed, where n >0, a 10k block of memory for bit map
+; screen and color bytes is allocated, if it has not previously been allocated.
+; This ram remains reserved until a 'graphic clear' command is executed.
+;
+;*****************************************************************
+
+graphic	cmp #clrtk		;test if hi-res ram is to be de-allocated
+	bne 10$			;no, go on to set up new mode
+
+	jsr clrhir		;de-allocate ram
+	jsr chrget		;skip over clr token
+	lda #0			;force to text screen
+	sta _graphm
+	rts
+
+
+10$	jsr getbyt		;get new mode
+	txa
+	pha			;save in case ther is a 'clear'
+	cpx #5			;in range?
+	beq 50$			;branch if 'go to 80 col'
+	bcs graper		;illegal value
+
+	lda modes,x		;set up for one of the graphic modes
+20$	sta _graphm
+	beq 26$			;branch if 'goto 40'
+	jsr sethir		;..else set up graphic area
+
+25$	bit _graphm		;is this a split screen mode?
+	bvc 30$			;no, don't force into 40 column
+26$	bit _mode
+	bpl 30$			;branch if already in 40 column
+22$	jsr _swapper
+
+30$	jsr optzer		;get optional clear flag (def=0)
+	cpx #2
+	bcs graper		;arg can only be 0 or 1
+	txa
+	pha			;save it
+
+40$	ldx #20			;get (optional) line to start text
+	jsr optbyt
+	cpx #26
+	bcs graper		;bad value
+	txa
+	asl a			;multiply times 8
+	asl a
+	asl a
+	adc #$30		;add offset to first line
+	sta _split
+
+	pla			;get back clear flag
+	tay			;..hold on a sec...
+	pla			;get original mode argument
+	tax			;set up for scnclr
+	tya			;test clear arg
+	beq 45$			;if zero, don't clear screen
+	jsr scnclr_1		;special entry into screen clear routine
+
+45$	lda #0
+	sta scalem		;turn off scaling to force new defaults
+	rts
+
+50$	bit _mode		;test if already 80 column
+	bmi 30$			;yes, don't do anything
+	lda _graphm		;if we're in a split mode, force mode to all graphic
+	and #%10111111
+	sta _graphm
+	jmp 22$
+
+
+graper	jmp fcerr
+
+modes	.byte 0,$20,$60,$a0,$e0 	;text,hir,hir/s,mcm,mcm/s
+
+;.end

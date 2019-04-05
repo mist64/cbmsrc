@@ -1,0 +1,191 @@
+	.page
+	.subttl monitor2
+
+;******************************************************************
+;
+;	Hunt command - hunt for bytes or string
+;
+; syntax:  h 0000 1111 'ascii...   <or>   h 0000 1111 22 33 44 ...
+;
+;******************************************************************
+
+hunt
+	jsr range	;get sa in t2, calculate length, put in t1
+	bcs 9$		;...error if eol
+	ldy #0
+	jsr gnc		;get first char
+	cmp #$27	;is it an <'>
+	bne 2$		;no-  must be hex
+	jsr gnc		;yes- get first string chr
+	cmp #0
+	beq 9$		;...branch if true eol (error)
+
+1$	sta xcnt,y	;save in buffer
+	iny
+	jsr gnc		;get next
+	beq 4$		;yes-end of string
+	cpy #32		;no-32 char yet?
+	bne 1$		;no-get more
+	beq 4$		;yes-go look for it
+
+2$	sty bad		;zero for rdob
+	jsr pargot	;finish hex read
+
+3$	lda t0
+	sta xcnt,y
+	iny
+	jsr parse	;get next character
+	bcs 4$		;no more -go look for bytes
+	cpy #$20	;32 bytes yet?
+	bne 3$		;no-get more
+
+4$	sty verck	;yes-start search
+	jsr crlf	;next line
+
+5$	ldy #0
+
+6$	jsr fetch	;get a byte from memory
+	cmp xcnt,y
+	bne 7$		;...branch if no match
+	iny
+	cpy verck	;checked full string?
+	bne 6$		;no-check on
+
+	jsr putt2	;print address found
+	jsr putspc	;pretty up to 8 bytes
+	jsr putspc
+
+7$	jsr stop
+	beq 8$		;...branch if user requests abort
+	jsr inct2	;increment t2
+	jsr dect1	;decrement byte counter
+	bcs 5$		;loop if not done
+
+8$	jmp main
+
+9$	jmp error
+	.page
+;************************************************************
+; load/save/verify
+;
+; l ["name"] [,device_number] [,alt_load_address]
+; v ["name"] [,device_number] [,alt_load_address]
+; s "name", device_number, starting_address, ending_address
+;************************************************************
+
+lodsav
+	ldy #1
+	sty fa		;setup defaults: tape, fixed_load, no filename
+	sty sa
+	dey		;(.y=0)
+	sty ba		;default l/s/v from/to RAM 0
+	sty fnlen	;default no filename
+	sty fnbnk	;filename is always in RAM 0 for monitor
+	sty status
+	lda #>xcnt
+	sta fnadr+1
+	lda #<xcnt
+	sta fnadr
+
+1$	jsr gnc		;look for name
+	beq 6$		;branch if no name (must be default load)
+	cmp #' '
+	beq 1$		;skip spaces
+	cmp #'"'
+	bne 3$		;jmp to error if no quoted name
+	ldx txtptr
+
+2$	lda buf,x	;get chr
+	beq 6$		;eol, must be load
+	inx
+	cmp #'"'	;pass everything up to closing quote
+	beq 4$
+	sta (fnadr),y	;okay- always bank 0
+	inc fnlen
+	iny
+	cpy #17		;check length of name (16 max.)
+	bcc 2$
+3$	jmp error
+
+4$	stx txtptr
+	jsr gnc		;trash delimitor
+	beq 6$		;...eol, use default
+	jsr parse	;get device #
+	bcs 6$		;...eol, use default
+	lda t0
+	sta fa		;device # in 'fa' (let kernal catch invalid devices)
+
+	jsr parse	;get starting address
+	bcs 6$		;none, must be load
+	jsr t0tot2	;save start_addr in t2
+	sta ba		;set bank
+
+	jsr parse	;get ending address
+	bcs 8$		;none...must be 'alternate load'
+	jsr crlf	;prep for 'saving...' msg
+	ldx t0		;pickup end addr
+	ldy t0+1
+	lda verck
+	cmp #'S'	;check that this is a save
+	bne 3$
+	lda #0
+	sta sa
+	lda #t2		;pointer to start. addr
+	jsr _save	;do save
+5$	jmp main
+
+6$	lda verck	;check for load
+	cmp #'V'	;..or verify
+	beq 7$
+	cmp #'L'
+	bne 3$
+	lda #0		;flag load
+
+7$	jsr _load	;do load/verify
+	lda status
+	and #$10
+	beq 5$		;ok to cont.
+	lda verck	;l & v have diff. err. msgs
+	beq 3$		;branch if zero (load)
+	jsr primm
+	.byte ' ERROR',0
+	jmp main
+
+8$	ldx t2		;set up new address for load (bank already put in 'ba')
+	ldy t2+1
+	lda #0		;flag 'non-default load'
+	sta sa
+	beq 6$		;go check for V or L, then doit.
+
+	.page
+;******************************************************************
+;
+;	Fill command - F starting-address ending-address value
+;
+;******************************************************************
+
+fill
+	jsr range	;sa in t2, len in t1
+	bcs 3$		;error if eol
+
+	lda t2+2
+	cmp temps+2
+	bne 3$		;prevent bank wraps
+
+	jsr parse	;get fill value
+	bcs 3$
+	ldy #0
+
+1$	lda t0
+	jsr stash	;fill memory byte by byte (without comparison check)
+	jsr stop
+	beq 2$		;branch if user wants to abort
+	jsr inct2
+	jsr dect1
+	bcs 1$
+
+2$	jmp main
+
+3$	jmp error
+
+;.end

@@ -1,0 +1,110 @@
+	.page
+	.subttl DELETE Command
+
+; delete a range of source
+;
+; syntax:   delete from# - to#
+
+nrange	jmp snerr
+
+delete	jsr errind		;allowed only in direct mode
+	jsr chrgot
+	beq nrange		;bad..no range parms.
+	jsr range		;get line # range
+	lda lowtr		;save it
+	ldx lowtr+1
+	sta index2
+	stx index2+1
+	jsr fndlin		;find it
+	bcc del300		;skip if not found
+	ldy #1
+	jsr indlow		;at end of source ?
+	dey
+	tax			;save it in case of swap
+	bne noteos
+	jsr indlow
+	beq del300		;both zero means end-of-source
+noteos
+	jsr indlow
+	sta lowtr		;include to line #
+	stx lowtr+1
+del300
+	lda index2		;check from#<to#
+	sec
+	sbc lowtr		;gen neg delta
+	tax
+	lda index2+1
+	sbc lowtr+1
+	tay
+	bcs notdel		;no good
+	txa
+	clc
+	adc text_top		;gen new end of source
+	sta text_top
+	tya
+	adc text_top+1
+	sta text_top+1
+	ldy #0
+
+del500	jsr indlow		;move source down
+	sta (index2),y
+	inc lowtr		;increment source (318018-03 fix; FAB)
+	bne 10$
+	inc lowtr+1
+10$	jsr delete_patch	;increment destination & compare with text_top
+	bcc del500		;loop until done
+	nop
+	nop			;(318018-03 placeholders)
+	nop
+
+notdel 				;entry for renumber also!
+	jsr lnkprg		;fix links
+	lda index1		;calc new end
+	ldx index1+1
+	clc
+	adc #2
+	sta text_top
+	bcc not500
+	inx
+not500
+	stx text_top+1
+	rts			;-04 FIX: was 'jmp ready'	(FAB)
+	.byte $00,$00		;-04 FIX: placeholder
+
+;********************************
+;*
+;* input range parameters
+;*
+;********************************
+
+range	beq 10$			;a terminator from chrgot
+	bcc 10$			;a number
+	cmp #minutk		;a dash
+	bne rngerr		;if it's not a dash, error (318018-03 fix; FAB)
+	ldy #1
+	jsr indtxt		;let's peek, and see what follows the dash!
+	beq rngerr		;uh-oh! it's of the form 'delete -' - error
+	cmp #':'		;the other terminator
+	beq rngerr		;..still bad
+	sec			;set up for linget
+
+10$	jsr linget		;get first #
+	jsr fndlin		;find it & set ptrs
+	jsr chrgot		;get last char
+	beq 20$			;skip done
+	cmp #minutk		;a dash
+	bne rngerr		;syntax error
+	jsr chrget		;yes - skip dash
+	jsr linget		;get second #
+	bne rngerr		;wasn't a number
+
+20$	lda endchr		;was a # input?
+	bne rngrts		;yes
+	lda #$ff		;no - make max
+	sta linnum
+	sta linnum+1
+rngrts	rts
+
+rngerr	jmp snerr		;syntax error
+
+;.end

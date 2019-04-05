@@ -40,6 +40,15 @@ It does not contain the version byte at $FF80 (which is $AA in the binary) or th
 
 The Commodore Plus/4, C16 and C116 BASIC 3.5 and KERNAL source (1984). Source: [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/index.html)
 
+##  BASIC_C128, KERNAL_C128_0{5|6}, EDITOR_C128[_DIN], MONITOR_C128
+
+The Commodore 128 BASIC 7.0, KERNAL, EDITOR and MONITOR sources (1985/1986). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
+
+* EDITOR_C128 is the US version (318020-05), EDITOR_C128_DIN the German version (315078-03).
+* KERNAL_C128_05 is 318020-05, $FF80 = 1.
+* KERNAL_C128_06 is 318020-06, $FF80 = 2 - this version seems to have been unreleased.
+* Version 318020-03, $FF80 = 0 was only included as an .lst file in the dump.
+
 ## BASIC_PET2001
 
 The PET 2001 BASIC source (V2, 1978).
@@ -48,7 +57,7 @@ The PET 2001 BASIC source (V2, 1978).
 * On the PET, this was called BASIC V2, Microsoft called it V1.1.
 * It includes the "WAIT6502,1" easter egg (symbol "ZSTORDO").
 
-## BASIC_CBM2_[AB], KERNAL_CBM2_[AB], EDITOR_CBM2
+## BASIC_CBM2&#x5f;{A|B}, KERNAL_CBM2&#x5f;{A|B}, EDITOR_CBM2
 
 The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from [David Viner](https://www.davidviner.com/cbm9.html), and the B version is from disks 67/68 of the [CBUG](http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/) library. The files have been converted to LF line breaks and LST-style indenting.
 

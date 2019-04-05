@@ -1,0 +1,417 @@
+	.page
+	.subttl  code0:  08/04/86
+
+reddy	jsr k_primm		;print immediate
+	.byte cr,'READY.',cr,0
+	rts
+
+ready	ldx #$80
+	.byte $2c
+
+omerr	ldx #errom
+
+error	jmp (ierror)
+nerror	sta sw_rom_ram0		;bank ram 0 in (just in case)
+	txa
+	bmi readyx		;...branch if no error (from 'ready')
+	stx errnum		;save error # for 'er'
+	bit runmod		;direct mode?
+	bpl errisd		;yes...always display error text
+
+	ldy #1			;copy curlin to errlin, oldtxt to errtxt
+1$	lda curlin,y
+	sta errlin,y
+	lda oldtxt,y
+	sta errtxt,y
+	dey
+	bpl 1$
+
+	ldy trapno+1    	;is trap set?
+	iny
+	beq errisd		;no.
+	dey			;restore msb of line #
+	sty linnum+1
+	sty tmptrp		;save until a resume is executed
+	ldy trapno
+	sty linnum
+
+	ldx #$ff
+	jsr error_patch		;-04 FIX: reset string temps & flag no more traps
+	ldx oldstk	
+	txs
+	jsr luk4it
+	jmp newstt
+errisd
+	dex
+	txa
+	jsr erstup		;set up address of error msg in .a in index2
+	jsr k_clrch
+	lda #0
+	sta channl
+	bit _mode		;are we in 80 col?
+	bmi 10$			;yes, don't reset graphics mode
+	sta _graphm		;make sure we're in text mode
+
+10$	jsr crdo
+	jsr outqst
+	ldy #0
+
+geterr	lda (index2),y  	;ind.ok
+	pha
+	and #127
+	jsr outdo
+	iny
+	pla
+	bpl geterr
+
+	jsr stkini
+	jsr k_primm
+	.byte   ' ERROR',0
+
+errfin	ldy curlin+1		;direct mode?
+	iny
+	beq readyx		;yes...no line #
+	jsr inprt
+
+
+
+
+readyx	jsr reddy		;print 'ready'
+	lda #$80
+	jsr _setmsg		;turn kernal messages on
+	lda #0
+	sta runmod		;turn run mode off
+
+
+
+main	jmp (imain)
+nmain	ldx #$ff
+	stx curlin+1
+	jsr inlin		;get a line from terminal
+execute_a_line
+	stx txtptr		;txtptr is ptr to index buffer
+	sty txtptr+1
+	jsr chrget
+	tax
+
+main00	beq main		;if end of line
+	bcc main1		;if line number
+	jsr crunch
+	jsr chrgot		;get command
+	jmp xeqdir		;execute command
+
+
+
+main1
+	jsr linget		;read line # into linnum
+	jsr crunch
+	sty count		;retain char count
+	jsr fndlin
+	bcc nodel		;no match, so don't delete
+
+; test : if new line is longer than the line it replaces,
+;	 then if there isn't enough room in memory to add this new line,
+;		then out-of-memory error
+;
+; before this fix, the old line was deleted BEFORE testing if the new line fit
+;
+;N.B.: I am assuming that lines cannot be greater than 255 chars, as is the
+; case where the line was entered 'normally', that is, using LINGET, The only
+; consequence of this assumption is that lines > 255 will fall prey to the
+; pre-fix problem mentioned above.
+
+	ldy #0
+	jsr indlow		;get lsb of the next lines starting address
+	sec
+	sbc lowtr		;subtract lsb of this lines starting address
+	sec			;ignore borrow (gives abs. value)
+	sbc #4			;allow for link & line number
+	sbc count		;compare with new length
+	bcs 3$			;new line is shorter, no problem.
+	eor #$ff
+	adc #1			;convert to positive delta (.c=0)
+
+	ldy text_top+1		;get msb of end of text
+	adc text_top		;add our calculated delta to end of text
+	bcc 1$
+	iny
+1$	cpy max_mem_0+1
+	bcc 3$			;result is less than top-of-memory : ok
+	bne 2$			;oops, overflow. too bad.
+	cmp max_mem_0		;msb's the same, test lsb's
+	bcc 3$			;ok if lsb is less than top,
+2$	jmp omerr		;..else an error
+
+
+3$	ldy #1
+	jsr indlow
+	sta index1+1
+	lda text_top		;text end
+	sta index1
+	lda lowtr+1     	;set xfer to
+	sta index2+1
+	dey
+	jsr indlow		;compute length
+	clc
+	sbc lowtr
+	eor #$ff		;make it negative
+	clc
+	adc text_top		;compute new text end
+	sta text_top
+	sta index2		;set low of xfer to
+	lda text_top+1
+	adc #255
+	sta text_top+1		;compute high of text end
+	sbc lowtr+1     	;compute # of blocks to move
+	tax
+	sec
+	lda lowtr
+	sbc text_top		;compute offset
+	tay
+	bcs qdect1		;if text_top <= lowtr
+	inx			;dec due to carry and
+	dec index2+1    	;dec store so carry works
+qdect1
+	clc
+	adc index1
+	bcc 10$
+	dec index1+1
+	clc
+
+10$	jsr indin1
+	sta (index2),y
+	iny
+	bne 10$
+	inc index1+1
+	inc index2+1
+	dex
+	bne 10$
+
+nodel	jsr stkini		;jsr clearc removed since changes to text no longer
+	jsr lnkprg
+	ldy #0			;..require trashing variables
+	lda (txtptr),y		;delete line?
+	bne 5$
+	jmp main00
+
+5$	clc			;no...something to insert
+	lda text_top
+	ldy text_top+1
+	sta hightr
+	sty hightr+1    	;top of block to move
+
+	adc count		;length of characters in line
+	bcc 1$
+	iny
+1$	clc
+	adc #4			;plus link and line #
+	bcc 2$
+	iny
+2$	sta highds		;destination of top
+	sty highds+1
+
+; low block address is lowtr
+; where it was left in the call to fndlin
+;
+	cpy max_mem_0+1		;make sure new top doesn't crash into top of available ram
+	bcc 4$			;ok
+	bne 3$			;out of memory
+	cmp max_mem_0
+	bcc 4$			;ok
+3$	jmp omerr		;out of memory
+
+4$	sta text_top		;new top of text
+	sty text_top+1
+
+	.page
+; Move text up to make room for an insertion.
+;
+; our story so far...
+;
+; (highds)= destination of (high address).
+; (lowtr)= lowest addr to be transferred.
+; (hightr)= highest addr to be transferred.
+;
+	sec			;prepare to subtract.
+	lda hightr
+	sbc lowtr		;compute number of things to move.
+	sta index		;save it for later.	
+	tay
+	lda hightr+1
+	sbc lowtr+1
+	tax			;put it in a counter register.
+	inx 			;so that counter algorithm works.
+	tya			;see if low part of count is zero.
+	beq 60$			;yes, go start moving blocks.
+	lda hightr		;no, must modify base address.
+	sec
+	sbc index		;borrow if off since (hightr) > (lowtr).
+	sta hightr		;save modified abse address.
+	bcs 30$			;if no borrow, go shove it.
+	dec hightr+1		;borrow implies sub 1 from high order.
+	sec
+
+30$	lda highds		;mod base of dest addr.
+	sbc index
+	sta highds
+	bcs 50$			;no borrow.
+	dec highds+1		;decrement high order byte
+	bcc 50$			;always skip
+
+40$	jsr indhtr		;lda (hightr),y
+	sta (highds),y
+
+50$	dey
+	bne 40$
+	jsr indhtr		;lda (hightr),y
+	sta (highds),y
+
+60$	dec hightr+1
+	dec highds+1		;start on new blocks.
+	dex
+	bne 50$
+
+;
+; make links non-null to fool chead
+;
+	ldy #0
+	lda #1
+	sta (lowtr),y
+	iny			;y=1
+	sta (lowtr),y
+;
+; put line number in text
+;
+	iny			;y=2
+	lda linnum
+	sta (lowtr),y
+	lda linnum+1
+	iny			;y=3
+	sta (lowtr),y
+;
+; advance lowtr to start of line
+;
+	clc
+	lda lowtr
+	adc #4
+	sta lowtr
+	bcc 80$
+	inc lowtr+1
+
+;
+; block move line to text
+;
+80$	ldy count
+	dey
+
+90$	lda (txtptr),y
+	sta (lowtr),y
+	dey
+	cpy #$ff
+	bne 90$
+	jsr lnkprg
+	jsr stxtpt		;set up txtptr (was jsr runc)
+
+; test if auto in effect
+
+	lda autinc		;if in auto mode, increment val <> 0
+	ora autinc+1
+	beq gomain		;not in
+	
+	lda linnum		;yes, construct new line number
+	clc
+	adc autinc
+	sta facho+1
+	lda linnum+1
+	adc autinc+1
+	bcs gomain		;no auto if wrapped
+	cmp #$fa		;test if # >= 64000
+	bcs gomain		;no auto if so.
+	sta facho
+	ldx #$90
+	sec
+	jsr floatc		;float it
+	jsr fout		;make it into a string
+	
+	ldx #0			;move string into kbd buffer
+aline1
+	lda $101,x		;copy number formed into buffer, ignoring leading space
+	beq aline2		;a null marks end
+	sta _keyd,x
+	inx
+	bne aline1		;always
+	
+
+aline2
+	lda #29			;cursor right
+	sta _keyd,x
+	inx
+	stx _ndx
+gomain
+	jmp main
+	
+
+
+lnkprg
+	lda txttab
+	ldy txttab+1
+	sta index
+	sty index+1
+	clc 
+chead
+	ldy #0
+	jsr indin1		;lda (index),y .. check for null link
+	bne 1$
+	iny
+	jsr indin1		;lda (index),y
+	beq lnkrts
+
+1$	ldy #4
+2$	iny
+	jsr indin1		;lda (index),y
+	bne 2$
+	iny
+	tya
+	adc index
+	tax
+	ldy #0
+	sta (index),y
+	tya
+	adc index+1
+	iny
+	sta (index),y
+	stx index
+	sta index+1
+	bcc chead		;always
+
+	.page
+
+fixlnk	clc
+	lda index		;set pointer to end of text
+	ldy index+1     	;(called only when allocating or deallocating bit maps)
+	adc #2
+	bcc *+3
+	iny
+	sta text_top
+	sty text_top+1
+lnkrts
+	rts
+
+
+;
+; function to get a line one character at a time from the input
+; channel and build it in the input buffer.
+;
+
+inlin	ldx #0
+1$	jsr inchr
+	cmp #cr			;a carriage return?
+	bne 2$
+	jmp fininl		;yes...done build
+2$	sta buf,x		;put it away
+	inx
+	cpx #buflen     	;max character line?
+	bcc 1$			;no...o.k.
+	jmp errlen		;'too long' error
+
+;.end

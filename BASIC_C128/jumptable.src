@@ -1,0 +1,70 @@
+	.page
+	.subttl jump table
+
+; Format Conversions
+
+	jmp ayint	;convert f.p. to integer
+	jmp givayf	;convert integer to f.p.
+	jmp fout	;convert f.p. to ascii string
+	jmp val_1	;convert ascii string to f.p.
+	jmp getadr	;convert f.p. to an address
+	jmp floatc	;convert address to f.p.
+
+; Math Functions
+
+	jmp fsub	;MEM - FACC
+	jmp fsubt	;ARG - FACC
+	jmp fadd	;MEM + FACC
+	jmp faddt	;ARG - FACC
+	jmp fmult	;MEM * FACC
+	jmp fmultt	;ARG * FACC
+	jmp fdiv	;MEM / FACC
+	jmp fdivt	;ARG / FACC
+	jmp log		;compute natural log of FACC
+	jmp int		;perform basic INT on FACC
+	jmp sqr		;compute square root of FACC
+	jmp negop	;negate FACC
+	jmp fpwr	;raise ARG to the MEM power
+	jmp fpwrt	;raise ARG to the FACC power
+	jmp exp		;compute EXP of FACC
+	jmp cos		;compute COS of FACC
+	jmp sin		;compute SIN of FACC
+	jmp tan		;compute TAN of FACC
+	jmp atn		;compute ATN of FACC
+	jmp round	;round FACC
+	jmp abs		;absolute value of FACC
+	jmp sign	;test sign of FACC
+	jmp fcomp	;compare FACC with MEM
+	jmp rnd_0	;generate random f.p. number
+
+; Movement
+
+	jmp conupk	;move RAM MEM to ARG
+	jmp romupk	;move ROM MEM to ARG
+	jmp movfrm	;move RAM MEM to FACC
+	jmp movfm	;move ROM MEM to FACC
+	jmp movmf	;move FACC to MEM
+	jmp movfa	;move ARG to FACC
+	jmp movaf	;move FACC to ARG
+
+
+	jmp optab
+	jmp drawln
+	jmp gplot
+	jmp cirsub
+	jmp run
+	jmp runc
+	jmp clear
+	jmp new
+	jmp lnkprg
+	jmp crunch
+	jmp fndlin
+	jmp newstt
+	jmp eval
+	jmp frmevl
+	jmp run_a_program
+	jmp setexc
+	jmp linget
+	jmp garba2
+	jmp execute_a_line
+;end

@@ -1,0 +1,18 @@
+	.page
+	.subttl LOCATE Command
+
+;*************************************************************
+;
+; set the current xpos, ypos
+;
+;	   locate p
+;
+;*************************************************************
+
+locate
+	jsr isgrap	;make sure graphics area has been allocated
+	ldx #xdest-vwork
+	jsr incord      ;get the coordinates
+	jmp dstpos      ;set the pos'n, do rts
+
+;end

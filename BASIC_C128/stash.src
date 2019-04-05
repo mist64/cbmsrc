@@ -1,0 +1,9 @@
+	.page
+	.subttl STASH Command
+
+;	STASH Command - set up for call to kernal dma routine
+
+stash	lda #$84
+	jmp swap_01		;pass the buck
+
+;end

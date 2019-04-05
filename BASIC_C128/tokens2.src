@@ -1,0 +1,74 @@
+	.page
+	.subttl Escape Tokens and Keywords
+
+; Escape Command Tokens
+
+esc_cmd_lst
+
+lowest_esc_cmd_tk=2
+	.byte 'BAN','K'+$80		; 2: set bank number
+	.byte 'FILTE','R'+$80		; 3: set up filter
+	.byte 'PLA','Y'+$80		; 4: play a tune
+	.byte 'TEMP','O'+$80		; 5: set rate for playing
+	.byte 'MOVSP','R'+$80		; 6: sprite position/movement
+	.byte 'SPRIT','E'+$80		; 7: turn on/set up sprite
+	.byte 'SPRCOLO','R'+$80		; 8: set sprite multicolor registers
+	.byte 'RRE','G'+$80		; 9: retreive register values after 'SYS'
+	.byte 'ENVELOP','E'+$80		;10: set up SID envelopes
+	.byte 'SLEE','P'+$80		;11: delay
+	.byte 'CATALO','G'+$80		;12: disk directory
+	.byte 'DOPE','N'+$80		;13: open a disk file
+	.byte 'APPEN','D'+$80		;14: open a disk file for appending
+	.byte 'DCLOS','E'+$80		;15: close a file opened w/ DOPEN
+	.byte 'BSAV','E'+$80		;16: binary (non-program) save
+	.byte 'BLOA','D'+$80		;17: binary load
+	.byte 'RECOR','D'+$80		;18: 
+	.byte 'CONCA','T'+$80		;19: concatenate 2 files
+	.byte 'DVERIF','Y'+$80		;20: verify a saved program
+	.byte 'DCLEA','R'+$80		;21: re-initialize a drive
+	.byte 'SPRSA','V'+$80		;22: sprite/string to sprite/string
+	.byte 'COLLISIO','N'+$80	;23: set traps for sprite & light pen collisions
+collision_tk=23
+	.byte 'BEGI','N'+$80		;24: mark start of a b-block
+begintk=24
+	.byte 'BEN','D'+$80		;25: ..and it's end, too!
+bendtk=25
+	.byte 'WINDO','W'+$80		;26: set screen window
+	.byte 'BOO','T'+$80		;27: boot CP/M (etc.) off disk
+	.byte 'WIDT','H'+$80		;28: single/double width drawing
+	.byte 'SPRDE','F'+$80		;29: define a sprite
+	.byte 'QUI','T'+$80		;30: (UNIMPLEMENTED)
+	.byte 'STAS','H'+$80		;31: access external memory
+	.byte ' '+$80			;32: POISON - space character
+	.byte 'FETC','H'+$80		;33: access external memory
+	.byte ' '+$80			;34: POISON - quote character
+	.byte 'SWA','P'+$80		;35: access external memory
+	.byte 'OF','F'+$80		;36: (UNIMPLEMENTED)
+off_tk=36
+	.byte 'FAS','T'+$80		;37: go to 2 MHz. mode
+	.byte 'SLO','W'+$80		;38: go to 1 MHz. mode
+	.byte 0				;  end marker
+highest_esc_cmd_tk=38
+
+	.page
+; Escape Function Tokens
+
+esc_fn_lst
+
+lowest_esc_fn_tk=2
+	.byte 'PO','T'+$80		; 2: return paddle value
+	.byte 'BUM','P'+$80		; 3: read sprite collision
+	.byte 'PE','N'+$80		; 4: read light pen value
+	.byte 'RSPPO','S'+$80		; 5: read sprite position
+	.byte 'RSPRIT','E'+$80		; 6: read sprite value
+	.byte 'RSPCOLO','R'+$80		; 7: read sprite multicolor value
+	.byte 'XO','R'+$80		; 8: exclusive or
+	.byte 'RWINDO','W'+$80		; 9: read window size
+	.byte 'POINTE','R'+$80		;10: return address of descriptor
+pointer_tk=10
+highest_esc_fn_tk=pointer_tk
+	.byte 0
+	.byte 0,0			;fill to compensate for 7APR85 change
+					;from 'SYSTEM' to 'QUIT'
+
+;end

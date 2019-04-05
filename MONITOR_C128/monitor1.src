@@ -1,0 +1,284 @@
+	.page
+	.subttl monitor1
+
+;********************************************
+;
+;	Display memory command
+;
+;********************************************
+
+dspmem
+	bcs 1$		;no range, do 1/2 screen
+	jsr t0tot2	;else move 'from' value into place
+	jsr parse
+	bcc 2$		;got 'to', go dump
+
+1$	lda #11	  	;do 12 lines
+	sta t0
+	bne 4$		;always
+
+
+;	calculate # of lines
+
+2$	jsr sub0m2	;calculate # bytes, put result in t0 (msb goes in .a)
+	bcc 7$		;...branch if sa > ea
+	
+	ldx #3
+	bit mode	;divide by 8 if 40-col, 16 if 80-col
+	bpl 3$
+	inx
+
+3$	lsr t0+2	;shift msb right,
+	ror t0+1	;..into middle byte,
+	ror t0		;..and finally into lsb
+	dex
+	bne 3$
+
+4$	jsr stop	;is stop key down?
+	beq 6$		;..if so, exit.
+
+	jsr dmpone
+	lda #8
+	bit mode	;add 8 (16 if 80-col) to line start address
+	bpl 5$
+	asl a
+
+5$	jsr addt2
+	jsr dect0	;test if dump finished
+	bcs 4$		;loop until underflow
+6$	jmp main
+
+7$	jmp error
+
+	.page
+;********************************************
+;
+;	Set register command
+;
+;********************************************
+
+setreg
+	jsr t0topc	;copy adr & bank to pcl,h & pcb,  if given
+
+	ldy #0
+1$	jsr parse
+	bcs 2$		;quit anytime arg list is empty
+	lda t0
+	sta flgs,y
+	iny
+	cpy #5
+	bcc 1$
+2$	jmp main
+
+	.page
+;********************************************
+;
+;	Alter memory command
+;
+;********************************************
+
+setmem
+	bcs 3$		;...branch if no arguments- just regurgitate existing data
+	jsr t0tot2	;destination bank, addr in 't2'
+	ldy #0
+
+1$	jsr parse	;scan for next argument
+	bcs 3$		;...branch if eol
+	lda t0		;get the byte to stash
+	jsr stash	;stash it
+	iny
+	bit mode
+	bpl 2$
+	cpy #16
+	bcc 1$
+2$	cpy #8
+	bcc 1$
+
+3$	jsr primm	;clear all modes & cursor up
+	.byte $1b,$4f,$91,0
+
+	jsr dmpone
+	jmp main
+
+	.page
+;********************************************************************
+;
+;	Go command- start executing at either the supplied address,
+;	   or (default) the current contents of the PC reg
+;
+;********************************************************************
+
+go
+	jsr t0topc	;copy adr & bank to pcl,h & pcb,  if given
+
+	ldx sp
+	txs		;set up stack pointer
+
+	jmp _goto	;goto <pcl,h,b>
+
+
+
+
+
+;********************************************************************
+;
+;	Jsr command- start executing at either the supplied address,
+;	   or (default) the current contents of the PC reg.
+;	   return is to monitor 'main' loop.
+;
+;********************************************************************
+
+gosub
+	jsr t0topc	;copy adr & bank to pcl,h & pcb,  if given
+	jsr _gosub	;execute 'go' as a subroutine
+	jmp main	;we're back
+
+	.pag
+;********************************************
+;
+;	Subroutine to dump one line
+;	of memory on screen
+;
+;********************************************
+
+dmpone
+	jsr crlf
+	lda #'>'	;print dump prompt
+	jsr bsout
+	jsr putt2	;print address, space.
+	ldy #0
+	beq 2$		;always (skip first space)
+
+1$	jsr putspc
+2$	jsr fetch	;get a byte from memory
+	jsr puthex	;print hex byte
+	iny
+	cpy #8		;8 bytes/line for 40-column mode
+	bit mode
+	bpl 3$
+	cpy #16		;16 bytes/line for 80-column mode
+3$	bcc 1$
+
+	jsr primm	;block off ascii dump & turn rvs on
+	.byte ':',18,0
+
+	ldy #0
+
+4$	jsr fetch	;re-get byte from memory
+	pha
+	and #$7f	;mask control characters ($00-$1f and $80-$9f)
+	cmp #$20
+	pla
+	bcs 5$
+	lda #'.'	;print control characters as '.'
+
+5$	jsr bsout
+	iny
+	bit mode
+	bpl 6$
+	cpy #16
+	bcc 4$
+6$	cpy #8
+	bcc 4$
+	rts
+
+	.page
+;********************************************
+;
+;	Transfer/Compare routines.
+;
+;	T starting-from,thru,to
+;	C starting-from,thru,with
+;
+;********************************************
+
+compar
+	lda #0	   	;flag 'compare'
+	.byte $2c
+
+trnsfr
+	lda #$80	;flag 'transfer'
+	sta verck
+	lda #0
+	sta direction
+	jsr range	;get source in t2, length in t1
+	bcs 99$
+	jsr parse	;get destination in t0
+	bcc 1$
+
+99$	jmp error
+
+1$	bit verck
+	bpl 20$		;...branch if compare (direction crap unimportant)
+
+	sec		;determine direction of transfer (to avoid stepping on ourselves!)
+	lda t2
+	sbc t0		;source - destination (ignore banks...there might be bleed-thru)
+	lda t2+1
+	sbc t0+1
+	bcs 20$		;branch if source >= destination
+
+;	clc
+	lda t1		;source < destination,   must work from back to front
+	adc t0
+	sta t0
+	lda t1+1	;add length to destination
+	adc t0+1
+	sta t0+1
+	lda t1+2
+	adc t0+2
+	sta t0+2
+	ldx #2
+10$	lda temps,x	;restore ea as source (saved @ 'range')
+	sta t2,x
+	dex
+	bpl 10$
+
+	lda #$80
+	sta direction	;flag backwards direction
+
+20$	jsr crlf	;start with a new line
+	ldy #0
+
+30$	jsr stop
+	beq 90$		;...branch if user requests abort
+	jsr fetch	;get a byte
+	ldx #t0
+	stx stavec
+	stx cmpvec	;set up sta/cmp addresses
+	ldx t0+2	;get bank
+
+	sei
+	bit verck
+	bpl 40$
+	jsr _stash	;copy byte
+
+40$	ldx t0+2	;get bank
+	jsr _cmpar	;compare bytes
+	cli
+	beq 50$
+
+	jsr putt2	;report mismatch
+	jsr putspc	;make each number 8 bytes to look pretty
+	jsr putspc
+
+50$	bit direction
+	bmi 60$		;test direction of transfers
+
+	inc t0		;normal
+	bne 70$
+	inc t0+1
+	bne 70$		;bra
+	jmp error	;disallow bank-wrapping operations
+
+60$	jsr dect0	;backwards
+	jsr dect2
+	jmp 80$
+
+70$	jsr inct2
+80$	jsr dect1
+	bcs 30$
+
+90$	jmp main
+
+;.end

@@ -1,0 +1,28 @@
+	.page
+	.subttl  PATCHES to BASIC ($8000-$AFFF)
+
+;  ROUND_QINT	fixes the infamous   INT(.9+.1) -> 0   Microsoft bug
+;
+
+round_qint
+	jsr round	;must 'round' fac per 'facov'
+	jmp qint	;now int(fac)
+
+
+;  USING_PATCH	fixes the infamous  $,999.99  print-using bug
+;
+
+using_patch
+	jsr indfrm	;take a peek at the next character in the format string
+	cmp #','	;if it's a comma, we got problems
+	bne 10$		;...branch if no comma & resume normal processing
+
+	lda blfd	;here's the bug fix:
+	jsr cdout	;print a 'fill' character instead of the '$'
+	iny		;and increment format string pointer past comma
+
+10$	sec		;resume normal processing
+	ror dolr	;clear the dollar flag & go on to print '$'
+	rts
+
+;.end

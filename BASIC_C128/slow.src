@@ -1,0 +1,21 @@
+	.page
+	.subttl SLOW Command
+
+;***********************************************************************
+;
+;    SLOW - put the system in 1 MHz. mode, and un-blank the VIC screen
+;
+;***********************************************************************
+
+slow	jsr put_io_in_map
+
+	lda #0
+	sta vic+48		;slow down there, lil' processor!
+
+	lda vic+17		;enable screen
+	and #$7f
+	ora #$10
+	sta vic+17
+
+	rts
+;end

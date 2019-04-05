@@ -1,0 +1,236 @@
+	.page
+	.subttl BOX Command
+
+;**************************************************************
+;
+;  box  (s), p1 ( , (p2) (, (ang) , fill ) )  --  draw a box
+;          s = color (1-4) (default=fg (1))
+;          p1 = a corner coordinate
+;          x2,y2 = opposite diagonal coordinate
+;                 (default = current xpos/ypos)
+;          ang = rotation angle (default = 0)
+;          fill = fill with color (default = 0)
+;
+;*************************************************************
+
+box	jsr grpcol      ;make sure a graphics area has been allocated, get color
+	ldx #xcord1-vwork
+	jsr incor3      ;get x/y coordinates
+	ldx #xcord2-vwork
+	jsr incor2      ;get optional 2nd x/y coordinates
+	jsr optwrd      ;get 2 byte angle, or 0,0 if no arg.
+	sty boxang
+	sta boxang+1    ;save rotation angle
+	jsr optzer
+	cpx #2
+	bcc 1$		;good arg
+	jmp fcerr	;illegal value
+
+1$	stx filflg
+	txa
+	pha
+	jsr boxsub      ;set up values & get 1st side
+	pla
+	bne boxfil      ;skip if to be filled
+	beq box15
+
+box10
+	jsr anglpt      ;get next position
+box15
+	jsr drawln      ;connect to last position
+	lda angcnt
+	bne box10	;loop 4 times
+box20
+	ldx #4
+box30
+	lda xcord2-1,x  ;reset xpos/ypos to x2,y2
+	sta xpos-1,x
+	dex
+	bne box30
+	stx filflg      ;clear fill flag
+	rts
+
+	.page
+;***********************************************************
+;
+;  boxfil  --  same as box except fill rectangle with color
+;
+;***********************************************************
+
+boxfil
+	ldx #0
+	lda angsgn
+	lsr a
+	bcc boxf05
+	ldx #2
+boxf05
+	lda xcord1+16,x
+	sta bxleng      ;save absolute difference
+	lda xcord1+17,x
+	sta bxleng+1
+	lda #0
+	ldx #3
+boxf10
+	sta xcount,x    ;init values to zero
+	dex
+	bpl boxf10
+;
+;  fill box by drawing lines connecting opposite sides of the box
+;
+boxf20
+	ldx #7
+boxf25
+	lda xpos,x      ;save coordinates
+	pha
+	dex
+	bpl boxf25
+	jsr drawln      ;connect the two points
+	ldx #0
+boxf28
+	pla
+	sta xpos,x      ;restore coordinates
+	inx
+	cpx #8
+	bne boxf28
+boxf30
+	lda bxleng
+	bne boxf40      ;check count
+	dec bxleng+1
+	bmi box20	;exit if down to zero
+boxf40
+	dec bxleng      ;decrement count
+	ldx #xcount-vwork
+	ldy #cosval-vwork
+	lda angsgn
+	lsr a
+	bcc boxf45
+	ldy #sinval-vwork
+boxf45
+	lda #0
+boxf50
+	lsr a
+	pha
+	jsr addtwo      ;add inc value to count of increment
+	sta vwork,x
+	tya		;save sum to count of increment
+	sta vwork+1,x
+	pla
+	bcc boxf60
+	ora #$a0	 ;flag to show to increment position
+boxf60
+	inx
+	inx
+	ldy #sinval-vwork
+	lsr angsgn
+	bcc boxf65
+	ldy #cosval-vwork
+boxf65
+	rol angsgn
+	cpx #ycount-vwork
+	beq boxf50      ;loop to do y-increment
+	ldx #6
+	asl a
+	beq boxf30      ;loop if neither position incremented
+boxf70
+	bcc boxf80      ;skip increment to position
+	inc xpos,x
+	bne boxf80
+	inc xpos+1,x
+boxf80
+	asl a
+	dex
+	dex
+	bpl boxf70      ;loop 4 times
+	bmi boxf20      ;loop to connect points
+
+	.page
+;**************************************************************
+;
+;  boxsub  -  set up coordinate positions for box drawing
+;	      get first coordinate point
+;
+;*************************************************************
+
+boxsub
+	ldy #boxang-vwork
+	jsr getang      ;set up sine & cosine values for rotation angle
+	ldx #xcord1-vwork
+	ldy #xcord2-vwork
+boxs10
+	tya
+	pha
+	jsr box_patch_1 ; (318018-03 mod; fab: fix values >16383)
+	sta vwork+4,x   ;set distance = abs(coord1-coord2)
+	sta vwork+8,x
+	sta vwork+16,x
+	tya
+	sta vwork+5,x   ;save high byte
+	sta vwork+9,x
+	sta vwork+17,x
+	pla
+	tay
+	jsr box_patch_2 ; (318018-03 mod; fab: fix values >16383)
+	sta vwork,x     ;set center pts = coord1+coord2
+	tya
+	sta vwork+1,x
+	ldy #ycord2-vwork
+	inx
+	inx
+	cpx #ycord1-vwork
+	beq boxs10      ;loop to do y values
+	lda #$90
+	jsr angdst      ;set up xang1-4
+	lda angsgn
+	and #03
+	sta angsgn      ;mask to 1 of four angle phases
+	tax
+	lda boxtab,x    ;get values for 1st points
+	jsr anglpt      ;set pt1 = xctr-xd*cos+yd*sin , yctr-xd*sin-yd*cos
+	jsr dstpos      ;move to xpos/ypos
+	lda angcnt
+	jsr anglpt      ;get next coordinate counter clockwise
+	ldx angsgn
+	lda boxtab,x
+	and #$f0
+	sta angcnt+1
+	lda boxtab+4,x
+	sta angcnt
+	rts
+
+boxtab
+	.byte $be,$e4,$41,$1b,$41,$1b,$be,$e4
+	.byte $46,$52,$45,$44,$20,$42,$0d
+	.byte $54,$45,$52,$52,$59,$20,$52,$0d
+	.byte $4d,$49,$4b,$45,$20,$49,$0d
+	.page
+;*************************************************************
+;
+;  boxpnt  --  get the next box corner point
+;		pt(x) = xcenter +/- xd*cos +/- yd*sin
+;		pt(y) = ycenter +/- xd*sin +/- yd*cos
+;		a = +/-,+/-,+/-,+/-
+;
+;  **** 318018-03 mod- this subbie no longer called. FAB  ****
+;
+;*************************************************************
+
+boxpnt
+	jsr anglpt      ;get coordinate point
+	ldx #4
+boxp10
+	lda xpos+1,x
+	asl a		;carry sign into shift
+	ror xpos+1,x    ;divide by 2 to scale
+	ror xpos,x
+	bcc boxp20
+	inc xpos,x      ;add 1 for rounding
+	bne boxp20
+	inc xpos+1,x
+boxp20
+	inx
+	inx
+	cpx #6
+	beq boxp10      ;loop to divide ydest
+	rts
+
+;.end

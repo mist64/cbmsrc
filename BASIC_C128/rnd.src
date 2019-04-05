@@ -1,0 +1,63 @@
+	.page
+	.subttl RND Function
+
+;    random number function.  rnd(x) where:
+;      x=0 ==> generate a random number based on hardware clock
+;      x<0 ==> seed a reproducable, pseudo-random number generator
+;      x>0 ==> generate a reproducable pseudo-random # based on
+;		seed value above.
+
+rnd
+	jsr sign		;get sign into accb.
+rnd_0	bmi rnd1
+	bne qsetnr
+
+; get value from hardware timers
+
+	jsr put_io_in_map
+	lda d1pra+6		;timer b is free-running,
+	sta facho
+	lda d1pra+7
+	sta facmo
+	lda d1pra+4		;..timer a isn't
+	sta facmoh
+	lda d1pra+5
+	sta faclo
+	jmp strnex
+
+
+qsetnr	lda #<rndx		;get last one into fac.
+	ldy #>rndx
+	jsr movfm
+	lda #<rmulc
+	ldy #>rmulc		;fac was zero. restore last one
+	jsr rommlt		;multiply by random constant.
+	lda #<raddc
+	ldy #>raddc
+	jsr romadd		;add random constant.
+
+rnd1	ldx faclo
+	lda facho
+	sta faclo
+	stx facho		;reverse hi and lo.
+	ldx facmoh
+	lda facmo
+	sta facmoh
+	stx facmo
+
+strnex	lda #0			;make number positive.
+	sta facsgn
+	lda facexp		;put exp where it wil
+	sta facov		;be shifted in by normal.
+	lda #@200
+	sta facexp		;make result between 0 and 1.
+	jsr normal		;normalize.
+	ldx #<rndx
+	ldy #>rndx
+	jmp movmf		;put new one into memory.
+
+
+rmulc  .byte @230,@65,@104,@172,0
+raddc  .byte @150,@50,@261,@106,0
+
+	;end

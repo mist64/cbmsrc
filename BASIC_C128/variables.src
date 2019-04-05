@@ -1,0 +1,210 @@
+	.page
+	.subttl Variable Assignment
+
+is_variable
+	jsr ptrget	;parse variable name, put name in varnam
+
+isvret	sta facmo	;save pointer to variable
+	sty facmo+1
+	ldx varnam
+	ldy varnam+1
+	lda valtyp	;test if numeric or string
+	beq is_numeric	;branch if numeric
+	lda #0
+	sta facov
+	cpx #'T'	;'ti$' is a special case. look for it.
+	bne isvds	;go test for ds$
+	cpy #$c9	;shifted 'i'
+	bne strrts_1
+
+; variable name is 'ti$'. to see if this is 'the' ti$, and not an
+; array ti$(), test to see if it has a pointer to the zero in rom.
+; if it is an array item, it's pointer will be to a real value, or
+; a real zero. if it isn't an array item, it's pointer will point
+; to a dummy zero in rom.
+;
+	lda facmo
+	cmp #<zero
+	bne strrts_1	;not ti$
+	lda facmo+1
+	cmp #>zero
+	bne strrts_1	;not ti$
+
+	jsr gettim	;it is ti$, create a string.
+	sty tenexp	;y=0.
+	dey
+	sty fbufpt
+	ldy #6		;six digits to print.
+	sty deccnt
+	ldy #fdcend-foutbl
+	jsr foutim	;convert to ascii.
+	jmp timstr
+
+strrts_1 rts
+
+isvds	cpx #'D'	;is this ds$?
+	bne strrts_1
+	cpy #$d3	;'s'+$80
+	bne strrts_1
+	jsr chkds
+	ldy #$ff
+
+10$	iny			;copy ds string to a temp. first get length
+	lda #dsdesc+1
+	jsr indsub_ram1
+	cmp #0			;look for end-of-string null
+	bne 10$
+
+	tya
+	jsr strini		;get temp string space (len in .A)
+	tay
+	beq 30$			;don't bother copying if len is 0
+
+20$	dey
+	lda #dsdesc+1
+	jsr indsub_ram1
+	sta (frespc),y
+	tya
+	bne 20$
+
+	jsr mvdone
+30$	jmp putnew
+
+
+
+
+
+
+chkds	lda dsdesc
+	bne strrts
+	jmp errchl	;get status
+
+
+
+is_numeric
+	bit intflg	;is this an integer?
+	bpl is_floating	;no, branch.
+	ldy #0
+	jsr indfmo	;fetch high 
+	tax
+	iny
+	jsr indfmo	fetch low
+	tay		;put low in y.
+	txa		;get high in a.
+	jmp givayf	;float and return.
+
+;screen out ti,st,er, and el, and assign values to them.
+;first test if pointer points to rom zero. if not, it can't
+;be any of the above.
+;
+is_floating
+	lda facmo+1
+	cmp #>zero
+	bne gomovf	;not ti,st,....
+	lda facmo
+	cmp #<zero
+	bne gomovf	;not ti,st,....
+;
+; pointer does point to the rom zero. now it is necessary to
+; examine the actual variable name case by case.
+;
+	cpx #'T'
+	bne qstatv
+	cpy #'I'
+	bne gomovf
+	jsr gettim
+	tya		;for floats.
+	ldx #160	;set exponent.
+	jmp floatb
+
+gettim	jsr _rdtim
+	stx facmo
+	sty facmoh
+	sta faclo
+	ldy #0
+	sty facho	;zero highest.
+strrts	rts
+
+qstatv	cpx #'S'	;'st'?
+	bne qdsav	;no, go test 'ds'
+	cpy #'T'
+	bne gomovf
+	jsr k_readst	; (318018-03 fix; fab: system bank for rs232 st)
+	jmp float
+
+
+
+qdsav
+	cpx #'D'	;'ds'?
+	bne qerlin	;no, go test 'er' & 'el'
+	cpy #'S'
+	bne gomovf
+
+; get disk status - make the first two characters of ds$ string into a number.
+
+	jsr chkds	;get a ds$ string if one doesn't exist already
+	ldy #0
+	lda #dsdesc+1	;lda (dsdesc+1),y
+	jsr indsub_ram1	;..indirectly from string bank.
+	and #$0f
+	asl a
+	sta garbfl
+	asl a
+	asl a
+	adc garbfl
+	sta garbfl
+	iny
+	lda #dsdesc+1	;lda (dsdesc+1),y
+	jsr indsub_ram1	;..indirectly from string bank.
+	and #$0f
+	adc garbfl
+	jmp float
+
+qerlin	cpx #'E'
+	bne gomovf
+	cpy #'R'
+	beq qnumer
+	cpy #'L'
+	bne gomovf
+
+	sta sw_rom_ram0		;they want the last error line #
+	lda errlin+1
+	ldy errlin
+	jmp nosflt
+
+qnumer	sta sw_rom_ram0		;'er', or type number of last error
+	lda errnum
+	jmp float
+
+gomovf	lda facmo
+	ldy facmo+1
+movfrm	sta index1
+	sty index1+1
+
+; move value from ram
+
+	ldy #0
+	jsr indin1_ram1
+	sta facexp
+	sty facov
+
+	iny ;y=1
+	jsr indin1_ram1
+	sta facsgn
+	ora #$80
+	sta facho
+
+	iny ;=2
+	jsr indin1_ram1
+	sta facmoh
+
+	iny ;=3
+	jsr indin1_ram1
+	sta facmo
+
+	iny ;=4
+	jsr indin1_ram1
+	sta faclo
+	rts
+
+;end

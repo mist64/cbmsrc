@@ -1,0 +1,240 @@
+	.page
+	.subttl execute dispatcher
+
+; here for new statement. character -> by txtptr is ':' or eol. the adr of
+; this loc is left on the stack when a statement is executed so that it can
+; merely do a rts when it is done.
+; get char, exit via xeqcm3, and return to newstt.
+
+xeqcm	jmp (igone)
+
+; check if there is an interrupt from  the VIC that needs to be serviced
+
+ngone	bit runmod		;are we in direct mode?
+	bpl 30$			;yes, get off here
+
+	lda intval		;check if there is an interrupt already in progress
+	bmi 30$			;yes, don't go any further
+
+	ldx #2			;check for 3 types of interrupts: s/s, s/b, & lp
+10$	lda int_trip_flag,x
+	beq 20$			;this wasn't set, go check next
+
+	lda #0
+	sta int_trip_flag,x	;reset this flag to show 'serviced'
+	lda int_adr_lo,x	;install the trap address as linnum
+	sta linnum
+	lda int_adr_hi,x
+	sta linnum+1
+	txa
+	pha			;save counter & text pointer
+	lda txtptr
+	pha
+	lda txtptr+1
+	pha
+
+	lda intval
+	ora #$80		;flag 'no other interrupt traps, please'
+	sta intval
+
+	jsr chrget		;skip over 2nd byte of line number
+	jsr gosub_sub		;fake a 'gosub' from here, so trap rx can do a RETURN
+	jsr goto_1
+	jsr newstt
+
+	lda intval
+	and #$7f
+	sta intval
+
+	pla
+	sta txtptr+1
+	pla
+	sta txtptr
+	pla
+	tax
+
+20$	dex
+	bpl 10$
+
+
+30$	jsr chrget	;get statement type
+xeqdir	jsr xeqcm3
+
+newstt	jsr is_stop_key_down
+	bit runmod	;direct mode?
+	bpl 10$		;yes...
+
+; in run mode...save txtptr for cont command
+
+	jsr tto	  	;transfer txtptr to oldtxt
+	tsx
+	stx oldstk
+
+10$	ldy #0
+	jsr indtxt	;end of the line?
+	beq 20$		;yes
+	jmp morsts	;no...out of statement
+
+20$	bit runmod	;in direct mode?
+	bpl nstt5	;yes, go to ready
+	ldy #2
+	jsr indtxt	;end of text?
+	beq nstt5	;yes...finished
+	iny		;y=3
+	jsr indtxt	;extract line# lo byte
+	sta curlin
+	iny
+	jsr indtxt	;extract line # hi byte
+	sta curlin+1
+	tya		;y=4
+	clc
+	adc txtptr	;point @ character before line start
+	sta txtptr
+	bcc 30$
+	inc txtptr+1
+30$	jmp xeqcm	;execute new line
+
+nstt5	jmp ready
+
+
+
+tto	lda txtptr
+	ldy txtptr+1
+	sta oldtxt
+	sty oldtxt+1
+xeqrts	rts
+
+	.page
+; set up for command processing and set processor address on stack,
+; exit via jmp to chrget
+
+xeqcm3	beq xeqrts	;nothing here...null statement
+
+	bit trcflg	;in trace mode?
+	bpl xeqcm2	;branch if not.
+
+	bit runmod	;in direct mode?
+	bpl xeqcm2	;branch if yes. can't trace in direct mode
+
+	pha		;save token
+	lda #'['	;print '{ line-number }'
+	jsr outdo
+	jsr curprt	;print curlin
+	lda #']'
+	jsr outdo
+	pla		;restore token
+
+
+xeqcm2	cmp #esc_cmd_tk	;special case: escape token
+	beq xeqesc
+
+	cmp #gotk	;special case: go to
+	bne 1$
+	jmp go_without_to
+
+1$	cmp #middtk	;special case: mid$()=
+	beq xeqmid
+
+; command can be in the range end..new (old basic) & else..monitor
+; (new extensions). although there is a gap between these two blocks,
+; it will be quickest & easiest to collapse them into one
+; continuous block.
+
+	cmp #montk+1
+	bcs snerr1
+	cmp #scratk+1
+	bcc xeqcm4	;no need to collapse
+	cmp #elsetk
+	bcc snerr1
+	sbc #elsetk-scratk-1
+
+xeqcm4	sec		;convert adjusted token into an index into a jump table.
+	sbc #endtk
+	bcs xeqcm5
+	jmp let		;it wasn't a token after all! assume an assignment
+
+xeqcm5	asl a
+	tay
+	lda stmdsp+1,y
+	pha
+	lda stmdsp,y
+	pha
+	jmp chrget	;execution will commence after chrget's rts.
+
+
+
+xeqmid 			;handle special case of mid$= (what we call a kludge).
+	lda #>midwrk	;midd2-1
+	pha
+	lda #<midwrk
+	pha
+xeqchr
+	jmp chrget
+
+
+
+
+xeqesc 				;execute escape token
+	jsr chrget		;lets have us a look at the second char
+	beq snerr1		;oops, there wasn't any!
+	cmp #lowest_esc_cmd_tk	;is it one of our esc tokens?
+	bcc 1$			;no, foreign.
+	cmp #highest_esc_cmd_tk+1
+	bcs 1$			;foreign
+
+;it's one of our own. convert to index into command dispatch table
+
+	adc #montk-elsetk+scratk-endtk-lowest_esc_cmd_tk+2 ;+eye of newt-toe of frog...
+	bne xeqcm5		;always
+
+1$	sec			;set up flag for a trip into the users code
+	jmp (iescex)
+nescex	bcc xeqchr		;jmp chrget
+
+snerr1	jmp snerr
+
+morsts	cmp #':'
+	bne snerr1
+	jmp xeqcm		;if ':', continue statement
+
+	.page
+
+is_stop_key_down
+	jsr k_stop	;test stop key
+	beq 10$
+	rts		;not down, exit
+
+10$	ldy trapno+1	;test if trap on
+	iny
+	beq stop_1	;no, do a normal stop
+
+20$	jsr k_stop	;wait for the user to release the key
+	beq 20$
+	ldx #erbrk
+	jmp error
+
+
+
+stop	bcs stopc	;make (c) nonzero as a flag
+
+end	clc
+stopc	bne do_rts
+stop_1	bit runmod	;in direct mode?
+	bpl diris	;yes
+	jsr tto	  	;transfer txtptr to oldtxt
+	lda curlin
+	ldy curlin+1
+	sta oldlin
+	sty oldlin+1
+diris
+	pla
+	pla
+	bcc 1$
+	jsr k_primm
+	.byte cr, $a, 'BREAK', 0
+	jmp errfin
+1$	jmp ready	;type "ready".
+
+do_rts	rts
+
+;end

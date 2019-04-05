@@ -1,0 +1,184 @@
+	.page
+	.subttl Jump Table For Dispatch Routine
+stmdsp
+	.word  end-1
+	.word  for-1
+	.word  next-1
+	.word  data-1
+	.word  inputn-1
+	.word  input-1
+	.word  dim-1
+	.word  read-1
+	.word  let-1
+	.word  goto-1
+	.word  run-1
+	.word  if-1
+	.word  restor-1
+	.word  gosub-1
+	.word  return-1
+	.word  rem-1
+	.word  stop-1
+	.word  ongoto-1
+	.word  wait-1
+	.word  load-1
+	.word  save-1
+	.word  verify-1
+	.word  def-1
+	.word  poke-1
+	.word  printn-1
+	.word  print-1
+	.word  cont-1
+	.word  list-1
+	.word  clear-1
+	.word  cmd-1
+	.word  sys-1 
+	.word  open-1
+	.word  close-1
+	.word  get-1
+	.word  new-1
+	.word  else-1
+	.word  resume-1
+	.word  trap-1
+	.word  tron-1
+	.word  troff-1
+	.word  sound-1
+	.word  volume-1
+	.word  auto-1
+	.word  puctrl-1
+	.word  graphic-1       	;'graphic'
+	.word  paint-1
+	.word  char-1
+	.word  box-1
+	.word  circle-1
+	.word  gshape-1
+	.word  sshape-1
+	.word  draw-1
+	.word  locate-1
+	.word  color-1
+	.word  scnclr-1
+	.word  scale-1
+	.word  help-1
+	.word  do-1
+	.word  loop-1
+	.word  exit-1
+	.word  catalog-1
+	.word  dsave-1
+	.word  dload-1
+	.word  header-1
+	.word  scratc-1
+	.word  collect-1
+	.word  dcopy-1
+	.word  rename-1
+	.word  backup-1
+	.word  delete-1
+	.word  renum-1
+	.word  key-1
+	.word  _monitor-1
+	.word  bank-1		;escape
+	.word  filter-1		;escape
+	.word  play-1		;escape
+	.word  tempo-1		;escape
+	.word  movspr-1		;escape
+	.word  sprite-1		;escape
+	.word  sprcolor-1	;escape
+	.word  rreg-1		;escape
+	.word  envelope-1	;escape
+	.word  sleep-1		;escape
+	.word  catalog-1	;escape
+	.word  dopen-1		;escape
+	.word  append-1		;escape
+	.word  dclose-1		;escape
+	.word  bsave-1		;escape
+	.word  bload-1		;escape
+	.word  record-1		;escape
+	.word  concat-1		;escape
+	.word  dverify-1	;escape
+	.word  dclear-1		;escape
+	.word  sprsav-1		;escape
+	.word  collision-1	;escape
+	.word  snerr-1		;escape - BEGIN
+	.word  data-1		;escape - BEND
+	.word  window-1		;escape
+	.word  boot-1		;escape
+	.word  set_width-1	;escape - WIDTH
+	.word  sprdef-1		;escape
+	.word  bad_command-1	;escape - SYSTEM - unimplemented command
+	.word  stash-1		;escape
+	.word  0		; placeholder to skip over the space character
+	.word  fetch-1		;escape
+	.word  0		; placeholder to skip over the quote character
+	.word  swap-1		;escape
+	.word  bad_command-1	;escape - OFF - unimplemented command
+	.word  fast-1		;escape
+	.word  slow-1
+
+	.page
+fundsp
+	.word  sgn
+	.word  int
+	.word  abs
+	.word  usrpok
+	.word  fre
+	.word  pos
+	.word  sqr
+	.word  rnd
+	.word  log
+	.word  exp
+	.word  cos
+	.word  sin
+	.word  tan
+	.word  atn
+	.word  peek
+	.word  len
+	.word  strd
+	.word  val
+	.word  asc
+	.word  chrd
+	.word  leftd
+	.word  rightd
+	.word  midd
+	.word  rgr
+	.word  rclr
+	.word  0		;placeholder for escape function token
+	.word  joy
+	.word  rdot
+	.word  dcml            	;dec
+	.word  hexd
+	.word  errd
+	.word  pot		;escape
+	.word  bump		;escape
+	.word  pen		;escape
+	.word  rsppos		;escape
+	.word  rsprite		;escape
+	.word  rspcolor		;escape
+	.word  xor		;escape
+	.word  rwindow		;escape
+	.word  pointer		;escape
+
+	.page
+
+optab	.byte   121
+	.word  faddt-1
+	.byte   121
+	.word  fsubt-1
+	.byte   123
+	.word  fmultt-1
+	.byte   123
+	.word  fdivt-1
+	.byte   127
+	.word  fpwrt-1
+	.byte   80
+	.word  andop-1
+	.byte   70
+	.word  orop-1
+negtab	.byte 125
+	.word  negop-1 
+	.byte   90
+	.word  notop-1
+ptdorl	.byte 100
+	.word  dorel-1
+
+bad_command
+	ldx #err_bad_command		;unimplemented command
+	jmp error
+;.end

@@ -1,0 +1,42 @@
+	.page
+	.subttl HELP Command
+
+help	ldx errnum	;anything to do?
+	inx
+	beq 1$		;no errors
+	lda errlin
+	ldy errlin+1
+	sta linnum
+	sty linnum+1
+	jsr fndlin	;find the beginning of line with error
+	bcc 1$		;we've been deceived!
+	ror helper	;ok, set help flag
+	jsr crdo	;new line
+	ldx linnum
+	lda linnum+1
+	jsr p1line	;show him where error was
+	lsr helper	;clear help flag just in case 'p1line' had problems
+1$	jmp crdo	;and return to caller
+
+
+helpsb	ldx lowtr+1	;has 'list' reached code in error?
+	tya
+	clc
+	adc lowtr	;add .y index to line pointer...
+	bcc 1$
+	inx
+1$	cpx errtxt+1	;and compare to error pointer
+	bne 3$		;no
+	cmp errtxt
+	bcc 3$
+	beq 3$
+	lsr helper	;yes: remove list wedge...
+	lda #$12	;assume 40 col : reverse
+	bit _mode	; 80 col?
+	bpl 2$		; it was 40!
+	lda #$02	;80 uses underline
+2$	jmp outdo
+
+3$	rts
+
+;end

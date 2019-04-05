@@ -1,0 +1,184 @@
+	.page
+	.subttl MOVSPR Command
+
+
+;****************************************************************
+;
+;  movspr n , [ p | x # y ]  --  position sprite
+; 	n = sprite number (1-8)
+;	p = x/y coordinate  --  relative and angular distances
+;		 are relative to current sprite position and
+;		 scaled if scaling is on
+;	x # y = constant movement at an angle-x with a speed-y
+;
+;****************************************************************
+
+movspr	jsr get_sprite_number
+	jsr sprcor		;get first coordinate
+	bit numcnt		;test coordinate type
+	bvc 10$			;skip if was a comma
+	jmp snerr		;syntax error
+
+10$	sty xdest		;save coordinate value
+	sty xdest+2
+	sta xdest+1
+	sta xdest+3
+	jsr sprcor		;get second coordinate
+	bit numcnt		;test type of input
+	bvc 61$			;skip if normal coordinates
+	bmi 50$			;skip if angular coordinates
+
+	tya
+	pha			;must be speed - save value
+	ldy #xdest-vwork
+	jsr getang		;get angle of movement
+	ldx z_p_temp_1		;get sprite number
+	ldy sproff,x		;get offset to speed data
+	lda #0
+	sta sprite_data,y	;turn off sprite speed
+	iny
+	ldx #3
+
+20$	lsr sinval,x
+	dex
+	ror sinval,x
+	dex
+	bpl 20$
+
+30$	inx
+	lda angsgn,x		;move angle data to speed data
+	iny
+	sta sprite_data,y
+	cpx #4
+	bne 30$
+	lda #0			;clear speed angle counts
+
+40$	iny
+	sta sprite_data,y
+	dex
+	bne 40$
+	pla			;restore speed value
+	and #$0f		;limit range (0-15)
+	sta sprite_data-10,y 	;start sprite movement
+	rts
+
+; _ ._. : ._ _.. _.. . _.. ..... _... _.__ _ . ... .... . ._. .
+
+50$	jsr swapxy		;swap y and a (eventually) : y ==> x
+	tay			;			     a ==> y
+	txa			;			     x ==> a
+	jsr gtang1		;get angle values
+	ldx #xdest-vwork
+	jsr scalxy		;scale lengths
+	ldx #xdest-vwork
+	clc
+
+60$	jsr angmlt		;multiply lengths * angles
+	sta vwork,x
+	tya
+	sta vwork+1,x
+	inx
+	inx
+	cpx #ydest-vwork
+	beq 60$			;loop to do y-position
+	ror numcnt		;shift in carry to set msb
+	bmi 70$			;...always
+
+61$	sty xdest+2		;save second coordinate
+	sta xdest+3
+	ldx #xdest-vwork
+	jsr scalxy		;scale the coordinates
+
+70$	lda z_p_temp_1		;get sprite number
+	tax			;use as an index
+	asl a
+	tay			;get sprite-number * 2 as another index
+	lda xdest+2		;get y-coordinate
+	asl numcnt		;test if relative
+	bcc 80$			;skip if absolute
+	clc
+	bpl 75$			;skip if normal coordinates
+	eor #$ff
+	sec			;invert to subtract if angular
+75$	adc vic_save+1,y	;add to current sprite y-value
+
+80$	sei
+	sta vic_save+1,y	;save new sprite y-position
+	lda xdest		;get low byte of x-coordinate
+	asl numcnt		;test if relative
+	bpl 95$			;skip if absolute
+	clc
+	adc vic_save,y		;add current sprite x-position
+	sta vic_save,y		;save sprite x-position
+	bcs 90$			;skip if carry
+	inc xdest+1		;invert lsb
+
+90$	lda vic_save+16		;get x-position msb bits
+	jmp 97$			;test if need to invert msb bit
+
+95$	sta vic_save,y		;save new sprite x-position
+	lda vic_save+16
+	ora sbits,x		;set x-position msb bit
+
+97$	lsr xdest+1		;match to lsb of x-coordinate high byte
+	bcs 100$		;skip if should be set
+	eor sbits,x		;reset bit
+
+100$	sta vic_save+16		;save position msb bits
+	cli
+	rts
+
+
+
+;	sprcor	--	get sprite position coordinate parameter
+
+sprcor	jsr chkcom_1		;check for a comma
+	ror numcnt		;reset msb if comma else set msb
+	bpl 10$			;skip if got a comma
+	cmp #';'		;test if angular data
+	beq 30$			;skip if yes - 2 msb's = 1 1
+	cmp #'#'		;test if speed type
+	beq 20$			;skip if yes - 2 msb's = 0 1
+	jmp snerr		;syntax error if none of above
+
+10$	jsr chrgot		;test for relative coordinate
+	cmp #plustk		;test if plus sign
+	beq 30$			;skip if yes - show relative
+	cmp #minutk		;test if minus sign
+	beq 30$			;skip if yes - show relative
+20$	clc			;reset to show absolute
+30$	ror numcnt		;shift in second flag bit
+
+cordsb_patch			; (318018-03 mod; fab: fixes relative coords)
+	jsr frmnum
+	jmp getsad		;get signed 2 byte coordinate,do rts
+
+	.page
+
+;*************************************************************
+;
+;  chkcom_1  --- check for a comma
+;      carry set & eq = end of string
+;      carry set & neq = not a comma
+;      carry clear = a comma
+;
+;*************************************************************
+
+chkcom_1
+	jsr chrgot		;get character in input stream
+	beq 20$			;skip if end of string
+	cmp #','		;check if a comma
+	clc
+	beq 10$			;skip if yes
+	sec             	;set carry if not
+10$	php
+	pha
+	jsr chrget      	;move to next non-space character
+	pla
+	plp
+20$	rts
+	
+
+sproff	;sprite offsets into speed table
+	.byte 0,11,22,33,44,55,66,77
+;end

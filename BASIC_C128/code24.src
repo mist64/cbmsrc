@@ -1,0 +1,140 @@
+	.page
+	.subttl 'code24'
+
+		;exponentation function
+
+		; first save the original argument and multiply the FAC
+		; by log2(e).  The result is used to determine if 
+		; overflow will occur since exp(x)=2^(x*log2(e)) where
+		; log2(e)=log(e) base 2.  Then save the integer part of 
+		; this to scale the answer at the end.  Since
+		; 2^y=2^int(y)*2^(y-int(y)) and 2^int(y) is easy to
+		; compute.  Now compute 2^(x*log2(e)-int(x*log2(e)) by
+		; p(log(2)*(int(x*log2(e))+1)-x  where p is an approximation
+		; polynomial. The result is then scaled by the power of two
+		; previously saved.
+
+logeb2	.byte @201,@070,@252,@073,@051	;log(e) base 2.
+
+expcon	.byte 7				;degree-1
+	.byte @161,@064,@130,@076,@126	;0.000021498763697
+	.byte @164,@026,@176,@263,@033	;0.00014352314036
+	.byte @167,@057,@356,@343,@205	;0.0013422634824
+	.byte @172,@035,@204,@034,@052	;0.0096140170199
+	.byte @174,@143,@131,@130,@012	;0.055505126860
+	.byte @176,@165,@375,@347,@306	;0.24022638462
+	.byte @200,@061,@162,@030,@020	;0.69314718600
+	.byte @201,0,0,0,0		;1.0
+
+
+
+exp	lda #<logeb2	;multiply by log(e) base 2.
+	ldy #>logeb2
+	jsr rommlt
+	lda facov
+	adc #@120
+	bcc stold
+	jsr incrnd
+
+
+
+stold
+	sta oldov
+	jsr movef	;to save in arg without round.
+	lda facexp
+	cmp #@210	;if abs(fac) .ge. 128, too big.
+	bcc exp1
+gomldv
+	jsr mldvex	;overflow or overflow.
+exp1
+	jsr int
+	lda integr	;get low part.
+	clc
+	adc #@201
+	beq gomldv	;overflow or overflow !!
+	sec
+	sbc #1		;subtract it.
+	pha		;save a while.
+	ldx #5		;prep to swap fac and arg.
+swaplp
+	lda argexp,x
+	ldy facexp,x
+	sta facexp,x
+	sty argexp,x
+	dex
+	bpl swaplp
+	lda oldov
+	sta facov
+	jsr fsubt
+	jsr negop	;negate fac.
+	lda #<expcon
+	ldy #>expcon
+	jsr poly
+	lda #0
+	sta arisgn 	;multiply by positive 1.0
+	pla		;get scale factor.
+	jsr mldexp	;modify facexp and check for overflow.
+	rts		;has to do jsr due to pla's in muldiv.
+
+			;
+			;polynomial evaluator and the random number generator.
+			;
+			; evaluate p(x^2)*x
+			; pointer to degree is in xreg.
+			; the constants follow the degree.
+			; for x=fac, compute:
+			;  c0*x+c1*x^3+c2*x^5+c3*x^7+... +c(n)*x^(2*n+1)
+			;
+polyx	
+	sta polypt	;retain polynomial pointer for later.
+	sty polypt+1
+	jsr mov1f	;save fac in factmp.
+	lda #tempf1
+	jsr fmult	;compute x^2.
+	jsr poly1	;compute p(x^2).
+	lda #<tempf1
+	ldy #>tempf1
+	jmp fmult	;multiply by fac again.
+
+			;
+			;polynomial evaluator
+			;
+			; pointer to degree is in xreg.
+			; compute:
+			; c0+c1*x+c2*x^2+c3*x^3+c4*x^4...+c(n-1)*x^(n-1)+c(n)*x^n
+
+poly
+	sta polypt
+	sty polypt+1
+poly1
+	jsr mov2f	;save fac.
+	lda (polypt),y
+	sta degree
+	ldy polypt
+	iny
+	tya
+	bne poly3
+	inc polypt+1
+poly3
+	sta polypt
+	ldy polypt+1
+poly2
+	jsr rommlt
+	lda polypt	;get current pointer.
+	ldy polypt+1
+	clc
+	adc #5
+	bcc poly4
+	iny
+poly4
+	sta polypt
+	sty polypt+1
+	jsr romadd	;add in constant.
+	lda #<tempf2	;multiply the original fac.
+	ldy #>tempf2
+	dec degree	;done?
+	bne poly2
+	rts		;yes.
+
+
+;.end

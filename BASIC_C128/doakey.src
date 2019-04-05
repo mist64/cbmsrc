@@ -1,0 +1,88 @@
+	.page
+	.subttl Modify Function Key Table
+
+;*************************************************************************
+;
+; DOAKEY - Put a string in the programmable function key table
+;	enter with:
+;		.A = zero page pointer to string (Bank,Adr Lo,Adr Hi)
+;		.X = Key number to modify
+;		.Y = Length of string
+;
+;	exit:	.C = 0 ==> good exit
+;		.C = 1 ==> error
+;
+;**************************************************************************
+
+doakey	sta keysiz	;save string length
+	ldx #8
+	jsr findky	;find end of all strings
+	sta keylen	;save offset
+	ldx z_p_temp_1
+	inx
+	jsr findky	;find end of function key
+	sta keynxt	;save offset
+	ldx z_p_temp_1
+	lda keysiz
+	sec
+	sbc keybuf,x	;get new size - old size
+	beq keyins	;skip if the same
+	bcc 20$		;skip if new is shorter
+	clc
+	adc keylen	;get new ending offset for all keys
+	bcs kydon2	;wrapped? error if so...
+	cmp #maxkys+1
+	bcs kydon2	;exit - memory full error
+	tax		;get destination address+1
+	ldy keylen	;get source address+1
+10$	cpy keynxt
+	beq keyins	;done if all following keys have been moved
+	dey		;expand key area
+	dex		;move source to destination
+	lda pkybuf,y
+	sta pkybuf,x
+	bcs 10$
+
+20$	adc keynxt	;get destination offset
+	tax
+	ldy keynxt	;get source address
+30$	cpy keylen	;contract key area
+	bcs keyins	;exit if moved all
+	lda pkybuf,y
+	sta pkybuf,x
+	iny
+	inx
+	bcc 30$		;always
+
+
+
+
+;  keyins  --  insert new key definition
+
+keyins	ldx z_p_temp_1	;get key number
+	jsr findky	;get starting offset
+	tax
+	ldy z_p_temp_1
+	lda keysiz	;get new size
+	sta keybuf,y	;set new size
+	ldy #0
+10$	jsr indin1_ram1	;lda (index),y...move in new key def. from string
+	dec keysiz
+	bmi 20$		;exit - end of string
+	sta pkybuf,x
+	inx
+	iny
+	bne 10$		;...always
+20$	clc
+	rts
+
+
+
+findky	lda #0
+	clc
+10$	dex
+	bmi 20$
+	adc keybuf,x	;(.c=0)
+	bcc 10$		;always
+20$	rts
+;.end

@@ -1,0 +1,496 @@
+	.page
+	.subttl  load  (09/05/85)
+
+;  **********************************************
+;  *	   load memory from mass storage	*
+;  *						*
+;  *	 fa:	0= keyboard <invalid>		*
+;  *		1= cassette			*
+;  *		2= screen   <invalid>		*
+;  *		3= rs-232   <invalid>		*
+;  *		4-31= serial			*
+;  *						*
+;  *	 sa:	0= alternate load		*
+;  *		   (x,y= starting addr)		*
+;  *		1= normal load			*
+;  *		   (load starting addr)		*
+;  *						*
+;  *	 ba:	0-15= destination bank		*
+;  *						*
+;  *	 .a:	0= load memory			*
+;  *		>0= verify only			*
+;  *						*
+;  *	 ending address returned in x,y		*
+;  **********************************************
+
+loadsp			;////////// jump table entry: x & y have load address
+	stx memuss
+	sty memuss+1
+load			;////////// old monitor entry  (not c/128 monitor)
+	jmp (iload)
+nload
+	sta verck	;preserve load/verify flag (load if = 0)
+	lda #0
+	sta status	;clear status
+
+	lda fa		;dispatch per device number
+	cmp #4
+	bcs lddisk	;load from serial device
+	jmp ldtape	;load from cassette tape
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  load memory from serial device (disk)
+
+lddisk
+	lda serial	;assume slow disk, but attempt burst first
+	and #%10111110	;clear external fast flag & burst load flag
+	sta serial
+
+	ldx sa
+	stx t1		;save sa: flags normal/alternate load
+	ldy fnlen	;must have filename
+	bne 1$		;...branch if so
+	jmp err8
+
+1$	sty t2		;save fnlen too
+	jsr luking	;'searching for...'
+	jsr burst	;try a burst load
+	bcs 2$		;...branch if failed- retry as normal load
+	jmp lddone	;burst done
+
+2$	ldy t2
+	sty fnlen	;restore fnlen
+	lda #$60
+	sta sa		;pass 'load' command to disk in sa
+	jsr openi	;open the file
+
+	lda fa
+	jsr talk	;establish the channel
+	lda sa
+	jsr tksa	;send 'load' command
+
+	jsr acptr	;get first byte (load adr lo)
+	sta eal
+	jsr acptr	;get second byte (load adr hi)
+	sta eah
+
+	lda status	;test status for error
+	lsr a
+	lsr a
+	bcs err4	;...branch if 'file not found' error
+
+	lda t1		;restore user sa (normal/alt load adr)
+	bne 10$		;...branch if load address read from disk (normal)
+	lda memuss
+	sta eal		;load address given by user (alternate)
+	lda memuss+1
+	sta eah
+
+10$	jsr load_patch	; (318020-04 fix: fab; corrects BOOTs from 1541's)
+
+
+20$	lda #$fd	;mask out timeout status bit
+	and status
+	sta status
+
+	jsr stop	;scan for keyboard <stop> key
+	beq brkerr	;...abort load operation
+
+	jsr acptr	;read a byte from serial bus
+	tax		;save data byte
+	lda status	;check status for timeout
+	lsr a
+	lsr a
+	bcs 20$		;...branch if timeout occurred: try again
+
+	txa		;restore data byte
+	ldy verck
+	beq 30$		;...branch if loading memory
+
+	sta ochar
+	ldy #0
+	jsr eally	;lda (eal),y	;verify memory
+	cmp ochar
+	beq 40$		;...branch if good compare
+
+	lda #sperr	;set 'read error' bit to flag 'verify error'
+	jsr udst	;update i/o status byte
+	bne 40$		;always
+
+30$	jsr ealsy	;sta (eal),y
+
+40$	inc eal 	;increment load address for next data byte
+	bne 50$
+	inc eah
+	lda eah
+	cmp #$ff	;check for 'out of memory'
+	beq err16
+
+50$	bit status
+	bvc 20$		;...branch if not end_of_file
+
+
+	jsr untlk	;close channel
+	jsr clsei	;close the file
+	jmp lddone	;load operation done
+
+
+
+
+
+
+
+err4	jmp error4	;file not found
+err8	jmp error8	;missing filename
+err9	jmp error9	;illegal device
+err16	jmp error16	;out of memory
+brkerr	jmp break	;abort
+
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  load memory from cassette
+
+ldtape
+	cmp #1
+	bne err9	;...branch if 'illegal device' error
+
+	jsr tapadr	;setup pointers to cassette buffer
+	bcc err9	;...branch if deallocated (error)
+
+	jsr cste1	;prompt user 'press play...' & wait for it
+	bcs ldrts	;...branch if aborted by <stop> key
+	jsr luking	;'searching...'
+
+
+
+1$	lda fnlen	;filename is optional for tape
+	beq 2$		;...branch if none given (load any file)
+
+	jsr faf		;find a specified file on tape
+	bcc 3$		;...branch if found
+	beq ldrts	;...branch if aborted by <stop> key
+	bcs err4	;...branch if file not found (eot)
+
+2$	jsr fah		;find next file on tape
+	beq ldrts	;...branch if aborted by <stop> key
+	bcs err4	;...branch if file not found (eot)
+
+3$	sec
+	lda status	;check i/o status of header read
+	and #sperr
+	bne ldrts	;...branch if read error (.c=1)
+
+	cpx #blf	;check file type read from header
+	beq 5$		;...branch if relocatable load file	(eg: basic pgm)
+
+	cpx #plf
+	bne 1$		;...branch if not a load type file	(eg: data file)
+
+4$	ldy #1		;load non-relocatable data		(eg: asm pgm)
+	lda (tape1),y
+	sta memuss	;get load address from buffer
+	iny
+	lda (tape1),y
+	sta memuss+1
+	bcs 6$		;always
+
+5$	lda sa		;load relocatable data: test user's sa
+	bne 4$		;...branch if normal load (ie: use load adr from tape)
+
+6$	ldy #3		;calculate # of bytes to load:
+	lda (tape1),y
+	ldy #1		; (tape_ending_adr - tape_starting_adr)
+	sbc (tape1),y	; (.c=1)
+	tax		;low to .x
+	ldy #4
+	lda (tape1),y
+	ldy #2
+	sbc (tape1),y
+	tay		;high to .y
+
+	clc		;calculate true ending address
+	txa
+	adc memuss	; (memuss + #_of_bytes)
+	sta eal
+	tya
+	adc memuss+1
+	sta eah
+	cmp #$ff
+	beq err16	;...'out of memory'
+
+	lda memuss	;set up load address for tape handler
+	sta stal
+	lda memuss+1
+	sta stah
+	jsr loding	;'loading...'
+	jsr trd		;load the file from tape
+	.byte $24	;preserve status in .c from tape handler
+
+
+
+lddone	clc		;signal good load
+	ldx eal		;return ending address in x & y
+	ldy eah
+ldrts	rts		;done load
+
+	.page (*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)
+burst
+	ldy #0
+	jsr fnadry	;examine filename
+	cmp #'$'
+	beq ldrts	;...branch if directory load (rts with .c=1 to load slow)
+
+	ldx fa		;fa: device #
+	ldy #15		;sa: disk command channel
+	lda #0		;la: use reserved la
+	jsr setlfs
+	sta fnlen	;no name just yet
+	jsr open	;open command channel to disk
+	ldx la
+	jsr ckout	;make it an output channel
+	bcc 10$		;...branch if okay so far
+
+	jsr burst_end	;shut 'er down
+	pla
+	pla
+	jmp error5	;device not present error
+
+10$	ldy #3
+20$	lda burst_cmd-1,y
+	jsr bsout	;send burst_load command
+	dey
+	bne 20$
+
+30$	jsr fnadry
+	jsr bsout	;send filename
+	iny
+	cpy t2		;fnlen
+	bne 30$
+
+	jsr clrch	;release clock & drop disk channel
+	bit serial	;was it good for you babe?
+	bvs 35$		;...branch if fast (don't stop, don't stop! faster, faster!)
+	jsr burst_end
+	sec
+	rts		;return .c=1 & attempt a slow load
+
+35$	lda t2
+	sta fnlen	;restore user fnlen
+
+	sei
+	jsr clkhi	;clk must be high
+	jsr spinp	;setup for input
+	bit d1icr	;clear byte pending
+	jsr wiggle	;toggle clk
+	jsr burst_byt	;read status byte
+	cmp #2
+	bne 40$		;...branch if status ok
+
+	jsr burst_end	;shut 'er down
+	pla
+	pla
+	jmp error4	;file not found error
+
+40$	pha		;save last burst status
+	cmp #$1f	;by the way, was it eoi?
+	bne 45$		;naaa
+	jsr wiggle	;toggle clk
+	jsr burst_byt	;yes- get # bytes to follow
+	sta count
+	jmp 46$
+
+45$	cmp #2
+	bcc 46$
+	pla		;(pop saved status)
+	bcs burst_err
+
+46$	jsr loding	;'loading...'
+	jsr wiggle	;toggle clk
+	jsr burst_byt	;read load address from disk
+	sta eal
+	jsr wiggle	;toggle clk
+	jsr burst_byt
+	sta eah
+	ldx t1		;recall sa
+	bne 50$		;...branch if default load (use disk load adr)
+
+	lda memuss
+	ldx memuss+1
+	sta eal		;replace load address with user's
+	stx eah
+
+50$	lda eal		;preserve load address for basic 'boot & go' cmd
+	ldx eah
+	sta sal
+	stx sah
+
+	pla		;pop last burst status
+	cmp #$1f
+	beq burst_eoi	;...branch if current (first) block is the last block
+
+60$	jsr wiggle	;toggle clk
+	lda #252	;********** load first sector **********
+	sta count
+
+70$	jsr ud60	;scan stop key
+	jsr stop	;user requests abort?
+	beq burst_brk	;...yes
+	jsr burst_blk	;load a block (.x = # bytes to load)
+	bcs burst_errm	;...branch on error (out of memory)
+
+	jsr burst_byt	;check burst status
+	cmp #2		;status ok?
+	bcc 80$		;...branch if good
+
+	cmp #$1f
+	beq 90$		;...branch if next block is the last block (eoi)
+	bne burst_err	;...branch on any other error (read error)
+
+80$	jsr wiggle	;toggle clk
+	lda #254	;********** load middle sectors **********
+	sta count
+	bne 70$		;bra
+
+90$	jsr wiggle	;toggle it ok...
+	jsr burst_byt	;eoi: read # bytes to load from last sector
+	sta count
+
+burst_eoi
+	jsr wiggle
+	jsr burst_blk
+	bcs burst_errm	;...branch on error (memory)
+	lda #$40
+	jsr udst	;set eoi status bit
+
+burst_end
+	jsr clkhi	;wave goodbye
+	cli		;shed a tear
+	lda la
+	sec		;not a full close
+	jsr close	;just clean up tables
+	clc		;signal successful burst load
+	rts
+
+
+
+burst_err
+	lda #$02	;all errors 'timeout'
+	jsr udst	;update i/o status byte
+	jsr burst_end	;shut down
+	pla
+	pla
+	lda #41
+	sec		;signal 'file read' error
+	rts		;return to user
+
+burst_brk
+	jsr burst_end	;shut down our end
+	lda #0
+	sta sa		;kludge to prevent closing cmd channel
+	pla
+	pla
+	jmp break	;unlisten disk & return break error
+
+burst_errm
+	jsr burst_end	;out of memory error
+	pla
+	pla
+	jmp error16
+
+
+
+burst_byt
+	lda #$08
+1$	bit d1icr	;wait for byte ready
+	beq 1$
+
+	lda d1sdr	;get byte
+	rts
+
+
+burst_blk
+	lda #$08
+99$	bit d1icr	;wait for byte ready
+	beq 99$		;rewrite for speed
+
+	ldy d1sdr	;get byte
+	lda d2pra	;handshake (toggle clock)
+	eor #$10
+	sta d2pra
+	tya		;put data in .a
+	ldy verck
+	beq 1$		;...branch if loading
+
+	sta ochar
+	ldy #0
+	jsr eally	; lda (eal),y from bank
+	cmp ochar
+	beq 2$		;...branch if match
+	lda #sperr	;verify error: set 'read error' status bit
+	jsr udst
+	bne 2$		;...always
+
+1$	jsr ealsy	; sta (eal),y  to bank
+
+2$	inc eal		;increment address for next byte
+	bne 3$
+	inc eah
+	lda eah
+	cmp #$ff
+	beq 4$		;...branch if out of memory error (.c=1)
+3$	dec count
+	bne burst_blk	;...loop until .x bytes read
+	clc
+4$	rts		;.c=0 for normal return. .c=1 for error return
+
+
+
+wiggle	lda d2pra	;handshake (toggle clock)
+	eor #$10
+	sta d2pra
+	rts
+
+
+burst_cmd	.byte %00011111,'0U'	;burst cmd string (backwards!)
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; subroutine to print to display: 'searching  [for <filename>]'
+
+luking
+	lda msgflg
+	bpl lurts	;...branch if display output disabled
+	ldy #ms5-ms1
+	jsr msg		;print 'searching '
+	lda fnlen
+	beq lurts	;...branch if no filename given
+	ldy #ms6-ms1
+	jsr msg		;print 'for ' & fall thru to display filename
+
+
+; subroutine to print filename
+
+outfn
+	ldy fnlen
+	beq lurts	;...branch if no filename given
+	ldy #0
+1$
+	jsr fnadry	;lda (fnadr),y
+	jsr bsout	;print <filename>
+	iny
+	cpy fnlen
+	bne 1$
+lurts
+	rts
+
+
+; subroutine to print: 'loading' or 'verifying'
+
+loding
+	ldy #ms10-ms1	;setup 'loading'
+	lda verck
+	beq 1$		;...branch if loading
+	ldy #ms21-ms1	;setup 'verifying'
+1$
+	jmp spmsg	;test for display enabled, print it, rts
+
+;.end

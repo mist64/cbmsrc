@@ -1,0 +1,124 @@
+	.page
+	.subttl  interrupt handler  (03/11/85)
+
+;/////////////////   N M I   I N T E R R U P T   C O D E   \\\\\\\\\\\\\\\\\\\\
+
+nnmi
+	cld		;just in case there's a nerd out there
+	lda #$7f
+	sta d2icr	;disable nmi's by clearing mask register
+	ldy d2icr	; (must save icr in .y!)
+	bmi 1$		;...branch if interrupt came from here (not <restore>)
+
+	jsr ud60	;sets up keyports to last row	(preserve .y!)
+	jsr stop	;scan for <stop> key		(preserve .y!)
+	bne 1$		;...branch if no <stop> key
+
+	jsr restor	;restore system indirects
+	jsr ioinit	;restore default i/o parameters
+	jsr cint	;restore default screen parameters
+
+	jmp (system_vector)	;<stop><restore> key convention- warm start BASIC
+
+1$	jsr nmi232	;go handle an rs-232 interrupt
+	jmp prend	;rti
+
+
+
+
+;/////////////   I R Q   &   B R K   I N T E R R U P T   C O D E   \\\\\\\\\\\\
+
+nirq			;////// kernal irq handler
+	cld		;just in case there's a nerd out there
+	jsr edirq	;blink cursor, scan keyboard, split screen stuff
+	bcc 1$		;...branch if irq was only for split screen handler
+
+	jsr udtim	;update jiffie clock & scan stop key (ud60)
+	jsr tapeirq	;check cassette switches
+	lda d1icr	;clear alien irqs?
+
+	lda init_status
+	lsr a
+	bcc 1$		;...branch if basic not installed
+	jsr basirq	;do basic's irq stuff
+
+1$	jmp prend	;rti	
+
+
+.kernal_mid_check
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+;//////////////   I N T E R R U P T   D I S P A T C H   C O D E   \\\\\\\\\\\\\
+
+	* = $ff05
+
+.interrupt_code		;this code is copied into each ram bank at this address
+
+nmi
+	sei		;disable irq's  (could interfere with cassette ops)
+	pha		;save registers
+	txa
+	pha
+	tya
+	pha
+	lda mmucr	;save current memory configuration
+	pha
+	lda #sysbnk	;configure memory for system
+	sta mmucr
+	jmp (inmi)	;nmi indirect
+
+
+
+
+irq			;////// hardware irq always comes here!
+	pha
+	txa
+	pha
+	tya
+	pha
+	lda mmucr	;save current memory configuration
+	pha
+	lda #sysbnk	;configure memory for system
+	sta mmucr
+
+	tsx		;determine if interrupt was an irq or brk
+	lda $105,x	;get processor status at interrupt time
+	and #$10	;test break flag
+	beq 1$
+	jmp (ibrk)	;...taken if brk (goto monitor)
+
+1$	jmp (iirq)	;...taken if irq
+
+	.page
+prend			;////// entry from other kernal routines
+	pla
+	sta mmucr	;restore memory configuration
+	pla
+	tay		;restore registers
+	pla
+	tax
+	pla
+	rti
+
+
+
+
+
+reset
+	lda #sysbnk	;force system configuration
+	sta mmucr
+	jmp start	;a new beginning...
+
+
+
+.interrupt_end
+.kernal_top_check
+
+
+
+;	* = $ffd0
+;
+;.cpm_ram		;cp/m puts its transfer-processor-control code here in first ram bank
+
+;.end

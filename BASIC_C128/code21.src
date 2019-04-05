@@ -1,0 +1,255 @@
+	.page
+	.subttl 'code21'
+
+;*********************************
+; quick greatest integer function
+;*********************************
+
+			;quick greatest integer function.
+			;leaves int(fac) in facho&mo&lo signed.
+			;assumes fac .lt.2~23 =8388608
+
+qint	lda facexp
+	beq clrfac	;if zero, got it.
+	sec
+	sbc #$a0	;get number of palces to shift.
+	bit facsgn
+	bpl qishft
+	tax
+	lda #@377
+	sta bits	;put 377 in when shftr shifts bytes.
+	jsr negfch	;truly negate quantity in fac.
+	txa
+qishft
+	ldx #fac
+	cmp #$f9
+	bpl qint1	;if number of places .gt. 7.
+			;shift 1 place at a time.
+	jsr shiftr	;start shifting bytes, then bits.
+	sty bits	;zero bits since adder wants zero.
+qintrt	rts
+
+qint1
+	tay		;put count in counter.
+	lda facsgn
+	and #@200	;get sign bit.
+	lsr facho	;save first shifted byte.
+	ora facho
+	sta facho
+	jsr rolshf	;shift the rest.
+	sty bits	;zero (bits).
+	rts
+
+;***************************
+; greatest integer function
+;***************************
+
+int
+	lda facexp
+	cmp #$a0
+	bcs intrts	;forget it.
+	jsr round_qint	;PATCH FIXES INT(.9+.1) TYPE BUGS  (04/08/85 FAB)
+	sty facov	;clr overflow byte.
+	lda facsgn
+	sty facsgn	;make fac look positive.
+	eor #@200	;get complement of sign in carry.
+	rol a
+	lda #@230+8
+	sta facexp
+	lda faclo
+	sta integr
+	jmp fadflt
+
+clrfac
+	sta facho	;make it really zero.
+	sta facmoh
+	sta facmo
+	sta faclo
+	tay
+intrts	rts
+	.page
+
+; Floating point input routine.
+;
+; Number input is left in fac. at entry (txtptr) points to the first character
+; in a text buffer. The first character is also in acca. Fin packs the digits
+; into the fac as an integer and keeps track of where the decimal point is.
+; (dptflg) tells whether a dp has been seen. (deccnt ) is the number of digits
+; after the dp. At the end (deccnt) and the exponent are used to determine how
+; many times to multiply or divide by ten to get the correct number.
+
+fin	stx fin_bank	;save bank number where string is stored
+
+	ldy #0		;zero facsgn&sgnflg.
+	ldx #$0a	;zero exp and ho (and moh).
+10$	sty deccnt,x	;zero mo and lo.
+	dex		;zero tenexp and expsgn.
+	bpl 10$		;zero deccnt, dptflg.
+
+	bcc findgq	;flags still set from chrget.
+	cmp #'-'	;a negative sign?
+	bne qplus	;no, try plus sign.
+	stx sgnflg	;it's negative. (x=377).
+	beq finc	;always branches.
+
+qplus	cmp #'+'	;plus sign?
+	bne fin1	;yes, skip it.
+
+finc	jsr fin_chrget
+
+findgq	bcc findig
+
+fin1	cmp #'.'	;the dp?
+	beq findp	;no kidding.
+	cmp #'E'	;exponent follows.
+	bne fine	;no.
+			;here is check for sign of exp.
+	jsr fin_chrget	;yes, get another.
+	bcc fnedg1	;is it a digit. (easier than backing up pointer).
+	cmp #minutk	;minus?
+	beq finec1	;negate.
+	cmp #'-'	;minus sign?
+	beq finec1	
+	cmp #plustk	;plus?
+	beq finec
+	cmp #'+'	;plus sign?
+	beq finec
+	bne finec2
+
+finec1	ror expsgn	;turn it on.
+
+finec	jsr fin_chrget	;get another.
+
+fnedg1	bcc finedg	;it is a digit.
+finec2	bit expsgn
+	bpl fine
+	lda #0
+	sec
+	sbc tenexp
+	jmp fine1
+
+findp	ror dptflg
+	bit dptflg
+	bvc finc
+fine
+	lda tenexp
+fine1
+	sec
+	sbc deccnt	;get number of palces to shift.
+	sta tenexp
+	beq finqng	;negate?
+	bpl finmul	;positive, so multiply.
+findiv
+	jsr div10
+	inc tenexp	;done?
+	bne findiv	;no.
+	beq finqng	;yes.
+
+
+finmul
+	jsr mul10
+	dec tenexp	;done?
+	bne finmul	;no.
+finqng
+	lda sgnflg
+	bmi negxqs	;if positive, return.
+	rts
+
+negxqs	
+	jmp negop	;oterwise, negate and return.
+
+
+findig
+	pha
+	bit dptflg
+	bpl findg1
+	inc deccnt
+findg1
+	jsr mul10
+	pla		;get it back.
+	sec
+	sbc #'0'
+	jsr finlog	;add it in.
+	jmp finc
+
+
+finlog
+	pha
+	jsr movaf	;save it for later.
+	pla
+	jsr float	;float the value in acca.
+	lda argsgn
+	eor facsgn
+	sta arisgn	;resultant sign.
+	ldx facexp	;set signs on thing to add.
+	jmp faddt	;add together and return.
+
+			;
+			;here pack in the next digit of the exponent.
+			;multiply the old exp by 10 and add in the next
+			;digit. note: exp overflow is not checked for 
+			;
+
+
+finedg
+	lda tenexp	;get exp so far.
+	cmp #@12	;will result be .ge. 100
+	bcc mlex10
+	lda #@144
+	bit expsgn
+	bmi mlexmi	;if neg exp, no chk for overr.
+	jmp overr
+
+mlex10
+	asl a		;max is 120.
+	asl a		;mult by 2 twice.
+	clc		;possible shift out of high.
+	adc tenexp	;like multiplying by five.
+	asl a		;and now by ten.
+	clc
+	ldy #0
+	sta syntmp
+
+	lda fin_bank	;bank 0 (text) or 1 (string)?
+	bne 10$		;branch if string
+	jsr indtxt
+	jmp 20$
+10$	jsr indin1_ram1
+
+20$	adc syntmp
+	sec
+	sbc #'0'
+mlexmi
+	sta tenexp	;save result.
+	jmp finec
+
+
+
+
+;
+; subby to get a character from bank 0 or 1, and set the flags in the manner
+; performed by chrget in either case
+
+fin_chrget
+	lda fin_bank	;which bank is byte to come from
+	bne fin_chrget_1	;branch if string bank (1)
+	jmp chrget	;bank 0 (text) uses normal chrget mechanism
+
+fin_chrget_1
+	inc index1
+	bne fin_chrget_2
+	inc index1+1
+fin_chrget_2
+	ldy #0
+	jsr indin1_ram1
+	cmp #':'
+	bcs 10$
+	cmp #' '
+	beq fin_chrget_1	;skip over spaces
+	sec
+	sbc #'0'	;set up .C as chrget would
+	sec
+	sbc #$d0
+10$	rts
+
+;.end

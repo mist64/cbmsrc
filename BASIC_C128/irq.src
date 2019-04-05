@@ -1,0 +1,303 @@
+	.page
+	.subttl Basic's Interrupt Code
+
+basic_irq
+	lda irq_wrap_flag	;filter out wrapped irq calls (but allow interruptable code)
+	beq 1$			;...it's ok
+	rts			;she's wrapped- bar new irq's until old ones done
+
+1$	inc irq_wrap_flag	;shut the door
+
+
+; copy saved VIC info into registers
+
+	ldx #16
+5$	lda vic_save,x
+	sta vic,x
+	dex
+	bpl 5$
+
+; update any moving sprites
+
+	ldy #7
+10$	lda vic+21		;see if this sprite is enabled
+	and sbits,y		;'sbits' is a bit mask
+	beq 40$			;not set, see if done
+
+	ldx sproff,y		;get offset to sprite info from a table
+	lda sprite_data,x		;test if sprite move active
+	beq 40$			;not active, see if done
+
+	sta sprite_data+1,x	;set counter
+20$	tya
+	asl a			;double index to point to position registers
+	tay
+	lda sprite_data+2,x	;get angle sign
+	sec
+	sbc #1			;subtract 1 for cosine
+	inx
+	inx
+	iny
+	jsr sprsub		;update y position
+	dex
+	dex
+	dey
+	lda sprite_data+2,x
+	jsr sprsub		;update x position
+	php
+	tya
+	lsr a			;restore index (.Y)
+	tay
+	plp
+	bcc 30$			;skip if no overflow
+	lda vic_save+16		;get x position msb bits
+	eor sbits,y		;invert bit
+	sta vic_save+16
+30$	dec sprite_data+1,x
+	bne 20$			;loop 'till counter done
+
+40$	dey
+	bpl 10$
+
+	.page
+
+; test if there was a vic collision/light pen interrupt
+
+collision_irq
+	lda vic+25
+	sta vic+25
+	and #$0e
+	beq music_irq		;not a collision type interrupt
+	lsr a			;shift out raster interrupt bit (not used)
+
+; test for 3 types of collision interrupts : sprite/sprite, sprite/bkgrnd, & light pen
+
+	ldy #1			;s/s & s/b are very similar, so save code
+10$	lsr a
+	bcc 30$			;bit not set ==> not source of interrupt
+	pha
+	lda vic+30,y		;get collision data
+	ora vic_save+17,y
+	sta vic_save+17,y
+	lda #0
+	sta vic+30,y		;clear collision data
+
+	lda intval		;record of allowable interrupts
+	cpy #0			;examine selected bit
+	beq 20$
+	lsr a
+20$	lsr a
+	bcc 25$			;BASIC doesn't want this interrupt
+	lda #$ff
+	sta int_trip_flag,y	;turn on trip flag
+
+25$	pla
+30$	dey
+	bpl 10$
+
+; check light pen
+
+	lsr a
+	bcc music_irq
+
+	lda vic+19		;save x pos'n,
+	sta vic_save+19
+	lda vic+20		;..and y, too!
+	sta vic_save+20
+
+	lda intval		;is BASIC interested in our little find?
+	and #4
+	beq music_irq		;hey, no big deal.
+
+	lda #$ff
+	sta int_trip_flag+2	;let BASIC know we caught one.
+	
+	.page
+; play music, if in progress
+
+music_irq
+
+	ldx #0
+100$	lda voices+1,x
+	bmi 110$		;skip if not active
+
+	lda voices,x
+	sec
+	sbc tempo_rate		;decrement current value by current tempo
+	sta voices,x
+	bcs 110$
+	lda voices+1,x
+	sbc #0
+	sta voices+1,x
+	bcs 110$		;ok, no underflow
+
+	txa
+	lsr a			;get offset to waveform
+	tay
+	lda wave0,y		;get waveform
+	and #$fe		;mask out gate bit
+	pha
+	lda offtab,y		;get offset to correct oscillator
+	tay
+	pla
+	sta sid+4,y		;turn off sound
+
+110$	inx
+	inx
+	cpx #6
+	bne 100$		;loop for 3 voices
+
+	.page
+
+; test if SOUND command wants anything
+
+sound_irq
+
+	ldy #2			;test three voices
+10$	lda sound_time_hi,y	;active if msb clear
+	bpl 12$
+11$	dey
+	bpl 10$
+	jmp basic_irq_end
+
+12$	clc			;add step to frequency
+
+	lda sound_freq_lo,y
+	adc sound_step_lo,y
+	sta sound_freq_lo,y
+
+	lda sound_freq_hi,y
+	adc sound_step_hi,y
+	sta sound_freq_hi,y
+
+	lda sound_direction,y	;test if this is up or down
+	tax
+	and #1
+	beq 20$			;branch if up
+
+; if step direction is down, .C==0 OR freq < min  ==> reset value
+
+	bcc 13$			;underflow, reset
+
+	sec
+	lda sound_freq_lo,y
+	sbc sound_min_lo,y
+	lda sound_freq_hi,y
+	sbc sound_min_hi,y
+	bcs 40$			;no borrow, don't reset
+
+13$	cpx #2			;is 'cycle' bit set?
+	bcc 15$			;no, keep direction 'down'
+
+	jsr negate_step		;make step 2's comp
+	lda #%10		;change direction to 'up'
+	sta sound_direction,y
+	bne 35$			;go reset for 'up'
+
+15$	lda sound_max_lo,y	;reset to max
+	sta sound_freq_lo,y
+	lda sound_max_hi,y
+	sta sound_freq_hi,y
+
+	jmp 40$			;go update SID frequency
+
+; if step direction is up, overflow (.C==1) OR freq > max ==> reset frequency
+
+20$	bcs 30$			;overflow, must reset
+
+	lda sound_freq_hi,y	;16 bit compare (yech!)
+	cmp sound_max_hi,y
+	bcc 40$			; freq < max, no reset
+	bne 30$			; freq > max, reset
+	lda sound_freq_lo,y	; msb's the same, test lsb's
+	cmp sound_max_lo,y
+	bcc 40$			; freq < max, no reset
+	beq 40$			; freq = max, no reset
+
+30$	cpx #2			;is this 'cycle'?
+	bcc 35$			;no, go reset for next 'up'
+
+	jsr negate_step		;make step 2's comp
+	lda #%11		;change direction to 'down'
+	sta sound_direction,y
+	bne 15$			;go reset for next 'down'
+
+35$	lda sound_min_lo,y	;set freq to minimum value
+	sta sound_freq_lo,y
+	lda sound_min_hi,y
+	sta sound_freq_hi,y
+
+; update SID's frequency registers
+
+40$	ldx offtab,y		;get index to sid voices
+	lda sound_freq_lo,y
+	sta sid,x
+	lda sound_freq_hi,y
+	sta sid+1,x
+
+; decrement total time - see if it's time to bring down the curtain
+
+	tya
+	tax
+	lda sound_time_lo,x	;16 bit decrement - not very pretty
+	bne 50$
+
+	dec sound_time_hi,x
+50$	dec sound_time_lo,x
+
+	lda sound_time_hi,x	;underflow?
+	bpl 60$			;nope
+
+; time to turn off this voice
+
+	lda #$08
+	ldx offtab,y
+	sta sid+4,x
+60$	jmp 11$
+
+negate_step
+	lda sound_step_lo,y
+	eor #$ff
+	clc
+	adc #1
+	sta sound_step_lo,y
+
+	lda sound_step_hi,y
+	eor #$ff
+	adc #0
+	sta sound_step_hi,y
+	rts
+
+
+
+
+basic_irq_end
+	dec irq_wrap_flag	;open the door to new irq's
+	rts
+	.page
+
+; update sprite position subroutine
+
+sprsub	pha			;save angle phase
+	clc
+	lda sprite_data+3,x
+	adc sprite_data+7,x
+	sta sprite_data+7,x
+	lda sprite_data+4,x	;add high bytes
+	adc sprite_data+8,x
+	sta sprite_data+8,x
+	pla			;get angle sign
+	bcc 30$			;skip if no carry - do not update position
+	lsr a
+	lsr a			;test if positive or negative
+	lda vic_save,y
+	bcs 10$			;skip if negative
+	adc #1			;increment position
+	jmp 20$
+
+10$	sbc #1			;decrement position
+	cmp #$ff		;set carry if underflow
+20$	sta vic_save,y		;decrement position
+30$	rts
+
+;end

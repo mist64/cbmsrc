@@ -1,0 +1,267 @@
+	.page
+	.subttl String Routines
+;
+; strini gets string space for the creation of a string,
+; and creates a descriptor for it in dsctmp
+;
+strini
+	ldx facmo	;get facmo to store in dscpnt
+	ldy facmo+1
+	stx dscpnt	;retain the descriptor pointer
+	sty dscpnt+1
+strspa
+	jsr getspa	;get string space
+	stx dsctmp+1	;save location
+	sty dsctmp+2
+	sta dsctmp	;save length
+	rts		;done
+
+
+
+
+; strlt2 takes the string literal whose first character is pointed
+; to by (xreg)+1 and builds a descriptor for it. the descriptor is
+; initially built in 'dsctmp', but 'putnew' transfers it into a
+; temporary, and leaves a pointer at the temporary in facmo & lo.
+; the characters other than zero that terminates the string
+; should be set up in 'charac' and 'endchr'. if the terminator
+; is a quote, the quote is skipped over. leading quotes should
+; be skipped before jsr. on return, the character after the string
+; literal is pointed to by (strng2).
+
+strlit
+	ldx #'"'	;assume string ends on quote
+	stx charac
+	stx endchr
+strlt2
+	sta strng1	;save pointer to string
+	sty strng1+1
+	sta dsctmp+1	;in case no strcpy
+	sty dsctmp+2
+	ldy #255	;initialize character count
+strget
+	iny
+	jsr indst1	;get character.
+	beq strfi1	;if zero
+	cmp charac	;this terminator?
+	beq strfin	;yes.
+	cmp endchr
+	bne strget	;look further.
+strfin
+	cmp #'"'	;quote?
+	beq strfi2
+strfi1
+	clc
+strfi2
+	sty dsctmp	;no, back up. retain count
+	tya
+	adc strng1	;wishing to set (txtptr).
+	sta strng2
+	ldx strng1+1
+	bcc strst2
+	inx
+strst2
+	stx strng2+1
+	tya
+strlit_1
+	jsr strini
+	tay
+	beq putnew	;length=0, don't bother copying
+	pha		;save length
+10$	dey
+	jsr indst1	;get character from (strng1),y in bank 0
+	sta sw_rom_ram1	;set up ram 1 for bleed-thru's
+	sta (frespc),y
+	tya
+	bne 10$
+	pla		;restore length
+	jsr mvdone	;finish up by updating frespc
+
+
+
+; some string function is returning a result in dsctmp. Set up a temp
+; descriptor with dsctmp in it. Put a pointer to the descriptor in facmo&lo
+; and flag the result as type string.
+
+putnew	ldx temppt	;pointer to first free temp.
+	cpx #tempst+strsiz+strsiz+strsiz
+	bne 1$
+	ldx #errst	;string temporary error.
+	jmp error	;go tell him.
+
+1$	lda dsctmp
+	sta 0,x
+	lda dsctmp+1
+	sta 1,x
+	lda dsctmp+2
+	sta 2,x
+	ldy #0
+	stx facmo
+	sty facmo+1
+	sty facov
+	dey
+	sty valtyp	;type is "string".
+	stx lastpt	;set pointer to last-used temp.
+	inx
+	inx
+	inx		;point further.
+	stx temppt	;save pointer to next temp if any.
+	rts		;all done.
+
+
+;
+; the following routine concatenates two strings.
+; the fac contains the first one at this point.
+; (txtptr) points to the + sign.
+
+cat	lda faclo       ;push high order onto stack.
+	pha
+	lda facmo	;and the low.
+	pha
+	jsr eval	;can come back here since
+	jsr chkstr	;operator is known. must be string
+	pla
+	sta strng1	;get high order of old descriptor.
+	pla
+	sta strng1+1
+	ldy #0
+	jsr indst1_ram1      ;get length of old string.
+	sta syntmp
+	jsr indfmo
+	clc
+	adc syntmp
+	bcc sizeok	;result is less than 256.
+	jmp errlen	;error "long string".
+
+
+
+sizeok	jsr strini	;initialize string.
+	jsr movins	;move it.
+	lda dscpnt	;get pointer to second.
+	ldy dscpnt+1
+	jsr fretmp	;free it.
+	jsr movdo	;move second string.
+	lda strng1
+	ldy strng1+1
+	jsr fretmp
+	jsr putnew
+	jmp tstop	;"cat" reentries form eval at tstop.
+
+movins	ldy #0		;get address of string.
+	jsr indst1_ram1
+	pha
+	iny
+	jsr indst1_ram1
+	tax
+	iny
+	jsr indst1_ram1
+	tay
+	pla
+movstr
+	stx index
+	sty index+1
+movdo
+	tay
+	beq mvdone
+	pha
+movlp
+	dey
+	jsr indin1_ram1
+	sta (frespc),y
+	tya
+	bne movlp
+	pla
+mvdone	clc
+	adc frespc
+	sta frespc
+	bcc mvstrt
+	inc frespc+1
+mvstrt	rts
+; 
+; "fretmp" is passed a string descriptor pntr in (a,y). A check is made to see
+; if the string descriptor points to the last temporary descriptor allocated by
+; putnew. if so, the temporary is freed up by the updating of (temppt). If a
+; string is freed up, a further check sees if the string data that if so,
+; (fretop) is updated to reflect the fact that the space is no longer in use.
+; the address of the actual string is returned in (x,y) and its length in acca.
+; 
+
+frmstr	jsr frmevl	
+
+frestr	jsr chkstr	;make sure it's a string.
+frefac	lda facmo	;free up string pointed to by fac.
+	ldy facmo+1
+fretmp	sta index	;get length for later.
+	sty index+1
+	jsr fretms	;check desc. if last
+	bne fre02	;one then scratch it
+	jsr stradj	;index points to link
+	bcc fre02	;literal no fix
+	dey		;.y=1
+	lda #$ff	;flag string as garbage
+	sta sw_rom_ram1	;set up string bank
+	sta (index),y
+	dey
+	txa
+	sta (index),y	;put in length
+	pha		;save length on stack
+	
+	eor #$ff	;put index back
+	sec		;to first byte
+	adc index
+	ldy index+1
+	bcs res00
+	dey
+res00
+	sta index
+	sty index+1
+	tax		;lo into x
+	pla		;pull length from stack
+	cpy fretop+1	;test for eq to fretop
+	bne frerts
+	cpx fretop
+	bne frerts
+	
+;	string was last into string space
+;	save garbage collection some time
+;	by freeing up. (length + 2)
+	
+	pha		;save length on stack
+	sec		;plus one
+	adc fretop
+	sta fretop
+	bcc 1$
+	inc fretop+1
+1$	inc fretop	;+ one more
+	bne frepla
+	inc fretop+1
+frepla	pla		;pull length off stack
+	rts
+
+fre02	ldy #0		;set up x,y,a and index
+	jsr indin1_ram1	;length
+	pha		;on stack
+	iny
+	jsr indin1_ram1	;pointer lo
+	tax
+	iny
+	jsr indin1_ram1	;pointer hi
+	tay
+	stx index
+	sty index+1
+	pla		;get back length
+	rts
+
+
+
+fretms	cpy lastpt+1	;last entry to temp?
+	bne frerts
+	cmp lastpt
+	bne frerts
+	sta temppt
+	sbc #strsiz	;point ot lst one
+	sta lastpt	;update temp pointer.
+	ldy #0		;also clears zflg so we do rest of fretmp.
+frerts	rts		;all done.
+
+;.end

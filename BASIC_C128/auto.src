@@ -1,0 +1,18 @@
+
+	.page
+	.subttl AUTO Command
+
+; auto increment
+;	  syntax :    auto {line-number}
+;      line-number = 0 means turn off
+
+auto
+	jsr errind
+	jsr linget
+	lda linnum
+	sta autinc
+	lda linnum+1
+	sta autinc+1
+	jmp ready
+
+;end

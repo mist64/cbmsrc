@@ -1,0 +1,326 @@
+	.page
+	.subttl 'code26'
+
+erexit	tax			;set termination flags
+	bne erexiy
+break_exit
+	ldx #erbrk		;break error
+erexiy	jmp error		;normal error
+
+
+k_open	jsr put_io_in_map
+	jsr _open
+	rts
+
+
+outch	jsr k_bsout
+	bcs erexit
+	rts
+
+
+inchr	jsr k_basin
+	bcs erexit
+	rts
+
+
+coout	pha
+	jsr put_io_in_map
+	jsr _chkout
+	jsr dschk		;see if device # >=4, and clear ds if so
+	tax			;save error code
+	pla
+	bcc 1$			;no error
+	txa
+	bcs erexit
+1$	rts
+
+
+coin	jsr put_io_in_map
+	jsr _chkin
+	jsr dschk		;see if device # >=4, and clear ds if so
+	bcs erexit
+	rts
+
+cgetl	jsr put_io_in_map
+	jsr _getin
+	bcs break_exit		;'stop' key was pressed
+	rts
+
+	.page
+
+save	jsr plsv		;parse parms
+
+savenp	ldx text_top		;end save addr
+	ldy text_top+1
+	lda #<txttab		;indirect with start address
+
+savenb	jsr put_io_in_map
+	jsr _savesp		;save it
+	jsr dschk		;see if device # >=4, and clear ds if so
+	bcs erexit
+	rts
+
+
+
+verify	lda #1			;verify flag
+	.byte $2c    		;skip two bytes
+
+load	lda #0	   		;load flag
+	sta verck
+	jsr plsv		;parse parameters
+
+cld10				;entry from dload
+	jsr put_io_in_map
+	lda verck
+	ldx txttab		;.x and .y have alt...
+	ldy txttab+1		;...load address
+	jsr _loadsp		;load it
+	php
+	jsr dschk		;see if device # >=4, and clear ds if so
+	plp
+	bcs jerxit		;problems
+
+	lda verck
+	beq cld50		;was load
+
+;  finish verify
+
+	ldx #ervfy		;assume error
+	jsr k_readst		;read status
+	and #$10		;check error
+	bne cld55		;replaces beq *+5/jmp error
+
+;  print verify 'ok' if direct
+
+	bit runmod		;direct mode?
+	bmi cld20		;no
+	jsr k_primm
+	.byte cr, 'OK', cr, 0
+cld20	rts
+
+
+
+;  finish load
+
+cld50	jsr k_readst		;read status
+	and #$ff-$40		;clear e.o.i.
+	beq cld60		;was o.k.
+
+load_error
+	ldx #erload
+cld55	jmp error
+
+cld60	stx text_top
+	sty text_top+1		;end load address
+
+	bit runmod		;direct?
+	bmi cld70		;no...
+	bvs cld20		;special "RUN file_name" flag...get out here.
+
+	jsr reddy		;print 'ready'
+	jsr lnkprg
+	jsr runc
+	jmp main
+
+;  program load
+
+cld70	jsr stxtpt
+	jsr lnkprg
+	jmp fload
+
+	.page
+
+open	jsr paoc		;parse statement
+	clc			;do a real open
+	jsr k_open		;open it
+	jsr dschk		;see if device # >=4, and clear ds if so
+	bcs jerxit		;bad stuff
+	rts			;a.o.k.
+
+
+
+close	jsr paoc		;parse statement
+	jsr put_io_in_map
+	lda andmsk		;get la
+	clc			;flag a real close
+	jsr k_close		;close it
+	jsr dschk		;see if device # >=4, and clear ds if so
+	bcc cld20		;it's okay
+
+jerxit	jmp erexit
+
+
+
+;  parse load, save, & verify commands
+
+plsv
+
+;  default file name
+;
+	lda #0			;length=0
+	jsr k_setnam
+
+;  default device #
+;
+	ldx #1			;device #1
+	ldy #0			;command 0
+	jsr k_setlfs
+	jsr k_setbank		;call with (.A=load bank=0) and (.X=name bank=1)
+
+
+
+	jsr paoc20		;by-pass junk
+	jsr paoc15		;get/set file name
+	jsr paoc20		;by-pass junk
+	jsr plsv7		;get ',fa'
+	ldy #0			;command 0
+	stx andmsk
+	jsr k_setlfs
+	jsr paoc20		;by-pass junk
+	jsr plsv7 		;get ',sa'
+	txa			;new command
+	tay
+	ldx andmsk		;device #
+	jmp k_setlfs
+
+
+
+;  look for comma followed by byte
+
+plsv7	jsr paoc30
+	jmp getbyt
+
+
+
+;  skip return if next char is end
+;
+paoc20
+	jsr chrgot
+	bne paocx
+	pla
+	pla
+paocx	rts
+
+
+
+;  check for comma and good stuff
+;
+paoc30
+	jsr chkcom		;check comma
+paoc32
+	jsr chrgot		;get current
+	bne paocx		;is o.k.
+	jmp snerr		;bad...end of line
+
+
+;  parse open/close
+
+paoc	lda #0
+	ldx #1
+	jsr k_setbank
+	jsr k_setnam		;default file name
+	jsr paoc32		;must got something
+	jsr getbyt		;get la
+	stx andmsk
+	txa
+	ldx #1    		;default device
+	ldy #0    		;default command
+	jsr k_setlfs		;store it
+	jsr paoc20		;skip junk
+	jsr plsv7
+	stx eormsk
+	ldy #0    		;default command
+	lda andmsk		;get la
+	cpx #3
+	bcc paoc5
+	dey			;default ieee to $ff
+paoc5
+	jsr k_setlfs		;store them
+	jsr paoc20		;skip junk
+	jsr plsv7 		;get sa
+	txa
+	tay
+	ldx eormsk
+	lda andmsk
+	jsr k_setlfs		;set up real eveything
+	jsr paoc20
+	jsr paoc30
+paoc15
+	jsr frmstr		;do frmevl, frestr. return with len in a, index =~string
+	ldx index1
+	ldy index1+1
+	jmp k_setnam		;bank always set at plsv
+
+
+
+dschk	php			;check if device >=4, and clear ds if so
+	pha
+	lda _fa
+	cmp #4
+	bcc 1$
+	jsr oldclr
+1$	pla
+	plp
+	rts
+
+
+
+
+k_readst
+	jsr put_io_in_map
+	jmp _readst
+
+
+
+k_setlfs
+	jsr put_io_in_map
+	jmp _setlfs
+
+
+
+k_setnam
+	jsr put_io_in_map
+	jmp _setnam
+
+
+
+k_basin	jsr put_io_in_map
+	jmp _basin
+
+
+k_bsout	jsr put_io_in_map
+	jmp _bsout
+
+
+k_clrch	jsr put_io_in_map
+	jmp _clrch
+
+
+
+k_close	jsr put_io_in_map
+	jmp _close
+
+
+
+k_clall	jsr put_io_in_map
+	jmp _clall
+
+
+
+k_primm	jsr put_io_in_map
+	jmp _primm
+
+
+k_setbank
+	jsr put_io_in_map
+	jmp _set_bank
+
+
+k_jplot	sta sw_rom_ram0
+	jmp _jplot
+
+
+k_stop	jsr put_io_in_map
+	jmp _stop
+
+;.end

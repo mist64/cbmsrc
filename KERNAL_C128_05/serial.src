@@ -1,0 +1,503 @@
+	.page
+	.subttl  serial routines  (04/29/85)
+
+; command serial bus device to talk
+
+talk	ora #$40	;make a talk address
+	.byte $2c	;skip two bytes
+
+
+
+; command serial bus device to listen
+
+listn	ora #$20	;make a listen address
+	jsr rsp232	;protect from rs232 nmi's
+
+list1	pha
+	bit c3p0	;character left in buffer?
+	bpl 10$		;no...
+
+
+; send buffered character
+
+	sec		;init eoi flag
+	ror r2d2
+	jsr isour	;send last character
+	lsr c3p0	;buffer clear flag
+	lsr r2d2	;clear eoi flag
+
+
+10$	pla		;talk/listen address
+	sta bsour
+	jsr disk_sei
+	jsr datahi
+;	jsr clklo	;PLUS-4 DMA kludge
+
+	lda d2pra						(*fs*)
+	and #$08						(*fs*)
+	bne 30$		;...branch if already under atn		(*fs*)
+
+	jsr spout	;serial port output			(*fs*)
+	lda #$ff						(*fs*)
+	sta d1sdr	;send $ff				(*fs*)
+	jsr slowb	;wait transmission time & go input	(*fs*)
+	txa							(*fs*)
+	ldx #20		;delay for 1571				(*fs*)
+20$	dex							(*fs*)
+	bne 20$							(*fs*)
+	tax							(*fs*)
+
+30$	lda d2pra	;assert attention
+	ora #$08
+	sta d2pra
+
+	.page
+isoura
+	jsr disk_sei
+	jsr clklo	;set clock line low
+	jsr datahi
+	txa		;save .x
+	ldx #200-16
+10$	dex		;...wait for 1ms (approx- allow for VIC DMA's)
+	bne 10$
+	tax		;restore .x
+
+
+isour	jsr disk_sei	;no irq's allowed
+	jsr datahi	;make sure data is released
+	jsr debpia	;data should be low
+	bcc 1$
+	jmp nodev
+
+1$	bit d1icr	;clear pending				(*fs*)
+	jsr clkhi	;clock line high
+	bit r2d2	;eoi flag test
+	bpl 10$		;...branch if no eoi
+
+; do the eoi
+
+2$	jsr debpia	;wait for data to go high
+	bcc 2$
+
+3$	jsr debpia	;wait for data to go low
+	bcs 3$
+
+
+10$	lda d2pra	;wait for data to go high		(*fs*)
+	cmp d2pra	;debounce				(*fs*)
+	bne 10$							(*fs*)
+	pha							(*fs*)
+	lda d1icr	;byte ready?				(*fs*)
+	and #$08						(*fs*)
+	beq 20$		;...no					(*fs*)
+	lda #$c0	;set fast serial flag (int & ext)	(*fs*)
+	sta serial						(*fs*)
+20$	pla							(*fs*)
+	bpl 10$		;wait for data high			(*fs*)
+
+
+	ora #$10	;set clock low				(*fs*)
+	sta d2pra						(*fs*)
+	and #$08	;under atn?				(*fs*)
+	bne 30$							(*fs*)
+	bit serial	;fast?					(*fs*)
+	bpl 30$							(*fs*)
+
+	jsr spout	;go output				(*fs*)
+	lda bsour	;get data				(*fs*)
+	sta d1sdr	;send it				(*fs*)
+	jsr slowb	;wait for transmission & go input	(*fs*)
+	jmp 70$							(*fs*)
+
+; set to send data
+
+30$	lda #$08	;count 8 bits
+	sta count
+;	jsr clklo	;TED DMA kludge
+
+40$	lda d2pra	;debounce the bus
+	cmp d2pra
+	bne 40$
+	asl a		;set the flags
+	bcc frmerr	;...frame error: data must be hi
+
+	ror bsour	;next bit into carry
+	bcs 50$		;...branch isrhi
+	jsr datalo
+	bne 60$		;...branch isrclk
+
+50$	jsr datahi
+60$	jsr clkhi	;clock hi
+	nop
+	nop
+	nop
+	nop
+	lda d2pra
+	and #%11011111	;data high
+	ora #%00010000	;clock low
+	sta d2pra
+	dec count
+	bne 40$		;...loop until 8 bits sent
+
+
+70$	txa		;save .x				(*fs*)
+	pha							(*fs*)
+	ldx #34		;wait 1 ms				(*fs*)
+80$	jsr debpia	;debounce				(*fs*)
+	bcs 90$							(*fs*)
+	pla							(*fs*)
+	tax							(*fs*)
+	jmp disk_cli	;leave with .c=0			(*fs*)
+
+
+90$	dex							(*fs*)
+	bne 80$							(*fs*)
+	pla							(*fs*)
+	tax		;restore .x & fall into 'frmerr'	(*fs*)
+
+	.page
+;  serial bus error handler:  update I/O status byte
+;
+
+
+frmerr	lda #$03	;framing error
+	.byte  $2c
+
+
+
+nodev	lda #$80	;device not present error
+
+
+
+csberr	pha							(*fs*)
+	lda serial	;reset fast serial flag			(*fs*)
+	and #$7f						(*fs*)
+	sta serial						(*fs*)
+	pla							(*fs*)
+	jsr udst	;commodore serial bus error entry
+	jsr disk_cli	;irq's were off...turn on
+	clc		;make sure no kernal error returned
+	jmp dlabye	;turn atn off & release all lines
+
+	.page
+; input a byte from serial bus
+
+acptr
+	jsr disk_sei	;disable irq's, sprites, & select 1MHz mode
+	lda #0
+	sta count	;clear eoi error flag
+	bit d1icr	;clear pending				(*fs*)
+	txa							(*fs*)
+	pha		;save .x				(*fs*)
+
+	jsr clkhi	;release clock line
+10$	jsr debpia	;wait for clock high
+	bpl 10$
+
+20$	ldx #13		;delay for 256 us			(*fs*)
+	lda d2pra	;'datahi' in line
+	and #%11011111
+	sta d2pra	;makes timing more like vic-20		(*fs*)
+
+30$	lda d2pra	;wait for clock low or timeout		(*fs*)
+	cmp d2pra						(*fs*)
+	bne 30$		;debounce				(*fs*)
+	asl a							(*fs*)
+	bpl 50$		;...exit timeout loop when clock low	(*fs*)
+	dex							(*fs*)
+	bne 30$		;...loop until timeout			(*fs*)
+
+	lda count
+	bne 40$		;...branch if error (twice thru timeouts)
+
+; timer ran out-  do an eoi thing.
+
+	jsr datalo	;data line low
+	jsr clkhi	;delay and then set datahi (fix for 40us c64)
+	lda #$40
+	jsr udst	;or an eoi bit into status byte
+	inc count	;go around again for error check on eoi
+	bne 20$		;always-  go around again for eoi error check
+
+
+40$	pla		;restore .x				(*fs*)
+	tax							(*fs*)
+	lda #2		;error status = 2 for read timeout
+	jmp csberr
+
+
+; do the byte transfer.
+
+50$	ldx #8		;set up bit counter
+
+60$	lda d1icr	;was there fast byte to read?		(*fs*)
+	and #$08						(*fs*)
+	bne 75$		;...branch if fast byte to read		(*fs*)
+
+65$	lda d2pra	;wait for clock high then get bit
+	cmp d2pra
+	bne 65$		;debounce
+	asl a		;shove bit into carry
+	bpl 60$		;...branch until clock high & data valid
+
+69$	ror bsour1	;rotate bit in from carry
+
+70$	lda d2pra	;got bit, now wait for clock low
+	cmp d2pra
+	bne 70$		;debounce
+	asl a
+	bmi 70$		;...branch until clock low
+
+	dex
+	beq 80$		;...exit loop if all bits in
+
+71$	lda d2pra	;got a bit, so we can exclude test for fast byte
+	cmp d2pra
+	bne 71$		;debounce
+	asl a		;shove bit into carry
+	bpl 71$		;...branch until clock high & data valid
+	bmi 69$		;always
+
+
+75$	lda d1sdr	;get a byte				(*fs*)
+	sta bsour1	;got a byte				(*fs*)
+	lda #$c0						(*fs*)
+	sta serial	;flag fast device & exit		(*fs*)
+
+
+; ...exit...
+
+80$	pla		;restore .x				(*fs*)
+	tax							(*fs*)
+	jsr datalo	;data low
+	bit status	;check for eoi
+	bvc 90$		;...branch if none
+
+	jsr dladlh	;delay then set data high
+
+90$	jsr disk_cli	;unleash irq's, sprites, 2MHz mode
+	lda bsour1	;don't forget what we came for!
+	clc		;good exit
+	rts
+
+	.page
+; send secondary address after listen
+
+secnd	sta bsour	;buffer character
+	jsr isoura	;send it
+
+
+
+; release attention after listen
+
+scatn	lda d2pra
+	and #%11110111
+	sta d2pra	;release attention
+	rts
+
+
+
+; talk second address
+
+tksa	sta bsour	;buffer character
+	jsr isoura	;send second addr
+	bit status
+	bmi dlabye	;...branch if error sending sa
+
+
+
+tkatn			;shift over to listener
+	jsr disk_sei	;no irq's here
+	jsr datalo	;data line low
+	jsr scatn
+	jsr clkhi	;clock line high jsr/rts
+
+10$	lda d2pra	;'debpia' in-line for faster turn-around
+	cmp d2pra
+	bne 10$		;debounce
+	asl a		;data bit in .c (unused)
+	bmi 10$		;...until clock low
+	jmp disk_cli	;enable irq's & rts
+
+
+
+; buffered output to serial bus
+
+ciout	bit c3p0	;buffered character?
+	bmi 10$		;yes...send last
+	sec		;no...
+	ror c3p0	;set buffered char flag
+	bne 20$		;...branch always
+
+10$	pha		;save current char
+	jsr isour	;send last char
+	pla		;restore current char
+
+20$	sta bsour	;buffer current char
+	clc		;carry-good exit
+	rts
+	.page
+; send untalk command on serial bus
+
+untlk	jsr disk_sei
+	jsr clklo
+	lda d2pra	;pull atn
+	ora #$08
+	sta d2pra
+	lda #$5f	;untalk command
+	.byte $2c	;skip two bytes
+
+
+
+; send unlisten command on serial bus
+
+unlsn	lda #$3f	;unlisten command
+	pha
+	lda serial						(*fs*)
+	and #$7f						(*fs*)
+	sta serial	;reset fast serial flag			(*fs*)
+	pla
+	jsr list1	;send it & then release all lines
+
+
+
+; release all lines
+
+dlabye	jsr scatn	;always release atn
+
+dladlh	txa		;delay and then release clock & data
+	ldx #10		;delay approx 60 us
+10$	dex
+	bne 10$
+	tax
+	jsr clkhi
+	jmp datahi
+
+	.page
+clkhi		 	;set clock line high (inverted)
+	lda d2pra
+	and #%11101111
+	sta d2pra
+	rts
+
+
+
+clklo		 	;set clock line low (inverted)
+	lda d2pra
+	ora #%00010000
+	sta d2pra
+	rts
+
+
+
+datahi		 	;set data line high (inverted)
+	lda d2pra
+	and #%11011111
+	sta d2pra
+	rts
+
+
+
+datalo		 	;set data line low (inverted)
+	lda d2pra
+	ora #%00100000
+	sta d2pra
+	rts
+
+
+
+debpia
+	lda d2pra	;debounce the pia
+	cmp d2pra
+	bne debpia
+	asl a		;shift the data bit into the carry...
+	rts		;...and the clock into neg flag
+
+	.page
+disk_sei
+	sei		;disable irq's, turn sprites off, insure 1MHz mode
+
+get_sp			;///// entry from TAPECTLR
+	bit hold_off
+	bmi 10$		;...branch if user wants full control of vic
+	bit speed
+	bmi 10$		;...branch if already done!
+	lda vicreg+48
+	sta speed	;save current speed
+	lda vicreg+21
+	sta sprites	;save current sprite enables
+	lda #0
+	sta vicreg+21	;disable all sprites
+	sta vicreg+48	;insure 1MHz mode for time-sensitive operations
+
+	lda sprites
+	beq 10$		;...avoid delay if sprites were off
+	txa
+	ldx #0
+1$	dex		;allow vic sprite dma's to cease before time-sensitive stuff begins
+	bne 1$
+	tax
+10$	rts
+
+
+
+
+
+disk_cli		;restore irq's, sprites, & system speed
+	bit hold_off
+	bmi 10$		;...branch if user wants full control of vic
+	bit speed
+	bpl 10$		;...branch if nothing to restore
+	lda sprites
+	sta vicreg+21
+	lda speed
+	sta vicreg+48
+	lda #0
+	sta speed	;flag restoration
+
+10$	cli
+	rts
+
+	.page
+;(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)(*fs*)
+slowb
+	lda d1icr	;wait sdr flag
+	and #$08
+	beq slowb
+
+
+spinp
+	lda d1cra
+	and #$80	;keep 50/60Hz tod flag
+	ora #$08	;kill output on 6526
+	sta d1cra
+	lda mmumcr
+	and #%11110111	;fast serial in
+	sta mmumcr
+	rts
+
+
+spout
+	lda mmumcr
+	ora #%00001000	;fast serial out
+	sta mmumcr
+	lda #$7f
+	sta d1icr	;no irq's
+	lda #$00
+	sta d1t1h	;output rate 4us*2 per bit
+	lda #$04
+	sta d1t1l
+	lda d1cra
+	and #$80	;keep 50/60hz tod
+	ora #$55	;set tod,spout,phi,frc,cont,tgl,pb6=off,start
+	sta d1cra
+	bit d1icr	;clear pending
+	rts
+
+
+
+spin_spout
+	bcc spinp	;user wants spinp...
+	bcs spout	;user wants spout...
+
+;.end

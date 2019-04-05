@@ -1,0 +1,70 @@
+	.page
+	.subttl RSPPOS Function
+
+;******************************************************************
+;*
+;*	RSPPOS - Return sprite location / speed data
+;*
+;*	Syntax : RSPPOS (sprite_number, argument)
+;*
+;*	Where  : sprite_number = [1..8]
+;*		 argument = [0..2]
+;*			0 : return X position
+;*			1 : return Y position
+;*			2 : return current speed
+;*
+;******************************************************************
+
+rsppos	jsr conint	;get first arg, sprite #, in .X
+	dex		;adjust [1..8] to [0..7]
+	cpx #8		; (318018-03 mod; fab)
+	bcs 98$		;value error
+	txa
+	pha		;save sprite number
+
+	jsr chkcom	;check for proper delimiter
+	jsr getbyt	;do frmevl, get 1 byte arg (arg) in .X
+	jsr chkcls	;look for closing paren
+
+	cpx #3
+	bcs 98$		;value error
+
+	pla		;sprite number
+	tay
+	cpx #2
+	bne 10$		;branch if x or y position
+
+	ldx sproff,y	;get offset into speed data
+	ldy sprite_data,x	;get speed data
+	jmp sngflt	;go float 1 byte arg in .Y
+
+; get msb of sprite position (in case this is for x position)
+
+10$	sei
+	lda sbits,y	;get bit mask for this sprite
+	and vic_save+16
+	beq 20$
+	lda #1		;change any non-zero to a '1'
+20$	pha		;save msb
+
+	tya		;y = sprite# * 2
+	asl a
+	tay
+	txa		;see if this is y position
+	lsr a		;.C = 0 for x pos'n, 1 for y pos'n
+	bcc 30$		branch if x pos'n
+
+	iny		;adjust pointer to point to y pos'n in register data
+	pla
+	lda #0		;..and force 'msb' to be zero
+	pha
+
+30$	lda vic_save,y	;get correct location lsb
+	cli
+	tay
+	pla		;..and get msb,
+	jmp nosflt	;..and go float 2 byte value in y,a
+
+98$	jmp fcerr	;bad value error
+
+;end
