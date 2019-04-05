@@ -1,0 +1,145 @@
+	.page
+	.subttl 'extensions-3   02/17/84'
+; alternate use of the mid$ fn., as the target of an assignment stmt.
+;
+; mid$(string_var,starting_position [,length]) = string_expression
+
+midd2
+
+midwrk	=midd2-1
+
+	jsr chkopn	;check for '('
+	jsr ptrget	;get pointer to descriptor of string-var
+	sta forpnt	;store for later use
+	sty forpnt+1
+	jsr chkstr	;check if string
+
+	jsr combyt	;look for comma, followed by 1 byte starting address
+	dex		;adjust starting addr.
+	stx hulp	;store    "	"
+
+	cmp #')'	;finished?
+	beq md10	;branch if so (use default length)
+	jsr combyt	;..else get length
+	.byte $2c
+md10
+	ldx #$ff	;default length
+	stx hulp+1
+	jsr chkcls	;look for ')'
+	lda #equltk	;look for '='
+	jsr synchr
+
+	jsr frmevl	;bring on the source!
+	jsr chkstr	;nothing funny.
+
+	ldy #2	   	;get string descriptors
+md20
+	lda #forpnt	;target
+	jsr indsub	;lda (forpnt),y
+	sta str1,y
+	jsr indfmo	;source
+	sta str2,y
+	dey
+	bpl md20
+
+; test for target string in text was removed-  all strings in ted are
+; copied to string ram when they are created.
+
+	sec		;adjust pointer to source string so that the same
+	lda str2+1	;..index can load & save
+	sbc hulp
+	sta str2+1
+	bcs *+4
+	dec str2+2
+
+	lda hulp+1	;get specified length (or default)
+	cmp str2	;compare with length of source
+	bcc *+4	  	;ok if less,
+	lda str2	;..else use length of source
+	tax
+	beq md80	;done if length=0
+	clc
+	adc hulp	;add length to starting posn.
+	bcs md98	;error if > 256,
+	cmp str1
+	bcc *+4
+	bne md98	;...or if > target length.
+
+	ldy hulp	;get adjusted starting address
+md70
+	jsr inds2p
+	sta (str1+1),y	;this is what it's all about
+	iny
+	dex
+	bne md70	;keep going for specified length
+
+md80
+	jmp frefac	;free up temp. string, rts
+
+md98
+	jmp fcerr	;illegal quantity error
+
+
+
+; auto increment
+;	  syntax :    auto {line-number}
+;      line-number = 0 means turn off
+
+auto
+	jsr errind
+	jsr linget
+	lda linnum
+	sta autinc
+	lda linnum+1
+	sta autinc+1
+	jmp ready
+
+
+errind			;goto error if not in direct mode
+	bit runmod
+	bmi errin2	;in run mode
+	rts
+errin2
+	ldx #erroid
+	jmp error
+
+
+help
+	ldx errnum	;anything to do?
+	inx
+	beq help01	;no errors
+	lda errlin
+	ldy errlin+1
+	sta linnum
+	sty linnum+1
+	jsr fndlin	;find the beginning of line with error
+	bcc help01	;we've been deceived!
+	ror helper	;ok, set help flag
+	jsr crdo	;new line
+	ldx linnum
+	lda linnum+1
+	jsr p1line	;show him where error was
+help01
+	jmp crdo	;and return to caller
+
+
+helpsb
+	ldx lowtr+1	;has 'list' reached code in error?
+	tya
+	clc
+	adc lowtr	;add .y index to line pointer...
+	bcc helps1
+	inx
+helps1
+	cpx errtxt+1	;and compare to error pointer
+	bne helps2	;no
+	cmp errtxt
+	bcc helps2
+	beq helps2
+	lsr helper	;yes: remove list wedge...
+	lda #130	;and initiate flash mode
+	jmp outdo
+helps2
+	rts
+
+;.end

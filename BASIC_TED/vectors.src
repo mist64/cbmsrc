@@ -1,0 +1,19 @@
+	.page
+	.subttl 'vectors'
+;  non-standard basic  vectors available to kernal
+
+	*=$ff49
+
+	jmp doakey	;for e-z use of function key redefinition routine
+
+
+
+;  non-standard kernal vectors available to basic
+
+	*=$ff4c
+
+prt	*=*+3		;kernal has jmp to it's 'print' here
+primm	*=*+3		;kernal has jmp to it's print immediate here
+monitr	*=*+3		;kernal has jmp to the monitor here
+
+;.end

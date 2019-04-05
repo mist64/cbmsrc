@@ -1,0 +1,140 @@
+	.page
+	.subttl 'graphics15'
+
+; clear (de-allocate) 10k graphics area, if installed
+
+clrhir
+	lda mvdflg      ;see if already cleared
+	bne clrh05      ;branch if not,
+	rts		;else done
+
+clrh05
+	ldy #0
+	sty mvdflg      ;flag 'moved'
+	lda memsiz+1    ;is this a 16k or a 64k ted system?
+	bmi clrh10      ;branch if 64k
+
+
+
+; to de-allocate hires ram in a 16k ted, it is necessary to:
+;  1. move strings up to the normal top of memory
+;  2. correct the memsiz and fretop pointers
+;  3. fix the forward pointers in all string descriptors
+
+	jsr garba2      ;clean up string area
+	jsr getdif      ;get memsiz-fretop in x,y
+
+	lda msiz	;set up destination pointers for move
+	sta index1
+	lda msiz+1
+	sta index1+1
+
+	jsr mover	;do move
+
+	ldx #1
+clrh06
+	lda msiz,x
+	sta memsiz,x
+	lda index1,x
+	sta fretop,x
+	dex
+	bpl clrh06
+	jmp fixfor	;fix forward pointers in all string descriptors, do rts
+
+
+
+clrh10
+	ldy #0
+	sty mvdflg      ;change flag
+	sty index1      ;set up pointers for memory transfer
+	sty index2
+	lda #$10
+	sta index1+1    ;destination
+	lda #$40
+	sta index2+1    ;origin
+clrh20
+	jsr indin2      ;lda (index2),y
+	sta (index1),y
+	iny
+	bne clrh20      ;do 1 full page
+	inc index1+1
+	inc index2+1
+	lda strend+1	;test if page containing last bytes was moved
+	cmp index2+1
+	bcs clrh20	;keep going until msb of index2 > msb of strend
+
+	lda strend+1    ;update pointers
+	sec
+	sbc #$30
+	sta strend+1
+
+	lda txttab+1
+	sbc #$30
+	sta txttab+1
+
+	lda vartab+1
+	sbc #$30
+	sta vartab+1
+
+	lda arytab+1
+	sbc #$30
+	sta arytab+1
+
+	lda datptr+1
+	sbc #$30
+	sta datptr+1
+
+	jmp seth30
+
+
+
+addoff
+	lda (fndpnt),y
+	bit mvdflg
+	bne addof2      ;if z then subtract.else add $30
+	sec
+	sbc #$30
+	sta (fndpnt),y
+	rts
+addof2
+	clc
+	adc #$30
+	sta (fndpnt),y
+	rts
+
+
+
+isgrap			;test if graphics mode allocated, error if not
+	lda mvdflg
+	beq isgrer      ;oh-oh, bad news
+	rts		;ok!
+
+isgrer
+	ldx #errng      ;'no graphics area' error
+	jmp error
+
+
+
+go2txt			;switch to text mode subroutine
+	lda ted+6	;turn off bit map mode
+	and #%11011111
+	sta ted+6
+
+	lda ted+7	;turn off multicolor mode
+	and #%11101111
+	sta ted+7
+
+	lda ted+20      ;restore video matrix base
+	and #%00000111
+	ora #%00001000  ;$0800
+	sta ted+20
+
+	lda ted+18      ;switch to 'fetch from rom'
+	ora #%00000100
+	sta ted+18
+
+	lda #0
+	sta graphm      ;reset text flag
+	rts
+
+;.end

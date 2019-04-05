@@ -1,0 +1,213 @@
+	.page
+	.subttl 'graphics12'
+;********************************************************
+;
+;  draw {s} { ,p !  to p }
+;
+;	   where:
+;		  s    = optional color selection (1-4)
+;		  p    = point to plot
+;		  to p = draw a line to the point p
+;
+;********************************************************
+
+draw
+	jsr isgrap	;make sure graphics area has been allocated
+	jsr chrgot
+	beq draw15	;nothing follows 'draw', so quit
+	ldx #1		;default to foreground color,
+	cmp #totk	;if 'draw ,' or 'draw to'
+	jsr incol1      ;get color, or set up default
+
+draw10
+	jsr chrgot
+	cmp #','
+	beq draw20      ;statement of form ',p'
+	cmp #totk
+	beq draw20      ;'to p'
+draw15
+	rts		;ok if end of statement, anything else will crash
+
+draw20
+	pha
+	jsr chrget      ;skip over comma or semicolon
+	ldx #xdest-vwork
+	jsr incord
+	pla
+	bpl draw40      ;branch if ','
+
+	jsr drawln
+	jmp draw10
+
+draw40
+	jsr dstpos
+	jsr gplot	;plot to the point
+	jmp draw10
+
+
+
+;*************************************************************
+;
+; set the current xpos, ypos
+;
+;	   locate p
+;
+;*************************************************************
+
+locate
+	jsr isgrap	;make sure graphics area has been allocated
+	ldx #xdest-vwork
+	jsr incord      ;get the coordinates
+	jmp dstpos      ;set the pos'n, do rts
+
+	.page
+;*************************************************************
+;
+; set a color
+;
+;	  color n, v {,l}
+;
+;      where:
+;	      n = 0 for background color
+;		   1     foreground
+;		   2     multicolor 1
+;		   3     multicolor 2
+;		   4     border
+;	      v = color (1-16)
+;	      l = optional luminance (0-7) (def.=7)
+;
+;************************************************************
+
+scolor
+	jsr getbyt      ;get selection in x
+	cpx #5
+	bcs sclerr      ;illegal value
+	stx tmpton      ;save temp
+
+	jsr combyt      ;comma, color in x
+	dex
+	cpx #16
+	bcs sclerr
+	stx tmpton+1
+
+	ldx #7
+	jsr optbyt      ;get optional luminance, default=7
+	cpx #8
+	bcs sclerr
+
+	txa		;pack color/lum in acc.
+	asl a		;move lim to high nybble
+	asl a
+	asl a
+	asl a
+	ora tmpton+1    ;or in color
+
+	ldx tmpton      ;where does this color/lum go?
+	cpx #1
+	beq scol10
+	bcs scol20
+
+	sta ted+21      ;background
+	bne scol99      ;always
+
+scol10
+	sta fg		;foreground
+	sta color	;set current text color, also.
+	beq scol99      ;always
+
+scol20
+	cpx #3
+	beq scol30
+	bcs scol40
+
+	sta mc1		;multicolor 1
+	bne scol99      ;always
+
+scol30
+	sta ted+22      ;multicolor 2
+	beq scol99      ;always
+
+scol40
+	sta ted+25      ;border
+scol99
+	rts
+
+sclerr
+	jmp fcerr	;illegal value error
+
+
+
+;*********************************************************
+;
+; scnclr...   clear current screen
+;
+;*********************************************************
+
+scnclr
+	lda graphm      ;which mode are we in?
+	bne scnc10      ;branch if not text.
+scnc05
+	lda #$93	;print 'cls'
+	jmp bsout
+
+scnc10
+	and #$40	;split screen?
+	beq scnc15      ;branch if not.
+	jsr scnc05      ;first clear text screen,
+	ldx #nlines-5   ;then position cursor.
+	ldy #0
+	clc
+	jsr jplot
+
+scnc15
+	lda #0
+	ldy #>grbase
+	ldx #32
+	jsr scnc80      ;fill 8k bit map area with 0
+
+	jsr getcol	;get packed byte of colors for current mode
+	ldy #>bmcolr
+	ldx #4
+	jsr scnc80      ;fill 1k vm area with color info.
+
+	jsr getlum      ;get packed luminance levels
+	ldy #>bmlum
+	ldx #4
+	jsr scnc80      ;fill 1k attr area with luminance info.
+	lda #0
+	ldx #3
+scnc60
+	sta xpos,x      ;set current pos to top left
+	dex
+	bpl scnc60
+	rts
+
+scnc80			;general fill sub.: save a for x pages, starting at (0,y)
+	sty grapnt+1
+	ldy #0
+	sty grapnt
+scnc85
+	sta (grapnt),y
+	dey
+	bne scnc85
+	inc grapnt+1
+	dex
+	bne scnc85
+	rts
+
+
+
+;****************************************************************
+;
+;  scale n      :turn the scale mode on (n=1) or off (n=0)
+;
+;***************************************************************
+
+scale
+	jsr getbyt
+	cpx #2
+	bcs sclerr      ;illegal value
+	stx scalem      ;0 if off, 1 if on
+	rts
+
+;.end

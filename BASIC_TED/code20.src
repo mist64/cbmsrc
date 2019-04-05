@@ -1,0 +1,191 @@
+	.page
+	.subttl 'code20'
+movfr
+	lda resho
+	sta facho
+	lda resmoh
+	sta facmoh
+	lda resmo
+	sta facmo
+	lda reslo
+	sta faclo
+	jmp normal
+movfrm
+	clc	      	;move from ram
+	.byte $24
+movfm
+	sec	      	;move from rom
+	sta index1
+	sty index1+1
+	ldy #3+addprc
+	jsr romram
+	sta faclo
+	dey
+	jsr romram
+	sta facmo
+	dey
+	jsr romram
+	sta facmoh
+	dey
+	jsr romram
+	sta facsgn
+	ora #@200
+	sta facho
+	dey
+	jsr romram
+	sta facexp
+	sty facov
+	rts
+
+
+mov2f
+	ldx #tempf2
+	.byte $2c
+
+mov1f
+	ldx #tempf1
+	ldy #0
+	beq movmf
+movvf
+	ldx forpnt
+	ldy forpnt+1
+movmf
+	jsr round
+	stx index1
+	sty index1+1
+	ldy #3+addprc
+	lda faclo
+	sta (index),y
+	dey
+	lda facmo
+	sta (index),y
+	dey
+	lda facmoh
+	sta (index),y
+	dey
+	lda facsgn
+	ora #@177
+	and facho
+	sta (index),y
+	dey
+	lda facexp
+	sta (index),y
+	sty facov
+	rts
+
+movfa
+	lda argsgn
+movfa1
+	sta facsgn
+	ldx #4+addprc
+movfal
+	lda argexp-1,x
+	sta facexp-1,x
+	dex
+	bne movfal
+	stx facov
+	rts
+
+movaf
+	jsr round
+movef
+	ldx #5+addprc
+movafl
+	lda facexp-1,x
+	sta argexp-1,x
+	dex
+	bne movafl
+	stx facov
+movrts	rts
+
+
+round
+	lda facexp
+	beq movrts
+	asl facov
+	bcc movrts
+incrnd
+	jsr incfac
+	bne movrts
+	jmp rndshf
+
+
+sign
+	lda facexp
+	beq signrt
+fcsign
+	lda facsgn
+fcomps
+	rol a
+	lda #$ff
+	bcs signrt
+	lda #1
+signrt	rts
+
+
+sgn
+	jsr sign
+float
+	sta facho
+	lda #0
+	sta facho+1
+	ldx #@210
+floats
+	lda facho
+	eor #@377
+	rol a
+floatc
+	lda #0
+	sta faclo
+	sta facmo
+floatb
+	stx facexp
+	sta facov
+	sta facsgn
+	jmp fadflt
+
+
+abs
+	lsr facsgn
+	rts
+
+fcomp
+	sta index2
+	sty index2+1
+	ldy #0
+	lda (index2),y
+	iny
+	tax
+	beq sign
+	lda (index2),y
+	eor facsgn
+	bmi fcsign
+	cpx facexp
+	bne fcompc
+
+	lda (index2),y
+	ora #@200
+	cmp facho
+	bne fcompc
+	iny
+	lda (index2),y
+	cmp facmoh
+	bne fcompc
+	iny
+	lda (index2),y
+	cmp facmo
+	bne fcompc
+	iny
+	lda #@177
+	cmp facov
+	lda (index2),y
+	sbc faclo
+	beq qintrt
+
+fcompc
+	lda facsgn
+	bcc fcompd
+	eor #@377
+fcompd	jmp fcomps
+
+;end

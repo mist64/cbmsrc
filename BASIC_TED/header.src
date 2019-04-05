@@ -1,0 +1,11 @@
+	.page
+	.subttl 'header'
+
+	*=$8000
+
+	jmp init	;hard reset
+	jmp panic   	;soft reset
+
+	.byte   0,'CBM'
+
+;.end

@@ -1,0 +1,73 @@
+	.page   'background'
+; a brief explanation of the pointer structure in basic:
+
+
+;               highest memory 
+;              ================  <==  memsiz 
+;              *   strings    *
+;              *              *
+;              ================  <==  fretop   builds down as strings
+;              *              *                are created.
+;              *              *
+;              *              *
+;              *  available   *
+;              *     ram      *
+;              *              *
+;              *              *
+;              ================  <==  strend   builds up
+;              *              *
+;              *  array area  *
+;              *              *
+;              ================  <==  arytab 
+;              *              *
+;              *  variables   *
+;              *              *
+;              ================  <==  vartab 
+;              *              *
+;              *              *
+;              *              *
+;              *  text area   *
+;              *              *
+;              *              *
+;              ================  <== txttab
+;                 lowest ram 
+	.page
+; a little insight into basics many and curious bit mapped memory maps
+
+
+;           *  64k ted  *                             16k ted
+;           *           *
+;           *    b      *  <==basic text area
+;           *           *
+;           *-----------*  <--------$4000-------->  *---------*
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *  <==bit map screen 8k ==> *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *           *                           *         *
+;           *-----------*  <--------$2000-------->  *---------*
+;           *           *  <==hires text & attr==>  *         *
+;           *           *                           *         *
+;           *-----------*  <--------$1800-------->  *---------*
+;           *           *  <==unused                *    b    *
+;           *           *            basic text==>  *         *
+;           *-----------*  <--------$1000-------->  *---------*
+;           *           *                           *         *
+;           *           *  <==normal text & atr==>  *         *
+;           *-----------*                           *---------*
+;           *           *                           *         *
+;           *           *  <=== system storage===>  *         *
+;           *-----------*  <--------$0000-------->  *---------*
+
+; since the basic text area in each machine is in a different
+; area, two graphic area allocation schemes are required. in the
+; case of the 16k ted, existing text remains in place, but the
+; top of memory pointer is lowered by 10k, and strings & variables
+; are trashed. for the 64k ted, however, basic text is moved above
+; the hires ram, relinked, and strings and var's are left intact.
+;end

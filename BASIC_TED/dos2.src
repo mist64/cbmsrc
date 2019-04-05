@@ -1,0 +1,305 @@
+	.page
+	.subttl 'dos2'
+;   -mgm 7/23/79-
+;
+;  this is the dos parser routine which looks at lines
+;  passed to it and varifies that the syntax is proper.
+;
+;  entry  (dosprs)
+;   a = parsts bit which must be zero.
+;
+;  exit a = parsts as follows
+;
+;  i-i-i-i-i-i-i-i-i
+;  i7+6+5+4+3+2+1+0i
+;  i-i-i-i-i-i-i-i-i
+;   ^ ^ ^ ^ ^ ^ ^ ^=====> fn1 this bit is set when the
+;   | | | | | | |           first filename is parsed
+;   | | | | | | |=======> fn2 set for second filename
+;   | | | | | |=========> la set when #lfn parsed (***not used***)
+;   | | | | |===========> fa set for device number
+;   | | | |=============> d1 set for first disk unit
+;   | | |===============> d2 set for second disk unit
+;   | |=================> dosrcl set for record size
+;   |===================> @ set when @ encountered.
+;
+;  the following are the vaild bit patterns for parsts
+;  after parsing for the various keywords
+;
+;           7 6 5 4  3 2 1 0
+;  (format)
+;   header  0 0 0 1  * 0 0 1
+;   colect  0 0 0 *  * 0 0 0
+;   backup  0 0 1 1  * 0 0 0
+;   copy    0 0 1 1  * 0 0 0
+;     or..  0 0 * *  * 0 1 1
+;   dsave   * 0 0 *  * 0 0 1
+;   dload   0 0 0 *  * 0 0 1
+;   catlog  0 0 0 *  * 0 0 0
+;   rename  0 0 0 *  * 0 1 1
+;   scrtch  0 0 0 *  * 0 0 1
+;           | | | |  | | | |
+;           @ l d d  f l f f
+;           r r 2 1  a a n n
+;           p e          2 1
+;           l l
+;
+;  "0" bits are required to be clear.
+;  "1" bits are required to be set.
+;  "*" bits are optional parameters.
+
+dospar
+       lda #0
+
+dosprs 			;special error flag entry
+       pha             	;save error flags
+       lda #0
+       sta parsts
+       ldx #dosspc-1   	;clear dos scratch area
+dos1
+       sta fnbufr,x
+       dex
+       bne dos1
+       ldx #8          	;set default device number
+       stx dosfa
+       ldx #$6f        	;channel 15
+       stx dossa
+       ldx #doslfn
+       stx dosla
+
+       jsr chrgot      	;get current chr
+       bne parse1      	;if not end of statement
+
+done
+       pla             	;get error flags
+       jsr prmrpt
+       lda parsts
+       rts
+
+parse1
+       cmp #'D'
+       beq drv1
+       cmp #ontk       	;"on" token
+       beq on1
+       cmp #'U'
+       beq unit1
+       cmp #'I'
+       beq ident       	;if identifier
+       cmp #'"'
+       beq name1
+       cmp #'('
+       beq name1
+gosnr
+       jmp snerr
+
+
+
+unit1
+       jsr unit        	;do unit# parsing
+       jmp del1
+
+
+
+drv1
+       lda #$10
+       jsr prmrpt      	;check for repeated parameter
+       jsr getval
+       cpx #2
+       bcs qtyer2      	;illegal drv# if >1
+       stx dosds1
+       stx dosds2
+       lda #$10
+       bne del1
+
+qtyer2
+       jmp qtyerr
+
+
+
+ident
+       lda didchk
+       bne gosnr       	;only 1 dosdid allowed
+
+idcon
+       jsr chrget      	;get next character
+       sta dosdid      	;m(txtptr => dosdid
+       jsr chrget
+       sta dosdid+1
+       lda #$ff
+       sta didchk      	;set dosdid flag &
+       jsr chrget      	;continue
+       jmp delim1
+
+
+
+on1
+       jsr on
+       jmp del1
+name1
+       lda #1          	;name1 allwd only once
+       jsr newnam      	;do name parsing
+       sta dosf1l
+       sta xcnt        	;save temp value
+       lda #<fnbufr
+       sta dosf1a
+       sta index2
+       lda #>fnbufr
+       sta dosf1a+1
+       sta index2+1
+
+       ldy #0
+loop6
+       jsr indin1
+       sta (index2),y  	;set char in buffer
+       iny
+       cpy xcnt
+       bcc loop6       	;if not full name
+       lda #1          	;set name1 flag
+
+del1
+       ora parsts
+       sta parsts
+
+delim1
+       jsr chrgot
+       bne nxxx
+done1  jmp done        	;<cr>/<> => done
+
+nxxx
+       cmp #','
+       bne next6
+       jsr chrget
+       jmp parse1
+
+next6
+       cmp #ontk
+       beq on1
+       cmp #totk       	;"to" token
+       bne gosner      	;sntax error
+
+parse2
+       jsr chrget
+       cmp #'D'
+       beq drv2
+       cmp #ontk       	;"on" token
+       beq on2
+       cmp #'U'
+       beq unit2
+       cmp #'"'
+       beq name2
+       cmp #'('
+       beq name2
+
+drv2
+       lda #$20
+       jsr prmrpt      	;check for repeated parameter
+       jsr getval
+       cpx #2
+       bcs qtyerr      	;illegal drive #
+       stx dosds2
+       lda #$20
+       bne del2
+
+on2    jsr on
+       jmp del2
+
+unit2  jsr unit        	;do unit# parsing
+       jmp del2
+
+name2
+       lda #2          	;name2 allowed only once
+       jsr newnam
+       sta dosf2l
+       stx dosf2a
+       sty dosf2a+1
+       lda #2          	;set filename2 flag &
+
+del2
+       ora parsts      	;set flag in status
+       sta parsts
+       jsr chrgot
+       beq done1       	;done on <cr>/<>
+       cmp #','
+       beq parse2
+       cmp #ontk       	;"on" token
+       beq on2
+       cmp #'U'
+       beq unit2
+
+gosner
+       ldx #errsn      	;syntax
+	.byte   $2c
+qtyerr
+       ldx #errfc
+	.byte   $2c
+errlen
+       ldx #errls      	;string too long
+       jmp error
+
+
+on
+       jsr chrget
+       cmp #'U'
+       bne gosner      	;if character <> "u"
+
+unit
+       jsr getval
+       cpx #32
+       bcs qtyerr      	;error if >31
+       cpx #3
+       bcc qtyerr      	;error if <3
+       stx dosfa
+       lda #8
+       rts
+
+newnam
+       jsr prmrpt      	;check for repeated parameter
+       jsr frmstr      	;do frmevl, frestr
+       tax             	;save length of string
+       beq qtyerr      	;if length = 0
+       ldy #0
+       jsr indin1
+       cmp #'@'
+       bne lenchk
+       lda #$80
+       jsr prmrpt
+       lda parsts
+       ora #$80        	;set "@" flag
+       sta parsts
+       dex             	;decrement length
+       inc index1      	;increment past "@"
+       bne lenchk      	;if no carry
+       inc index1+1
+
+lenchk
+       txa
+       cmp #17
+       bcs errlen      	;if length < 17
+       ldx index1
+       ldy index1+1
+       rts
+
+
+
+getval 			;get next value routine
+       jsr chrget      	;get nxt chr
+       beq gosner      	;if end of statement
+       bcc gtvl5       	;can be numeric
+       jsr chkopn      	;or a "("
+       jsr getbyt      	;anything else is an error
+       jmp chkcls      	;need closing ")"
+
+gtvl5  jmp getbyt      	;evaluate it
+
+
+
+;  prmrpt checks for a repeated parameter.
+;
+;  entry  a contains parsts flag to check.
+
+prmrpt
+       and parsts      	;and with parsts
+       bne gosner      	;if bit previously set
+       rts
+
+;.end

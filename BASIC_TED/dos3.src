@@ -1,0 +1,141 @@
+	.page
+	.subttl 'dos3'
+;   syntax checker
+;   routines for dos.write
+
+chk1
+       and #$e6        	;for header,dload,scrtch
+       beq chk2        	;chk opt parms
+chker1
+       bne gosner
+
+chk2
+       lda parsts      	;for dsave
+       and #1
+       cmp #1          	;chk req'd parms
+       bne chker1      	;error if 1 missing
+       lda parsts      	;reload for return
+       rts
+
+chk4
+       and #$c4        	;for copy,concat
+       bne chker1      	;chk opt parms
+       lda parsts
+chk5
+       and #3          	;for rename
+       cmp #3          	;chk req'd parms
+       bne chker1
+       lda parsts      	;reload for return
+       rts
+
+	.page
+;   error on channel read
+;
+errchl
+       lda dsdesc      	;entry for user
+       bne echks       	;chk old status
+       lda #40         	;get 40 char str
+       sta dsdesc      	;we have 40 chrs
+       jsr getspa
+       stx dsdesc+1    	;return low
+       sty dsdesc+2    	;return high
+       ldy #40
+       jsr patch1	;(05jul84:fab+tvr) fixes: ?ds$:?fre(0) hangup
+       nop		;placeholder*********************************
+
+echks
+       ldx dosfa       	;chk bus <=ds read
+       bne eread       	;if =0 default
+       ldx #8
+       stx dosfa
+eread
+       lda #doslfn
+       ldy #$6f
+       jsr setlfs
+
+       lda #0
+       jsr setnam
+
+       jsr open
+       ldx #doslfn
+       jsr chkin
+       bcs errbad      	;a problem??
+
+       ldy #$ff
+loop1
+       iny
+       jsr basin
+       cmp #cr         	;check for end
+       beq errend
+       sta (dsdesc+1),y
+       bne loop1       	;br always
+errend
+       lda #0
+       sta (dsdesc+1),y
+       jsr clrch
+       lda #doslfn
+       sec             	;not a real close
+       jmp close
+
+errbad
+       pha
+       jsr errend
+       jsr oldclr      	;flag 'no ds available'
+       pla             	;get error
+       tax
+       jmp error
+
+
+;  r-u-sure subroutine
+
+rusure
+       bit runmod      	;direct mode?
+       bmi ans3        	;no
+       jsr primm       	;prompt user
+
+	.byte 'ARE YOU SURE?', 0
+
+       jsr clrch       	;clear channel for basin
+       jsr basin       	;next char
+       pha             	;save first char of reply
+ans1   			;eat chars until end of line
+       cmp #cr
+       beq ans2        	;if cr received, exit
+       jsr basin
+       bne ans1        	;continue to ignore
+
+ans2
+       pla
+       cmp #'Y'		;z set means ans=y.....
+       rts
+ans3
+       lda #0          	;...or not in direct mode.
+       rts
+
+
+
+;  oldclr subroutine
+;  clears disk status
+
+oldclr
+       tya             	;save y
+       pha
+       lda dsdesc      	;chk for allocation
+       beq oldcl1      	;bra if not
+       ldy #40
+       tya
+       sta (dsdesc+1),y ;length of garbage
+       iny
+       lda #$ff
+       sta (dsdesc+1),y ;garbage flaged
+
+oldcl1
+       lda #0
+       sta dsdesc      	;kill ds$
+       pla             	;restore y
+       tay
+       rts
+
+;.end
+;(05jul84) fab & tvr: garbage collect following ?ds$ crashed due to messy
+;                     condition of ds$ backpointer. corrected backpointer.

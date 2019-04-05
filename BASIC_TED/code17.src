@@ -1,0 +1,165 @@
+	.page
+	.subttl 'code17'
+gtbytc
+	jsr chrget
+getbyt
+	jsr frmnum
+conint
+	jsr posint
+	ldx facmo
+	bne gofuc
+	ldx faclo
+	jmp chrgot
+
+
+val
+	jsr len1	;get length
+	beq valis0	;return 0 if len=0
+;
+; use text to fp number code by faking a new text poiner
+;
+	ldx txtptr	;save old text poiner
+	ldy txtptr+1
+	stx strng2
+	sty strng2+1
+	ldx index1	;move index1 to txtptr
+	stx txtptr
+	clc
+	adc index1	;add len to index1 and put in index2
+	sta index2
+	ldx index1+1
+	stx txtptr+1
+	bcc val2
+	inx
+val2
+	stx index2+1
+	ldy #0
+	jsr indin2	;replace character after string with $00 (fake eol)
+	pha
+	tya		;a=0
+	sta (index2),y
+	jsr chrgot
+	jsr fin	  	;go do evaluation
+	pla
+	ldy #0
+	sta (index2),y	;restore zeroed-out character
+st2txt
+	ldx strng2	;restore text pointer
+	ldy strng2+1
+	stx txtptr
+	sty txtptr+1
+	rts		;done!
+valis0
+	jmp zerofc
+
+
+
+getnum			;get 2 byte value in y,a : check for a comma, get 1 byte val in x
+	jsr frmnum
+	jsr getadr
+
+combyt			;check for a comma, get a 1 byte value in x
+	jsr chkcom
+	jmp getbyt
+
+comwrd
+	jsr chkcom
+
+getwrd			;get a 2 byte value in y,a
+	jsr frmnum
+
+getadr
+	lda facsgn	;for this entry, value can't be < 0
+	bmi gofuc
+getsad			;get signed 2 byte value in (y,a)
+	lda facexp
+	cmp #145
+	bcs gofuc
+	jsr qint
+	lda facmo
+	ldy facmo+1
+	sty poker
+	sta poker+1
+	rts
+
+peek
+	lda poker+1
+	pha
+	lda poker
+	pha
+	jsr getadr
+	ldy #0
+	jsr indpok
+	tay
+	pla
+	sta poker
+	pla
+	sta poker+1
+	jmp sngflt
+
+
+
+poke
+	jsr getnum
+	txa
+	ldy #0
+	sta (poker),y
+	rts
+
+;
+; dec... convert a hex string representing
+;	 a 2 byte integer into decimal
+
+dcml
+	jsr len1	;find length of string
+	sta index2	;len ret. in a
+	ldy #0
+	sty index2+1	;zero char counter
+	sty strng2	;zero out value
+	sty strng2+1
+dec010
+	cpy index2	;evaluated all characters?
+	beq dec050	;branch if so
+	jsr indin1	;get next character from string
+	iny
+	cmp #' '	;ignore spaces
+	beq dec010
+	inc index2+1
+	ldx index2+1
+	cpx #5
+	beq decbad	;can't have more than 4 characters
+
+	cmp #'0'
+	bcc decbad	;bad if < '0'
+	cmp #':'	;'9'+1
+	bcc dec030	;ok if in '0'..'9'
+	cmp #'A'
+	bcc decbad	;bad if > '9' & < 'a'
+	cmp #'G'
+	bcs decbad	;bad if > 'f'
+
+	sbc #7	   	;adjust if in 'a'..'f'
+dec030
+	sbc #$2f	;adjust to $00..$0f
+	asl a	    	;shift low nibble to high
+	asl a
+	asl a
+	asl a
+	ldx #4	   	;mult. old val. by 16, add new
+dec040
+	asl a
+	rol strng2
+	rol strng2+1
+	dex
+	bne dec040
+	beq dec010
+
+dec050
+	ldy strng2	;get lsb of value,
+	lda strng2+1	;& msb,
+	jmp nosflt	;go float 2 byte unsigned integer
+
+decbad
+	jmp fcerr	;illegal qty error
+
+;.end

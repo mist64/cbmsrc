@@ -1,0 +1,385 @@
+	.page
+	.subttl 'renumber   01/27/84'
+;********************************************
+;*                                          *
+;* renumber                                 *
+;*                                          *
+;* syntax:                                  *
+;*   renumber [n1 [,[n2] ,n3]]              *
+;*    n1 =new start line number, default 10 *
+;*    n2 =line increment, default 10        *
+;*    n3 =start line, default first         *
+;*                                          *
+;* syntax error may occur for missing commas*
+;*   or bad line numbers                    *
+;* illegal quantity error for line increment*
+;*   zero and bad renumber range            *
+;* overflow error if increment wraps line   *
+;*   number during renumber                 *
+;*                                          *
+;* returns to ready mode on completion of   *
+;*   renumber                               *
+;*                                          *
+;********************************************
+
+
+; the renumber algorithm examines the entire statement
+; table first for embedded line numbers (branches) to
+; fix. this is done by looking for keywords (goto, gosub,
+; then, run) which are usually followed by line numbers.
+;
+; the old line number is mapped to a new value and the
+; string representing the new branch label replaces the
+; original text. after completing this first pass over the
+; table, a second pass is made to replace the statement
+; number bytes by their final values. lastly, the table
+; is relinked.
+
+testwd
+        .byte gototk,runtk,gosutk,thentk,resttk,resutk,traptk,elsetk
+renum
+	jsr errind	;allowed only in direct mode
+	lda #0	   	;line #10...
+	ldx #10
+	stx zpvec1	;default renum origin
+	sta zpvec1+1
+	stx zpvec2	;default increment
+	sta zpvec2+1
+	sta hightr	;default start line #
+	sta hightr+1
+
+	jsr chrgot	;any parameters?
+	beq ren010	;no...
+	jsr linget	;check for new starting line # ********************
+	lda endchr	;was there one?
+	beq ren001	;no...use default
+	lda linnum
+	ldx linnum+1
+	sta zpvec1
+	stx zpvec1+1
+
+ren001
+	jsr chrgot	;any more parameters?
+	beq ren010	;no...use defaults for rest
+	jsr chkcom	;eat comma (or syntax error)
+	jsr linget	;check for new increment **************************
+	lda endchr	;was there one?
+	beq ren005	;no...use default
+	lda linnum
+	ldx linnum+1
+	sta zpvec2
+	stx zpvec2+1
+	bne ren005	;increment must be >0
+	tax		;test lo byte
+	bne ren005	;ok
+
+ren004
+	jmp fcerr	;illegal quantity error
+
+ren005
+	jsr chrgot	;another parameter?
+	beq ren010	;no...
+	jsr chkcom	;eat comma (or syntax error)
+	jsr linget	;get starting line # ********************************
+	lda linnum
+	ldx linnum+1
+	sta hightr
+	stx hightr+1
+	jsr fndlin	;test for illegal renum range
+	lda lowtr	;pointer to 1st stmt to renumber
+	ldx lowtr+1
+	sta highds
+	stx highds+1
+	lda zpvec1
+	ldx zpvec1+1
+	sta linnum
+	stx linnum+1
+	jsr fndlin	;lowtr = ptr to 1st stmt to be overlapped
+	lda lowtr+1	;can't be smaller
+	sec
+	sbc highds+1
+	bcc ren004	;bad...
+	bne ren010	;ok, do renumber
+	lda lowtr
+	sbc highds
+	bcc ren004	;bad...
+ren010
+	jsr stxtpt	;start at first line
+
+ad7640
+	jsr chargt	;skip links
+	jsr chargt
+	bne ad7669	;not last (null) link
+	jsr ad7730	;put current line # in fac
+ad764b
+	jsr chargt	;skip link
+	jsr chargt
+	bne ad7656	;not null link
+
+	jmp notdel	;exit: jsr lnkprg, fix vartab, jsr runc, jmp ready
+
+
+
+ad7656
+	jsr chargt
+	sta linnum	;if line# >= start#, replace with facho
+	iny
+	jsr indtxt
+	sec
+	sbc hightr+1
+	bcc ad7658	;no, let alone
+	bne ad7657	;yes, replace
+	lda linnum
+	sbc hightr
+	bcc ad7658	;no, let alone
+ad7657
+	lda facho
+	sta (txtptr),y	;hi
+	dey
+	lda facho+1
+	sta (txtptr),y	;lo
+	jsr chargt	;skip past 2nd byte of line#
+	jsr ad773b	;incr line# and scan to eol
+	beq ad764b	;always...
+ad7658
+	jsr chargt	;skip past line#
+	jsr ad774a	;scan to eol
+	beq ad764b	;always...
+
+ad7669
+	jsr chargt	;move on
+	jsr chargt
+ad766f
+	jsr chargt	;one more
+ad7672
+	cmp #'"'	;opening double quote?
+	bne ad7681	;no...
+ad7676
+	jsr chargt	;scan line
+	beq ad7640	;end...
+	cmp #'"'	;close double quote
+	bne ad7676	;no... continue
+	beq ad766f	;yes... resume renumber
+ad7681
+	tax		;end of line?
+	beq ad7640	;yes...
+	bpl ad766f	;not a token...
+	ldx #8	   	;check special token list
+ad7688
+	cmp testwd-1,x
+	beq ad7692	;a match...
+	dex
+	bne ad7688	;continue until zero
+
+	cmp #gotk	;wasn't in the 'special' token list. check for 'go to'
+	bne ad766f	;nope, skip this turkey
+	jsr chrget	;got a 'go', look for 'to'
+	beq ad7640	;end of line, abort
+	cmp #totk
+	bne ad766f	;no 'to', keep looking
+
+ad7692
+	lda txtptr	;save current txtptr
+	sta oldlin
+	lda txtptr+1
+	sta oldlin+1
+	jsr chrget
+	bcs ad7672	;not a #...
+	jsr linget	;get line # from text
+	jsr ad76da	;test for 'on'
+	lda oldlin	;restore old txtptr
+	sta txtptr
+	lda oldlin+1
+	sta txtptr+1
+	ldy #0
+	ldx #0
+ad76b1
+	lda fbuffr+1,x	;get character from number
+	beq ad76c7	;end of number
+	pha		;save digit from new number
+	jsr chrget	;get digit from old number
+	bcc ad76bf	;digit...move on
+
+	jsr ad7726	;other char...move up  (**01/27/84 put inline)
+	inc argmo
+	jsr ad755d
+	inc vartab
+	bne ad76bf
+	inc vartab+1
+
+ad76bf
+	pla
+	ldy #0
+	sta (txtptr),y	;put new digit in new number
+	inx
+	bne ad76b1	;branch always
+
+ad76c7
+	jsr chrget
+	bcs ad76d4	;old stuff after # is other char
+ad76cc 			;digit...move down
+	jsr ad7726
+	dec argmo
+	jsr ad7545
+	lda vartab
+	bne ad7723
+	dec vartab+1
+ad7723
+	dec vartab
+	jsr chrgot
+	bcc ad76cc	;still digits...
+ad76d4
+	cmp #','	;comma from 'on'?
+	beq ad7692	;it is...
+	jmp ad7672	;no...
+
+ad76da
+	jsr ad7730
+ad76dd
+	jsr chargt	;new line, skip over link
+	bne ad76ec
+	jsr chargt
+	bne ad76ed
+	lda #$ff	;end-of-table, use $ffff for line#
+	sta facho
+	sta facho+1
+	bmi ad76fb	;always
+
+ad76ec
+	jsr chargt
+ad76ed
+	jsr chargt
+	sta highds	;highds = current line# in loop
+	cmp linnum
+	bne ad76fe
+	jsr chargt
+	sta highds+1
+	cmp linnum+1
+	bne ad7701
+	sec		;if linnum < start#, no remapping
+	sbc hightr+1
+	bcc ad76f0
+	bne ad76fb
+	lda linnum
+	sbc hightr
+	bcs ad76fb
+ad76f0
+	lda linnum	;use same line#
+	sta facho+1
+	lda linnum+1
+	sta facho
+ad76fb
+	ldx #$90	;make replacement string
+	sec
+	jsr floatc
+	jmp fout
+
+ad76fe
+	jsr chargt
+	sta highds+1	;(** 01/27/84 fix)
+ad7701
+	jsr ad773a	;scan to end of line
+	beq ad76dd	;always
+	nop		;(** 01/27/84 placeholder)*****************************
+	nop
+
+
+
+ad7726
+	lda txtptr
+	sta index1
+	lda txtptr+1
+	sta index1+1
+	lda vartab
+	sta index2
+	lda vartab+1
+	sta index2+1
+	ldy #0
+	sty count
+	sty argmo
+	rts
+
+ad7730
+	lda zpvec1
+	sta facho+1
+	lda zpvec1+1
+	sta facho
+	jmp stxtpt
+
+ad773a
+	lda highds+1	;if line# >= start#, incr new#
+	sec
+	sbc hightr+1
+	bcc ad774a	;nope, just scan to eol
+	bne ad773b
+	lda highds
+	sbc hightr
+	bcc ad774a
+ad773b
+	lda facho+1	;increment new line#
+	clc
+	adc zpvec2
+	sta facho+1
+	lda facho
+	adc zpvec2+1
+	sta facho
+ad774a
+	jsr chargt	;scan to end of line
+	bne ad774a
+	rts
+
+
+chargt
+	ldy #0	   	;must simulate chrget
+	inc txtptr	; (but can't ignore spaces!)
+	bne charg1
+	inc txtptr+1
+charg1
+	jmp indtxt
+
+
+
+ad753a
+	lda index1
+	cmp index2
+	bne ad7544
+	lda index1+1
+	cmp index2+1
+ad7544
+	rts
+
+
+
+ad7555
+	inc index1
+	bne ad7545
+	inc index1+1
+ad7545
+	ldy count
+	iny
+	jsr indin1
+	ldy argmo
+	iny
+	sta (index1),y
+	jsr ad753a
+	bne ad7555
+	rts
+
+
+
+ad756b
+	lda index2
+	bne ad7571
+	dec index2+1
+ad7571
+	dec index2
+ad755d
+	ldy count
+	jsr indin2
+	ldy argmo
+	sta (index2),y
+	jsr ad753a
+	bne ad756b
+	rts
+
+;.end

@@ -1,0 +1,205 @@
+	.page
+	.subttl 'graphics16'
+
+; subroutine to move string area. source start is assumed to be memsiz,
+; and destination is in index1. the # of bytes to be moved should be
+; in x,y. no reg's are preserved,and grbpnt and index2 are used as temps.
+
+mover
+
+	lda memsiz      ;source
+	sta index2
+	lda memsiz+1
+	sta index2+1
+
+moverc 			;entry for 'do-it-yourself'ers (source already set up)
+	txa	      	;make counter 1's complement
+	eor #$ff
+	sta grbpnt
+	tya
+	eor #$ff
+	sta grbpnt+1
+
+	ldy #0
+
+
+mover0			;main loop
+	inc grbpnt      ;decrement 2 byte counter
+	bne mover2
+	inc grbpnt+1
+	beq mover8      ;done
+
+mover2
+	lda index1      ;decrement dest. pointer
+	bne mover4
+	dec index1+1
+mover4
+	dec index1
+
+	lda index2      ;decrement source pointer
+	bne mover6
+	dec index2+1
+mover6
+	dec index2
+
+	jsr indin2      ;load from source,
+	sta (index1),y	;...and put into dest.
+	jmp mover0
+mover8
+	rts
+
+	.page
+; subroutine to fix forward pointers into string area. this is
+; necessary when the strings themselves (all ram between memsiz and
+; fretop) are moved. on entry, this routine assumes only that the
+; memsiz and fretop pointers are correct.
+; *** call this routine after the strings are already moved ***
+;
+; no reg's preserved. the contents of index1 and index2 are destroyed.
+;
+;  index1 <= memsiz
+;  while (index1 > fretop)
+;   index1 -=2   /* point index1 at string's backpointer */
+;   copy backpointer into index2 /* point index2 at descrptr */
+;   get length from descriptor
+;   subtract length from index1
+;   copy index1 into descriptors 'starting address' field
+;   end while
+
+fixfor			;fix forward pointers
+
+	lda memsiz      ;index1 <= memsiz
+	ldy memsiz+1
+	sta index1
+	sty index1+1
+
+
+fixf00 			;main loop
+	sec		;test if index1 > fretop
+	lda fretop
+	sbc index1
+	lda fretop+1
+	sbc index1+1
+	bcs mover8      ;done if fretop >= index1
+
+	sec
+	lda index1      ;index1 -=2
+	sbc #2
+	sta index1
+	bcs fixf10
+	dec index1+1
+
+fixf10
+	ldy #1
+fixf20
+	jsr indin1      ;copy backpointer into index2
+	sta index2,y
+	dey
+	bpl fixf20
+
+	iny		;y=0
+	jsr indin2      ;get length of strings
+	sta voicno      ;a temp
+
+	lda index1      ;subtract length from index1
+	sec
+	sbc voicno
+	sta index1
+	bcs fixf30
+	dec index1+1
+
+; index1 now points to the beginning of the string. put this
+; address into the strings descriptor.
+
+fixf30
+	ldy #2
+fixf40
+	lda index1-1,y
+	sta (index2),y
+	dey
+	bne fixf40
+	beq fixf00      ;loop always
+
+
+
+; subroutine to subtract fretop from memsiz. this gives the size of
+; the current string area. result is returned in x,y.
+
+getdif
+	sec
+	lda memsiz
+	sbc fretop
+	tax
+	lda memsiz+1
+	sbc fretop+1
+	tay
+	rts
+
+	.page
+; subroutine to fix string back pointers to their descriptors. this is
+; necessary when the descriptors are to be moved. a garbage collect must
+; be called prior to executing this routine. enter with the offset in
+; grbpnt (2's comp. is ok for neg. offsets, as overflow is ignored).
+; memsiz & fretop must be valid.
+; no registers are preserved, and index1 & index2 are used as temps.
+; *** call this routine *before* actually moving descriptors ***
+;
+;  index1 <=memsiz
+;
+;  while (index1 > fretop)
+;   index1 -=2   /* point index1 at back pointer */
+;   copy back pointer into index2
+;   add offset in grbpnt to backpointer
+;   get length from descriptor
+;   subtract length from index1
+;   end while
+
+fixbak			;fix back pointers
+	lda memsiz      ;index1 <= memsiz
+	sta index1
+	lda memsiz+1
+	sta index1+1
+
+fixb00			;main loop
+	sec		;test if index1 > fretop
+	lda fretop
+	sbc index1
+	lda fretop+1
+	sbc index1+1
+	bcs fixb80      ;done if fretop >= index1
+
+	sec		;index1 -= 2
+	lda index1
+	sbc #2
+	sta index1
+	bcs fixb10
+	dec index1+1
+
+fixb10
+	clc
+	ldy #0
+fixb20
+	jsr indin1
+	sta index2,y    ;copy back pointer into index2,
+	adc grbpnt,y    ;..add in offset,
+	sta (index1),y	;..and update back pointer.
+	iny
+	cpy #1
+	bne fixb20
+
+	dey		;y=0
+	jsr indin2      ;get length of string from descriptor
+	sta voicno      ;a temp
+
+	lda index1	;subtract current string len, so we point at next string
+	sec
+	sbc voicno
+	sta index1
+	bcs fixb00      ;return to main loop
+	dec index1+1
+	bcc fixb00
+
+fixb80
+	rts
+
+;.end

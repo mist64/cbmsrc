@@ -1,0 +1,121 @@
+	.page
+	.subttl 'graphics6'
+;*************************************************************
+;
+;  circle s,(pc),xr(,(yr)(,(as)(,(ae)(,(rot) (,inc) ) ) ) )
+;				  --  draw an ellipse
+;	     s = color selection (1-4) (default = fg (1))
+;	     pc = center coordinates (default = xpos,ypos)
+;	     xr = x-radius  -  yr = y-radius (default = xr)
+;	     as,ae = arc start & arc end (defalut = 0)
+;	     rot = rotation angle (default = 0)
+;	     inc = increment to next point (default = cirseg)
+;
+;*************************************************************
+
+circle
+	jsr grpcol	;make sure graphics area has been allocated, get color
+
+	ldx #xcircl-vwork
+	jsr incor2      ;get optional center coordinates
+
+	jsr optwrd      ;get 2-byte x-radius
+	sty xradus
+	sta xradus+1
+
+	jsr optwrd	;get 2-byte y-radius. set c if non-default.
+	sty yradus
+	sta yradus+1
+	php		;save c
+
+	ldx #xradus-vwork
+	jsr scalxy      ;scale the values
+
+	plp		;look if y was default (same as x)
+	bcs circl0      ;branch if not
+
+	lda xradus      ;use x radius for y as well
+	sta yradus
+	lda xradus+1
+	bit graphm
+	bpl circl0      ;skip if not multicolor mode
+	asl yradus      ;double it for circle
+	rol a
+circl0
+	sta yradus+1
+	jsr optwrd      ;get optional 2-byte arc start
+	sty angbeg
+	sta angbeg+1
+
+	jsr optwrd      ;get optional 2-byte arc end
+	sty angend
+	sta angend+1
+
+	jsr optwrd      ;get optional 2-byte rotation angle
+	sta voicno      ;swap y and a
+	tya
+	ldy voicno
+	jsr gtang1      ;set sine & cosine for rotation angle
+
+	ldx #angend-vwork ;test if angend>angbeg
+	ldy #angbeg-vwork
+	jsr subtwo
+	bcc circ10      ;skip if yes
+	lda #104
+	ldy #1
+	jsr addtw2      ;add 360 to arc-end
+	sta vwork,x
+	tya
+	sta vwork+1,x
+circ10
+	ldx #3
+circ20
+	lda xradus,x    ;duplicate x-rad/y-rad in xdist2/ydist2
+	sta xdist2,x
+	dex
+	bpl circ20
+	lda #$90
+	jsr angdst      ;get distances * rotation angle
+
+;  xdist1 = xr*cos   --   ydist1 = yr*sin
+;  xdist2 = xr*sin   --   ydist2 = yr*cos
+
+	ldx #7
+circ30
+	lda xdist1,x    ;move for later use
+	sta xrcos,x
+	dex
+	bpl circ30
+	jsr cirsub      ;get 1st point on circle
+	jsr dstpos      ;move to xpos/ypos
+
+;  draw circle with connected lines
+;      incrementing angbeg by cirinc for each point
+
+	ldx #2
+	jsr optbyt	;get optional 1 byte increment value (default is 2)
+	stx cirseg
+	clc
+circ45
+	lda cirseg
+	bne *+5
+	jmp fcerr	;bad value
+	adc angbeg      ;add increment (carry assumed clear)
+	sta angbeg
+	bcc circ50
+	inc angbeg+1
+circ50
+	ldx #angend-vwork ;test if angend>angbeg
+	ldy #angbeg-vwork
+	jsr subtwo
+	bcs cirend      ;yes - do once more
+	jsr cirsub      ;get next point on circle
+	jsr drawln      ;connect to last point
+	bcc circ45      ;loop always
+cirend
+	ldy #angend-vwork
+	jsr cirs10      ;get last point for arc-end
+;
+; fall thru to drawln
+;
+;.end

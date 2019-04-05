@@ -1,0 +1,271 @@
+	.page
+	.subttl 'code9'
+	bmi docstr
+	bcs chkerr
+chkok
+	rts
+docstr
+	bcs chkok
+chkerr
+	ldx #errtm
+	.byte $2c
+sterr
+	ldx #errst
+	jmp error
+
+
+
+frmevl
+	ldx txtptr	;txtptr points to 1st char. in formula
+	bne frmev1
+	dec txtptr+1
+frmev1
+	dec txtptr
+	ldx #0	   	;dummy precedence = 0
+	.byte $24
+lpoper
+	pha		;save precedence
+	txa
+	pha
+
+	tsx		;confirm enough system stack available (recursive calls)
+	cpx #<sysstk+5 	;bottom of stack + 3*addprc + 2
+	bcc sterr	;formula too complex
+	jsr eval
+	lda #0
+	sta opmask
+tstop
+	jsr chrgot	;last char
+loprel
+	sec
+	sbc #greatk
+	bcc endrel
+	cmp #lesstk-greatk+1
+	bcs endrel
+	cmp #1
+	rol a
+	eor #1
+	eor opmask
+	cmp opmask
+	bcc snerr5
+	sta opmask
+	jsr chrget
+	jmp loprel
+endrel
+	ldx opmask
+	bne finrel
+	bcs qop
+	adc #greatk-plustk
+	bcc qop
+	adc valtyp
+	bne *+5
+	jmp cat
+
+	adc #$ff
+	sta index1
+	asl a
+	adc index1
+	tay
+qprec
+	pla
+	cmp optab,y
+	bcs qchnum
+	jsr chknum
+doprec
+	pha
+negprc
+	jsr dopre1
+	pla
+	ldy opptr
+	bpl qprec1
+	tax
+	beq qopgo
+	bne pulstk
+finrel
+	lsr valtyp
+	txa
+	rol a
+	ldx txtptr
+	bne finre2
+	dec txtptr+1
+finre2
+	dec txtptr
+	ldy #ptdorl-optab
+	sta opmask
+	bne qprec	;bra
+
+qprec1
+	cmp optab,y	;check precedence
+	bcs pulstk
+	bcc doprec
+dopre1
+	lda optab+2,y
+	pha
+	lda optab+1,y
+	pha
+	jsr pushf1
+	lda opmask
+	jmp lpoper
+
+snerr5
+	jmp snerr
+
+pushf1
+	lda facsgn	;save fac on stack unpacked
+	ldx optab,y	;precedence
+	tay
+	clc
+	pla		;pointer into stack
+	adc #1
+	sta index1
+	pla
+	adc #0
+	sta index1+1
+	tya
+	pha
+	jsr round	;put rounded fac on stack
+	lda faclo
+	pha
+	lda facmo
+	pha
+	lda facmoh
+	pha
+	lda facho
+	pha
+	lda facexp
+	pha
+	jmp (index1)
+
+qop
+	ldy #255
+	pla
+qopgo
+	beq qoprts
+qchnum
+	cmp #100	;relational operator?
+	beq unpstk
+	jsr chknum	;must be number
+unpstk
+	sty opptr
+pulstk
+	pla		;get mask for rel. op. if it is one
+	lsr a	    	;setup c for dorel's chkval
+	sta domask
+	pla		;unpack stack into arg
+	sta argexp
+	pla
+	sta argho
+	pla
+	sta argmoh
+	pla
+	sta argmo
+	pla
+	sta arglo
+	pla
+	sta argsgn
+	eor facsgn
+	sta arisgn	;sign used by add, sub, mul, div
+qoprts
+	lda facexp
+	rts
+	.page
+eval
+	jmp (ieval)
+neval
+	lda #0
+	sta valtyp	;assume numeric
+eval0
+	jsr chrget	;get a character
+	bcs eval2
+eval1
+	jmp fin	  	;it is a number
+eval2
+	jsr isletc	;variable name?
+	bcc *+5
+	jmp isvar
+	cmp #pi	  	;pi?
+	bne qdot
+	lda #<pival
+	ldy #>pival
+	jsr movfm
+	jmp chrget
+pival
+	.byte @202,@111,@017,@332,@241
+
+qdot
+	cmp #'.'	;constant?
+	beq eval1
+	cmp #minutk	;negation?
+	beq domin
+	cmp #plustk
+	beq eval0
+	cmp #'"'	;string?
+	bne eval3
+strtxt
+	lda txtptr
+	ldy txtptr+1
+	adc #0	   	;c=1
+	bcc strtx2
+	iny
+strtx2
+	jsr strlit	;process string
+	jmp st2txt
+
+eval3
+	cmp #nottk	;not?
+	bne eval4
+	ldy #24
+	bne gonprc	;bra
+
+notop
+	jsr ayint	;integerize
+	lda faclo	;get argument
+	eor #$ff
+	tay
+	lda facmo
+	eor #$ff
+givayf
+	jsr stoint	;integer to float routine
+	jmp floats
+eval4
+	cmp #fntk	;user defined function?
+	bne *+5
+	jmp fndoer
+
+	cmp #onefun	;function name?
+	bcc parchk
+	jmp isfun
+
+parchk
+	jsr chkopn	;only thing left is formula in parens
+	jsr frmevl
+chkcls
+	lda #')'	;close paren?
+	.byte   $2c
+chkopn
+	lda #'('	;open paren?
+	.byte $2c
+chkcom
+	lda #','	;comma?
+synchr
+	ldy #0
+	sta syntmp
+	jsr indtxt
+	cmp syntmp
+	bne snerr
+	jmp chrget	;ok
+
+snerr
+	ldx #errsn	;'syntax error'
+	jmp error
+
+negoff	=negtab-optab
+
+domin
+	ldy #negoff	;precedence below '-'
+gonprc
+	pla
+	pla
+	jmp negprc	;do negation
+
+;end

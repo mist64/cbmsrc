@@ -1,0 +1,399 @@
+	.page
+	.subttl 'graphics1'
+;******************************************************************
+;
+;  paint (s) (,(p)(,m)) -  fill a shape with a specified color
+;                  shape is defined by all points within a
+;                        colored border (see m below)
+;                  s = color of filled area (1-4) (default=1(fg))
+;                  p = optional starting coordinate position
+;                  m = mode: 0=shape defined by (s) color (default)
+;                            1=shape defined by any non-bgnd color
+;
+;******************************************************************
+
+paint
+	jsr grpcol	;make sure a graphic area has been allocated, get color
+
+	ldx #xdest-vwork
+	jsr incor2	;get x & y coordinates
+	jsr dstpos	;move xdest/ydest to xpos/ypos
+
+	jsr optzer	;look for mode: default is 0
+	cpx #2
+	bcc paint2	;branch if legal number
+	jmp fcerr	;...else illegal qty error
+paint2
+	txa
+	lsr a
+	ror a
+	sta stopnb	;flag is now $00 for 'stop on same', $80 for 'stop on any'
+	bpl pntok1	;test for stopnb=1 & colsel=0 ... just quit if found
+	lda colsel
+	beq pnterr
+pntok1
+	jsr readpt	;test if 1st point is off
+	bcs pnterr	;abort if 1st point out of bounds
+	bne pntok2	;skip if point is not = color
+pnterr
+	rts
+
+; a large block of ram is necessary for the stack required by 'paint'.
+; rather than allocate a fixed block of ram just for paint, it would
+; be more frugal to use any free ram in basic's area. this would be
+; the area between the end of arrays (strend) and the bottom of
+; strings (fretop).
+;
+; to guarantee the largest block possible, we will call the garbage
+; collect routine first.
+
+pntok2
+	jsr garba2
+
+	.page
+; now we'll set up our pointers. index1 will be the top of stack
+; pointer, and tempst will be fretop-3 (at or after this address,
+; it is no longer possible to push any more 4 byte addresses on
+; the stack).
+
+	lda strend
+	sta index1
+	lda strend+1
+	sta index1+1
+
+	sec
+	lda fretop
+	sbc #3
+	sta tempst
+	lda fretop+1
+	sbc #0
+	sta tempst+1
+
+;to fill the shape:
+;  1) move current position down until a dot is found that is on
+;  2) move up until a dot is found that is on
+;     a. set each dot that is off to the color specified
+;     b. test the dot to the right and save each coordinate
+;that begins a string of reset points
+;     c. test each dot on the left in the same way as (b)
+;  3) remove a saved coordinate and repeat from (1)
+;  4) done when there are no more saved coordinates
+
+ptloop
+	ldx #0
+	stx ltflag	;init flags = 0 - prev point set
+	stx rtflag	;use to test if previous point was on or off
+
+ptdown			;move down until a point is found is found that is set.
+	ldx ypos
+	bne ptdwn2
+	dec ypos+1
+ptdwn2
+	dec ypos
+	jsr readpt	;test if point set or reset
+	bcs ptbotm	;skip if ypos < 0
+	bne ptdown	;loop if point is not = colsel
+ptbotm
+	inc ypos
+	bne ptfill
+	inc ypos+1
+ptfill
+	jsr plot01	;set the point
+	ldx xpos
+	bne ptfil2
+	dec xpos+1
+ptfil2
+	dec xpos
+	lda ltflag	;get left flag value
+	jsr tstval	;test if need to save coordinates, crash if overflow
+	sta ltflag	;save new flag value
+	clc	      	;move to xpos 2 to the right
+	lda xpos
+	adc #2
+	sta xpos
+	bcc ptfil3
+	inc xpos+1
+ptfil3
+	lda rtflag	;get right flag value
+	jsr tstval	;test if need to save coordinates, crash if overflow
+	sta rtflag	;save new flag value
+
+	ldx xpos	;decrement xpos, increment ypos
+	bne ptfil4
+	dec xpos+1
+ptfil4
+	dec xpos
+	inc ypos
+	bne ptfil6
+	inc ypos+1
+ptfil6
+	jsr readpt	;test if set
+	bcs ptmax	;skip if ypos >= max
+	bne ptfill	;loop if point is not equal to colsel
+ptmax
+	ldx #3
+	ldy #0
+;
+; test if stack empty. if so, done. else continue.
+;
+	lda index1+1
+	cmp strend+1
+	bne ptmax2
+	lda index1
+	cmp strend
+	beq ptdone	;empty..exit.
+ptmax2
+	lda index1
+	bne ptcoor
+	dec index1+1
+ptcoor
+	dec index1
+	jsr indin1	;move 4 byte addr into xpos/ypos
+	sta xpos,x
+	dex
+	bpl ptmax2
+
+	jsr iscntc	;check for stop key
+	jmp ptloop	;loop for another pass
+ptdone
+	jmp dstpos	;restore original coordinates,do rts
+
+
+
+;tstval - test value of position
+;  if set then set flag to zero
+;  if reset and flag = 1 then do nothing
+;  if reset and flag = 0 then save position on stack
+;     and set flag = 1
+
+tstval
+	pha		;save flag value
+	jsr readpt	;test position is set
+	bcs tstgo	;skip if position out of bounds
+	beq tstgo	;exit if point equal colsel
+	pla
+	bne tstxit	;exit if previous point reset
+
+	tax		;make x & y =0 for later use
+	tay
+	lda index1+1    ;test if there is room on stack for another 4 bytes.
+	cmp tempst+1
+	bcc ptsave	;..ok
+	bne pterr	;..full
+	lda index1	;..ms byte equal, test ls byte
+	cmp tempst
+	bcc ptsave	;..ok
+pterr
+	jmp omerr	;out of memory error
+
+ptsave
+	lda xpos,x	;save 4 bytes of address on stack
+	sta (index1),y
+	inc index1
+	bne ptsav1
+	inc index1+1
+ptsav1
+	inx
+	cpx #4
+	bne ptsave
+	lda #$80	;set flag - last point reset
+	rts
+tstgo
+	pla
+	lda #0		;set flag - last point set
+tstxit
+	rts
+
+	.page
+;*****************************************************************
+;
+;   char (s),x,y,str(,r) -- display a character string
+;	s = color selection (1-4) (default is fg (1))
+;	x,y = column/row position for 1st character
+;	str = character string (1-255)
+;	r = normal(0) or reverse(1)
+;
+;*****************************************************************
+
+char
+	jsr incolr	;get color selection
+
+	jsr combyt	;check comma, get column number
+	cpx #llen
+	bcs charer	;exit - col number too large
+	stx colcnt
+
+	jsr combyt	;check comma, get row number
+	cpx #nlines
+	bcc char10	;skip if okay
+charer
+	jmp fcerr	;exit - illegal value
+char10
+	stx rowcnt	;initialize column counter
+	jsr chkcom	;check for comma
+
+	jsr frmstr	;do frmevl, frestr. returns len in a, index points to string
+	sta numcnt	;save length
+	tya
+	pha		;save index (11/16/83 patch)
+	txa
+	pha
+
+	jsr optzer	;look for optional invert (def. is 0, normal)
+	txa		;move .x's lsb to xysgn's msb
+	ror a
+	ror xysgn
+
+	pla		;restore 'index' (ptr to string)
+	sta index
+	pla
+	sta index+1
+	lda graphm
+	bne char20	;skip if not text screen
+
+	ldx rowcnt	;text mode: treat like 'print at x,y,string'
+	ldy colcnt
+	clc
+	jsr jplot	;move cursor
+	ldy #0
+char15
+	cpy numcnt
+	beq char99
+	jsr indin1	;get the character from the string
+		
+;	ora xysgn	;make rvs, if requested (removed 11/16/83: doesn't work)
+	jsr prt		;print to text screen
+	iny
+	bne char15
+char99
+	rts
+
+char20
+	jsr isgrap	;make sure a graphic area has been allocated
+	lda fg
+	pha		;save foreground color
+	lda colsel
+	pha
+	bit graphm
+	bpl char25	;skip if not multicolor mode
+	pla		;colsel
+	beq char26	;use fgnd color (feature)
+	lsr a
+	beq char26	;use fgnd color
+	ldx mc1
+	bcc char27	;use multicolor-1
+	ldx ted+22
+	bcs char27	;use multicolor-2
+
+char25
+	ldx ted+21	;high-res mode
+	pla		;colsel
+	beq char27	;use bgnd color
+char26
+	ldx fg		;use fgnd color
+
+char27
+	stx fg
+	ldx rowcnt
+	ldy #0
+	sty strcnt	;initialize string counter
+char30
+	ldy strcnt	;get string offset
+	inc strcnt	;increment offset
+	jsr indin1	;get string character
+	dec numcnt
+	bmi char50	;exit if end of string
+	ldy colcnt
+	jsr chrdsp	;display the character
+	inc colcnt	;increment column count
+	cpy #llen-1     ;check if at end
+	bcc char30	;loop if not
+	ldy #0
+	sty colcnt	;set to start of next line
+	inx
+	cpx #24
+	bcc char30	;loop if not at end of screen
+char50
+	pla
+	sta fg		;restore color
+	rts
+
+
+
+;*****************************************************************
+;
+;	chrdsp - display a character
+;	   x = row number
+;	   y = column number
+;	   a = character
+;
+;*****************************************************************
+
+chrdsp
+	pha		;save character
+	jsr docolr	;set colors
+	jsr graddr	;get bit map addr of 8x8 char cell
+	lda #0
+	sta tmpton
+	pla		;recall character
+	pha
+	asl a		;multiply by 8 to get char rom addr
+	rol tmpton
+	asl a
+	asl a
+	rol tmpton
+	sta index2
+	lda tmpton
+	adc chrpag	;get char rom base
+	sta index2+1
+	tya
+	pha		;save column number
+	ldy #7
+movchr
+	lda xysgn	;rvs fld flag
+	asl a
+	lda (index2),y	;get char byte (was jsr charin)
+	bcc movch0	;invert fields if carry set
+	eor #$ff
+movch0
+	bit graphm	;get graphic mode
+	bpl dochr0	;skip if not multicolor
+
+	and #$aa	;remove every other bit
+	sta tmpton
+	lda colsel	;what is color source?
+	bne movch1
+	lda tmpton
+	bcs movrvs	;bgnd: is it rvs fld?
+	lsr a		;bgnd (do fgnd on mc#1)
+	eor tmpton
+	eor #$aa
+	bne dochr0
+movrvs
+	ora #$55	 ;bgnd rvs (do fgnd on mc#2)
+	bne dochr0
+movch1
+	cmp #2
+	bne movch2
+	lda tmpton	;mc#1 pattern '10'
+	bcs dochr0
+movch2
+	bcc movch3
+	lda tmpton	;mc#2 pattern '11'
+	lsr a
+	eor tmpton
+	bcc dochr0
+movch3
+	lda tmpton	;fgnd pattern '01'
+	lsr a
+
+dochr0
+	sta (grapnt),y  ;save into graphic bit map
+	dey
+	bpl movchr
+	pla
+	tay		;restore colnum
+	pla		;restore character
+	rts
+
+;.end

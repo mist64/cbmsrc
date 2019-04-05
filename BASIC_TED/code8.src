@@ -1,0 +1,241 @@
+	.page
+	.subttl 'code8'
+datbk1
+	jsr chrget
+	bit valtyp
+	bpl numins
+	bit inpflg
+	bvc setqut
+	inx
+	stx txtptr
+	lda #0
+	sta charac
+	beq resetc
+setqut	sta charac
+	cmp #'"'
+	beq nowget
+	lda #':'
+	sta charac
+	lda #','
+resetc	clc
+nowget	sta endchr
+	lda txtptr
+	ldy txtptr+1
+	adc #0
+	bcc nowge1
+	iny
+nowge1	jsr strlt2
+	jsr st2txt
+	jsr inpcom
+	jmp strdn2
+
+numins	jsr fin
+	lda intflg
+	jsr qintgr
+strdn2	jsr chrgot
+	beq trmok
+	cmp #','
+	beq trmok
+
+	lda inpflg	;is this get, read, or input?
+	beq trmn01	;input
+	bmi tmerr	;read
+	ldx channl	;get. if not kbd, go use 'bad file data error'
+	bne trmn02
+tmerr
+	ldx #errtm	;'get from kbd' or 'read' saw a bad type
+	bne trmn03	;always
+
+trmn01
+	lda channl
+	beq doagin	;do again if keybd input
+trmn02
+	ldx #errbd	;input saw bad file data
+trmn03
+	jmp error
+
+doagin
+	jsr primm
+	.byte '?REDO FROM START', cr, 0
+
+	lda oldtxt
+	ldy oldtxt+1
+	sta txtptr	;put user back to beginning of input
+	sty txtptr+1
+	rts
+
+
+
+trmok
+	ldx #1
+trmok1
+	lda txtptr,x
+	sta inpptr,x
+	lda vartxt,x
+	sta txtptr,x
+	dex
+	bpl trmok1
+
+	jsr chrgot
+	beq varend
+	jsr chkcom
+	jmp inloop
+
+datlop
+	jsr datan
+	iny
+	tax
+	bne nowlin
+	ldx #errod
+	iny
+	jsr indtxt
+	beq next25
+	iny
+	jsr indtxt
+	sta datlin
+	iny
+	jsr indtxt
+	iny
+	sta datlin+1
+nowlin
+	jsr addon	;txtptr+.y
+	jsr chrgot	;span blanks
+	tax	      	;used later
+	cpx #datatk
+	bne datlop
+	jmp datbk1
+
+varend
+	lda inpptr
+	ldy inpptr+1
+	ldx inpflg
+	bpl vary0
+	jmp resfin
+
+vary0
+	ldy #0
+	jsr indinp
+	beq inprts
+	lda channl
+	bne inprts
+	jsr primm
+	.byte '?EXTRA IGNORED', cr, 0
+inprts
+	rts
+
+
+
+; 'next' statement
+;
+next
+	bne next10	;hop if 'next' variable given
+	ldy #$ff	;flag no specific 'for' variable
+	bne next20	;always
+
+next50 			;done, clean up stack
+	ldy #lenfor
+	jsr rlsstk	;release (y) items from stack
+	jsr chrgot
+	cmp #','	;ie., next j,k
+	bne next45
+	jsr chrget
+
+next10
+	jsr ptrget     	;get pointer to variable in (a,y)
+	sta forpnt
+next20
+	sty forpnt+1
+	ldy #fortk
+	sty srchtk
+	jsr search	;look for 'for' entry in run-time stack
+	beq next30	;branch if found
+	ldx #errnf	;otherwise 'error, not found'
+next25
+	jmp error
+next30
+	jsr movfnd	;(fndpnt) => (tos)
+;
+; set up to move 'step' value to fac
+;
+	lda fndpnt
+	clc
+	adc #3	   	;offset to step value
+	ldy fndpnt+1
+	bcc next35
+	iny
+next35
+	jsr movfrm	;perform move (from ram)
+;
+; movfm doesn't move sign. get it.
+;
+	ldy #8
+	lda (fndpnt),y
+	sta facsgn
+;
+; get pointer to 'for' variable
+;
+	ldy #1
+	lda (fndpnt),y	;get lsb
+	pha
+	tax
+	iny
+	lda (fndpnt),y	;get msb
+	pha
+	tay	      	;msb in y,
+	txa	      	;lsb in a
+
+	jsr fadd	;add 'step' value to 'for' varible
+	pla	      	;re-get msb
+	tay	      	;msb in y,
+	pla
+	tax	      	;lsb in x
+	jsr movmf	;put result back into 'for' variable
+;
+; make (a,y) point to 'to' value in stack
+;
+	lda fndpnt
+	clc
+	adc #9
+	ldy fndpnt+1
+	bcc next40
+	iny
+;
+; test if loop done
+;
+next40
+	jsr fcomp	;compare fac to value pointed to by (a,y)
+	ldy #8
+	sec
+	sbc (fndpnt),y
+	beq next50	;branch taken if done
+;
+; not done, set pointers to re-execute loop
+;
+	ldy #17
+	lda (fndpnt),y
+	sta txtptr
+	dey
+	lda (fndpnt),y
+	sta txtptr+1
+	dey
+	lda (fndpnt),y
+	sta curlin+1
+	dey
+	lda (fndpnt),y
+	sta curlin
+next45
+	rts
+
+
+
+frmnum
+	jsr frmevl
+chknum
+	clc
+	bcc chkval
+chkstr
+	sec
+chkval
+	bit valtyp
+
+;.end

@@ -1,0 +1,136 @@
+	.page
+	.subttl 'for'
+;       for
+;
+;    push the following information on the run-time stack
+;            (bottom)   highest memory
+;    =========================
+;             txtptr    address of next statement
+;             txtptr+1
+;             ========
+;             curlin+1  current line number
+;             curlin
+;             ========
+;             to lo
+;             to mo
+;             to moh    'to' value
+;             to ho
+;             to exp
+;             ========
+;             step sign
+;             step lo
+;             step mo
+;             step moh  'step' value
+;             step ho
+;             step exp
+;             ========
+;             forpnt+1  'for' variable pointer
+;             forpnt
+;             ========
+;             'for' token       <== (tos) top of stack pointer
+;   ============================
+;        (top of stack)  lowest memory
+
+for
+	lda #$80
+	sta subflg
+	jsr let	    	;get & set 'for' variables
+	lda #fortk	;set up for call to see if
+	sta srchtk
+	jsr search	;..this 'for' variable is unique
+	beq for010	;branch if not
+
+; if variable is not unique, (fndpnt) will point to last
+; occurance in stack, and we will reset the stack to that point.
+; otherwise we will adjust the pointer by 'lenfor',
+; and start from that point.
+
+	ldy #lenfor
+	jsr getstk	;updates stack pointer, error if overflow
+	jsr movtos	;(tos) => (fndpnt)
+
+for010
+	jsr movfnd	;(fndpnt) => (tos)   (redundant for new entries)
+	jsr datan	;find address of next statement
+	tya		;offset from (txtptr) in y
+	ldy #lenfor-1
+;
+; push address of next statement on stack
+;
+	clc
+	adc txtptr
+	sta (tos),y
+	lda txtptr+1
+	adc #0
+	dey
+	sta (tos),y
+;
+; push current line number on stack
+;
+	lda curlin+1
+	dey
+	sta (tos),y
+	lda curlin
+	dey
+	sta (tos),y
+;
+; look for 'to'... must appear
+;
+	lda #totk
+	jsr synchr
+;
+; get 'to' value
+;
+	jsr chknum
+	jsr frmnum
+	lda facsgn
+	ora #$7f
+	and facho
+	sta facho
+	ldx #4
+	ldy #lenfor-5
+for020
+	lda facexp,x	;push faclo,mo,moh,ho,exp
+	sta (tos),y
+	dex
+	dey
+	bpl for020
+;
+; push 'step' value
+;
+	lda #<fone	;point to default 'one' in rom
+	ldy #>fone
+	jsr movfm
+	jsr chrgot
+	cmp #steptk
+	bne for030	;branch if no step given
+	jsr chrget
+	jsr frmnum
+
+for030
+	jsr sign
+	pha		;save sign for a moment
+	jsr round
+	pla
+	ldy #lenfor-10
+	ldx #5
+for040
+	sta (tos),y
+	lda facexp-1,x
+	dey
+	dex
+	bpl for040
+;
+; finally push pointer to 'for' variable, & 'for' token
+;
+	lda forpnt+1
+	sta (tos),y
+	lda forpnt
+	dey
+	sta (tos),y
+	lda #fortk
+	dey
+	sta (tos),y
+	rts
+
+;.end

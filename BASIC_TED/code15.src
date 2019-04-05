@@ -1,0 +1,149 @@
+	.page
+	.subttl 'code15'
+;
+; strini gets string space for the creation of a string,
+; and creates a descriptor for it in dsctmp
+;
+strini
+	ldx facmo	;get facmo to store in dscpnt
+	ldy facmo+1
+	stx dscpnt	;retain the descriptor pointer
+	sty dscpnt+1
+strspa
+	jsr getspa	;get string space
+	stx dsctmp+1	;save location
+	sty dsctmp+2
+	sta dsctmp	;save length
+	rts		;done
+
+
+
+; the str function takes a number and gives a string with
+; the characters the output of the number would have given.
+;
+strd
+	jsr chknum	;arg has to be numeric
+	ldy #0
+	jsr foutc	;do it's output
+	pla
+	pla
+timstr
+	lda #<lofbuf
+	ldy #>lofbuf	;fall thru to strlit
+
+
+
+; strlt2 takes the string literal whose first character is pointed
+; to by (xreg)+1 and builds a descriptor for it. the descriptor is
+; initially built in 'dsctmp', but 'putnew' transfers it into a
+; temporary, and leaves a pointer at the temporary in facmo & lo.
+; the characters other than zero that terminates the string
+; should be set up in 'charac' and 'endchr'. if the terminator
+; is a quote, the quote is skipped over. leading quotes should
+; be skipped before jsr. on return, the character after the string
+; literal is pointed to by (strng2).
+
+strlit
+	ldx #'"'	;assume string ends on quote
+	stx charac
+	stx endchr
+strlt2
+	sta strng1	;save pointer to string
+	sty strng1+1
+	sta dsctmp+1	;in case no strcpy
+	sty dsctmp+2
+	ldy #255	;initialize character count
+strget
+	iny
+	jsr indst1
+	beq strfi1
+	cmp charac
+	beq strfin
+	cmp endchr
+	bne strget
+strfin
+	cmp #'"'
+	beq strfi2
+strfi1
+	clc
+strfi2
+	sty dsctmp
+	tya
+	adc strng1
+	sta strng2
+	ldx strng1+1
+	bcc strst2
+	inx
+strst2
+	stx strng2+1
+	tya
+	jsr strini
+	ldx strng1
+	ldy strng1+1
+	jsr movstr
+
+putnew
+	ldx temppt
+	cpx #tempst+strsiz+strsiz+strsiz
+	bne putnw1
+	ldx #errst
+	jmp error
+
+putnw1
+	lda dsctmp
+	sta 0,x
+	lda dsctmp+1
+	sta 1,x
+	lda dsctmp+2
+	sta 2,x
+	ldy #0
+	stx facmo
+	sty facmo+1
+	sty facov
+	dey
+	sty valtyp
+	stx lastpt
+	inx
+	inx
+	inx
+	stx temppt
+	rts
+
+
+
+cat
+	lda faclo
+	pha
+	lda facmo
+	pha
+	jsr eval
+	jsr chkstr
+	pla
+	sta strng1
+	pla
+	sta strng1+1
+	ldy #0
+	jsr indst1
+	sta syntmp
+	jsr indfmo
+	clc
+	adc syntmp
+	bcc sizeok
+	jmp errlen
+
+
+
+sizeok
+	jsr strini
+	jsr movins
+	lda dscpnt
+	ldy dscpnt+1
+	jsr fretmp
+	jsr movdo
+	lda strng1
+	ldy strng1+1
+	jsr fretmp
+	jsr putnew
+	jmp tstop
+
+;.end

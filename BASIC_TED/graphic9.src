@@ -1,0 +1,214 @@
+	.page
+	.subttl  'graphics9'
+;***************************************************************
+;
+;   dotwo  -  add two 2-byte values if carry clear
+;	      subtract two 2-byte values if carry set	
+;
+;***************************************************************
+
+dotwo2
+	bcc addtw2      ;go do addition
+	bcs subtw2      ;go do subtraction
+dotwo
+	bcs subtwo      ;go do subtraction
+
+;***************************************************************
+;
+;  addtwo  -  add vwork+y and vwork+x  -  result in y/a
+;
+;***************************************************************
+
+addtwo
+	jsr settwo      ;put vwrok+y into y/a
+
+addtw2			;enter here to add y/a to vwork+x
+	clc
+	adc vwork,x
+	pha
+	tya
+	adc vwork+1,x
+	tay
+	pla
+	rts
+
+;****************************************************************
+;
+;  subtwo  -  subtract vwork+y - vwork+x  - result in y/a
+;
+;****************************************************************
+
+subtwo
+	jsr settwo      ;move vwork+y into y/a
+
+subtw2			;enter here with 1st value in y/a
+	sec
+	sbc vwork,x
+	sta temp
+	tya
+	sbc vwork+1,x
+	tay
+	php
+	lda temp
+	plp
+	rts
+
+;************************************************************
+;
+;  settwo  -  move value in vwork+y into y/a
+;
+;************************************************************
+
+settwo
+	lda vwork,y
+	pha
+	lda vwork+1,y
+	tay
+	pla
+	rts
+
+;******************************************************************
+;
+;  abstwo  -  get absolute value of vwork+y - vwork+x
+;	      result in y/a  -  carry === vwork+y >= vwork+x
+;
+;******************************************************************
+
+abstwo
+	jsr subtwo      ;subtract vwork+y - vwork+x
+abstw2			;entrance with vwork+y in y/a
+	bpl absrts      ;done if result is positive
+invert	php
+	clc
+	eor #$ff	;invert low byte result and add 1
+	adc #1
+	pha
+	tya
+	eor #$ff	;invert high byte result
+	adc #0		;add back any carry
+	tay
+	pla
+	plp
+absrts	rts
+
+
+
+;****************************************************************
+;
+;  twobyt  -  multiply 2 byte fraction in y/a times 2 bytes
+;	      integer found in vwork+x-reg.  result = y/a
+;
+;****************************************************************
+
+twobyt
+	sty vtemp1      ;save fraction
+	sta vtemp2
+	lda vwork,x
+	ldy vwork+1,x
+	php		;save sign of integer
+	jsr abstw2      ;absolute value
+	sta vwork,x
+	tya
+	sta vwork+1,x
+	lda #0
+	sta vtemp3      ;initialize result to zero
+	ldy #16		;initialize count
+twoby1
+	lsr vtemp1
+	ror vtemp2
+	bcc twoby2      ;skip if no bit set
+	clc
+	adc vwork,x     ;add integer low byte
+	pha
+	lda vtemp3
+	adc vwork+1,x   ;add integer high byte to total
+	sta vtemp3
+	pla
+twoby2
+	lsr vtemp3      ;divide by 2
+	ror a
+	dey
+	bne twoby1	;loop 16 times - test all bits in 2 bytes
+	adc #0		;add back round factor
+	ldy vtemp3
+	bcc tworts
+	iny
+tworts	plp		;pop sign
+	jmp abstw2      ;return with signed product in y/a
+
+
+
+;******************************************************************
+;  dstpos  -  move xdest/ydest to xpos/ypos
+;
+;******************************************************************
+
+dstpos
+	ldy #0
+	jsr dstmov
+	ldy #2
+dstmov
+	lda xdest,y
+	sta xpos,y
+	lda xdest+1,y
+	sta xpos+1,y
+	rts
+
+
+
+;*****************************************************************
+;
+;  optwrd - get an optional 2 byte value in y,a.
+;      case 1 : pointer at end of line:
+;		 return a=y=0, clear c to flag 'default'
+;      case 2 : pointer is at comma, next non-blank is also a comma:
+;		 return a=y=0, clear c to flag 'default'
+;      case 3 : pointer is at comma, next non-blank is not a comma:
+;		 get word in y,a, set c to flag 'non-default'
+;
+;*****************************************************************
+
+optwrd
+	jsr chrgot
+	beq optw90
+	jsr chkcom
+	cmp #','
+	beq optw90
+	jsr getwrd
+	sec
+	rts
+
+optw90
+	lda #0
+	tay
+	clc
+optw99
+	rts
+
+
+
+;*****************************************************************
+;
+;  optbyt - get an optional 1 byte value in x.
+;  enter with default value in x.
+;      case 1 : pointer at end of line:
+;		 return default x.
+;      case 2 : pointer is at comma, next non-blank is also a comma:
+;		 return default x.
+;      case 3 : pointer is at comma, next non-blank is not a comma:
+;		 get byte in x.
+;
+;*****************************************************************
+
+optzer			;optional byte, with default=0
+	ldx #0
+
+optbyt
+	jsr chrgot
+	beq optw99
+	jsr chkcom
+	cmp #','
+	beq optw99
+	jmp getbyt
+
+;.end

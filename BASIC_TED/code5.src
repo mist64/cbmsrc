@@ -1,0 +1,520 @@
+	.page
+	.subttl 'code5  01/18/84'
+return
+	lda #gosutk
+	sta srchtk
+	jsr search	;look for 'gosub' on runtime stack
+	beq ret010	;branch if 'gosub' found on stack
+	ldx #errrg	;else error
+	.byte $2c
+userr
+	ldx #errus	;entry for 'undefined statement'
+	jmp error
+
+ret010
+	jsr movfnd	;(fndpnt) => (tos)
+	ldy #lengos
+	jsr rlsstk	;effectivly pop gosub off run-time stack
+
+	dey
+	lda (fndpnt),y
+	sta txtptr+1
+	dey
+	lda (fndpnt),y
+	sta txtptr
+	dey
+	lda (fndpnt),y
+	jsr retpat	;01/18/84 patch: correct 'return' to 'gosub' from direct mode
+	lda (fndpnt),y
+	sta curlin
+;
+; fall through to 'data' to waste rest of stmt (in case of on..gosub)
+;
+data
+	jsr datan
+addon
+	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc remrts
+	inc txtptr+1
+remrts
+	rts
+
+
+datan
+	ldx #':'
+	.byte $2c
+remn
+	ldx #0
+	stx charac
+	ldy #0
+	sty endchr
+exchqt
+	lda endchr
+	ldx charac
+	sta charac
+	stx endchr
+remer
+	jsr indtxt
+	beq remrts
+	cmp endchr
+	beq remrts
+	iny
+	cmp #'"'
+	bne remer
+	beq exchqt
+
+
+
+if
+	jsr frmevl
+	jsr chrgot
+	cmp #gototk
+	beq okgoto
+	lda #thentk
+	jsr synchr
+okgoto
+	lda facexp	;test truth value of argument
+	bne docond	;branch if true
+lkelse
+	jsr data	;may be 'else' clause. first skip over 'then' clause..
+	ldy #0
+	jsr indtxt	;..and see if end of stmt or end of line.
+	beq rem	  	;end of line, no 'else'. go to next line.
+	jsr chrget	;another statement on this line.. is it 'else'?
+	cmp #elsetk
+	bne lkelse	;no, keep looking on this line.
+	jsr chrget	;yes! skip over token...
+	jmp docond	;and execute clause.
+
+
+
+rem
+	jsr remn
+	beq addon
+docond
+	jsr chrgot
+	bcs doco
+	jmp goto
+
+doco
+	jmp xeqcm3
+
+ongoto
+	jsr getbyt
+	pha
+	cmp #gosutk
+	beq onglop
+snerr3
+	cmp #gototk
+	beq onglop
+	jmp snerr
+
+onglop
+	dec faclo
+	bne onglp1
+	pla
+	jmp xeqcm2
+
+onglp1
+	jsr chrget
+	jsr linget
+	cmp #','
+	beq onglop
+	pla
+ongrts
+	rts
+
+
+; linget  reads a line # from the current txtptr position
+;	  and stores it in linnum  (valid range is 0-63999).
+;
+;	  on exit txtptr is pointing to the terminating char
+;	  which is in .a with condition codes set.
+;	  endchr will be =0 if no digit input, else >0. use it
+;	  to distinguish between line # 0 & null input.
+
+linget
+	ldx #0
+	stx endchr	;flags line # input
+	stx linnum	;init line # to 0
+	stx linnum+1
+morlin
+	bcs ongrts	;it's not a digit
+	inc endchr	;indicate line # input
+	sbc #$2f	;'0'-1 since c=0
+	sta charac	;save for later
+	lda linnum+1
+	sta index
+	cmp #25
+	bcs snerr3
+	lda linnum
+	asl a	    	;multiply by 10
+	rol index
+	asl a
+	rol index
+	adc linnum
+	sta linnum
+	lda index
+	adc linnum+1
+	sta linnum+1
+	asl linnum
+	rol linnum+1
+	lda linnum
+	adc charac	;add in digit
+	sta linnum
+	bcc nxtlgc
+	inc linnum+1
+nxtlgc
+	jsr chrget
+	jmp morlin
+
+
+
+let
+	jsr ptrget
+	sta forpnt
+	sty forpnt+1
+	lda #equltk
+	jsr synchr
+	lda intflg
+	pha
+	lda valtyp
+	pha
+	jsr frmevl
+	pla
+	rol a
+	jsr chkval
+	bne copstr
+	pla
+qintgr
+	bpl copflt
+	jsr round
+	jsr ayint
+	ldy #0
+	lda facmo
+	sta (forpnt),y
+	iny
+	lda faclo
+	sta (forpnt),y
+	rts
+copflt
+	jmp movvf
+copstr
+	pla
+inpcom
+	ldy forpnt+1
+	cpy #>zero
+	bne getspt
+	jsr frefac
+	cmp #6
+	bne fcerr2
+	ldy #0
+	sty facexp
+	sty facsgn
+timelp
+	sty fbufpt
+	jsr timnum
+	jsr mul10
+	inc fbufpt
+	ldy fbufpt
+	jsr timnum
+	jsr movaf
+	tax
+	beq noml6
+	inx
+	txa
+	jsr finml6
+noml6	ldy fbufpt
+	iny
+	cpy #6
+	bne timelp
+	jsr mul10
+	jsr qint
+	ldx facmo
+	ldy facmoh
+	lda faclo
+	jmp settim
+timnum
+	jsr indin1	;lda (index),y
+	jsr qnum
+	bcc gotnum
+fcerr2
+	jmp fcerr
+gotnum
+	sbc #$2f
+	jmp finlog
+
+
+
+dskx1
+	pla
+	iny
+dskx2
+	cmp fretop+1
+	bcc dntcpy
+	bne qvaria
+	dey
+	jsr indfmo
+	cmp fretop
+	bcc dntcpy
+qvaria
+	ldy faclo
+	cpy vartab+1
+	bcc dntcpy
+	bne copy
+	lda facmo
+	cmp vartab
+	bcs copy
+dntcpy
+	lda facmo
+	ldy facmo+1
+	jmp copyc
+
+
+
+getspt
+	ldy #2
+	jsr indfmo
+	cmp dsdesc+2	;check for ds$ hi
+	bne dskx2	;nope
+	pha
+	dey
+
+	jsr indfmo
+	cmp dsdesc+1	;check for ds$ lo
+	bne dskx1	;nope
+	lda dsdesc	;check if len=0
+	beq dskx1	;yup
+	pla		;fall through to copy
+
+copy
+	ldy #0
+	jsr indfmo
+	jsr strini
+	lda dscpnt
+	ldy dscpnt+1
+	sta strng1
+	sty strng1+1
+	jsr movins
+
+	lda strng1	;fix to free get strings
+	ldy strng1+1
+	jsr fretms	;free the string, if it is a temp
+
+	lda #<dsctmp
+	ldy #>dsctmp
+copyc
+	sta dscpnt
+	sty dscpnt+1
+	sta index	;index points to new descriptor
+	sty index+1
+	jsr fretms
+
+;   fix the strings by flagging the old string as
+;   garbage and the new string by pointing it to
+;   its new descriptor.
+
+	jsr stradj	;set up new string
+	bcc copy00	;leave it alone
+	ldy #0
+	lda forpnt	;put in backwards link
+	sta (index),y
+	iny
+	lda forpnt+1
+	sta (index),y
+
+copy00
+	lda forpnt	;fix old string
+	sta index
+	lda forpnt+1
+	sta index+1
+	jsr stradj	;point to old string
+	bcc copy01	;in text do not fix
+	dey		;restore y
+	lda #$ff	;garbage flag
+	sta (index),y
+	dey
+	txa
+	sta (index),y	;store length
+
+copy01
+	ldy #2
+copy02
+	lda #dscpnt
+	jsr indsub	;lda (dscpnt),y
+	sta (forpnt),y	;set the descriptor
+	dey
+	bpl copy02
+	rts
+
+
+
+;   takes the pointer index which points to a descriptor
+;   and indexes to the desciptors string data.
+;   if the string is not in string space (no action to take)
+;   we return with carry clear, else we return with
+;   the pointer set to the link bytes in the string
+;   the length in .a and the carry set.
+
+stradj
+	ldy #0
+	jsr indin1	;push length on stack
+	pha
+	beq sadj8	;length 0 do nothing
+	iny
+	jsr indin1	;lo byte to x
+	tax
+	iny
+	jsr indin1
+	cmp memsiz+1
+	bcc sadj2	;ok
+	bne sadj8	;if above top of memory
+	cpx memsiz	;msb the same, test lsb
+	bcs sadj8	;if above top of memory
+sadj2
+	jsr indin1
+	cmp fretop+1
+	bcc sadj8	;if below fretop
+	bne sadj3
+	cpx fretop
+	bcc sadj8	;if below fretop
+sadj3
+	cmp dsdesc+2
+	bne sadj4	;fix
+	cpx dsdesc+1
+	beq sadj8
+sadj4
+	stx index	;ok set pointer
+	sta index+1
+	pla		;get back length
+	tax		;into x also
+	clc
+	adc index
+	sta index
+	bcc sadj6
+	inc index+1
+sadj6
+	sec		;carry set
+	rts
+
+sadj8
+	pla		;clean up stack
+	clc
+	rts
+
+
+
+printn
+	jsr cmd
+	jmp iodone
+
+cmd
+	jsr getbyt
+	beq saveit
+	lda #','
+	jsr synchr
+saveit
+	php
+	stx channl
+	jsr coout
+	plp
+	jmp print
+
+strdon
+	jsr strprt
+newchr
+	jsr chrgot
+print
+	beq crdo
+	cmp #usetk
+	bne printc
+	jmp using
+
+
+
+printc
+	beq prtrts
+	cmp #tabtk
+	beq taber
+	cmp #spctk
+	clc
+	beq taber
+	cmp #','
+	beq comprt
+	cmp #';'
+	beq notabr
+	jsr frmevl
+	bit valtyp
+	bmi strdon
+	jsr fout
+	jsr strlit
+	jsr strprt
+	jsr outspc
+	bne newchr
+
+fininl
+	lda #0
+	sta buf,x
+
+zz5	=buf-1
+
+	ldx #<zz5
+	ldy #>zz5
+	lda channl
+	bne prtrts
+
+crdo
+	lda #cr
+	jsr outdo
+	bit channl
+	bpl crfin
+	lda #lf
+	jsr outdo
+crfin
+	eor #$ff
+prtrts
+	rts
+
+
+
+comprt
+	sec
+	jsr jplot	;get tab position in x
+	tya
+	sec
+morco1
+	sbc #clmwid
+	bcs morco1
+	eor #$ff
+	adc #1
+	bne aspac
+
+taber	php
+	sec
+	jsr jplot	;read tab position
+	sty trmpos
+	jsr gtbytc
+	cmp #')'
+	bne snerr4
+	plp
+	bcc xspac
+	txa
+	sbc trmpos
+	bcc notabr
+aspac	tax
+xspac	inx
+xspac2	dex
+	bne xspac1
+
+notabr
+	jsr chrget
+	jmp printc
+
+snerr4
+	jmp snerr
+
+;.end
+;01/18/84 fix: 'return' from a direct mode 'gosub' messed up 'curlin+1'

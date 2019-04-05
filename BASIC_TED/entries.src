@@ -1,0 +1,33 @@
+	.page
+	.subttl 'kernal entries'
+
+; these are the addresses of some entries in the standard
+; kernal vector table.
+
+setmsg 		=$ff90
+tksa   		=$ff96
+acptr  		=$ffa5
+untlk  		=$ffab
+talk   		=$ffb4
+readst 		=$ffb7
+setlfs 		=$ffba
+setnam 		=$ffbd
+open   		=$ffc0
+close  		=$ffc3
+chkin  		=$ffc6
+chkout 		=$ffc9
+clrch  		=$ffcc
+basin  		=$ffcf
+bsout  		=$ffd2
+settim 		=$ffdb
+rdtim  		=$ffde
+kstop  		=$ffe1
+clall  		=$ffe7
+jplot  		=$fff0
+
+ldtb2  		=$d802
+ldtb1  		=$d81b
+
+phenix 		=$fcf4	;jump to 'post-basic initialize' routine.
+
+;.end

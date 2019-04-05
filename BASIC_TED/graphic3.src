@@ -1,0 +1,202 @@
+	.page
+	.subttl 'graphics3'
+;****************************************************************
+;
+;  getang  -  set cosine & sine values
+;             results in sinval & cosval based as a fraction
+;             - over 65536
+;             angsgn = angle phase (0-3)
+;    on input vwork+y = 2 byte angle
+;
+;***************************************************************
+;
+getang
+	jsr settwo      ;move angle value into y/a
+gtang1
+	ldx #0		;init count of phase
+getan1
+	inx
+	sec
+	sbc #90		;subtract 90 until less than 0
+	bcs getan1
+	dey
+	bpl getan1
+	stx angsgn	;save phase (here it is 1-4)
+	pha
+	adc #90		;make positive
+	jsr getan2	;do division by 10
+	pla		;get 2's comp of angle
+	clc
+	eor #$ff
+	adc #1		;make positive
+	dec angsgn	;correct phase
+getan2
+	ldx #$ff
+getan3
+	inx		;do division by 10
+	sec
+	sbc #10
+	bcs getan3
+	adc #10		;make positive
+	sta vtemp1	;save remainder
+	txa
+	asl a		;get quotient*2 as index
+	tax
+	lda angval+1,x	;get low byte base
+	ldy angval,x	;get high byte value
+getan4
+	clc
+	dec vtemp1
+	bmi getan5	;done - remainder = 0
+	adc incval+1,x	;add low byte increment
+	pha
+	tya
+	adc incval,x	;add high byte increment
+	tay
+	pla
+	bcc getan4	;...always
+getan5
+	pha		;save low byte of result
+	ldx #0		;point to sinval
+	lda angsgn
+	lsr a
+	bcs getan6	;skip if sine value
+	ldx #2		;point to cosval
+getan6
+	pla
+	sta sinval,x	;save low byte result
+	tya
+	sta sinval+1,x	;save high byte result
+	rts
+
+
+
+;*************************************************************
+;
+;  angmlt  -  multiple 2-byte integer times angle
+;	      carry set/reset = cosine/sine
+;
+;	      vwork+x = 2-byte integer
+;	      result left in y/a
+;
+;*************************************************************
+
+angmlt
+	ldy #sinval-vwork	;get offset to angle value
+	bcc angm10      	;get cosine/sine offset
+	ldy #cosval-vwork
+angm10
+	lda angsgn
+	adc #2		;correct phase for cosine to look as sine
+	lsr a
+	lsr a
+	php		;save if carry - means negative angle value
+	jsr settwo      ;get angle fraction in y/a
+	cpy #$ff	;test if value should be 1
+	bcc angm20      ;skip if not
+	txa
+	tay		;get offset to integer
+	jsr settwo	;just get integer - multiplied by 1
+	bcs angm30
+angm20
+	jsr twobyt	;multiply integer times angle value
+angm30
+	plp		;get sign of angle
+	bcs angd20
+	jmp invert	;invert result if negative,do rts
+
+
+
+;*************************************************************
+;
+;  angdst  -  set up values for distance * angles
+;	      vwork+x = x & y distances
+;	      a = angles : ang1,ang2,ang3,ang4,0,0,0,0
+;	      get xdist1 = xdist1 * angle-1
+;		   ydist1 = ydist1 * angle-2
+;		   xdist2 = xdist2 * angle-3
+;		   ydist2 = ydist2 * angle-4
+;
+;*************************************************************
+
+angdst
+	sta angcnt      ;save angles
+	ldx #xdist1-vwork
+angd10
+	asl angcnt
+	jsr angmlt      ;multiply angle * distance
+	sta vwork,x
+	tya		;save results
+	sta vwork+1,x
+	inx		;point to next distance
+	inx
+	cpx #disend-vwork
+	bcc angd10	;loop 4 times
+angd20	rts
+
+
+
+;***********************************************************
+;
+;  cirsub  --  find the next point on the circle
+;     x = xctr + xr*cos(a)*sin(b) + yr*sin(a)*cos(b)
+;     y = yctr + xr*sin(a)*sin(b) - yr*cos(a)*cos(b)
+;     where: a = rotation angle  --  b = circle arc angle
+;
+;***********************************************************
+
+cirsub
+	ldy #angbeg-vwork
+cirs10
+	jsr getang      ;get sine & cosine values for arc angle
+	ldx #7
+cirs20
+	lda xrcos,x	;move radius * rotation-angle values to xdist
+	sta xdist1,x
+	dex
+	bpl cirs20
+	lda #$50
+	jsr angdst      ;multiply times arc-angle values
+	lda #$10	;fall thru to angplt
+
+
+
+;**************************************************************
+;
+;  anglpt  --  determine a point on the screen
+;		xdest = xcentr +/- xdist1 +/- ydist1
+;		ydest = ycentr +/- xdist2 +/- ydist2
+;		a = signs: +/-,+/-,+/-,+/-,0,0,0,0
+;
+;**************************************************************
+
+anglpt
+	sta angcnt      ;save plus or minus signs
+	ldy #xcentr-vwork
+	ldx #xdist1-vwork
+angpt1
+	asl angcnt+1
+	rol angcnt      ;get sign
+	jsr dotwo	;add or subtract 1st value to center pt
+	inx
+	inx		;point to next value
+	asl angcnt+1
+	rol angcnt      ;get next sign
+	jsr dotwo2      ;add or subtract to previous result
+	pha
+	tya		;save 2-byte result on stack
+	pha
+	ldy #ycentr-vwork ;set to do y-point
+	inx
+	inx		;point to next value
+	cpx #xdist2-vwork
+	beq angpt1	;loop to do y-point
+	ldx #3
+angpt2
+	pla
+	sta xdest,x	;move results to xdest/ydest
+	dex
+	bpl angpt2
+	rts
+
+;.end

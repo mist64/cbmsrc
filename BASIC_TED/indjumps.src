@@ -1,0 +1,47 @@
+	.page
+	.subttl 'indjumps'
+indinp
+       lda #<inpptr
+       bne indgo       	;always
+inddef
+       lda #<defpnt
+       bne indgo       	;always
+indpok
+       lda #<poker
+       bne indgo       	;always
+indvar
+       lda #<varpnt
+       bne indgo       	;always
+indgrb
+       lda #<grbpnt
+       bne indgo       	;always
+inds1p
+       lda #<str1+1
+       bne indgo       	;always
+inds2p
+       lda #<str2+1
+       bne indgo       	;always
+indfrm
+       lda #<form
+       bne indgo       	;always
+indpt1
+       lda #<ptarg1
+       bne indgo       	;always
+indpt2
+       lda #<ptarg2
+       bne indgo       	;always
+inddsc
+       lda #<dsctmp+1
+       bne indgo       	;always
+inddpt
+       lda #<dscpnt
+       bne indgo       	;always
+indamo
+       lda #<argmo
+       bne indgo       	;always
+indhtr
+       lda #<hightr
+indgo
+       jmp indsub
+
+;end

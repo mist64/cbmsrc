@@ -1,0 +1,206 @@
+	.page
+	.subttl 'init'
+panic
+	jsr clrch	;warm start basic...
+	jsr stkini	;restore stack (returns with .a=0)
+	sta channl	;clear channels
+	jsr go2txt	;setup text mode
+	cli		;enable irq's
+panic1
+	jmp ready
+
+
+init
+	jsr initv	;go init vectors
+	jsr initcz	;go init charget & z-page
+	jsr initms	;go print initilization messages
+	jsr phenix	;let any cartridges out there have a say
+	ldx #stkend-256 ;set up end of stack
+	txs
+	bne panic1	;jmp...ready
+
+
+initct
+	.word   flpint, givayf
+
+initcz
+	lda #76		;'jmp' opcode
+	sta jmper
+	sta usrpok
+	lda #<fcerr     ;init usr vector to 'qty err'
+	ldy #>fcerr
+	sta usrpok+1
+	sty usrpok+2
+
+	ldx #3
+initcl
+	lda initct,x
+	sta adray1,x
+	dex
+	bpl initcl
+;
+; download some rom code into ram (for banking)
+;
+	ldx #endmov-initat
+movchg
+	lda initat-1,x
+	sta chrget-1,x
+	dex
+	bne movchg
+
+	stx bits	;.x=0
+	stx channl
+	stx lastpt+1
+	stx trcflg	;start trace mode off
+	stx basbgn
+
+; ++patch 2mar84 : replace the following inline code with a loop
+;		  to free up room to initialize the msb of rndx
+;
+;	stx mvdflg	;flag '8k graphics screen not allocated'
+; 	stx autinc	;turn off auto increment
+; 	stx autinc+1
+;	stx width	;init to single-width lines
+; 	stx scalem	;turn off scaleing
+; 	stx filflg
+;
+; assume autinc,autinc+1, and mvdflg are contiguious.
+; also assume scalem,width, and filflg are contiguious.
+
+	txa		;a=0
+	ldx #3
+intlp1
+	sta autinc-1,x
+	sta scalem-1,x
+	dex
+	bne intlp1
+	nop
+	stx rndx	;zero-ing msb will guarantee a legal value
+
+	inx		;.x=1
+	stx buf-3
+	stx buf-4
+
+	ldx color
+	stx fg		;init bit map's fg color
+	ldx #$36
+	stx mc1		;init mc1 to lt. blue, lum 3
+	ldx #tempst
+	stx temppt
+
+	baswrk=basbgn+1
+	ldx #<baswrk    ;beginning of basic area
+	ldy #>baswrk
+	stx txttab	;now txtab has it
+	sty txttab+1
+
+	ldx #5
+	stx index
+
+	lda #>chrbas    ;init chrpag for char routine
+	sta chrpag	;..to the start of char rom (upper/graphics)
+
+	ldx #2
+initlp
+	lda msiz-1,x
+	sta memsiz-1,x
+	sta fretop-1,x
+	dex
+	bne initlp
+
+initm2			;assume x=0 from above
+	ldy #0		;make 11 copies of indirect fetch routine in ram
+initm1
+	lda indpat,y
+	sta indtxt,x
+	inx
+	iny
+	cpy #11
+	bcc initm1	;do 11 times
+	ldy index	;put in unique address byte
+	lda indtbl,y
+	sta indtxt-6,x
+
+	dec index	;do 6 times
+	bpl initm2
+	rts
+
+indtbl			;addresses to go into indirect subroutines
+	.byte facmo,lowtr,strng1,index2,index1,txtptr
+
+
+initms
+	lda txttab
+	ldy txttab+1
+	jsr reason
+
+	jsr primm	;print banner immediate
+	.byte 147,13,' COMMODORE BASIC V3.5 ',0
+
+	lda memsiz	;print # of bytes free
+	sec
+	sbc txttab
+	tax
+	lda memsiz+1
+	sbc txttab+1
+	jsr linprt
+
+	jsr primm	;print immediate
+	.byte ' BYTES FREE',cr,0
+
+	jmp scrtch	;go to 'new'
+
+
+bvtrs
+	.wor nerror,nmain,ncrnch,nqplop,ngone,neval
+	.wor nesclk,nescpr,nescex 	;escape vectors
+initv
+	ldx #initv-bvtrs-1		;init vectors
+initv1
+	lda bvtrs,x
+	sta ierror,x
+	dex
+	bpl initv1
+	rts
+
+
+; this is the chrget/chrgot code. it is moved to ram
+;
+initat			;a.k.a. chrget
+	inc txtptr
+	bne chdgot
+	inc txtptr+1
+chdgot			;a.k.a. chrgot
+	sei
+	sta romoff
+	ldy #0
+	lda (txtptr),y
+	sta romon
+	cli
+	cmp #':'
+	bcs chdrts
+	cmp #' '
+	beq initat
+	sec
+	sbc #'0'
+	sec
+	sbc #$d0
+chdrts
+	rts
+
+;indsub
+	sta *-initat+chrget+8
+indpat			;pattern for all ram indirect routines
+	sei
+	sta romoff
+	lda ($00),y
+	sta romon
+	cli
+	rts
+;
+; constants which must be moved to ram
+;
+	.byte   0,0,0	;zero, of course!
+endmov
+
+;end

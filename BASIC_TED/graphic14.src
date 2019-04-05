@@ -1,0 +1,196 @@
+	.page
+	.subttl 'graphics14'
+
+
+; test if 10k graphics screen already allocated. if so, return
+; immediately.
+
+sethir
+	lda mvdflg      ;done already if <>0
+	beq seth05
+	rts
+
+seth05
+	lda memsiz+1    ;is this a 16k or a 64k ted system?
+	cmp #$40
+	bcs seth10      ;branch if 64k ted
+
+
+
+; in the 16k ted system, text, variables, arrays, and strings must all
+; reside between $1000 and $1800. text, variables, and arrays are already
+; at the lower end of memory, so all that is necessary is to move strings
+; down from the current memsiz to $1800 (after checking that they will
+; fit), and correcting the forward pointers.
+;
+; do a garbage collect to clean up strings:
+
+	jsr garba2
+;
+; make sure (memsiz-fretop)+strend < $1800
+;
+	jsr getdif      ;get memsiz-fretop in x,y
+	txa
+	clc
+	adc strend
+	tya
+	adc strend+1
+	cmp #$18
+	bcs alo999      ;too big, om error
+	dec mvdflg      ;go ahead and set 'moved flag'
+
+; move string area from mesiz to fretop down to $1800.
+; at this point, # of bytes to move is in x,y
+
+	lda #<$1800     ;destination
+	sta index1
+	lda #>$1800
+	sta index1+1
+
+	jsr mover	;do move
+
+	lda index1      ;install new fretop
+	sta fretop
+	lda index1+1
+	sta fretop+1
+
+	lda #<$1800     ;install new memsiz
+	sta memsiz
+	lda #>$1800
+	sta memsiz+1
+
+	jmp fixfor      ;fix forward pointers, do rts
+
+alo999
+	jmp omerr
+
+
+
+; allocating a hires area for the 64k ted is slightly different. text,
+; variables, and arrays must be moved up, back pointers in strings
+; must be fixed, text must be re-linked, and pointers to text must
+; be adjusted. all very nasty indeed.
+
+seth10
+	jsr garba2      ;clean up strings
+
+	ldy strend      ;first see if it will all fit.
+	sty grbtop	;save a copy while we're at it, for the transfer operation.
+	lda strend+1
+	clc
+	adc #$30	;we're moving from $1000 on up, to $4000 on up.
+	bcs alo999      ;wrapped!
+	sta grbtop+1
+	cmp fretop+1    ;this is the bottom of strings
+	bcc seth15      ;less than the bottom, ok.
+	bne alo999      ;greater than the bottom, won't fit
+	cpy fretop      ;equal to the bottom, check ls byte
+	bcs alo999      ;no fit
+seth15
+	dec mvdflg      ;it will fit. flag 'moved'
+
+	lda #0		;set up offset to adjust string pointers
+	sta grbpnt
+	lda #$30	;offset is $3000
+	sta grbpnt+1
+	jsr fixbak      ;'fix back pointers'
+
+	lda grbtop      ;now set up to move text/vars/arrays
+	sta index1      ; first the destination,
+	lda grbtop+1
+	sta index1+1
+	ldx strend	;...then the source. x,y will also be used to pass length
+	stx index2
+	lda strend+1
+	sta index2+1
+	sec
+	sbc #$10	;calculate the length (top - $1000)
+	tay
+	jsr moverc      ;...and do move.
+
+	clc
+	lda strend+1    ;adjust all the pointers
+	adc #$30
+	sta strend+1
+
+	lda arytab+1
+	adc #$30	;assume no borrow in previous operation (c=1)
+	sta arytab+1
+
+	lda vartab+1
+	adc #$30
+	sta vartab+1
+
+	lda txttab+1
+	adc #$30
+	sta txttab+1
+
+	lda datptr+1
+	adc #$30
+	sta datptr+1
+
+seth30
+	jsr lnkprg
+	jsr fixlnk      ;re-link basic text & fix vartab
+;
+; fix run-time stack if not in direct mode
+;
+	bit runmod      ;done if direct mode
+	bpl seth45      ;done
+
+	ldx #$30	;adjust text pointers
+	bit mvdflg      ;alloc. or dealloc?
+	bmi *+4		;branch if alloc (add $3000)
+	ldx #$d0	;else sub. $3000
+
+	txa
+	clc
+	adc txtptr+1
+	sta txtptr+1
+	txa
+	clc
+	adc oldtxt+1
+	sta oldtxt+1
+	txa
+	clc
+	adc errtxt+1
+	sta errtxt+1
+
+	jsr movtos      ;copy top-of-stack pointer to fndpnt
+seth40
+	lda fndpnt      ;test if fndpnt points to stack bottom
+	cmp #<stkbot
+	bne seth50      ;no
+	lda fndpnt+1
+	cmp #>stkbot
+	bne seth50      ;no
+seth45
+	rts		;all moved!
+
+seth50
+	ldy #0		;adjust any pointers in this stack entry
+	lda (fndpnt),y	;what kind of entry is this?
+	cmp #fortk
+	bne seth60
+
+	ldy #2		;a 'for' entry needs 2 pointers fixed,
+	jsr addoff      ;..the pointer to the 'for' variable,
+	ldy #16
+	jsr addoff      ;..and the pointer to the 'for' line in text.
+	lda #18		;set up to adjust temp. stack pointer
+	bne seth70      ;always
+
+seth60
+	ldy #4		;'do' & 'gosub' only need 1 adjustment,
+	jsr addoff      ;..to the text pointer.
+	lda #5
+
+seth70
+	clc
+	adc fndpnt
+	sta fndpnt
+	bcc seth40
+	inc fndpnt+1
+	bne seth40      ;always
+
+;.end

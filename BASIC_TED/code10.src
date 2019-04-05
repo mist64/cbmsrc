@@ -1,0 +1,324 @@
+	.page
+	.subttl 'code10'
+isvar
+	jsr ptrget	;parse variable name, put name in varnam
+isvret
+	sta facmo	;save pointer to variable
+	sty facmo+1
+	ldx varnam
+	ldy varnam+1
+	lda valtyp	;test if numeric or string
+	beq gooo	;branch if numeric
+	lda #0
+	sta facov
+	cpx #'T'	;'ti$' is a special case. look for it.
+	bne isvds	;go test for ds$
+	cpy #$c9	;shifted 'i'
+	bne strrts
+
+; variable name is 'ti$'. to see if this is 'the' ti$, and not an
+; array ti$(), test to see if it has a pointer to the zero in rom.
+; if it is an array item, it's pointer will be to a real value, or
+; a real zero. if it isn't an array item, it's pointer will point
+; to a dummy zero in rom.
+;
+	lda facmo
+	cmp #<zero
+	bne strrts	;not ti$
+	lda facmo+1
+	cmp #>zero
+	bne strrts	;not ti$
+
+	jsr gettim	;it is ti$, create a string.
+	sty tenexp
+	dey
+	sty fbufpt
+	ldy #6
+	sty deccnt
+	ldy #fdcend-foutbl
+	jsr foutim
+	jmp timstr
+
+
+
+isvds
+	cpx #'D'	;is this ds$?
+	bne strrts
+	cpy #$d3	;'s'+$80
+	bne strrts
+	jsr chkds
+	lda dsdesc+1
+	ldy dsdesc+2
+	jmp strlit
+
+
+
+chkds
+	lda dsdesc
+	bne strrts
+	jmp errchl	;get status
+
+
+
+gooo
+	bit intflg	;is this an integer?
+	bpl gooooo	;no, branch.
+	ldy #0
+	jsr indfmo
+	tax
+	iny
+	jsr indfmo
+	tay
+	txa
+	jmp givayf
+
+
+
+;screen out ti,st,er, and el, and assign values to them.
+;first test if pointer points to rom zero. if not, it can't
+;be any of the above.
+;
+gooooo
+	lda facmo+1
+	cmp #>zero
+	bne gomovf	;not ti,st,....
+	lda facmo
+	cmp #<zero
+	bne gomovf	;not ti,st,....
+;
+; pointer does point to the rom zero. now it is necessary to
+; examine the actual variable name case by case.
+;
+	cpx #'T'
+	bne qstatv
+	cpy #'I'
+	bne gomovf
+	jsr gettim
+	tya
+	ldx #160
+	jmp floatb
+
+gettim
+	jsr rdtim
+	stx facmo
+	sty facmoh
+	sta faclo
+	ldy #0
+	sty facho
+strrts
+	rts
+
+qstatv
+	cpx #'S'	;'st'?
+	bne qdsav	;no, go test 'ds'
+	cpy #'T'
+	bne gomovf
+	jsr readst
+	jmp float
+
+
+
+qdsav
+	cpx #'D'	;'ds'?
+	bne qerlin	;no, go test 'er' & 'el'
+	cpy #'S'
+	bne gomovf
+
+	jsr chkds
+	ldy #0
+	lda #dsdesc+1	;lda (dsdesc+1),y
+	jsr indsub	;..indirectly
+	and #$0f
+	asl a
+	sta garbfl
+	asl a
+	asl a
+	adc garbfl
+	sta garbfl
+	iny
+	lda #dsdesc+1	;lda (dsdesc+1),y
+	jsr indsub	;..indirectly
+	and #$0f
+	adc garbfl
+	jmp float
+
+qerlin
+	cpx #'E'
+	bne gomovf
+	cpy #'R'
+	beq qnumer
+	cpy #'L'
+	bne gomovf
+
+	lda errlin+1	;they want the last error line #
+	ldy errlin
+	jmp nosflt
+
+qnumer
+	lda errnum	;'er', or type number of last error
+	jmp float
+
+gomovf
+	lda facmo
+	ldy facmo+1
+	jmp movfrm	;move value from ram
+
+
+
+; at this point, eval has determined that the token in a has to be a
+; function. it must therefor be in the range sgn..mid$ (old basic),
+; or rgr..instr (new extensions). we will collapse these two
+; disjoint blocks into one continuous range.
+;
+; on entry, we can assume the token is >= 'sgn'
+
+isfun
+	cmp #elsetk	;1 greater than instr
+	bcs snerr6
+	cmp #middtk+1
+	bcc isfun1	;no need to adjust
+	sbc #rgrtk-middtk-1
+
+isfun1
+
+; yet another special case. instr$, left$, right$, and mid$ get a special
+; pre-processing.
+
+	pha		;save token
+	tax
+	jsr chrget
+	cpx #insttk-1	;look for (adjusted) instr token
+	beq isfun2
+	cpx #middtk+1
+	bcs oknorm
+	cpx #lefttk
+	bcc oknorm
+
+isfun2
+	jsr chkopn
+	jsr frmevl
+	jsr chkcom
+	jsr chkstr
+
+	pla		;move token to x
+	cmp #insttk-1   ;yet another special case: instr bails out here.
+	beq instgo
+	tax
+	lda facmo+1
+	pha
+	lda facmo
+	pha
+	txa		;push token on stack
+	pha
+	jsr getbyt
+	pla		;put token in y
+	tay
+	txa
+	pha
+	tya		;put token in a
+	jmp fingo	;go set up to evaluate fn
+
+
+
+oknorm
+	jsr parchk	;check for open parens, evaluate argument
+	pla		;restore token
+
+fingo
+	sec		;convert token to index into jump table
+	sbc #onefun
+	asl a
+	tay
+	lda fundsp+1,y
+	sta jmper+2
+	lda fundsp,y
+	sta jmper+1
+	jsr jmper
+	jmp chknum
+
+
+
+instgo
+	jmp instr
+
+snerr6
+	jmp snerr
+
+
+orop
+	ldy #255
+	.byte $2c
+andop
+	ldy #0
+	sty count
+	jsr ayint
+	lda facmo
+	eor count
+	sta integr
+	lda faclo
+	eor count
+	sta integr+1
+	jsr movfa
+	jsr ayint
+	lda faclo
+	eor count
+	and integr+1
+	eor count
+	tay
+	lda facmo
+	eor count
+	and integr
+	eor count
+	jmp givayf
+
+
+dorel
+	jsr chkval
+	bcs strcmp
+	lda argsgn
+	ora #$7f
+	and argho
+	sta argho
+	lda #<argexp
+	ldy #>argexp
+	jsr fcomp
+	tax
+	jmp qcomp
+
+
+
+strcmp
+	lda #0
+	sta valtyp
+	dec opmask
+	jsr frefac
+	sta dsctmp
+	stx dsctmp+1
+	sty dsctmp+2
+	lda argmo
+	ldy argmo+1
+	jsr fretmp
+	stx argmo
+	sty argmo+1
+	tax
+	sec
+	sbc dsctmp
+	beq stasgn
+	lda #1
+	bcc stasgn
+	ldx dsctmp
+	lda #$ff
+stasgn	sta facsgn
+	ldy #255
+	inx
+nxtcmp	iny
+	dex
+	bne getcmp
+	ldx facsgn
+qcomp	bmi docmp
+	clc
+	bcc docmp
+getcmp
+	jsr indamo	;(argmo),y
+
+;.end

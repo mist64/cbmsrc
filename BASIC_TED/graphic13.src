@@ -1,0 +1,106 @@
+	.page
+	.subttl 'graphics13'
+;*************************************************************
+;
+;  set graphic mode
+;
+; syntax:	 graphic n {,c}
+;	     or
+;		  graphic clr
+;
+;	where :
+;		 n = 0  for text mode
+;		 n = 1  for hi res mode
+;		 n = 2  for hi res split screen mode
+;		 n = 3  for multicolor mode
+;		 n = 4  for multicolor split screen mode
+;
+;    optionally,
+;		 c = 0  for 'don't clear screen' (default)
+;		 c = 1  for 'clear screen'
+;
+;    if 'graphic n' is executed, where n >0, a 10k block of memory
+;    for bit map screen and color bytes is allocated, if it has
+;    not previously been allocated. this ram remains reserved
+;    until a 'graphic clear' command is executed.
+;
+;*****************************************************************
+
+graphs
+	cmp #clrtk	;test if hi-res ram is to be de-allocated
+	bne grap1	;no, go on to set up new mode
+	jsr clrhir      ;de-allocate ram
+	jsr chrget      ;skip over clr token
+	lda #0		;force to text screen
+	beq grap2	;always
+
+grap1
+	jsr getbyt      ;get new mode
+	cpx #5		;in range?
+	bcs graper      ;illegal value
+	lda modes,x
+
+grap2
+	cmp graphm      ;is this the same as the current mode?
+	beq graclr      ;yes, go to test for clear screen
+	sta graphm
+	tax		;is new mode 'text' mode?
+	bne grap10      ;no, go do graphic stuff
+
+	jsr go2txt      ;switch to text mode
+
+	lda #llen
+	ldx #nlines
+	bne grap20      ;always
+
+graper
+	jmp fcerr	;illegal value
+
+grap10			;set up for one of the graphic modes
+	jsr sethir      ;make sure 9k graphic ram is in
+
+	lda ted+6	;set bit map mode
+	ora #%00100000
+	sta ted+6
+
+	lda ted+7	;reset multicolor mode bit
+	and #%11101111
+	bit graphm      ;and set only if multicolor selected
+	bpl grap15
+	ora #%00010000
+grap15
+	sta ted+7
+
+	lda ted+18      ;set bit map base
+	and #%11000011
+	ora #%00001000  ;bmb=$2000,fetch from ram
+	sta ted+18
+
+	lda ted+20      ;set up new video matrix base
+	and #%00000011
+	ora #%00011000  ;$1800
+	sta ted+20
+
+	lda #llen	;set up screen size
+	ldx #nlines
+	bit graphm
+	bpl grap20
+	lsr a		;if mcm, divide rows by two
+
+grap20
+	sta scxmax      ;set up max. # of rows & columns
+	stx scymax
+graclr
+	jsr optzer      ;get optional clear flag (def=0)
+	txa
+	lsr a		;put lsb in carry
+	bne graper      ;can only be 0 or 1, else illegal value
+	bcc grsame
+	jmp scnclr
+grsame
+	rts
+
+modes
+	.byte 0,$20,$60,$a0,$e0 ;text,hir,hir/s,mcm,mcm/s
+
+;.end

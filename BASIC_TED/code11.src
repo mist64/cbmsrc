@@ -1,0 +1,344 @@
+	.page
+	.subttl 'code11'
+	pha
+	jsr inddsc	;(dsctmp+1),y
+	sta syntmp
+	pla
+	cmp syntmp
+	beq nxtcmp
+	ldx #$ff
+	bcs docmp
+	ldx #1
+
+
+
+docmp
+	inx
+	txa
+	rol a
+	and domask
+	beq goflot
+	lda #$ff
+goflot
+	jmp float
+
+
+
+dim3	jsr chkcom
+dim	tax
+	jsr ptrgt1
+	jsr chrgot
+	bne dim3
+	rts
+
+
+
+ptrget
+	ldx #0
+	jsr chrgot
+ptrgt1	stx dimflg
+ptrgt2	sta varnam
+	jsr chrgot
+	jsr isletc
+	bcs ptrgt3
+
+
+
+interr
+	jmp snerr
+
+
+
+ptrgt3
+	ldx #0
+	stx valtyp
+	stx intflg
+	jsr chrget
+	bcc issec
+	jsr isletc
+	bcc nosec
+issec	tax
+eatem
+	jsr chrget
+	bcc eatem
+	jsr isletc
+	bcs eatem
+nosec	cmp #'$'
+	bne notstr
+	lda #$ff
+	sta valtyp
+	bne turnon
+
+notstr
+	cmp #'%'
+	bne strnam
+	lda subflg
+	bne interr
+	lda #$80
+	sta intflg
+	ora varnam
+	sta varnam
+turnon
+	txa
+	ora #$80
+	tax
+	jsr chrget
+strnam
+	stx varnam+1
+	sec
+	ora subflg
+	sbc #40
+	bne *+5
+	jmp isary
+
+	ldy #0
+	sty subflg
+	lda vartab
+	ldx vartab+1
+stxfnd
+	stx lowtr+1
+lopfnd
+	sta lowtr
+	cpx arytab+1
+	bne lopfn
+	cmp arytab
+	beq notfns
+lopfn
+	jsr indlow	;(lowtr),y
+	sta syntmp
+	lda varnam
+	cmp syntmp
+	bne notit
+	iny
+	jsr indlow
+	sta syntmp
+	lda varnam+1
+	cmp syntmp
+	bne *+5
+	jmp finptr
+
+	dey
+notit	clc
+	lda lowtr
+	adc #6+addprc
+	bcc lopfnd
+	inx
+	bne stxfnd
+isletc
+	cmp #'A'
+	bcc islrts
+	sbc #$5b
+	sec
+	sbc #@245
+islrts	rts
+
+
+notfns	pla
+	pha
+
+zz6	=isvret-1
+
+	cmp #<zz6
+	bne notevl
+ldzr
+	lda #<zero
+	ldy #>zero
+	rts
+
+qst001
+	cpy #$c9	 ;we know first is 't', is second shift i?
+	beq ldzr
+	cpy #$49	;or 'i'?
+	bne varok
+	beq gobadv
+qst004
+	cpy #$d3	;check for 'ds$'
+	beq gobadv
+	cpy #'S'	;check for 'ds'
+	bne varok
+	beq gobadv
+qst002
+	cpy #'T'	;check for 'st'
+	bne varok
+	beq gobadv
+qst003
+	cpy #'R'	;check for 'er'
+	beq gobadv
+	cpy #'L'	;check for 'el'
+	bne varok
+gobadv
+	jmp snerr
+
+
+
+notevl
+	lda varnam
+	ldy varnam+1
+	cmp #'T'	;screen out 'ti',
+	beq qst001
+	cmp #'S'	;...and 'st',
+	beq qst002
+	cmp #'E'	;...and er and el,
+	beq qst003
+	cmp #'D'	;...and ds.
+	beq qst004
+varok
+	lda arytab
+	ldy arytab+1
+	sta lowtr
+	sty lowtr+1
+	lda strend
+	ldy strend+1
+	sta hightr
+	sty hightr+1
+	clc
+	adc #6+addprc
+	bcc noteve
+	iny
+noteve
+	sta highds
+	sty highds+1
+	jsr bltu
+	lda highds
+	ldy highds+1
+	iny
+	sta arytab
+	sty arytab+1
+
+
+; scan thru array entries, looking for string arrays. if any
+; are found, it will be necessary to adjust the back-links
+; on the strings in that array, since the array descriptor
+; block itself was moved
+
+	sta arypnt	;set pointer to arrays
+	sty arypnt+1
+aryva2
+	lda arypnt
+	ldx arypnt+1
+aryva3
+	cpx strend+1	;end of arrays ?
+	bne aryvgo
+	cmp strend
+	bne aryvgo
+	beq arydon	;always..finished
+
+aryvgo
+	sta index1
+	stx index1+1
+	ldy #1-addprc
+	jsr indin1	;look at array name
+	tax
+	iny
+	jsr indin1	;name 2nd char
+	php		;save status reg
+	iny
+	jsr indin1	;point to offset to next array
+	adc arypnt
+	sta arypnt	;save start of next array in arypnt
+	iny
+	jsr indin1
+	adc arypnt+1
+	sta arypnt+1
+	plp		;restore status
+	bpl aryva2	;not a string type
+	txa
+	bmi aryva2	;not a string array
+	iny		;ok we have a string array
+	jsr indin1	;get number of dimensions
+	ldy #0
+	asl a	    	;move index to ptr to 1st string (add 2*number of dims + 5)
+	adc #5
+	adc index1
+	sta index1
+	bcc aryget
+	inc index1+1
+
+aryget
+	ldx index1+1
+	cpx arypnt+1	;done with this array?
+	bne gogo
+	cmp arypnt
+	beq aryva3	;yes
+gogo
+	ldy #0	   	;process string pointer
+	jsr indin1	;get length of string
+	beq dvarts	;skip if null string
+	sta syntmp
+	iny
+	jsr indin1	;get lo byte of string ptr
+	clc
+	adc syntmp	;and add string length
+	sta hightr
+	iny
+	jsr indin1	;get hi byte of string ptr
+	adc #0	   	;adjust high byte
+	sta hightr+1
+
+; test for strings in basic text was removed-
+; in ted all strings are copied to string area!
+;
+; fix backwards pointer by adding
+; move length to it
+
+	ldy #0
+	jsr indhtr	;lda (hightr),y
+	adc #6+addprc	;carry clear (careful!)
+	sta (hightr),y
+	iny
+	jsr indhtr	;lda (hightr),y
+	adc #0
+	sta (hightr),y	;done with this string
+;
+; fix the next string in the array
+;
+dvarts
+	lda #strsiz
+	clc
+	adc index1
+	sta index1
+	bcc aryget
+	inc index1+1
+	bne aryget	;branch always
+
+arydon
+	ldy #0
+	lda varnam
+	sta (lowtr),y
+	iny		;.y=1
+	lda varnam+1
+	sta (lowtr),y
+	lda #0
+arydo1
+	iny
+	sta (lowtr),y
+	cpy #6
+	bne arydo1
+
+finptr
+	lda lowtr
+	clc
+	adc #2
+	ldy lowtr+1
+	bcc finnow
+	iny
+finnow
+	sta varpnt
+	sty varpnt+1
+	rts
+
+
+fmaptr
+	lda count
+	asl a
+	adc #5
+	adc lowtr
+	ldy lowtr+1
+	bcc jsrgm
+	iny
+jsrgm
+	sta arypnt
+	sty arypnt+1
+	rts
+
+;end

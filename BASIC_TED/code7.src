@@ -1,0 +1,188 @@
+	.page
+	.subttl 'code7'
+xspac1
+	jsr outspc
+	bne xspac2
+strout
+	jsr strlit
+strprt
+	jsr frefac
+	tax
+	ldy #0
+	inx
+strpr2
+	dex
+	beq prtrts
+	jsr indin1	;lda (index),y
+	jsr outdo
+	iny
+	cmp #cr
+	bne strpr2
+	jsr crfin
+	jmp strpr2
+
+
+outspc
+	lda channl
+	beq crtskp
+realsp
+	lda #' '	;space
+	.byte $2c
+crtskp
+	lda #29	  	;cbm cursor right (non-destructive skip char)
+	.byte $2c
+outqst
+	lda #'?'
+outdo
+	jsr outch	;output char in .a
+	and #$ff
+	rts
+
+	.page
+get
+	jsr errdir
+	sta voicno	;use as a flag to distinguish between 'get' and 'get key'
+	cmp #'#'	;is it 'get#'?
+	beq getn	;branch if yes
+	cmp #keytk	;is it 'get key'?
+	bne gettty	;branch if not
+	jsr chrget	;skip over 'key' token
+	jmp gettty
+getn
+	jsr chrget
+	jsr getbyt
+	lda #','
+	jsr synchr
+	stx channl
+	jsr coin	;chkin
+
+zz2	=buf+1
+zz3	=buf+2
+
+gettty
+	ldx #<zz2
+	ldy #>zz3
+	lda #0
+	sta buf+1
+	lda #64
+	jsr inpco1
+	ldx channl
+	bne iorele
+	rts
+
+inputn
+	jsr getbyt
+	lda #','
+	jsr synchr
+	stx channl
+	jsr coin	;chkin
+	jsr notqti
+iodone
+	lda channl
+iorele
+	jsr clrch
+	ldx #0
+	stx channl
+	rts
+
+
+
+input
+	cmp #'"'
+	bne notqti
+	jsr strtxt
+	lda #';'
+	jsr synchr
+	jsr strprt
+notqti
+	jsr errdir
+	lda #','
+	sta buf-1
+getagn
+	jsr qinlin
+	lda channl
+	beq bufful
+	jsr readst
+	and #2
+	beq bufful
+	jsr iodone
+	jmp data
+
+bufful
+	lda buf	  	;get anything?
+	bne inpcon	;yes
+	lda channl	;no, is this keyboard
+	bne getagn	;no
+	jsr datan
+	jmp addon
+qinlin
+	lda channl
+	bne ginlin
+	jsr outqst	;print '?'...
+	jsr realsp	;...and a space
+ginlin
+	jmp inlin
+
+
+
+read
+	ldx datptr
+	ldy datptr+1
+	lda #$98
+	.byte $2c
+inpcon
+	lda #0
+inpco1
+	sta inpflg
+	stx inpptr
+	sty inpptr+1
+inloop
+	jsr ptrget	;get a pointer to the variable
+	sta forpnt	;store it's address
+	sty forpnt+1
+	ldx #1
+inlopl
+	lda txtptr,x
+	sta vartxt,x
+	lda inpptr,x
+	sta txtptr,x
+	dex
+	bpl inlopl
+
+	jsr chrgot
+	bne datbk1
+	bit inpflg	;read($98),get($40),or input($00)?
+	bvc qdata	;branch if read or input
+
+	lda voicno	;is this a 'get' or a 'get key'?
+	cmp #keytk
+	bne inlop1	;branch if 'get'
+inlop0
+	jsr cgetl	;get a key
+	tax		;test if zero
+	beq inlop0	;it is zero, keep scanning
+	bne inlop2	;got a key, go put it in var.
+inlop1
+	jsr cgetl	;get a key if pressed, otherwise gets a zero
+inlop2
+	sta buf
+
+zz4	=buf-1
+
+	ldx #<zz4
+	ldy #>zz4
+	bne datbk
+qdata
+	bpl qdata1
+	jmp datlop	;branch if 'read'
+qdata1
+	lda channl
+	bne getnth
+	jsr outqst
+getnth
+	jsr qinlin
+datbk
+	stx txtptr
+	sty txtptr+1
+
+;end

@@ -1,0 +1,735 @@
+	.page
+	.subttl 'using'
+;       using
+;
+; entered by cmd, print, or print#
+; sample syntax:  print using"****";a;b;c
+
+using
+	ldx #$ff
+	stx endfd
+	jsr chrget
+	jsr frmevl	;evaluate format string
+	jsr chkstr	;must be string type...
+;
+;  save temp descriptor
+;
+	lda facmo
+	pha
+	lda facmo+1
+	pha
+
+	ldy #2		;move (facmo),1&2 to form,form+1
+ldform
+	jsr indfmo
+	dey
+	sta form,y
+	bne ldform
+
+	jsr indfmo      ;get length
+	sta lfor
+	tay
+	beq ser		;error if length is zero
+cncj
+	dey
+	jsr indfrm
+	cmp #'#'       	;at least one # in format?
+	beq cscol      	;yes...
+	tya		;no...end of format
+	bne cncj       	;no...
+
+ser	jmp snerr      	;yes...syntax error
+
+
+cscol
+	lda #';'
+eex2
+	jsr synchr	;check character
+	sty noze  	;clear flag for anaf
+	sty bnr   	;set pointer to begin of no
+	jsr frmevl	;evaluate expression
+	bit valtyp	;numeric or string?
+	bpl conv 	;branch if numeric
+	jsr ini  	;init counters and flags
+	jsr anaf 	;analyze format
+	ldx chsn 	;> or = in format field
+	beq prcha	;branch if not
+	ldx #0
+	sec
+	lda cform
+	sbc hulp 	;.a=room left in field
+	bcc prcha	;branch if no room left
+	ldx #'='
+	cpx chsn 	;= in field
+	bne schs1	;branch if not
+	lsr a   	;.a=.a/2
+	adc #0  	;add 1 if odd
+schs1
+	tax     	;store no of blanks in x
+prcha
+	ldy #0
+chx
+	txa
+	beq cpef	;branch if no blanks
+	dex
+oblk
+	lda #' '	;output a blank
+	bne outc	;always
+
+cpef
+	cpy hulp	;end of string reached?
+	bcs oblk	;output blank if yes
+	jsr indin1	;lda (index),y
+	iny
+outc
+	jsr cdout	;output character
+	bne chx 	;branch if not ready
+	beq reay
+
+conv
+	jsr fout	;convert mfp to decimal
+
+;
+;  build descriptor for fout string
+;
+	ldy #$ff
+conv1
+	iny
+	lda fbuffr,y
+	bne conv1
+conv2
+	tya
+	jsr strspa	;jsr getspa,stx dsctmp+1,sty dsctmp+2,sta dsctmp,rts
+	ldy #0
+conv3
+	lda fbuffr,y
+	beq conv4
+	sta (dsctmp+1),y
+	iny
+	bne conv3
+conv4
+	jsr putnew
+	jsr ini  	;init counters and flags
+	jsr fform	;output one formatted number
+
+reay	jsr chrgot	;get old character
+	cmp #','	;comma?
+	beq eex2 	;continue print use if yes
+	sec
+	ror noze 	;set flag for anaf
+	jsr anaf 	;print rest of format
+	pla		;restore descriptor
+	tay
+	pla
+	jsr fretmp
+	jsr chrgot
+	cmp #';'	;semi-colon?
+	beq nocr 	;branch if yes
+	jmp crdo 	;end of print using
+
+nocr	jmp chrget	;rts to basic
+	.page
+;       fform
+;
+;  output a number to format
+;
+;  number is in fbuffr...format checked by anaf
+
+fform
+	lda pufill
+	sta blfd 	;set working fill char
+	lda #$ff
+ana
+	sta sno  	;save blank or - in sno
+	jmp insy
+
+stp
+	stx point	;set point pointer
+insy
+	cpy hulp 	;end of no reached?
+	beq eoa  	;branch if yes
+	lda fbuffr,y    ;get character of no
+	iny
+	cmp #' ' 	;blank?
+	beq insy 	;yes...span
+	cmp #'-'  	;sign no negative
+	beq ana  	;yes...
+	cmp #'.'  	;decimal point?
+	beq stp  	;yes...
+	cmp #'E'	;is char 'e'?
+	beq lsg  	;yes...
+	sta fbuffr,x    ;move number
+	stx enr  	;update end-no pointer
+	inx
+	bit point	;point pointer set?
+	bpl insy 	;yes...
+	inc vn   	;count digits before point
+	jmp insy
+
+lsg
+	lda fbuffr,y
+	cmp #'-'  	;sign of exponent negative
+	bne nomn 	;no...
+	ror usgn 	;make sign negative
+nomn
+	iny
+	sty uexp 	;set exponent pointer
+eoa
+	lda point	;decimal found?
+	bpl rtts 	;yes...
+	stx point	;no...add point
+rtts
+	jsr anaf 	;analyze format
+	lda vf
+	cmp #$ff
+	beq erst 	;field overflow
+	lda fesp 	;exponent in field
+	beq cff  	;convert to f format if not
+	lda uexp 	;exponent in number?
+	bne ete  	;yes...
+	ldx enr
+	jsr et2  	;add exponent to number
+	dec fbuffr+2,x
+	inx
+	stx uexp
+	jsr alg  	;delete leading zeros
+	beq hup  	;all zero
+ete
+	ldy posp 	;+ or - in format?
+	bne sswe 	;yes...
+	ldy sno  	;+?
+	bmi sswe 	;yes...
+	lda vf
+erst
+	beq errf 	;no room for sign
+	dec vf   	;reserve room
+	bne rspa
+	lda nf   	;one #?
+	beq errf 	;yes...error
+rspa
+	inc swe
+sswe
+	jsr shpn 	;shift decimal point
+	jsr uround      ;round number
+	jsr shpn 	;shift again if necessary
+
+hup
+	jmp chout	;output number
+
+
+cff
+	ldy uexp 	;exponent in no?
+	beq ftf  	;no...
+	sta hulp 	;delete exponent
+	sec		;adjust decimal point
+	ror etof 	;set e-to-f flag
+	ldy point
+	lda usgn 	;exec nos3 or nos4
+	bpl no4  	;depends on sign of exp
+	jsr nos3
+	jmp rndd
+
+no4
+	jsr nos4
+ftf
+	ldy point	;at start of no?
+	beq rndd 	;yes...
+	jsr cho  	;no = 0 ?
+	beq devn 	;yes...no round
+rndd
+	jsr uround
+	jmp devn2
+
+devn
+	dec vn         	;adjust...no was 0
+devn2
+	sec
+	lda vf
+	sbc vn
+	bcc errf 	;no fit...error
+	sta swe  	;save difference
+	ldy posp 	;+ or -?
+	bne ahp  	;yes...
+	ldy sno  	;get sign
+	bmi ahp  	;positive...
+	tay
+	beq errf 	;no room for sign
+	dey
+	bne ldvn 	;swe<>1
+	lda nf
+	ora vn   	;both zero?
+	bne hup  	;no...
+
+errf
+	lda #'*'	;format error
+stout
+	jsr cdout      	;fill field with stars
+	bne stout
+	rts
+
+ahp
+	tay		;output no if swe=0
+	beq hup
+ldvn
+	lda vn
+	bne hup  	;vn<>0
+	dec swe  	;add extra 0
+	inc noze 	;before decimal point
+	jmp hup
+
+	.page
+; shift decimal point
+;
+shpn
+	sec
+	lda vf
+	sbc vn
+	beq rdy  	;format o.k
+	ldy point
+	bcc pntl 	;vf<vn
+	sta hulp
+incy
+	cpy enr		;end of no reached?
+	beq ity
+	bcs nos1 	;yes...
+ity
+	iny
+nos1
+	inc vn
+nos4
+	jsr eado	;adjust exponent
+	dec hulp 	;ready?
+	bne incy 	;no...
+	beq poit
+
+pntl
+	eor #$ff
+	adc #1
+	sta hulp 	;=vn-vf
+decy
+	cpy bnr		;begin of no?
+	beq inz  	;yes...
+	dey
+	dec vn
+	jmp inz2
+
+inz
+	inc noze       	;add leading zeros
+inz2
+	lda #$80
+nos3
+	jsr eadj       	;adjust exponent
+	dec hulp 	;ready?
+	bne decy 	;no...
+poit
+	sty point	;decimal point pointer
+rdy	rts
+
+	.page
+; adjust exponent
+;
+sexp
+	bne retrn      	;no over/underflow
+	eor #$09   	;.a is 0 or 9
+	sta fbuffr,x	;digit back in exp
+	dex		;= 0 or 9
+	cpx uexp
+	rts
+
+eado
+	lda #0
+eadj
+	ldx uexp
+	inx
+	bit etof 	;e-to-f flag on?
+	bmi tag2 	;yes...
+	eor usgn
+	beq tag2 	;++ or --
+tag1
+	jsr tag3       	;inc exp, overflow?
+	jsr sexp 	;digit 0 if yes
+	bcs tag1 	;try second digit
+	jmp overr	;exp>99
+
+tag2
+	lda fbuffr,x
+	dec fbuffr,x    ;decrement exp
+	cmp #'0'	;underflow on digit?
+	jsr sexp 	;set digit=9 if yes...
+	bcs tag2 	;try 2nd digit
+	bit etof 	;flag off?
+	bpl et3  	;yes...
+	sty point	;decimal point pointer
+retrn
+	pla
+	pla
+	rts		;return to fform/main
+
+et3
+	lda usgn
+	eor #$80 	;reverse sign exp
+et2
+	sta usgn
+	lda #'0'
+	sta fbuffr+1,x  ;exp<0 here
+	lda #'1'
+	sta fbuffr+2,x
+	rts
+
+tag3
+	lda fbuffr,x	;get digit of exp
+	inc fbuffr,x    ;increment digit
+	cmp #'9'	;overflow
+	rts		;return .z set
+
+	.page
+; ansub : load format field char in .a
+;
+ansub
+	clc
+	iny       	;begin format?
+	beq ans010	;yes...
+	cpy lfor  	;end?
+	bcc ans020	;no...
+ans010
+	ldy noze 	;<>0?
+	bne retrn	;yes...
+ans020
+	jsr indfrm
+	inc cform	;pointer to field
+	rts
+
+;
+;  ini : init counters and flags
+;
+ini
+	jsr frefac	;free temp descriptor
+	sta hulp 	;length string
+	ldx #$0a 	;printed in hulp
+	lda #0
+stz
+	sta swe,x	;init working registers
+	dex
+	bpl stz
+	stx flag 	;comma flag =ff
+	stx point	;point pointer=ff
+	stx dolr	;dollar flag=ff
+	tax		;x=y=0
+	tay
+	rts
+
+	.page
+; round number
+;
+uround
+	clc
+	lda point
+	adc nf   	;overflow?
+	bcs rrts 	;yes...
+	sec
+	sbc noze 	;underflow?
+	bcc rrts 	;yes...
+	cmp enr  	;anything to round?
+	beq cbn  	;yes...
+	bcs rrts 	;no...
+
+cbn
+	cmp bnr  	;again...
+	bcc rrts 	;no...
+	tax
+	lda fbuffr,x    ;get digit
+	cmp #'5'	;<5 ?
+	bcc rrts 	;yes...no round
+con1
+	cpx bnr  	;begin of no reached?
+	beq add1 	;yes..add 1
+	dex
+	jsr tag3 	;increment digit
+	stx enr  	;new end of no pointer
+	beq con1 	;branch on overflow
+	rts
+
+add1
+	lda #'1'
+	sta fbuffr,x
+	inx
+	stx point
+	dec noze 	;# of 0's before .
+	bpl rrts 	;no underflow
+	inc noze 	;underflow...back to 0
+	inc vn
+rrts	rts
+
+	.page
+; alg : delete leading zeros of no
+;
+alg
+	ldy point	;start with a .?
+	beq szer 	;yes...
+cho
+	ldy bnr
+cmo
+	lda fbuffr,y    ;start with a 0?
+	cmp #'0'
+	rts
+
+nbr
+	inc point	;adjust point
+	jsr eado 	;and exponent
+	inc bnr  	;and pointer to begin of no
+	cpy enr  	;end of number?
+	beq rrts 	;yes...
+	iny
+szer
+	jsr cmo  	;zero in no?
+	beq nbr  	;yes...
+	rts		;no...
+
+
+; chout : print number
+;
+chout
+	lda dolr	;dollar flag set?
+	bmi chou	;no...
+	inc noze	;make room for $
+chou
+	ldx bnr		;start of #
+	dex
+	ldy begfd	;begin of field
+afrm
+	jsr indfrm
+	iny
+	cmp #','	;comma?
+	bne punt	;no...
+	bit flag	;comma flag on?
+	bmi bout	;yes, do a fill char
+	lda pucoma
+	jmp out		;no,...output a comma char
+
+bout
+	lda blfd
+	jmp out
+
+punt
+	cmp #'.'	;decimal point?
+	bne afplus
+	lda pudot	;yes...
+	jmp out
+
+afplus
+	cmp #'+'	;plus?
+	beq ispl 	;yes...
+	cmp #'-'	;minus?
+	beq ispl1	;yes...
+	cmp #'^' 	;up arrow?
+	bne pndd 	;no...
+	lda #'E'
+	jsr cdout
+	ldy uexp
+	jsr cmo  	;first dig of exp zero?
+	bne mint 	;no...
+	iny
+	jsr cmo  	;second digit?
+	beq post 	;yes
+mint
+	lda #'-'
+	bit usgn
+	bmi mout
+post
+	lda #'+'
+mout
+	jsr cdout	;output sign exp
+	ldx uexp
+	lda fbuffr,x
+	jsr cdout	;output first dig exp
+	ldy endfd
+	jmp telx
+
+ispl1
+	lda sno 	;positive?
+	bmi bout	;yes...out blank or *
+ispl
+	lda sno 	;output sgn
+	jmp out
+
+zerot
+	lda noze	;# of zeros
+	bne zerot1
+lzer
+	cpx enr		;end of # reached?
+	beq zout	;yes...output zero
+telx
+	inx
+	lda fbuffr,x	;get digit
+	.byte $2c	;branch awlays
+
+zout
+	lda #'0'	;output zero
+outs
+	lsr flag	;clear comma flag
+out
+	jsr cdout   	;output character
+	bne afrm	;not ready...
+	rts
+
+zerot1
+	dec noze	;count leading zeros
+	lda dolr	;$ flag set?
+	bmi zout	;no...output zero
+	sec
+	ror dolr	;clear dollar flag
+	lda pumony
+	jmp outs	;output money symbol
+
+pndd
+	lda swe 	;# of blanks
+	beq zerot
+	dec swe 	;count !
+pndx
+	beq *+5
+	jmp bout	;out blank or *
+
+	lda posp	;+ or - in field?
+	bmi pndx	;yes...out blank or *
+tat
+	jsr indfrm
+	cmp #','	;comma?
+	bne ispl1	;no...out sign
+	lda blfd	;yes...
+	jsr cdout	;out blank or *
+	iny
+	jmp tat
+
+cdout
+	jsr outdo	;char out
+	dec cform	;count it
+	rts
+
+	.page
+; anaf :analyze format
+;
+anaf
+	ldy endfd	;format pointer
+gfor
+	jsr ansub
+	jsr comp 	;check special chars
+	bne pchar	;no match...
+	sty begfd	;save beginning of field
+	bcc ffoun	;# was found
+	tax		;save char
+sfur
+	jsr ansub	;get next format char
+	bcs nono 	;stop on wrap-around
+	jsr com1 	;compare specials
+	beq foun1	;found some...
+nono
+	ldy begfd
+	txa
+pchar
+	jsr outdo	;out character
+	jmp gfor
+
+foun1
+	bcs sfur 	;no #...keep looking
+	ldy begfd
+ffoun
+	ldx noze
+	bne trts
+	stx cform
+	dey
+
+hyo2
+	dec cform	;correct counter
+hyo
+	jsr ansub	;get next format char
+	bcs efo		;end of format
+	cmp #','	;comma?
+	beq hyo  	;yes...ignore it
+	jsr isp  	;+ or - in format?
+	bcc hyo2 	;yes...
+	cmp #'.'	;decimal point?
+	bne avf1 	;no...
+	inx
+	cpx #2   	;more than 1 decimal?
+	bcc hyo  	;no...
+ero	jmp snerr	;yes...syntax error
+
+avf1
+	jsr com2 	;=, >, or # in field
+	bne llar 	;no...
+	bcc hyo1 	;was #
+	sta chsn 	;was > or =
+hyo1
+	inc vf,x
+	jmp hyo
+
+llar
+	cmp #'$'	;dollar?
+	bne expo  	;no...
+	bit dolr  	;test flag
+	bpl hyo1  	;no...
+	clc
+	ror dolr  	;set flag
+	dec vf
+	jmp hyo1
+
+expo
+	cmp #'^'  	;up arrow?
+	bne isp  	;no...
+	ldx #$02
+chkk
+	jsr ansub	;must be 4 up arrows
+	bcs ero
+	cmp #'^' 	;up arrow?
+	bne ero
+	dex
+	bpl chkk
+	inc fesp 	;set exp flag
+	jsr ansub	;next format char
+	bcs efo  	;end of format
+isp
+	cmp #'+'	;plus?
+	bne chom 	;no...
+	lda sno  	;sign neg?
+	bpl spos 	;yes...
+	lda #'+'
+	sta sno
+spos
+	lda posp 	;+ or - already?
+	bne ero
+	ror posp 	;make posp neg/clc
+	sty endfd	;end field pointer
+	inc cform	;corect counter
+trts	rts
+
+chom
+	cmp #'-'	;minus?
+	beq spos 	;yes...
+	sec
+efo
+	sty endfd	;end field pointer
+	dec endfd
+	rts
+
+	.page
+; comp :compare .a with symbols
+;
+comp
+	cmp #'+'
+	beq rt
+	cmp #'-'
+	beq rt
+com1
+	cmp #'.'
+	beq rt
+com2
+	cmp #'='
+	beq rt
+	cmp #'>'
+	beq rt
+	cmp #'#'
+	bne rt
+	clc
+rt	rts
+
+;.end

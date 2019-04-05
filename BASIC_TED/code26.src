@@ -1,0 +1,294 @@
+	.page
+	.subttl 'code26'
+erexit
+	tax		;set termination flags
+	bne erexiy
+	ldx #erbrk	;break error
+erexiy
+	jmp error	;normal error
+
+
+kopen
+	jsr open
+	bcs erexit
+	rts
+
+
+outch
+	jsr bsout
+	bcs erexit
+	rts
+
+
+inchr
+	jsr basin
+	bcs erexit
+	rts
+
+
+coout
+	pha
+	jsr chkout
+	jsr dschk	;see if device # >=4, and clear ds if so
+	tax		;save error code
+	pla
+	bcc cooutx	;no error
+	txa
+	bcs erexit
+cooutx
+	rts
+
+
+coin
+	jsr chkin
+	jsr dschk	;see if device # >=4, and clear ds if so
+	bcs erexit
+	rts
+
+cgetl
+	jsr $ffe4	;jsr getin
+	bcs erexit
+	rts
+
+
+csys
+	jsr getwrd	;convert arg. to integer value
+	lda #>csysrz	;push return address
+	pha
+	lda #<csysrz
+	pha
+	lda spreg	;status reg
+	pha
+	lda sareg	;load 6502 regs
+	ldx sxreg
+	ldy syreg
+	plp		;load 6502 status reg
+	jmp (linnum)	;go do it
+
+csysrz	=*-1	     	;return to here
+
+	php		;save status reg
+	sta sareg   	;save 6502 regs
+	stx sxreg
+	sty syreg
+	pla	    	;get status reg
+	sta spreg
+	rts		;return to system
+
+
+csave
+	jsr plsv	;parse parms
+savenp
+	ldx vartab	;end save addr
+	ldy vartab+1
+	lda #<txttab	;indirect with start address
+	jsr $ffd8	;save it
+	jsr dschk	;see if device # >=4, and clear ds if so
+	bcs erexit
+	rts
+
+
+
+cverf	lda #1		;verify flag
+	.byte $2c    	;skip two bytes
+
+cload
+	lda #0	   	;load flag
+	sta verck
+	jsr plsv	;parse parameters
+
+cld10			;entry from dload
+	lda verck
+	ldx txttab	;.x and .y have alt...
+	ldy txttab+1	;...load address
+	jsr $ffd5	;load it
+	php
+	jsr dschk	;see if device # >=4, and clear ds if so
+	plp
+	bcs jerxit	;problems
+
+	lda verck
+	beq cld50	;was load
+;
+;  finish verify
+;
+	ldx #ervfy	;assume error
+	jsr readst	;read status
+	and #$10	;check error
+	bne cld55	;replaces beq *+5/jmp error
+;
+;  print verify 'ok' if direct
+;
+	bit runmod	;direct mode?
+	bmi cld20	;no
+	jsr primm
+	.byte cr, 'OK', cr, 0
+cld20
+	rts
+
+
+
+;  finish load
+;
+cld50
+	jsr readst	;read status
+	and #$ff-$40	;clear e.o.i.
+	beq cld60	;was o.k.
+	ldx #erload
+cld55
+	jmp error
+
+cld60
+	bit runmod	;direct?
+	bmi cld70	;no...
+
+	stx vartab
+	sty vartab+1	;end load address
+	jsr reddy	;print 'ready'
+	jsr lnkprg
+	jsr runc
+	jmp main
+;
+;  program load
+;
+cld70
+	jsr stxtpt
+	jsr lnkprg
+	jmp fload
+
+
+
+copen
+	jsr paoc	;parse statement
+	clc		;do a real open
+	jsr kopen	;open it
+	jsr dschk	;see if device # >=4, and clear ds if so
+	bcs jerxit	;bad stuff
+	rts		;a.o.k.
+
+
+
+cclos
+	jsr paoc	;parse statement
+	lda andmsk	;get la
+	clc		;flag a real close
+	jsr close	;close it
+	jsr dschk	;see if device # >=4, and clear ds if so
+	bcc cld20	;it's okay
+
+jerxit
+	jmp erexit
+
+
+
+;  parse load, save, & verify commands
+
+plsv
+
+;  default file name
+;
+	lda #0		;length=0
+	jsr setnam
+
+;  default device #
+;
+	ldx #1		;device #1
+	ldy #0		;command 0
+	jsr setlfs
+
+	jsr paoc20	;by-pass junk
+	jsr paoc15	;get/set file name
+	jsr paoc20	;by-pass junk
+	jsr plsv7	;get ',fa'
+	ldy #0		;command 0
+	stx andmsk
+	jsr setlfs
+	jsr paoc20	;by-pass junk
+	jsr plsv7 	;get ',sa'
+	txa		;new command
+	tay
+	ldx andmsk	;device #
+	jmp setlfs
+
+
+
+;  look for comma followed by byte
+
+plsv7	jsr paoc30
+	jmp getbyt
+
+
+
+;  skip return if next char is end
+;
+paoc20
+	jsr chrgot
+	bne paocx
+	pla
+	pla
+paocx	rts
+
+
+
+;  check for comma and good stuff
+;
+paoc30
+	jsr chkcom	;check comma
+paoc32
+	jsr chrgot	;get current
+	bne paocx	;is o.k.
+	jmp snerr	;bad...end of line
+
+
+;  parse open/close
+;
+paoc
+	lda #0
+	jsr setnam	;default file name
+	jsr paoc32	;must got something
+	jsr getbyt	;get la
+	stx andmsk
+	txa
+	ldx #1    	;default device
+	ldy #0    	;default command
+	jsr setlfs	;store it
+	jsr paoc20	;skip junk
+	jsr plsv7
+	stx eormsk
+	ldy #0    	;default command
+	lda andmsk	;get la
+	cpx #3
+	bcc paoc5
+	dey		;default ieee to $ff
+paoc5
+	jsr setlfs	;store them
+	jsr paoc20	;skip junk
+	jsr plsv7 	;get sa
+	txa
+	tay
+	ldx eormsk
+	lda andmsk
+	jsr setlfs	;set up real eveything
+	jsr paoc20
+	jsr paoc30
+paoc15
+	jsr frmstr	;do frmevl, frestr. return with len in a, index =~string
+	ldx index1
+	ldy index1+1
+	jmp setnam
+
+
+
+dschk			;check if device >=4, and clear ds if so
+	php
+	pha
+	lda fa
+	cmp #4
+	bcc coout0
+	jsr oldclr
+coout0
+	pla
+	plp
+	rts
+
+;.end

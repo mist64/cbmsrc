@@ -1,0 +1,180 @@
+	.PAGE
+	.SUBTTL 'TOKENS1'
+RESLST
+       .BYTE 'EN',$C4
+ENDTK  =$80
+       .BYTE 'FO',$D2
+FORTK  =ENDTK+1
+       .BYTE 'NEX',$D4
+NEXTTK =FORTK+1
+       .BYTE 'DAT',$C1
+DATATK =NEXTTK+1
+       .BYTE 'INPUT',$A3
+       .BYTE 'INPU',$D4
+       .BYTE 'DI',$CD
+       .BYTE 'REA',$C4
+       .BYTE 'LE',$D4
+       .BYTE 'GOT',$CF
+GOTOTK =DATATK+6
+       .BYTE 'RU',$CE
+RUNTK  =GOTOTK+1
+       .BYTE 'I',$C6
+       .BYTE 'RESTOR',$C5
+RESTTK =RUNTK+2
+       .BYTE 'GOSU',$C2
+GOSUTK =RESTTK+1
+       .BYTE 'RETUR',$CE
+       .BYTE 'RE',$CD
+REMTK  =GOSUTK+2
+       .BYTE 'STO',$D0
+       .BYTE 'O',$CE
+ONTK   =REMTK+2
+       .BYTE 'WAI',$D4
+       .BYTE 'LOA',$C4
+       .BYTE 'SAV',$C5
+       .BYTE 'VERIF',$D9
+       .BYTE 'DE',$C6
+       .BYTE 'POK',$C5
+       .BYTE 'PRINT',$A3
+       .BYTE 'PRIN',$D4
+PRINTK =ONTK+8
+       .BYTE 'CON',$D4
+       .BYTE 'LIS',$D4
+       .BYTE 'CL',$D2
+CLRTK  =PRINTK+3
+       .BYTE 'CM',$C4
+       .BYTE 'SY',$D3
+       .BYTE 'OPE',$CE
+       .BYTE 'CLOS',$C5
+       .BYTE 'GE',$D4
+       .BYTE 'NE',$D7
+SCRATK =CLRTK+6
+       .BYTE 'TAB',$A8
+TABTK  =SCRATK+1
+       .BYTE 'T',$CF
+TOTK   =TABTK+1
+       .BYTE 'F',$CE
+FNTK   =TOTK+1
+       .BYTE 'SPC',$A8
+SPCTK  =FNTK+1
+       .BYTE 'THE',$CE
+THENTK =SPCTK+1
+       .BYTE 'NO',$D4
+NOTTK  =THENTK+1
+       .BYTE 'STE',$D0
+STEPTK =NOTTK+1
+       .BYTE $AB        	;+
+PLUSTK =STEPTK+1
+       .BYTE $AD        	;-
+MINUTK =PLUSTK+1
+       .BYTE $AA        	;*
+       .BYTE $AF        	;/
+       .BYTE $DE        	;~
+       .BYTE 'AN',$C4
+       .BYTE 'O',$D2
+       .BYTE 190        	;>
+GREATK =MINUTK+6
+       .BYTE $BD        	;=
+EQULTK =GREATK+1
+       .BYTE 188        	;<
+LESSTK =EQULTK+1
+       .BYTE 'SG',$CE
+ONEFUN =LESSTK+1
+       .BYTE 'IN',$D4
+       .BYTE 'AB',$D3
+       .BYTE 'US',$D2
+       .BYTE 'FR',$C5
+       .BYTE 'PO',$D3
+       .BYTE 'SQ',$D2
+       .BYTE 'RN',$C4
+       .BYTE 'LO',$C7
+       .BYTE 'EX',$D0
+       .BYTE 'CO',$D3
+       .BYTE 'SI',$CE
+       .BYTE 'TA',$CE
+       .BYTE 'AT',$CE
+       .BYTE 'PEE',$CB
+       .BYTE 'LE',$CE
+       .BYTE 'STR',$A4
+       .BYTE 'VA',$CC
+       .BYTE 'AS',$C3
+       .BYTE 'CHR',$A4
+LASNUM =ONEFUN+19
+       .BYTE 'LEFT',$A4
+LEFTTK =LASNUM+1
+       .BYTE 'RIGHT',$A4
+       .BYTE 'MID',$A4
+MIDDTK=LEFTTK+2
+       .BYTE 'G',$CF
+GOTK   =MIDDTK+1
+	.SPACE   3
+       .BYTE 'RG',$D2
+RGRTK  =GOTK+1
+       .BYTE 'RCL',$D2
+       .BYTE 'RLU',$CD
+       .BYTE 'JO',$D9
+       .BYTE 'RDO',$D4
+       .BYTE 'DE',$C3
+       .BYTE 'HEX',$A4
+       .BYTE 'ERR',$A4
+       .BYTE 'INST',$D2
+INSTTK =RGRTK+8
+
+
+
+       .BYTE 'ELS',$C5
+ELSETK =INSTTK+1
+       .BYTE 'RESUM',$C5
+RESUTK=ELSETK+1
+       .BYTE 'TRA',$D0
+TRAPTK=RESUTK+1
+       .BYTE 'TRO',$CE
+       .BYTE 'TROF',$C6
+       .BYTE 'SOUN',$C4
+       .BYTE 'VO',$CC
+       .BYTE 'AUT',$CF
+       .BYTE 'PUDE',$C6
+       .BYTE 'GRAPHI',$C3
+       .BYTE 'PAIN',$D4
+       .BYTE 'CHA',$D2
+       .BYTE 'BO',$D8
+       .BYTE 'CIRCL',$C5
+       .BYTE 'GSHAP',$C5
+       .BYTE 'SSHAP',$C5
+       .BYTE 'DRA',$D7
+       .BYTE 'LOCAT',$C5
+       .BYTE 'COLO',$D2
+       .BYTE 'SCNCL',$D2
+       .BYTE 'SCAL',$C5
+       .BYTE 'HEL',$D0
+       .BYTE 'D',$CF
+DOTK=TRAPTK+20
+       .BYTE 'LOO',$D0
+LOOPTK=DOTK+1
+       .BYTE 'EXI',$D4
+       .BYTE 'DIRECTOR',$D9
+       .BYTE 'DSAV',$C5
+       .BYTE 'DLOA',$C4
+       .BYTE 'HEADE',$D2
+       .BYTE 'SCRATC',$C8
+       .BYTE 'COLLEC',$D4
+       .BYTE 'COP',$D9
+       .BYTE 'RENAM',$C5
+       .BYTE 'BACKU',$D0
+       .BYTE 'DELET',$C5
+       .BYTE 'RENUMBE',$D2
+       .BYTE 'KE',$D9
+KEYTK  =LOOPTK+13
+       .BYTE 'MONITO',$D2
+MONTK  =KEYTK+1
+       .BYTE 'USIN',$C7
+USETK  =MONTK+1
+       .BYTE 'UNTI',$CC
+UNTLTK =USETK+1
+       .BYTE 'WHIL',$C5
+WHILTK =UNTLTK+1
+ESCTK  = $FE
+       .BYTE 0
+
+;END
+

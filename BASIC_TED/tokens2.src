@@ -1,0 +1,133 @@
+	.page
+	.subttl 'tokens2'
+stmdsp
+	.word  end-1
+	.word  for-1
+	.word  next-1
+	.word  data-1
+	.word  inputn-1
+	.word  input-1
+	.word  dim-1
+	.word  read-1
+	.word  let-1
+	.word  goto-1
+	.word  run-1
+	.word  if-1
+	.word  restor-1
+	.word  gosub-1
+	.word  return-1
+	.word  rem-1
+	.word  stop-1
+	.word  ongoto-1
+	.word  fnwait-1
+	.word  cload-1
+	.word  csave-1
+	.word  cverf-1
+	.word  def-1
+	.word  poke-1
+	.word  printn-1
+	.word  print-1
+	.word  cont-1
+	.word  list-1
+	.word  clear-1
+	.word  cmd-1
+	.word  csys-1 
+	.word  copen-1
+	.word  cclos-1
+	.word  get-1
+	.word  scrath-1
+	.word  rem-1           	;'else' statement
+	.word  resume-1
+	.word  trap-1
+	.word  tron-1
+	.word  troff-1
+	.word  tone-1
+	.word  vol-1
+	.word  auto-1
+	.word  puctrl-1
+	.word  graphs-1        	;'graphic'
+	.word  paint-1
+	.word  char-1
+	.word  box-1
+	.word  circle-1
+	.word  gshape-1
+	.word  sshape-1
+	.word  draw-1
+	.word  locate-1
+	.word  scolor-1        	;'color'
+	.word  scnclr-1
+	.word  scale-1
+	.word  help-1
+	.word  do-1
+	.word  loop-1
+	.word  exit-1
+	.word  dcat-1
+	.word  dsave-1
+	.word  dload-1
+	.word  header-1
+	.word  scratc-1
+	.word  colect-1
+	.word  dcopy-1
+	.word  rename-1
+	.word  backup-1
+	.word  delete-1
+	.word  renum-1
+	.word  keyfun-1
+	.word  monitr-1
+	.page
+fundsp
+	.word  sgn
+	.word  int
+	.word  abs
+	.word  usrpok
+	.word  fre
+	.word  pos
+	.word  sqr
+	.word  rnd
+	.word  log
+	.word  exp
+	.word  cos
+	.word  sin
+	.word  tan
+	.word  atn
+	.word  peek
+	.word  len
+	.word  strd
+	.word  val
+	.word  asc
+	.word  chrd
+	.word  leftd
+	.word  rightd
+	.word  midd
+	.word  rgr
+	.word  rclr
+	.word  rlum
+	.word  joy
+	.word  rdot
+	.word  dcml            	;dec
+	.word  hexd
+	.word  errd
+	.page
+optab
+	.byte   121
+	.word  faddt-1
+	.byte   121
+	.word  fsubt-1
+	.byte   123
+	.word  fmultt-1
+	.byte   123
+	.word  fdivt-1
+	.byte   127
+	.word  fpwrt-1
+	.byte   80
+	.word  andop-1
+	.byte   70
+	.word  orop-1
+negtab	.byte 125
+	.word  negop-1 
+	.byte   90
+	.word  notop-1
+ptdorl	.byte 100
+	.word  dorel-1
+
+;.end

@@ -1,0 +1,335 @@
+	.page
+	.subttl  'code0'
+ready
+	ldx #$80
+	.byte $2c
+omerr
+	ldx #errom
+error
+	jmp (ierror)
+nerror
+	txa
+	bmi readyx
+	stx errnum	;save error # for 'er'
+	bit runmod	;direct mode?
+	bpl errisd	;yes...always display error text
+
+	ldy #1		;copy curlin to errlin, oldtxt to errtxt
+error1
+	lda curlin,y
+	sta errlin,y
+	lda oldtxt,y
+	sta errtxt,y
+	dey
+	bpl error1
+
+	cpx #errus	;don't trap undefined statement errors
+	beq errisd
+	ldy trapno+1    ;is trap set?
+	iny
+	beq errisd	;no.
+	dey		;restore msb of line #
+	sty linnum+1
+	sty tmptrp	;save until a resume is executed
+	ldy trapno
+	sty linnum
+
+	ldx #$ff
+	stx trapno+1    ;flag no more traps
+	ldx oldstk
+	txs
+	jsr luk4it
+	jmp newstt
+errisd
+	dex
+	txa
+	pha
+	lda #0		;make sure we're in text mode
+	sta graphm
+	jsr go2txt	;switch to text mode
+	pla
+	jsr erstup	;set up address of error msg in .a in index2
+	jsr clrch
+	lda #0
+	sta channl
+	jsr crdo
+	jsr outqst
+	ldy #0
+geterr
+	lda (index2),y  ;ind.ok
+	pha
+	and #127
+	jsr outdo
+	iny
+	pla
+	bpl geterr
+	jsr stkini
+	jsr primm
+	.byte   ' ERROR',0
+errfin
+	ldy curlin+1	;direct mode?
+	iny
+	beq readyx	;yes...no line #
+	jsr inprt
+
+
+
+
+readyx
+	jsr reddy	;print 'ready'
+	lda #$80
+	jsr setmsg	;turn kernal messages on
+	lda #0
+	sta runmod	;turn run mode off
+
+
+
+main
+	jmp (imain)
+nmain
+	ldx #$ff
+	stx curlin+1
+	jsr inlin	;get a line from terminal
+	stx txtptr	;txtptr is ptr to index buffer
+	sty txtptr+1
+	jsr chrget
+	tax
+main00
+	beq main	;if end of line
+	bcc main1	;if line number
+	jsr crunch
+	jsr chrgot	;get command
+	jmp xeqdir	;execute command
+
+
+
+main1
+	jsr linget	;read line # into linnum
+	jsr crunch
+	sty count	;retain char count
+	jsr fndlin
+	bcc nodel	;no match, so don't delete
+	ldy #1
+	jsr indlow
+	sta index1+1
+	lda vartab	;text end
+	sta index1
+	lda lowtr+1     ;set xfer to
+	sta index2+1
+	dey
+	jsr indlow	;compute length
+	clc
+	sbc lowtr
+	eor #$ff	;make it negative
+	clc
+	adc vartab	;compute new text end
+	sta vartab
+	sta index2	;set low of xfer to
+	lda vartab+1
+	adc #255
+	sta vartab+1    ;compute high of text end
+	sbc lowtr+1     ;compute # of blocks to move
+	tax
+	sec
+	lda lowtr
+	sbc vartab	;compute offset
+	tay
+	bcs qdect1	;if vartab <= lowtr
+	inx		;dec due to carry and
+	dec index2+1    ;dec store so carry works
+qdect1
+	clc
+	adc index1
+	bcc mloop
+	dec index1+1
+	clc
+mloop
+	jsr indin1
+	sta (index2),y
+	iny
+	bne mloop
+	inc index1+1
+	inc index2+1
+	dex
+	bne mloop
+nodel
+	jsr clearc
+	jsr lnkprg
+	ldy #0
+	jsr indtxt	;delete line?
+	beq main00
+	clc		;no...something to insert
+
+	lda vartab
+	ldy vartab+1
+	sta hightr
+	sty hightr+1    ;top of block to move
+
+	adc count	;length of characters in line
+	bcc nodel1
+	iny
+nodel1	clc
+	adc #4		;plus link and line #
+	bcc nodelc
+	iny
+nodelc	sta highds	;destination of top
+	sty highds+1
+
+; low block address is lowtr
+; where it was left in the call to fndlin
+;
+	jsr bltu
+;
+; make links non-null to fool chead
+;
+	ldy #0
+	lda #1
+	sta (lowtr),y
+	iny
+	sta (lowtr),y
+;
+; put line number in text
+;
+	iny
+	lda linnum
+	sta (lowtr),y
+	lda linnum+1
+	iny
+	sta (lowtr),y
+;
+; advance lowtr to start of line
+;
+	iny
+	tya
+	clc
+	adc lowtr
+	sta lowtr
+	bcc main2
+	inc lowtr+1
+main2
+	lda strend	;64k only
+	ldy strend+1
+	sta vartab
+	sty vartab+1
+;
+; block move line to text
+;
+	ldy count
+	dey
+stolop
+	jsr indtxt
+	sta (lowtr),y
+	dey
+	bpl stolop
+	jsr lnkprg
+	jsr runc
+;	
+; test if auto in effect
+;	
+	lda autinc	;if in auto mode, increment val <> 0
+	ora autinc+1
+	beq gomain	;not in
+	
+	lda linnum	;yes, construct new line number
+	clc
+	adc autinc
+	sta facho+1
+	lda linnum+1
+	adc autinc+1
+	sta facho
+	ldx #$90
+	sec
+	jsr floatc	;float it
+	jsr fout	;make it into a string
+	
+	ldx #0		;move string into kbd buffer
+aline1
+	lda $101,x	;copy number formed into buffer, ignoring leading space
+	beq aline2	;a null marks end
+	sta keyd,x
+	inx
+	bne aline1	;always
+	
+
+aline2
+	lda #29		;cursor right
+	sta keyd,x
+	inx
+	stx ndx
+gomain
+	jmp main
+	
+
+
+lnkprg
+	lda txttab
+	ldy txttab+1
+	sta index
+	sty index+1
+	clc 
+chead
+	ldy #0
+	jsr indin1	;lda (index),y .. check for null link
+	bne chea3
+	iny
+	jsr indin1	;lda (index),y
+	beq lnkrts
+chea3
+	ldy #4
+czloop
+	iny
+	jsr indin1	;lda (index),y
+	bne czloop
+	iny
+	tya
+	adc index
+	tax
+	ldy #0
+	sta (index),y
+	tya
+	adc index+1
+	iny
+	sta (index),y
+	stx index
+	sta index+1
+	bcc chead	;always
+
+
+
+fixlnk
+	clc
+	lda index	;set pointer to end of text
+	ldy index+1     ;(called only when allocating or deallocating bit maps)
+	adc #2
+	bcc *+3
+	iny
+	sta vartab
+	sty vartab+1
+lnkrts
+	rts
+
+
+;
+; function to get a line one character at a time from the input
+; channel and build it in the input buffer.
+;
+inlin
+	ldx #0
+
+
+inlinc
+	jsr inchr
+	cmp #cr		;a carriage return?
+	beq finin1	;yes...done build
+
+	sta buf,x	;put it away
+	inx
+	cpx #buflen     ;max character line?
+	bcc inlinc	;no...o.k.
+
+	jmp errlen
+
+finin1
+	jmp fininl
+
+;.end

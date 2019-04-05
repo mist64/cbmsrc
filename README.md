@@ -36,6 +36,10 @@ The sources have been verified to build the correct -03 KERNAL binary, but no gu
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
+## BASIC_TED, KERNAL_TED
+
+The Commodore Plus/4, C16 and C116 BASIC 3.5 and KERNAL source (1984). Source: [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/index.html)
+
 ## BASIC_PET2001
 
 The PET 2001 BASIC source (V2, 1978).

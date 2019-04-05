@@ -1,0 +1,347 @@
+	.page
+	.subttl 'code4  01/19/84'
+run
+	bne run1	;yes
+	jsr setexc	;set various run modes
+	jmp runc
+run1
+	jsr clearc
+	jsr chrgot
+	jsr goto
+	jsr setexc	;set various run modes
+	jmp newstt
+
+
+; here for new statement. character -> by txtptr
+; is ':' or eol. the adr of this loc is left on
+; the stack when a statement is executed so that
+; it can merely do a rts when it is done.
+; get char, exit via xeqcm3, and return to newstt.
+
+xeqcm
+	jmp (igone)
+ngone
+	jsr chrget	;get statement type
+xeqdir
+	jsr xeqcm3
+
+newstt
+	jsr iscntc
+	bit runmod	;direct mode?
+	bpl nstt2	;yes...
+
+; in run mode...
+; save txtptr for cont command
+
+	jsr tto	  	;transfer txtptr to oldtxt
+	tsx
+	stx oldstk
+
+nstt2
+	ldy #0
+	jsr indtxt	;end of the line?
+	beq nstt3	;yes
+	jmp morsts	;no...out of statement
+
+nstt3
+	bit runmod	;in direct mode?
+	bpl nstt5	;yes, go to ready
+	ldy #2
+	jsr indtxt	;end of text?
+	beq nstt5	;yes...finished
+	iny		;y=3
+	jsr indtxt	;extract line# lo byte
+	sta curlin
+	iny
+	jsr indtxt	;extract line # hi byte
+	sta curlin+1
+	tya		;y=4
+	clc
+	adc txtptr	;point @ character before line start
+	sta txtptr
+	bcc xeqcm
+	inc txtptr+1
+	bne xeqcm	;always...execute new line
+nstt5
+	jmp ready
+
+
+
+tto
+	lda txtptr
+	ldy txtptr+1
+	sta oldtxt
+	sty oldtxt+1
+xeqrts
+	rts
+
+	.page
+; set up for command processing and
+; set processor address on stack,
+; exit via jmp to chrget
+
+xeqcm3
+	beq xeqrts	;nothing here...null statement
+
+	bit trcflg	;in trace mode?
+	bpl xeqcm2	;branch if not.
+
+	bit runmod	;in direct mode?
+	bpl xeqcm2	;branch if yes. can't trace in direct mode
+
+	pha		;save token
+	lda #'['	;print '{ line-number }'
+	jsr outdo
+	jsr curprt	;print curlin
+	lda #']'
+	jsr outdo
+	pla		;restore token
+
+xeqcm2
+	cmp #esctk	;special case: escape token
+	beq xeqesc
+
+	cmp #gotk	;special case: go to
+	beq xeqgo
+
+	cmp #middtk	;special case: mid$()=
+	beq xeqmid
+
+; command can be in the range end..new (old basic) & else..monitor
+; (new extensions). although there is a gap between these two blocks,
+; it will be quickest & easiest to collapse them into one
+; continuous block.
+
+	cmp #montk+1
+	bcs snerr1
+	cmp #scratk+1
+	bcc xeqcm4	;no need to collapse
+	cmp #elsetk
+	bcc snerr1
+	sbc #elsetk-scratk-1
+
+xeqcm4
+	sec		;convert adjusted token into an index into a jump table.
+	sbc #endtk
+	bcc glet	;it wasn't a token after all! assume an assignment
+
+	asl a
+	tay
+	lda stmdsp+1,y
+	pha
+	lda stmdsp,y
+	pha
+	jmp chrget	;execution will commence after chrget's rts.
+
+
+
+xeqmid 			;handle special case of mid$= (what we call a kludge).
+	lda #>midwrk	;midd2-1
+	pha
+	lda #<midwrk
+	pha
+xeqchr
+	jmp chrget
+
+
+xeqgo  			;special case of go to (instead of goto)
+	jsr chrget
+	cmp #totk
+	bne snerr1
+	jsr chrget
+	jmp goto
+
+
+	.byte   $ff	;***** the all-important cbm checksum byte goes here! *****
+
+
+xeqesc 			;execute escape token
+	jsr chrget	;lets have us a look at the second char
+	beq snerr1	;oops, there wasn't any!
+	sec		;set up flag for a trip into the users code
+	jmp (iescex)
+nescex
+	bcc xeqchr	;jmp chrget
+snerr1
+	jmp snerr
+
+glet
+	jmp let
+
+morsts
+	cmp #':'
+	bne snerr1
+	jmp xeqcm	;if ':', continue statement
+
+	.page
+; reset pointers to next data statement. allows optional argument
+; specifying a specific line number, otherwise default is
+; beginning of text area.
+
+restor
+	beq rstor3	;branch if no argument...use default
+	jsr getwrd	;get 2 byte argument
+	sty linnum
+	sta linnum+1
+	jsr fndlin	;get pointer to specified line
+	bcs rstor1	;branch if found...
+	jmp userr	;else flag an error
+rstor1
+	lda lowtr	;decrement 2 byte pointer, and save it
+	ldy lowtr+1
+	bcs rstor4	;always
+
+rstor3
+	sec
+	lda txttab
+	ldy txttab+1
+rstor4
+	sbc #1
+	bcs resfin
+	dey
+resfin
+	sta datptr
+	sty datptr+1
+resrts
+	rts
+
+
+
+iscntc
+	jsr $ffe1	;test stop key
+	bne resrts	;return if not down
+	php
+	ldy trapno+1	;test if trap on
+	iny
+	beq blism	;no, do a normal stop
+unstop
+	jsr $ffe1	;debounce
+	beq unstop
+	plp		;clean up stack
+	ldx #erbrk
+	jmp error
+blism
+	plp
+stop
+	bcs stopc
+end
+	clc
+stopc
+	bne resrts
+	bit runmod	;in direct mode?
+	bpl diris	;yes
+	jsr tto	  	;transfer txtptr to oldtxt
+	lda curlin
+	ldy curlin+1
+	sta oldlin
+	sty oldlin+1
+diris
+	pla
+	pla
+	bcc gordy
+
+	jsr primm
+	.byte cr, $a, 'BREAK', 0
+	jmp errfin
+
+
+
+gordy
+	jmp ready
+
+
+cont
+	bne resrts
+	ldx #errcn
+	ldy oldtxt+1
+	bne cont10
+	jmp error
+cont10
+	lda oldtxt
+	sta txtptr
+	sty txtptr+1
+	lda oldlin
+	ldy oldlin+1
+	sta curlin
+	sty curlin+1
+
+setexc
+	lda #$80
+	sta runmod	;set up run mode
+	asl a	    	;.a=0
+	sta autinc	;turn auto increment off
+	sta autinc+1
+	jmp setmsg	;turn kernal messages off & rts
+
+	.page
+; gosub. push text pointer, line #, & gosub token on stack:
+;
+;		(bottom) highest memory
+;===========================================================
+;		txtptr+1 address of next statement
+;		txtptr
+;		========
+;		curlin+1 current line number
+;		curlin
+;		========
+;		'gosub' token <== (tos) top of stack pointer
+;===========================================================
+;		(top of stack) lowest memory
+
+gosub
+	ldy #lengos	;free up necessary space on stack
+	jsr getstk
+	dey
+	lda txtptr+1
+	sta (tos),y
+	dey
+	lda txtptr
+	sta (tos),y
+	dey
+	lda curlin+1
+	sta (tos),y
+	dey
+	lda curlin
+	sta (tos),y
+	dey
+	lda #gosutk
+	sta (tos),y
+
+	jsr chrgot
+;
+; fall thru to goto
+;
+goto
+	jsr linget
+	jsr remn
+	sec
+	lda curlin
+	sbc linnum
+	lda curlin+1
+	sbc linnum+1
+	bcs luk4it
+	tya
+	sec
+	adc txtptr
+	ldx txtptr+1
+	bcc lukall
+	inx
+	bcs lukall
+luk4it
+	lda txttab
+	ldx txttab+1
+lukall
+	jsr fndlnc
+	bcc userr
+	lda lowtr
+	sbc #1
+	sta txtptr
+	lda lowtr+1
+	sbc #0
+	sta txtptr+1
+	bit runmod	;in direct mode?
+	bpl setexc	;yes
+	rts
+
+;.end
+;12/02/83 patch (fab) fix 'cont' to correctly setup run mode flags.

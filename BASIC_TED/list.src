@@ -1,0 +1,163 @@
+	.page
+	.subttl 'list'
+list
+	jsr range	;set up line range
+
+;	pla		;pop return addr off stack.. this sucker wants
+;	pla		; to crash into 'ready' when it's done.
+
+list05
+	ldy #1
+	jsr indlow	;get ms byte of line to lists pointer
+	bne list10	;ok if not zero, but..
+	dey
+	jsr indlow
+	beq gordy2	;..if ls byte is also zero, we're done.
+
+list10
+	jsr iscntc	;stop key?
+	jsr crdo	;new line
+
+	ldy #2
+	jsr indlow	;get ms byte of line number
+	tax
+	iny
+	jsr indlow	;get ls byte.
+
+	cmp linnum+1	;test if we are past the last line requested.
+	bne list20
+	cpx linnum
+	beq list30
+list20
+	bcs gordy2	;next line is > last line requested, exit.
+
+list30
+	jsr p1line	;print line #, space, and the line of code.
+
+	ldy #0	   	;move 'pointer to next line' into (lowtr)
+	jsr indlow
+	tax
+	iny
+	jsr indlow
+	stx lowtr
+	sta lowtr+1
+	jmp list05
+
+gordy2
+	jmp crdo	;jmp ready
+
+	.page
+;******************************************************
+; print 1 line of basic.
+; entry:
+;	x,a contains line number low,high
+;	(lowtr) points to begining of line in text
+;
+;	next-line   line-num  basic.......text  null
+;	lo    hi    lo    hi  byte byte...byte   00
+;	/|
+;    (lowtr)	 acc   x
+;
+;******************************************************
+
+p1line
+	ldy #3
+	sty lstpnt
+	sty dores	;reset quote-switch
+
+	jsr linprt	;print line number
+	lda #' '	;print a space
+p1l010
+	ldy lstpnt
+	and #$7f
+p1l015
+	jsr outdo
+
+	cmp #'"'	;if quote character, toggle quote-switch
+	bne p1l019
+	lda dores
+	eor #$ff
+	sta dores
+
+p1l019
+	iny		;point to next character
+	beq gordy2	;failsafe mechanism...basic text was mangled, crash.
+	bit helper	;called by 'help' or 'list' cmd?
+	bpl p1l020	;list!
+	jsr helpsb	;help!
+
+p1l020
+	jsr indlow
+	beq p1lrts	;finished when trailing null is found
+
+	jmp (iqplop)	;usually points to nqplop
+
+
+
+nqplop
+	bpl p1l015	;not a token, just print character
+	cmp #pi
+	beq p1l015	;pi is >$80, but should be printed 'as is' anyway.
+	bit dores	;is quote switch on?
+	bmi p1l015	;yes, print char 'as is'
+
+;  at this point, we know we're talking token. scan the token text
+;  list until the correct text is found, and print that text.
+
+	cmp #esctk	;is this an escape token?
+	bne p1l025	;nope
+
+	iny		;yes, point to next character
+	jsr indlow	;and get the second token
+	beq p1l021	;eol. go backup 1, and print esctk as graphic
+
+	sty lstpnt	;set up y to continue when we're done
+	sec		;set flag for test,
+	jmp (iescpr)    ;..and see if anyone out there wants it.
+
+
+nescpr
+	bcs p1l015	;nobody wanted it, print it as a graphic
+	ldy #0
+	beq p1l070	;sombody wanted it. print his string.
+
+p1l021 			;an esc token found with no chrs following it.
+	dey
+	lda #esctk	;print esctk as a graphic to show that somethings amiss.
+	bne p1l015	;always
+
+p1l025
+	tax		;use the token as index
+	sty lstpnt
+	ldy #>reslst    ;set index1 pointing to token text list
+	sty index1+1
+	ldy #<reslst
+	sty index1
+
+	ldy #0
+p1l030
+	dex		;is this the correct text?
+	bpl p1l070	;yes
+p1l040
+	lda (index1),y	;ind.ok
+	pha
+	inc index1	;else scan till next command text
+	bne p1l050
+	inc index1+1
+p1l050
+	pla
+	bpl p1l040	;look for char with msb set (end terminator)
+	bmi p1l030	;check next command
+
+p1l060
+	iny
+p1l070
+	lda (index1),y  ;indirect ok.
+	bmi p1l010	;print last chr after masking msb, continue on line.
+	jsr outdo	;print non-terminator character
+	bne p1l060	;always
+
+p1lrts
+	rts
+
+;.end

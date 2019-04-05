@@ -1,0 +1,76 @@
+	.nam	ted_basic
+
+	.include  disclaim
+
+true	=-1
+false	=0
+truted	=true
+palmod	=false
+
+	.include  declare
+	.include  entries
+	.include  bground
+	.include  header
+	.include  init
+	.include  indjumps
+	.include  tokens1
+	.include  tokens2
+	.include  errmsgs
+	.include  code0
+	.include  code1
+	.include  crunch
+	.include  code2
+	.include  list
+	.include  code4
+	.include  code5
+	.include  code7
+	.include  code8
+	.include  code9
+	.include  code10
+	.include  code11
+	.include  code12
+	.include  code13
+	.include  code15
+	.include  code16
+	.include  code17
+	.include  code18
+	.include  code19
+	.include  code20
+	.include  code21
+	.include  code22
+	.include  code23
+	.include  code24
+	.include  code26
+	.include  grbcol
+	.include  trig
+	.include  renumber
+	.include  for
+	.include  delete
+	.include  using
+	.include  exten1
+	.include  exten2
+	.include  exten3
+	.include  keydefs
+	.include  noise
+	.include  graphic1
+	.include  graphic2
+	.include  graphic3
+	.include  graphic4
+	.include  graphic5
+	.include  graphic6
+	.include  graphic7
+	.include  graphic8
+	.include  graphic9
+	.include  graphic10
+	.include  graphic11
+	.include  graphic12
+	.include  graphic13
+	.include  graphic14
+	.include  graphic15
+	.include  graphic16
+	.include  dos1
+	.include  dos2
+	.include  dos3
+	.include  overflow
+	.include  vectors
+	.end

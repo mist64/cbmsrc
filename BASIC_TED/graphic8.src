@@ -1,0 +1,209 @@
+	.page
+	.subttl 'graphics8'
+;****************************************************************
+;
+;  docolr  --  set up color and lum. for 8x8 charcater cell
+;		 x = row number  --  y = column number
+;
+;****************************************************************
+
+docolr
+	lda ldtb2,x     ;put address of video ram into grapnt
+	sta grapnt
+	lda ldtb1,x
+	and #3
+	pha
+	ora #>bmcolr    ;fix to point to bit mapped color area
+	sta grapnt+1
+
+	jsr getcol      ;get color combination
+	sta (grapnt),y  ;save it
+
+	pla		;convert to address in bit mapped attr. ram
+	ora #>bmlum
+	sta grapnt+1
+	jsr getlum
+	sta (grapnt),y	;save multicolor2
+
+
+
+;****************************************************************
+;
+;  getcol - return in a-reg packed color byte
+;	      hires modes = foreground/background
+;	      multicolor  = foreground/multicolor-1
+;
+;***************************************************************
+
+getcol
+	lda fg		;get foreground color
+	asl a		;shift into left nibble
+	asl a
+	asl a
+	asl a
+	sta tmpton
+	lda ted+21	;assume hires (fg/bg)
+	bit graphm
+	bpl getcl1	;skip if hires modes
+	lda mc1		;not hires, mcm (fg/mc1)
+getcl1
+	and #$0f
+	ora tmpton
+	rts
+
+
+
+;***************************************************************
+;
+;  getlum - return in a-reg packed luminance byte
+;	      hires modes = background/foreground
+;	      multicolor  = multicolor-1/foreground
+;
+;***************************************************************
+
+getlum
+	lda fg		;get foreground luminance
+	lsr a		;isolate lum., move to ls nybble
+	lsr a
+	lsr a
+	lsr a
+	sta tmpton
+	lda ted+21	;assume hires, use background
+	bit graphm
+	bpl getlm1
+	lda mc1		;not hires, mcm. use mc1
+getlm1
+	and #$f0
+	ora tmpton
+	rts
+
+
+
+;******************************************************************
+;
+;  getpos - get address in graphic bit map into grapnt
+;	     x = bit offset into byte specified (0-7)
+;	     y = offset to byte within 8x8 character cell
+;	     a = bit mask to the bit (or bits if multicolor mode)
+;
+;******************************************************************
+
+getpos
+	jsr divpos      ;get xpos/ypos to column/row position
+	bcs grprts      ;abort if position too large
+getps1
+	jsr graddr	;get address of 8x8 char cell in bit map
+	lda ypos
+	and #07
+	tay		;get byte offset into 8x8 char cell
+	lda xpos
+	bit graphm
+	php
+	bpl grpos3	;skip if not multicolor mode
+	asl a		;shift x-pos for multicolor mode
+grpos3
+	and #07
+	tax
+	lda rbits,x	;get bit mask
+	plp
+	bpl grprts	;done if not multicolor mode
+	inx
+	ora rbits,x	;mask for 2 bits if multicolor mode
+grprts
+	rts
+
+rbits
+	.byte   $80,$40,$20,$10,$08,$04,$02,$01
+
+
+
+;******************************************************************
+;
+;  graddr  -  get address for row and column in grapnt
+;	      input: x = row number  -  y = column number
+;
+;******************************************************************
+
+graddr
+	tya
+	clc
+	adc ldtb2,x     ;add column position to low byte offset
+	sta grapnt
+	lda ldtb1,x     ;get high byte screen address
+	and #3		;make into offset into 1k area
+	adc #0		;add any carry
+	asl grapnt
+	rol a
+	asl grapnt      ;mult by 8 to get offset into 8k area
+	rol a
+	asl grapnt
+	rol a
+	ora #>grbase    ;add base address
+	sta grapnt+1
+	rts
+
+
+
+;**************************************************************
+;
+;  divpos  --  convert xpos to column number
+;		convert ypos to row number
+;		return carry set if either above limits
+;
+;**************************************************************
+
+divpos
+	lda xpos+1
+	lsr a
+	bne divabt      ;out of bounds if greater than 1
+	lda xpos
+	ror a
+	lsr a		;get column position = xpos/8
+	bit graphm
+	bmi divp10	;skip if multicolor mode
+	lsr a		;divide by 8 if a hires or text mode
+divp10
+	tay
+	cpy #llen
+	bcs divabt	;error exit if out of bounds
+	lda ypos+1
+	bne divabt	;out of bounds error if not = 0
+	lda ypos
+	lsr a
+	lsr a		;get row number = ypos/8
+	lsr a
+	tax
+	cmp scymax	;compare to max number of rows
+	rts		;carry clr if okay
+divabt
+	sec
+	rts
+
+
+
+;***************************************************************
+;
+;   scalxy  -  scale the x & y coordinates found in vwork+x
+;
+;***************************************************************
+
+scalxy
+	lda scalem
+	beq sclrts      ;do nothing if scaling off
+	lda scxmax      ;get number of columns
+	jsr doscal      ;scale in the x-direction
+	lda scymax      ;get number of rows
+doscal
+	asl a
+	tay		;set scale factor in high byte
+	lda #0		;set low byte to zero
+	jsr twobyt	;multiply * coordinate
+	sta vwork,x
+	tya
+	inx		;store back into original position
+	sta vwork,x
+	inx
+sclrts
+	rts
+
+;.end

@@ -1,0 +1,198 @@
+	.page
+	.subttl 'code1'
+; find a specific token in the run-time stack. token to be found is
+; in srchtk.
+;
+; if called by 'for' or 'next', scan entries in stack, looking for
+; a specific 'for-variable' (in (forpnt)). if found, (fndpnt) will
+; point to it, and z is set. otherwise, (fndpnt) will point to
+; either :
+;           1) the non-for token
+;           2) bottom-of-stack
+;
+; special case : 'next' with no argument will match first 'for'
+; entry on stack found, if any. this case is signaled by a (forpnt)
+; with a msb of $ff (an impossible value).
+;
+; all other calls to search will result in either
+;           1) (success) z = 1, (fndpnt) = address
+;           2) (failure) z = 0
+
+
+
+search
+;
+; set up temporary pointer with current top of stack
+;
+	jsr movtos	;tos => fndpnt
+
+srch05
+;
+; test if pointer at bottom of stack. if so, item not found.
+;
+	lda fndpnt
+	cmp #<stkbot
+	bne srch10	;(fndpnt) <> bottom, ok
+	lda fndpnt+1    ;lsb's the same, test msb's
+	cmp #>stkbot
+	beq srch98	;stack empty, rts
+
+srch10
+	ldy #0
+	lda srchtk	;what are we looking for?
+	cmp #fortk	;'for' tokens are special cases
+	bne srch20
+
+; looking for a 'for' token. if next token examined is not a 'for'
+; token, return with z = 0. otherwise, check the pointer to it's
+; 'for' variable. if the variable pointer = (forpnt), or if
+; (forpnt) = ffxx, return with z = 1. otherwise, set up x with
+; length of a 'for' entry, and use the usual mechanisim for
+; examining the next entry.
+
+	cmp (fndpnt),y
+	bne srch99	;not 'for', do rts with z = 0
+	ldy #2		;point to msb of 'for' variable
+	lda forpnt+1
+	cmp #$ff
+	beq srch99	;do rts with z = 1
+	cmp (fndpnt),y
+	bne srch15	;not right variable, keep looking.
+	dey
+	lda forpnt	;test lsb
+	cmp (fndpnt),y
+	beq srch99	;a hit! rts with z = 1
+srch15
+	ldx #lenfor
+	bne srch30	;keep looking.
+
+srch20
+	lda (fndpnt),y
+	cmp srchtk	;is this the correct type of entry?
+	beq srch99	;rts with z = 1
+
+; the entry on top of the run-time stack is not the entry we are
+; looking for. find out what is there, and advance temp. pointer
+; past it.
+
+	ldx #lenfor     ;is it a 'for' entry?
+	cmp #fortk
+	beq srch30
+	ldx #5		;must be gosub or do by default
+
+srch30
+	txa
+	clc
+	adc fndpnt
+	sta fndpnt
+	bcc srch05
+	inc fndpnt+1
+	bne srch05	;always
+
+srch98
+	ldy #1		;clear z flag
+srch99
+	rts
+
+bltu
+	jsr reason
+	sta strend
+	sty strend+1
+	sec
+	lda hightr
+	sbc lowtr
+	sta index
+	tay
+	lda hightr+1
+	sbc lowtr+1
+	tax
+	inx
+	tya
+	beq decblt
+	lda hightr
+	sec
+	sbc index
+	sta hightr
+	bcs blt1
+	dec hightr+1
+	sec
+blt1
+	lda highds
+	sbc index
+	sta highds
+	bcs moren1
+	dec highds+1
+	bcc moren1
+bltlp
+	jsr indhtr	;lda (hightr),y
+	sta (highds),y
+moren1
+	dey
+	bne bltlp
+	jsr indhtr	;lda (hightr),y
+	sta (highds),y
+decblt
+	dec hightr+1
+	dec highds+1
+	dex
+	bne moren1
+	rts
+
+
+; add (y) elements to top of run-time stack. error if result exceeds tos
+;
+getstk
+	sty syreg
+	sec
+	lda tos
+	sbc syreg
+	sta tos
+	lda tos+1
+	sbc #0
+	sta tos+1
+	cmp #>stktop
+	bcc gomerr
+	bne gets99
+	lda tos
+	cmp #<stktop
+	bcc gomerr
+gets99
+	rts
+
+reason
+	cpy fretop+1
+	bcc rearts
+	bne trymor
+	cmp fretop
+	bcc rearts
+trymor
+	pha
+	ldx #8+addprc
+	tya
+reasav
+	pha
+	lda highds-1,x
+	dex
+	bpl reasav
+	jsr garba2
+	ldx #248-addprc
+reasto
+	pla
+	sta highds+8+addprc,x
+	inx
+	bmi reasto
+	pla
+	tay
+	pla
+	cpy fretop+1
+	bcc rearts
+	bne gomerr
+	cmp fretop
+	bcs gomerr
+rearts
+	rts
+
+gomerr
+	jmp omerr
+
+;.end

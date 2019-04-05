@@ -1,0 +1,102 @@
+	.page
+	.subttl 'error messages'
+ERR01
+	.BYTE 'TOO MANY FILE',$D3
+	.BYTE 'FILE OPE',$CE
+	.BYTE 'FILE NOT OPE',$CE
+	.BYTE 'FILE NOT FOUN',$C4
+	.BYTE 'DEVICE NOT PRESEN',$D4
+	.BYTE 'NOT INPUT FIL',$C5
+	.BYTE 'NOT OUTPUT FIL',$C5
+	.BYTE 'MISSING FILE NAM',$C5
+	.BYTE 'ILLEGAL DEVICE NUMBE',$D2
+	.BYTE 'NEXT WITHOUT FO',$D2
+ERRNF  =10
+	.BYTE 'SYNTA',$D8
+ERRSN  =11
+	.BYTE 'RETURN WITHOUT GOSU',$C2
+ERRRG  =12
+	.BYTE 'OUT OF DAT',$C1
+ERROD  =13
+	.BYTE 'ILLEGAL QUANTIT',$D9
+ERRFC  =14
+	.BYTE 'OVERFLO',$D7
+ERROV  =15
+	.BYTE 'OUT OF MEMOR',$D9
+ERROM  =16
+	.BYTE 'UNDEF',$27,'D STATEMEN',$D4
+ERRUS  =17
+	.BYTE 'BAD SUBSCRIP',$D4
+ERRBS  =18
+	.BYTE 'REDIM',$27,'D ARRA',$D9
+ERRDD  =19
+	.BYTE 'DIVISION BY ZER',$CF
+ERRDVO =20
+	.BYTE 'ILLEGAL DIREC',$D4
+ERRID  =21
+	.BYTE 'TYPE MISMATC',$C8
+ERRTM  =22
+	.BYTE 'STRING TOO LON',$C7
+ERRLS  =23
+	.BYTE 'FILE DAT',$C1
+ERRBD  =24
+	.BYTE 'FORMULA TOO COMPLE',$D8
+ERRST  =25
+	.BYTE 'CAN',$27,'T CONTINU',$C5
+ERRCN  =26
+	.BYTE 'UNDEF',$27,'D FUNCTIO',$CE
+ERRUF  =27
+	.BYTE 'VERIF',$D9
+ERVFY  =28
+	.BYTE 'LOA',$C4
+ERLOAD =29
+	.BYTE 'BREAK',0,$A0	;(SHIFTED SPACE)
+ERBRK  =30
+	.BYTE 'CAN',$27,'T RESUM',$C5
+ERRCR  =31
+	.BYTE 'LOOP NOT FOUN',$C4
+ERRLNF =32
+	.BYTE 'LOOP WITHOUT D',$CF
+ERRLWD =33
+	.BYTE 'DIRECT MODE ONL',$D9
+ERROID =34
+	.BYTE 'NO GRAPHICS ARE',$C1
+ERRNG  =35
+	.BYTE 'BAD DIS',$CB
+ERRBDK =36
+ERRLST = ERRBDK			;KEEP TRACK OF # OF ERROR MSGS
+
+	.page
+; routine to translate error message # in .a
+; to address of string containing message in index2
+;
+erstup				;error set up
+	tax
+	ldy #0
+	lda #<err01     	;start with address of first error message
+	sta index2
+	lda #>err01
+	sta index2+1
+erst01
+	dex
+	bmi redrts      	;finished when .x decrements out
+erst02
+	lda (index2),y		;look at msg, and find end (msb set) (ind.ok)
+	pha
+	inc index2
+	bne erst03
+	inc index2+1
+erst03
+	pla			;was msb set?
+	bpl erst02      	;no, not end of message
+	bmi erst01      	;yes, tick off another msg
+
+
+
+reddy
+	jsr primm		;print immediate
+	.byte   cr,$a,'READY.',cr,$a,0
+redrts
+	rts
+
+;.end

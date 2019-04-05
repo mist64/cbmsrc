@@ -1,0 +1,48 @@
+	.page
+	.subttl 'basic overflow & patches'
+;  overflow area for basic routines to bulge into in an attempt to
+;  keep sundry entry points constant for pre-release applications.
+
+preamb
+       .byte ',0 YEK'	;fct key preamble
+
+prtdec
+       tax             	;prints decimal value of chr in .a
+       tya             	;saves .y but destroys .x
+       pha
+       lda #0
+       jsr linprt
+       pla
+       tay
+       rts
+
+
+retpat
+       sta curlin+1    	;01/18/84 patch: fixes a problem when return-ing to a
+       dey             	;         'gosub' in direct mode. 'curlin+1' must not be restored
+       tax             	;         to $ff without also resetting 'runmod'.
+       inx
+       bne retpa1      	;branch if 'gosub' was from a program
+       stx runmod      	;(.x=0) else force return to direct mode
+retpa1
+       rts
+
+atntbl
+	.byte   $d8,$1b,$14,$0c,$07,$7b,$01,$d7
+	.byte   $d8,$11,$07,$10,$1d,$7b,$17,$d8
+	.byte   $07,$10,$05,$1a,$1a,$16,$7b,$1f
+	.byte   $d8,$1b,$10,$02,$1a,$17,$7b,$13
+	.byte   $47,$d8,$a0,$21,$b9,$89,$cd,$49
+	.byte   $55,$20,$d2,$ff,$88,$10,$f5,$60
+	.byte   0	;end of table null
+
+	.page
+patch1
+	lda #<dsdesc		;05jul84 patch: fixes problem caused by a messy
+	sta (dsdesc+1),y	; backpointer on ds$ string hanging the system
+	lda #>dsdesc		; during garbage collection. the fix is to put
+	iny			; a valid backpointer onto ds$ string.
+	sta (dsdesc+1),y
+	rts
+
+;.end

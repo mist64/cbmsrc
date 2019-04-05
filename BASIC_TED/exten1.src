@@ -1,0 +1,298 @@
+	.page
+	.subttl 'extensions 1'
+;
+;  instring : position of str1 in str2 at or after position n
+;     usage : instr(a$, b$ {,n})
+
+instr
+	lda facmo	;save pointer to temporary descriptors
+	sta tmpdes
+	lda facmo+1
+	sta tmpdes+1
+
+	jsr frmevl	;get next arg.
+	jsr chkstr	;must be string
+	lda facmo	;save it, as well
+	sta tmpdes+2
+	lda facmo+1
+	sta tmpdes+3
+
+	ldx #1	   	;default starting position
+	stx faclo
+	jsr chrgot
+	cmp #')'	;any length argument?
+	beq inst1	;branch if not
+	jsr combyt	;else go get a one byte argument
+inst1
+	jsr chkcls	;look for )
+	ldx faclo
+	bne *+5
+	jmp fcerr	;starting position can't be 0
+
+	dex
+	stx positn
+
+	ldx #3	   	;copy 'pointers to temp descriptors' to zero page
+inst2
+	lda tmpdes,x
+	sta ptarg1,x
+	dex
+	bpl inst2
+
+	ldy #2	   	;now get the descriptors
+inst3
+	jsr indpt1
+	sta str1,y
+	jsr indpt2
+	sta str2,y
+	dey
+	bpl inst3
+
+	lda str2	;check if string 2 is null
+	beq instnf	;if so, return 0
+
+inst5
+	lda #0
+	sta match
+	clc
+	lda str2	;length of string 2
+	adc positn
+	bcs instnf	;too long, not found
+	cmp str1	;see if > length of string 1
+	bcc inst6	;< len string 1
+	bne instnf	;must be >, not found
+inst6
+	ldy match
+	cpy str2	;if match len = str len, then found
+	beq instfd
+	tya
+	clc
+	adc positn	;compare str1(s+p+m) with str2(m)
+	tay
+	jsr inds1p
+	sta syntmp
+	ldy match
+	jsr inds2p	;(str2+1),y
+	cmp syntmp
+	beq inst7
+	inc positn	;not the same, start over from next positn
+	bne inst5	;always
+inst7
+	inc match	;count characters that match
+	bne inst6	;always
+
+instfd
+	inc positn
+	lda positn
+	.byte $2c
+instnf
+	lda #0
+	pha
+	lda tmpdes+2	;free temp descriptors
+	ldy tmpdes+3
+	jsr fretmp
+	lda tmpdes
+	ldy tmpdes+1
+	jsr fretmp
+	pla
+	tay
+	jmp sngflt
+
+	.page
+trap
+	jsr errdir
+	jsr chrgot	;if no #, means 'turn off trap'
+	beq trap1
+	jsr getwrd
+	sty trapno
+	.byte $2c
+trap1
+	lda #$ff	;flag no trap
+	sta trapno+1
+	rts
+
+
+
+resume
+	jsr errdir	;no direct mode
+	ldx errlin+1	;is there an error to resume from?
+	inx
+	beq rescnt	;can't resume!
+	jsr chrgot	;look for arguments
+	beq resswp	;no arg's...restart err'd line
+	bcc resnum	;numeric argument
+	cmp #nexttk	;only other choice is 'next'
+	bne ressnr	;if not, syntax error
+
+	jsr resswp	;resume execution with next stm't
+	ldy #0
+	jsr indtxt
+	bne resum2	;must be a ':'
+	iny		;must be a null,get next line
+	jsr indtxt	;make sure its not end-of-text
+	bne resum1
+	iny
+	jsr indtxt
+	bne resum1
+	jmp ready	;2 nulls, eot. bye!
+
+resum1
+	ldy #3	   	;new line, update pointers
+	jsr indtxt
+	sta curlin
+	iny
+	jsr indtxt
+	sta curlin+1
+	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc resum2
+	inc txtptr+1
+resum2
+	jsr chrget	;skip over this character, into body of statement
+	jmp data	;advance until null or ':', then rts
+
+resnum
+	jsr getwrd
+	sta linnum+1
+	jsr resend
+	jmp luk4it
+
+resswp
+	ldx #1
+resum0
+	lda errlin,x
+	sta curlin,x
+	lda errtxt,x
+	sta txtptr,x
+	dex
+	bpl resum0
+resend
+	ldx #$ff
+	stx errnum	;reset error status- he's saying he's fixed it
+	stx errlin
+	stx errlin+1	;flag 'no further resumes until next error'
+	ldx tmptrp	;restore trap line to allow traps again
+	stx trapno+1
+	rts
+
+ressnr	jmp snerr
+
+
+rescnt
+	ldx #errcr
+	jmp error
+
+
+
+errd
+	jsr conint	;get integer arg in x
+	dex
+	txa
+	cmp #errlst	;check range
+	bcs errerr	;what would you call it?
+	jsr erstup
+	ldy #$ff
+	ldx #0
+erflp1			;count printing characters
+	inx
+erflp3
+	iny
+	lda (index2),y	;ind.ok
+	bmi errd1	;msb set means last
+	cmp #$20
+	bcc erflp3	;don't count non-printers
+	bcs erflp1	;count all others
+
+errd1
+	txa
+	jsr strspa	;get space
+	ldx #0
+	ldy #$ff
+erflp2			;this time, move chars
+	iny
+	lda (index2),y	;ind.ok
+	cmp #$20
+	bcc erflp2
+	jsr swapxy
+	pha
+	and #$7f
+	sta (dsctmp+1),y
+	jsr swapxy
+	inx
+	pla		;test if msb was set
+	bpl erflp2
+	jmp chrd1	;pla,pla,jmp putnew
+
+errerr
+	jmp fcerr	;bad value
+
+swapxy
+	pha
+	txa
+	pha
+	tya
+	tax
+	pla
+	tay
+	pla
+	rts
+
+
+
+hexd
+	jsr chknum
+	lda poker
+	pha
+	lda poker+1
+	pha
+	jsr getadr	;2 byte val in (poker)
+	lda #4
+	jsr strspa
+	ldy #0
+	lda poker+1
+	jsr hexit
+	lda poker
+	jsr hexit
+	pla
+	sta poker+1
+	pla
+	sta poker
+	jmp chrd1	;pla,pla,jmp putnew
+
+hexit
+	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr dohex
+	pla
+dohex
+	and #$0f
+	cmp #$0a
+	bcc dohex1
+	adc #6
+dohex1
+	adc #'0'
+	sta (dsctmp+1),y
+	iny
+	rts
+
+
+
+puctrl
+	jsr frmstr	;do frmevl,frestr. return with a=len, index=~string
+	tay
+	dey
+	cpy #4
+	bcs errerr	;len > 4 is error
+puc60
+	jsr indin1	;lda (index),y
+	sta puchrs,y
+	dey
+	bpl puc60
+	rts
+
+;.end

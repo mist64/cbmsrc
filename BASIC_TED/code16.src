@@ -1,0 +1,267 @@
+	.page
+	.subttl 'code16'
+movins
+	ldy #0
+	jsr indst1
+	pha
+	iny
+	jsr indst1
+	tax
+	iny
+	jsr indst1
+	tay
+	pla
+movstr
+	stx index
+	sty index+1
+movdo
+	tay
+	beq mvdone
+	pha
+movlp
+	dey
+	jsr indin1
+	sta (frespc),y
+	tya
+	bne movlp
+	pla
+mvdone
+	clc
+	adc frespc
+	sta frespc
+	bcc mvstrt
+	inc frespc+1
+mvstrt
+	rts
+
+frmstr
+	jsr frmevl
+frestr
+	jsr chkstr
+frefac
+	lda facmo
+	ldy facmo+1
+fretmp
+	sta index
+	sty index+1
+	jsr fretms	;check desc. if last
+	bne fre02	;one then scratch it
+	jsr stradj	;index points to link
+	bcc fre02	;literal no fix
+	dey		;.y=1
+	lda #$ff	;flag string as garbage
+	sta (index),y
+	dey
+	txa
+	sta (index),y	;put in length
+	pha		;save length on stack
+	
+	eor #$ff	;put index back
+	sec		;to first byte
+	adc index
+	ldy index+1
+	bcs res00
+	dey
+res00
+	sta index
+	sty index+1
+	tax		;lo into x
+	pla		;pull length from stack
+	cpy fretop+1	;test for eq to fretop
+	bne frerts
+	cpx fretop
+	bne frerts
+	
+;	string was last into string space
+;	save garbage collection some time
+;	by freeing up. (length + 2)
+	
+	pha		;save length on stack
+	sec		;plus one
+	adc fretop
+	sta fretop
+	bcc fre01
+	inc fretop+1
+fre01
+	inc fretop	;+ one more
+	bne frepla
+	inc fretop+1
+frepla
+	pla		;pull length off stack
+	rts
+
+fre02
+	ldy #0		;set up x,y,a and index
+	jsr indin1	;length
+	pha		;on stack
+	iny
+	jsr indin1	;pointer lo
+	tax
+	iny
+	jsr indin1	;pointer hi
+	tay
+	stx index
+	sty index+1
+	pla		;get back length
+	rts
+
+
+
+fretms
+	cpy lastpt+1
+	bne frerts
+	cmp lastpt
+	bne frerts
+	sta temppt
+	sbc #strsiz
+	sta lastpt
+	ldy #0
+frerts	rts
+
+
+
+chrd
+	jsr conint
+	txa
+	pha
+	lda #1
+	jsr strspa
+	pla
+	ldy #0
+	sta (dsctmp+1),y
+chrd1
+	pla
+	pla
+	jmp putnew
+
+
+
+leftd
+	jsr pream
+	pha
+	jsr inddpt
+	sta syntmp
+	pla
+	cmp syntmp
+	tya
+rleft
+	bcc rleft1
+	jsr inddpt
+	tax
+	tya
+rleft1
+	pha
+rleft2
+	txa
+rleft3
+	pha
+	jsr strspa
+	lda dscpnt
+	ldy dscpnt+1
+	jsr fretmp
+	pla
+	tay
+	pla
+	clc
+	adc index
+	sta index
+	bcc pulmor
+	inc index+1
+pulmor
+	tya
+	jsr movdo
+	jmp putnew
+
+
+
+rightd
+	jsr pream
+	pha
+	jsr inddpt
+	sta syntmp
+	pla
+	clc
+	sbc syntmp
+	eor #$ff
+	jmp rleft
+
+
+
+midd
+	lda #255
+	sta faclo
+	jsr chrgot
+	cmp #')'
+	beq mid2
+	jsr chkcom
+	jsr getbyt
+mid2
+	jsr pream
+	beq gofuc
+	dex 
+	txa
+	pha
+	ldx #0
+	pha
+	jsr inddpt
+	sta syntmp
+	pla
+	clc
+	sbc syntmp
+	bcs rleft2
+	eor #$ff
+	cmp faclo
+	bcc rleft3
+	lda faclo
+	bcs rleft3
+
+
+
+pream
+	jsr chkcls
+	pla
+	tay
+	pla
+	sta jmper+1
+	pla
+	pla
+	pla
+	tax
+	pla
+	sta dscpnt
+	pla
+	sta dscpnt+1
+	lda jmper+1
+	pha
+	tya
+	pha
+	ldy #0
+	txa
+	rts
+
+len
+	jsr len1
+	jmp sngflt
+
+len1
+	jsr frestr
+	ldx #0
+	stx valtyp	;force numeric
+	tay		;set condition codes
+	rts
+
+asc
+	jsr len1
+	beq ascnul	;it was null (zero length)
+	ldy #0
+	jsr indin1	;get 1st character
+	tay
+ascnul
+	jmp sngflt
+
+
+
+gofuc
+	jmp fcerr	;'illegal quantity error'
+
+;.end

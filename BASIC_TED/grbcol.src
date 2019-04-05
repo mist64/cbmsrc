@@ -1,0 +1,285 @@
+	.page
+	.subttl 'grbcol'
+;  get space for a string.
+;  note: may force garbage collection
+;
+;  entry:  ac = # of chars
+;  exit:   ptr in y,x otherwise
+;          blows off to 'out of string space' error
+;          (also preserves .a and sets frespc= y,x = -> at space.)
+
+getspa
+	lsr garbfl
+tryag2
+	tax		;save in x also
+	beq getrts	;length of 0 no go...
+	pha		;save a (length) on stack
+	lda fretop	;lo byte
+	sec		;for subtract
+	sbc #2	   	;minus 2 (link bytes)
+	ldy fretop+1
+	bcs tryag3
+	dey
+tryag3
+	sta index1	;save for later
+	sty index1+1
+	txa
+	eor #$ff
+	sec
+	adc index1
+	bcs tryag4
+	dey
+tryag4
+	cpy strend+1
+	bcc garbag
+	bne strfre
+	cmp strend
+	bcc garbag
+strfre
+	sta frespc
+	sty frespc+1
+	ldy #1		;flag string as garb.
+	lda #$ff
+	sta (index1),y	;flag
+	dey
+	pla		;length
+	sta (index1),y
+	ldx frespc
+	ldy frespc+1
+	stx fretop
+	sty fretop+1
+getrts
+	rts
+
+garbag
+	lda garbfl
+	bmi grbg99	;if out of memory
+	jsr garba2
+	sec
+	ror garbfl
+	pla
+	bne tryag2
+
+grbg99
+	jmp omerr
+
+
+
+;  routine looks for and squashes out any unused string
+;  space it finds, thus returning the space for future
+;  use by the string routines.
+;  garba2 is called only when basic needs space of a fre
+;  instruction is used.
+
+garba2
+	ldx temppt	;ptr to temp. strings
+garb1
+	cpx #tempst    	;any out there?
+	beq garb2	;none
+	jsr slr1	;setup ptr (tempf2) to temp. string's bkptr.
+	beq garb1	; (skip if null string!)
+	txa		;.x = lsb of ptr to descriptor
+	ldy #0
+	sta (tempf2),y  ;place backpointer on string to temp. descr.
+	tya		;.a = msb of ptr (0)
+	iny
+	sta (tempf2),y
+	bne garb1	;always
+
+garb2
+	ldy #0	 	;set up flag
+	sty highds
+	ldx memsiz
+	ldy memsiz+1
+	stx grbtop	;set both pointers
+	stx grbpnt
+	stx frespc
+	sty grbtop+1
+	sty grbpnt+1
+	sty frespc+1
+	txa
+;
+; do while (grbpnt <= fretop)
+;
+gloop
+	jsr chkgrb	;check garbage string
+	bne col01	;if not garbage
+col00a
+	dey		;back up to length
+	jsr indgrb
+	jsr movpnt	;move grbpnt to next
+	sec
+	ror highds	;indicate garbage string found
+	bne gloop	;always
+
+col01
+	bit highds
+	bpl col03	;if garbage string not found
+	ldx #0
+	stx highds	;clear indicator
+
+	lda #2	   	;skip pointers past
+;
+; move a string over garbage
+;
+col02
+	ldy #1	   	;move the link bytes
+	jsr indgrb
+	sta (grbtop),y
+	dey
+	jsr indgrb
+	sta (grbtop),y
+
+	jsr indin1
+	tax
+	jsr movtop	;move top pointer
+	sta frespc	;save in frespc
+	sty frespc+1
+	txa
+	jsr movpnt	;move grbpnt
+	txa		;put length-1 in .y
+	tay
+
+glop1
+	dey
+	jsr indgrb
+	sta (grbtop),y
+	dex
+	bne glop1
+
+	ldy #2	   	;fix the descriptor
+col02b
+	lda grbtop-1,y
+	sta (index1),y
+	dey
+	bne col02b
+	lda grbpnt	;check pointer
+	ldy grbpnt+1
+	jsr chkgrb	;check garbage string
+	beq col00a	;if garbage found
+	bne col02	;always
+
+col03
+	ldy #0	   	;skip over good strings
+	jsr indin1
+	tax
+	jsr movtop
+	sta frespc
+	sty frespc+1
+	txa
+	jsr movpnt
+	jmp gloop
+
+
+
+; subroutines used for garbage collection
+;  compare for y,a = fretop.
+;  entry  y,a = address of current string descriptor.
+;  exit  exit to caller if y,a = fretop.
+;  else  z flag set if garbage string.
+;  z flag clear if not garbage string.
+;  in either case pointers are setup for next loop
+;  and string movement.
+;  exit to cfre4.
+;  carry clear y,a <= fretop.
+
+chkgrb
+	cpy fretop+1	;end of strings ?
+	bcc cfre4
+	bne cfre1	;if not equal
+	cmp fretop
+	beq cfre4
+	bcc cfre4
+
+cfre1
+	bit highds	;check flag
+	bmi cfre2	;if empty string found
+	lda #2	   	;skip pointers past
+	jsr movtop	;move top pointer
+cfre2
+	lda #2	   	;skip pointers past
+	jsr movpnt	;move pointers
+	ldy #1
+	jsr indgrb	;garbage?
+	cmp #$ff
+	bne cfre3	;if not garbage string
+	rts
+
+cfre3
+	jsr indgrb	;to link bytes
+	sta index1,y
+	dey
+	bpl cfre3	;if two bytes not moved
+	rts
+
+
+cfre4
+	ldx temppt	;ptr to temp. strings
+cfre4a
+	cpx #tempst	;any out there?
+	beq cfre4b	;no
+	jsr slr1	;setup ptr (tempf2) to temp. string's bkptr.
+	beq cfre4a	; (skip if null string!)
+	ldy #0	   	;.a = string length
+	sta (tempf2),y	;remove backpointer built at garba2
+	iny
+	lda #$ff
+	sta (tempf2),y	;and mark as garbage
+	bne cfre4a	;always
+
+cfre4b
+	pla		;throw away return address
+	pla
+	lda frespc	;fix fretop and frespc
+	ldy frespc+1
+	sta fretop
+	sty fretop+1
+	rts
+
+
+movpnt
+	eor #$ff	;comp and add
+	sec
+	adc grbpnt
+	ldy grbpnt+1
+	bcs mov00
+	dey
+mov00
+	sta grbpnt
+	sty grbpnt+1
+	rts
+
+
+movtop
+	eor #$ff	;comp and add
+	sec
+	adc grbtop
+	ldy grbtop+1
+	bcs mov01
+	dey
+mov01
+	sta grbtop
+	sty grbtop+1
+	rts
+
+
+slr1
+	dex		;.x = ptr to temp. string descriptor
+	lda $00,x	;msb of ptr to string
+	sta tempf2+1
+	dex
+	lda $00,x	;lsb of ptr to string
+	sta tempf2
+	dex
+	lda $00,x	;string length
+	pha		;save for later test
+	clc
+	adc tempf2	;want ptr to string's backpointer
+	sta tempf2
+	bcc slr2
+	inc tempf2+1
+slr2
+	pla		;.a=len & set z flag; .x=next desc. ptr
+	rts
+
+;.end

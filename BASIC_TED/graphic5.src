@@ -1,0 +1,166 @@
+	.page
+	.subttl  'graphics5'
+;**********************************************************
+;
+;  rgr(n)  --  return graphic mode
+;
+;**********************************************************
+
+rgr
+	lda graphm
+	clc
+	rol a
+	rol a
+	rol a
+	adc #0
+	tay
+	jmp sngflt	;return value (0-3)
+
+
+
+
+;**********************************************************
+;
+;  rclr(n)  --  return color
+;  rlum(n)  --  return luminance
+;		 n = 0  :  background color
+;		     1  :  foreground color
+;		     2  :  multicolor-1
+;		     3  :  multicolor-2
+;		     4  :  border color
+;
+;**********************************************************
+
+rclr
+	sec
+	.byte $24
+
+rlum
+	clc
+	php
+	jsr conint      ;evaluate integer argument, put in x
+
+	lda ted+25      ;border? (4)
+	and #$7f	;(msb is garbage)
+	cpx #4
+	beq rclr50      ;yes.
+	bcs rclerr      ;illegal value
+
+	lda ted+21      ;background ? (0)
+	and #$7f	;(msb is garbage)
+	dex
+	bmi rclr50      ;yes.
+
+	lda fg		;foreground ? (1)
+	dex
+	bmi rclr50
+
+	lda mc1		;multicolor 1? (2)
+	dex
+	bmi rclr50
+
+	lda ted+22      ;must be multicolor 2 (3)
+	and #$7f	;(msb is garbage)
+rclr50
+	plp		;color or lum?
+	bcs rclr60      ;branch if color.
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	clc
+rclr60
+	and #$0f	;***fix 15mar84: swapped this line w/next
+	adc #0		;add 1 if color, no change if lum (adjust for keytop colors)
+	tay
+	jmp sngflt      ;float 1 byte arg. in y
+
+rclerr
+	jmp fcerr	;illegal value error
+
+
+;*************************************************************
+;
+;  joy(n)  --  return joy-stick value
+;	   n =  1 : joystick-1
+;		 2 : joystick-2
+;	   result  =      0-8 : not triggered
+;			128-136 : triggered
+;	   result mod 128 =  0 : no joystick reading
+;				      1
+;				   8     2
+;				7	    3
+;				   6     4
+;				      5
+;
+;*************************************************************
+
+joy
+	jsr conint	;get 1 byte arg in x
+	dex
+	cpx #2		;make sure arg. is valid
+	bcs rclerr      ;>1, error
+	lda joybit,x
+	tax
+
+	sei		;no keyboard interrupts, please
+joylop
+	stx keybrd
+	lda keybrd
+	stx keybrd      ;a try at debounce
+	cmp keybrd
+	bne joylop
+	cli
+
+	eor #$ff
+	tay		;save
+	and #$0f	;just look at d0-d3
+	tax		;use as index
+	lda joytab,x	;convert to nice 1-8 shown in pretty picture above.
+	cpy #$0f	;was a button pressed?
+	bcc joyout	;branch if not
+	ora #$80	;else set msb
+joyout
+	tay
+	jmp sngflt	;float 1 byte arg in y.
+
+joytab
+	.byte   0,1,5,0,7,8,6,0,3,2,4
+joybit
+	.byte   $fa,$fd
+
+
+
+;**************************************************************
+;
+;  rdot(n)  --  read characteristics of current xpos/ypos
+;		 n = 0 : x-position
+;		     1 : y-position
+;		     2 : color selection (0-3)
+;
+;**************************************************************
+
+rdot
+	jsr conint      ;get 1 byte arg. in x
+	cpx #2
+	bcc rdot20      ;0 or 1
+	bne rclerr      ;>2, error
+
+	jsr readpt      ;get color
+	tay
+	bcc rdot10      ;branch if in bounds
+	ldy #0		;else return 0
+rdot10
+	jmp sngflt      ;float 1 byte value in y
+
+rdot20
+	txa		;convert (0 or 1) to (0 or 2)
+	asl a
+	tax
+	lda xpos,x      ;get xpos or ypos ls byte
+	tay
+	lda xpos+1,x    ;get ms byte
+	jmp givayf      ;float 2 byte value in (y,a)
+
+;.end
+;(15mar84) rclr in ted returned '0' instead of '16'.

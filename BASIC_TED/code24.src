@@ -1,0 +1,208 @@
+	.page
+	.subttl 'code24'
+logeb2	.byte @201,@70,@252,@73,@51
+
+expcon	.byte 7,@161,@64,@130,@76
+	.byte @126,@164,@26,@176
+	.byte @263,@33,@167,@57
+	.byte @356,@343,@205,@172
+	.byte @35,@204,@34,@52
+	.byte @174,@143,@131,@130
+	.byte @12,@176,@165,@375
+	.byte @347,@306,@200,@61
+	.byte @162,@30,@20,@201
+	.byte 0,0,0,0
+
+
+
+exp
+	lda #<logeb2
+	ldy #>logeb2
+	jsr rommlt
+	lda facov
+	adc #@120
+	bcc stold
+	jsr incrnd
+
+
+
+stold
+	sta oldov
+	jsr movef
+	lda facexp
+	cmp #@210
+	bcc exp1
+gomldv
+	jsr mldvex
+exp1
+	jsr int
+	lda integr
+	clc
+	adc #@201
+	beq gomldv
+	sec
+	sbc #1
+	pha
+	ldx #4+addprc
+swaplp
+	lda argexp,x
+	ldy facexp,x
+	sta facexp,x
+	sty argexp,x
+	dex
+	bpl swaplp
+	lda oldov
+	sta facov
+	jsr fsubt
+	jsr negop
+	lda #<expcon
+	ldy #>expcon
+	jsr poly
+	lda #0
+	sta arisgn
+	pla
+	jsr mldexp
+	rts
+
+polyx
+	sta polypt
+	sty polypt+1
+	jsr mov1f
+	lda #tempf1
+	jsr fmult
+	jsr poly1
+	lda #<tempf1
+	ldy #>tempf1
+	jmp fmult
+
+
+
+poly
+	sta polypt
+	sty polypt+1
+poly1
+	jsr mov2f
+	lda (polypt),y
+	sta degree
+	ldy polypt
+	iny
+	tya
+	bne poly3
+	inc polypt+1
+poly3
+	sta polypt
+	ldy polypt+1
+poly2
+	jsr rommlt
+	lda polypt
+	ldy polypt+1
+	clc
+	adc #4+addprc
+	bcc poly4
+	iny
+poly4
+	sta polypt
+	sty polypt+1
+	jsr romadd
+	lda #<tempf2
+	ldy #>tempf2
+	dec degree
+	bne poly2
+	rts
+
+
+
+rmulc  .byte @230,@65,@104,@172,0
+raddc  .byte @150,@50,@261,@106,0
+
+;    random number function.  rnd(x) where:
+;      x=0 ==> generate a random number based on hardware clock
+;      x<0 ==> seed a reproducable, pseudo-random number generator
+;      x>0 ==> generate a reproducable pseudo-random # based on
+;		seed value above.
+
+rnd
+	jsr sign
+	bmi rnd1
+	bne qsetnr
+;
+; get value from hardware timers
+;
+	lda ted+0	;timer 1 is free-running,
+	sta facho
+	lda ted+1
+	sta facmo
+	lda ted+2	;timer 2 isn't.
+	sta facmoh
+	lda ted+3
+	sta faclo
+	jmp strnex
+
+qsetnr
+	lda #<rndx
+	ldy #>rndx
+	jsr movfm
+	lda #<rmulc
+	ldy #>rmulc
+	jsr rommlt
+	lda #<raddc
+	ldy #>raddc
+	jsr romadd
+rnd1
+	ldx faclo
+	lda facho
+	sta faclo
+	stx facho
+	ldx facmoh
+	lda facmo
+	sta facmoh
+	stx facmo
+strnex
+	lda #0
+	sta facsgn
+	lda facexp
+	sta facov
+	lda #@200
+	sta facexp
+	jsr normal
+	ldx #<rndx
+	ldy #>rndx
+gmovmf
+	jmp movmf
+
+
+
+;  utilities involved in the run-time stack.
+;
+;
+; move top-of-stack pointer to (fndpnt)
+
+movtos
+	lda tos
+	sta fndpnt
+	lda tos+1
+	sta fndpnt+1
+	rts
+;
+; move (fndpnt) to (tos)
+;
+movfnd
+	lda fndpnt
+	sta tos
+	lda fndpnt+1
+	sta tos+1
+	rts
+;
+; reduce size of run-time stack by (y). no error checking performed!
+;
+rlsstk
+	tya
+	clc
+	adc tos
+	sta tos
+	bcc rls999
+	inc tos+1
+rls999
+	rts
+
+;.end

@@ -1,0 +1,331 @@
+	.page
+	.subttl 'graphics4'
+;*******************************************************************
+;
+;  gshape str (, ( p ) , l )  -- place a stored shape on the screen
+;           str = string variable defining the shape
+;             p = top left corner of where to restore shape
+;                  default = current position
+;             l = type of replacement
+;                 0 : replace ( default )
+;                 1 : invert and replace
+;                 2 : 'or' with current screen data
+;                 3 : 'and' with current screen data
+;                 4 : 'xor' with current screen data
+;
+;*******************************************************************
+
+gshape
+	jsr isgrap      ;make sure graphics area is allocated
+	jsr frmstr      ;do frmevl, frestr
+	sta strsz	;save string length
+	stx index2      ;save string address
+	sty index2+1
+
+	ldx #xdest-vwork
+	jsr incor2      ;get starting bit-map address
+
+	jsr optzer	;get type of replacement (default is 0, 'replace')
+	cpx #5
+	bcc gshp05      ;branch if ok,
+gshp01
+	jmp fcerr	;otherwise illegal value
+gshp05
+	stx gettyp
+
+	ldx #3		;find x, y sizes in last 4 bytes
+	ldy strsz
+	cpy #5		;compare with minimum string size
+	bcs gshp20
+	rts		;string too small: just exit
+
+gshp20
+	dey
+	jsr indin2      ;lda (index2),y
+	sta xsize,x     ;store in xsize,ysize
+	dex
+	bpl gshp20
+
+	stx strptr	;initialize pointer to position in string
+	jsr dstpos      ;copy xdest,ydest to xpos,ypos
+
+	lda xsize	;make a copy of x length
+	sta xsave
+	lda xsize+1
+	sta xsave+1
+
+gsa
+	lda #8		;read fresh character from string
+	sta bitcnt
+	inc strptr
+	ldy strptr
+	jsr indin2      ;lda (index2),y
+	sta newbyt
+
+gsb
+	jsr readpt      ;get color at xpos,ypos
+	sta oldbyt	;old byte with bit(s) of interest right justified
+	asl newbyt	;move leftmost bit(s) of new value into acc.
+	rol a
+	dec bitcnt
+	bit graphm
+	bpl gsb30	;branch if not multicolor
+	asl newbyt
+	rol a
+	dec bitcnt
+
+gsb30	ldx gettyp	;how shall this new value be used?
+	cpx #3
+	bcc gsb40	;branch if 0,1,or 2
+	beq gsb35	;branch if 3
+	eor oldbyt      ;here for 4,'xor with current value'
+	bcs gsb60	;always
+gsb35	and oldbyt	;here for 3,'and with current value'
+	bcs gsb60	;always
+gsb40	cpx #1
+	bcc gsb60	;branch if 0,'use new value'
+	beq gsb50	;branch if 1
+	ora oldbyt      ;here for 2,'or with current value'
+	.byte $2c
+gsb50	eor #$ff	;here for 1,'invert & replace'
+gsb60
+	and #3		;isolate bit(s) of interest
+	bit graphm
+	bmi *+4		;branch if mcm
+	and #1		;if hi-res, just 1 bit is necessary
+	sta colsel
+	jsr plot01	;use plot to re-install bit & update color
+
+	inc xpos
+	bne gsb65
+	inc xpos+1
+gsb65	sec		;decrement x counter 1 or 2
+	lda xsave
+	bit graphm
+	bpl gsb66	;branch if not multicolor
+	sbc #2
+	.byte $2c
+gsb66
+	sbc #1
+	sta xsave
+	lda xsave+1
+	sbc #0
+	sta xsave+1
+	bcs gsb80	;if xsave >= 0, keep going
+
+	ldx #1		;else move xsize to xsave, xdest to xpos, & inc ypos
+gsb70	lda xsize,x
+	sta xsave,x
+	lda xdest,x
+	sta xpos,x
+	dex
+	bpl gsb70
+
+	inc ypos
+	bne gsb75
+	inc ypos+1
+
+gsb75
+	sec		;dec ysize, exit if done
+	lda ysize
+	sbc #1
+	sta ysize
+	lda ysize+1
+	sbc #0
+	sta ysize+1
+	bcs gsb90	;keep going if not < 0 (carry clear)
+	rts		;bye!
+
+gsb80
+	lda bitcnt	;if count=0 then get new character
+	beq gsb90
+	jmp gsb		;else just loop
+gsb90
+	jmp gsa
+
+
+
+;******************************************************************
+;
+;  sshape str , p1 (,p2)  --  save a shape into string ( str )
+;	    str  =  string to hold shape
+;	     p1  =  one corner coordinate of the shape to be saved
+;	     p2  =  opposite diagonal coordinate of the shape
+;		      default = current coordinate position
+;
+;******************************************************************
+
+sshape
+	jsr isgrap      ;make sure graphics area is allocated
+	jsr ptrget
+	sta stradr
+	sty stradr+1    ;save symbol table address
+	bit valtyp
+	bmi havstr      ;skip if a string
+	jmp chkerr      ;exit - type mismatch
+havstr
+	ldx #xsize-vwork
+	jsr incor3      ;get first coordinates
+
+	ldx #xdest-vwork
+	jsr incor2      ;get optional second coordinate pair
+
+	ldx #ysize-vwork
+	ldy #ydest-vwork
+	lda #2
+	sta vtemp1
+sshp30
+	jsr abstwo      ;get top left coordinates of rectangle
+	tax
+	tya		;save column/row length
+	pha
+	ldy vtemp1
+	jsr dstmov      ;move dest into pos
+	bcc sshp40      ;skip if x/y-cord > x/y-dest
+	lda xsize,y
+	sta xpos,y      ;else use x/y-cord as lower value
+	lda xsize+1,y
+	sta xpos+1,y
+sshp40
+	txa		;save low byte of size
+	sta xsize,y
+	sta savsiz,y
+	pla		;save high byte of size
+	sta xsize+1,y
+	sta savsiz+1,y
+	ldx #xsize-vwork
+	ldy #xdest-vwork
+	dec vtemp1
+	dec vtemp1
+	beq sshp30      ;loop to test x-positions
+	ldy #$ff	;init byte counter into shape string
+	sty strptr
+	lda xpos
+	sta xsave	;save xpos in temp location
+	lda xpos+1
+	sta xsave+1
+	tya		;($ff)
+	jsr strspa	;reserve string space for shape buffer (dsctmp)
+smov10
+	jsr getpos      ;get bit map position
+	lda (grapnt),y  ;get bit map byte
+	bcc smov30      ;skip if addr in bounds
+	lda xpos
+	bit graphm
+	bpl smov20      ;skip if not multicolor mode
+	sec		;mult xpos*2 & add 1
+	rol a
+smov20
+	and #07		;get bit offset into bit map byte
+	tax
+	lda #0		;set up null bit map byte
+smov30
+	bit graphm
+	bpl smov40	;skip if not multicolor mode
+	dex		;move bit position back
+smov40
+	stx bitidx	;save bit offset into bit map byte
+smov50
+	asl a		;left justify the bit map byte
+	dex
+	bpl smov50
+	ror a
+	sta vtemp1	;save the shifted byte
+	lda #8		;increment column position by 4 or 8
+	bit graphm
+	bpl smov55
+	lsr a
+smov55
+	clc
+	adc xpos
+	sta xpos
+	bcc smov56
+	inc xpos+1
+smov56
+	jsr getpos      ;get bit map position
+	lda #0
+	bcs smov60      ;skip if position out of bounds
+	lda (grapnt),y  ;- else get bit map byte
+smov60
+	sta vtemp2      ;save bit map byte
+	ldx bitidx      ;get bit index into byte
+smov70
+	lsr a		;right justify bits
+	inx
+	cpx #8
+	bne smov70
+	ora vtemp1      ;get left bits
+	inc strptr      ;increment pointer into string area
+	ldy strptr
+	cpy #252
+	bcc smov80      ;skip if string not filled
+	jmp errlen      ;string too long error
+smov80
+	sta (dsctmp+1),y ;save byte into string
+	ldx bitidx      ;get bit index into bit map byte
+	lda xsize
+	sec
+	bit graphm
+	bpl smov85
+	sbc #4
+	.byte $2c
+smov85
+	sbc #8		;subtract 8 from column length count
+smov86
+	sta xsize
+	lda vtemp2      ;restore bit map byte
+	bcs smov50      ;loop if not done with row
+	dec xsize+1
+	bpl smov50      ;loop if not done with row
+	ldx ysize
+	bne smv100      ;skip if not done
+	dec ysize+1
+	bpl smv100      ;skip if not done
+
+	bit graphm      ;if multicolor mode, multiply x by 2
+	bpl smov88
+	asl savsiz
+	rol savsiz+1
+smov88
+	ldx #0
+smov90
+	lda savsiz,x    ;move column & row lengths
+	iny		;- to end of string area
+	sta (dsctmp+1),y
+	inx
+	cpx #4
+	bne smov90
+	iny
+	sty savsiz      ;save string length
+	lda dsctmp+1
+	sta savsiz+1    ;save low byte of string start
+	lda dsctmp+2
+	sta savsiz+2    ;save high byte of string start
+	lda #<savsiz
+	sta facmo	;set addr of string descriptor
+	lda #>savsiz
+	sta facmo+1
+	lda stradr
+	sta forpnt      ;set symbol table addr of dest. string
+	lda stradr+1
+	sta forpnt+1
+	jsr copy	;move string
+	jmp dstpos      ;restore coordinates,do rts
+
+smv100
+	dec ysize	;decrement row count
+	inc ypos	;increment row position
+	bne smv110
+	inc ypos+1
+smv110
+	lda xsave
+	sta xpos	;restore starting column address
+	lda xsave+1
+	sta xpos+1
+	lda savsiz
+	sta xsize	;restore column length count
+	lda savsiz+1
+	sta xsize+1
+	jmp smov10
+
+;.end

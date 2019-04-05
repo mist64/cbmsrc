@@ -1,0 +1,313 @@
+	.page
+	.subttl 'code13'
+	ldy curtol
+	beq deccur
+zerita
+	dey
+	sta (arypnt),y
+	bne zerita
+deccur
+	dec arypnt+1
+	dec curtol+1
+	bne zerita
+	inc arypnt+1
+	sec
+	lda strend
+	sbc lowtr
+	ldy #2
+	sta (lowtr),y
+	lda strend+1
+	iny
+	sbc lowtr+1
+	sta (lowtr),y
+	lda dimflg
+	bne dimrts
+	iny
+getdef
+	jsr indlow
+	sta count
+	lda #0
+	sta curtol
+inlpnm
+	sta curtol+1
+	iny
+	pla
+	tax
+	sta indice
+	jsr indlow
+	sta syntmp
+	pla
+	sta indice+1
+	cmp syntmp
+	bcc inlpn2
+	bne bserr7
+	iny
+	jsr indlow
+	sta syntmp
+	cpx syntmp
+	bcc inlpn1
+
+bserr7	jmp bserr
+
+omerr1	jmp omerr
+
+inlpn2
+	iny
+inlpn1	lda curtol+1
+	ora curtol
+	clc
+	beq addind
+	jsr umult
+	txa
+	adc indice
+	tax
+	tya
+	ldy index1
+addind
+	adc indice+1
+	stx curtol
+	dec count
+	bne inlpnm
+	sta curtol+1
+	ldx #5
+	lda varnam
+	bpl notfl1
+	dex
+notfl1
+	lda varnam+1
+	bpl stoml1
+	dex
+	dex
+stoml1
+	stx addend
+	lda #0
+	jsr umultd
+	txa
+	adc arypnt
+	sta varpnt
+	tya
+	adc arypnt+1
+	sta varpnt+1
+	tay
+	lda varpnt
+dimrts	rts
+
+
+
+umult
+	sty index
+	jsr indlow
+	sta addend
+	dey
+	jsr indlow
+umultd
+	sta addend+1
+	lda #16
+	sta deccnt
+	ldx #0
+	ldy #0
+umultc
+	txa
+	asl a
+	tax
+	tya
+	rol a
+	tay
+	bcs omerr1
+	asl curtol
+	rol curtol+1
+	bcc umlcnt
+	clc
+	txa
+	adc addend
+	tax
+	tya
+	adc addend+1
+	tay
+	bcs omerr1
+umlcnt
+	dec deccnt
+	bne umultc
+	rts
+
+
+
+fre
+	lda valtyp
+	beq nofref
+	jsr frefac
+nofref
+	jsr garba2
+	sec
+	lda fretop
+	sbc strend
+	tay
+	lda fretop+1
+	sbc strend+1	;fall through to nosflt!
+
+
+
+nosflt			;float an unsigned double byte integer
+			;entry: msb in a, lsb in y
+	jsr stoint
+	sec	      	;sign is positive
+	jmp floatc
+
+
+
+pos
+	sec
+	jsr jplot	;get tab pos in .y
+sngflt
+	lda #0
+	jmp givayf
+
+
+
+errdir
+	bit runmod	;direct mode?
+	bmi dimrts	;no
+	ldx #errid
+	.byte $2c
+errguf
+	ldx #erruf
+	jmp error
+
+
+
+stoint			;move int to fac & compute proper exponents
+	ldx #0
+	stx valtyp
+	sta facho
+	sty facho+1
+	ldx #$90
+	rts
+
+ 
+
+; simple user defined function code
+;
+; note only single arguments are allowed to functions,
+; and functions must be of the single line form:
+;      def fna(x)=x~2 + x-2
+; no strings may be involved with these functions.
+;
+; idea: create a simple variable entry whose first
+;	character has the msb set.
+; the value will be:
+;	a text pointer to the formula
+;	a pointer to the argument variable
+
+def
+	jsr getfnm	;get a pointer to the function
+	jsr errdir
+	jsr chkopn	;must have a (
+	lda #$80	;prohibit subscripted variables
+	sta subflg
+	jsr ptrget	;get pointer to argument
+	jsr chknum	;is it a number?
+	jsr chkcls	;must have )
+	lda #equltk	;followed by =
+	jsr synchr
+	pha
+	lda varpnt+1
+	pha
+	lda varpnt
+	pha
+	lda txtptr+1
+	pha
+	lda txtptr
+	pha
+	jsr data
+	jmp deffin
+  
+
+
+
+; subroutine to get a pointer to a function name
+;
+getfnm
+	lda #fntk	;must start with fn
+	jsr synchr
+	ora #$80	;put function bit on
+	sta subflg
+	jsr ptrgt2	;get pointer to function or create anew
+	sta defpnt
+	sty defpnt+1
+	jmp chknum      ;make sure it's not a string, and return
+
+
+
+fndoer
+	jsr getfnm	;get the function's name
+	lda defpnt+1
+	pha
+	lda defpnt
+	pha
+	jsr parchk	;evaluate parameter
+	jsr chknum
+	pla
+	sta defpnt
+	pla
+	sta defpnt+1
+	ldy #2
+	jsr inddef	;get pointer to the variable
+	sta varpnt
+	tax
+	iny
+	jsr inddef
+	beq errguf
+	sta varpnt+1
+	iny
+defstf
+	jsr indvar
+	pha		;push it all on the stack, since we might be recursing
+	dey
+	bpl defstf
+	ldy varpnt+1
+	jsr movmf	;put current fac into our argument variable
+	lda txtptr+1	;save variable pointer
+	pha
+	lda txtptr
+	pha
+	jsr inddef	;get pointer to function
+	sta txtptr
+	iny
+	jsr inddef
+	sta txtptr+1
+	lda varpnt+1	;save variable pointer
+	pha
+	lda varpnt
+	pha
+	jsr frmnum	;evaluate variable, and check numeric
+	pla
+	sta defpnt
+	pla
+	sta defpnt+1
+	jsr chrgot
+	beq *+5
+	jmp snerr	;it didn't terminate, syntax error
+
+	pla	      	;restore text pointer
+	sta txtptr
+	pla
+	sta txtptr+1
+deffin
+	ldy #0
+	pla	      	;get old arg value off stack,
+	sta (defpnt),y	;and put it back in variable
+	pla
+	iny
+	sta (defpnt),y
+	pla
+	iny
+	sta (defpnt),y
+	pla
+	iny
+	sta (defpnt),y
+	pla
+	iny
+	sta (defpnt),y
+	rts
+
+;.end

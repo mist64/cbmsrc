@@ -1,0 +1,436 @@
+	.page
+	.subttl 'dos1 28dec83'
+doslfn	= 0		;dos internal lfn
+
+;         directory
+;
+; syntax: directory {drive number}{unit number}{pattern}
+;
+dcat
+       jsr dospar      	;parse
+       and #$e6
+       bne dossnr      	;syntax error
+
+       ldy #0          	;set up to call interpreter
+       jsr dodos
+
+       lda #doslfn     	;lfn
+       ldx dosfa
+       ldy #$60        	;load floppy
+       jsr setlfs      	;set file parameters
+
+       sec             	;not a real open
+       jsr open        	;open file
+       bcc dcat26      	;ok
+       pha
+       jsr dcat10      	;an error- close file
+       pla
+       tax
+       jmp error
+
+dcat26
+       ldx #doslfn
+       jsr chkin
+       ldy #3          	;loop counter
+			;get length in blocks
+dcat3
+       sty t3          	;save counter
+dcat35
+       jsr basin       	;get char
+       sta t4
+       jsr readst
+       bne dcat10      	;if bad status
+       jsr basin       	;get char
+       sta t4+1
+       jsr readst
+       bne dcat10      	;if bad status
+       dec t3
+       bne dcat35      	;if not done
+;
+;  output blocks number
+;
+       ldx t4
+       lda t4+1
+       jsr linprt      	;output number
+       lda #' '
+       jsr bsout       	;output a space
+;
+;  loop reading name and output
+;
+dcat4
+       jsr basin       	;get char
+       pha             	;save char
+       jsr readst      	;get status
+       bne dcat9       	;if bad status
+       pla             	;get back char
+       beq dcat5       	;if eol
+       jsr bsout       	;echo char
+       jmp dcat4       	;continue to process name
+;
+;  here on end of name
+;
+dcat5
+       lda #cr
+       jsr bsout       	;output new line
+
+			;check for halt
+       jsr kstop       	;get status of stop key
+       beq dcat10      	;if stop request
+
+			;process next
+       ldy #2          	;perform 2 times
+       bne dcat3
+
+dcat9
+       pla             	;clean up stk
+dcat10
+       jsr clrch
+       lda #doslfn
+       clc             	;a real close.
+       jmp close       	;close floppy/exit
+
+dossnr
+       jmp snerr
+
+	.page
+dsave
+       lda #$66        	;set error flags
+       jsr dosprs      	;parse the line
+       jsr chk2
+       ldy #doscm2-doscm1 	;set up to call interpreter
+       jsr dodos
+       jmp savenp
+
+
+;  dload dfn
+;
+dload
+       lda #$e6        	;set error flags
+       jsr dosprs      	;parse the line
+       jsr chk2
+       lda #0
+       sta dossa
+       sta verck       	;set load flag
+       ldy #doscm3-doscm1 	;set up to call interpreter
+       jsr dodos
+       jmp cld10       	;do load, set up addr's, etc.
+
+
+
+header
+       jsr dospar      	;parse the line
+       jsr chk1        	;check parameter errors
+       and #$11
+       cmp #$11
+       beq frmt2       	;if required parameters not present
+dosnr2
+       jmp snerr
+
+frmt2
+       jsr clall       	;close all files
+       jsr rusure      	;r-u-sure prpt
+       bne yxit        	;if no and direct mode
+       ldy #doscm4-doscm1 	;set up to call interpreter
+       jsr dodos
+
+       jsr errchl      	;get error status
+       bit runmod      	;direct mode?
+       bmi yxit        	;no- don't print msg
+
+       ldy #0
+       lda #dsdesc+1   	;get msg
+       jsr indsub
+       cmp #'2'
+       bcs frmt8       	;if error occured
+yxit
+       rts
+
+frmt8
+       ldx #errbdk     	;bad disk
+       jmp error
+
+
+
+;  scratch sdfn
+;
+scratc
+       jsr dospar      	;parse the line
+       jsr chk1
+       jsr rusure      	;check direct and ask user
+       bne yxit        	;if no and direct mode
+
+       ldy #doscm5-doscm1 	;set up to call interpreter
+       jsr dodos
+
+       jsr errchl      	;read error channel
+       bit runmod      	;direct mode?
+       bmi yxit        	;no- don't print msg
+       lda #cr
+       jsr bsout       	;output cr
+       ldy #0          	;clr to read errchl
+sctc1
+       lda #dsdesc+1   	;get msg
+       jsr indsub
+       beq sctc2       	;if end of error message
+       jsr bsout
+       iny
+       bne sctc1       	;always
+
+sctc2
+       lda #cr
+       jmp bsout       	;output cr,rts
+
+colect
+       jsr dospar      	;parse the line
+       and #$e7        	;chk opt parms
+       bne dosnr2
+       jsr clall       	;close all files
+       ldy #doscm6-doscm1 	;set up to call interpreter
+       bne dodos       	;always
+
+
+
+;  copy routines cdddfn=sdsfn
+;
+dcopy
+       jsr dospar      	;parse the line
+       and #$30
+       cmp #$30        	;chk req'd parms
+       bne dcpy2
+       lda parsts
+       and #$c7
+       beq dcpy4
+dcpy2  lda parsts
+       jsr chk4
+       lda parsts
+dcpy4
+       ldy #doscm7-doscm1 	;set up to call interpreter
+       bne dodos       	;always
+
+
+
+;  rename rdddfn=sdsfn
+;
+rename
+       lda #$e4        	;set error flags
+       jsr dosprs      	;parse the line
+       jsr chk5
+       ldy #doscm8-doscm1 	;set up to call interpreter
+       bne dodos       	;always
+
+
+
+;  backup d<dd>=<sd>
+;
+backup
+       lda #$c7        	;set error flags
+       jsr dosprs      	;parse the line
+       and #$30        	;req'd parms
+       cmp #$30
+       beq bup1        	;if syntax error
+       jmp snerr       	;syntax error
+bup1
+       jsr clall       	;close disk
+       ldy #doscm9-doscm1 	;set up to call interpreter
+       jmp dodos
+
+	.page
+;******************************************************************
+;
+;      dos interpreter -
+;           each of the dos routines calls this routine to
+;           assemble a command string to be sent to the
+;           disk. before calling this routine, the caller
+;           points .y at a string containing one of the
+;           following 'tokens':
+;
+;           '1': put in 1st drive number iff parsts and $10 <> 0
+;           '2': put in 1st drive number
+;           '3': put in 2nd drive number
+;           '4': put in '@' iff the msb of parsts is set
+;           '5': put in ':', filename1 iff dosf1l > 0
+;           '6': put in filename1
+;           '7': put in ':', filename2 iff dosf2l > 0
+;           '8': put in filename2
+;           '9': put in ',', id iff dosdid <> 0
+;           '0': end marker, call dosset
+;           $80: end marker, call dosset and call trans
+;     any other: put in string verbatim
+;
+;*****************************************************************
+
+dosdun 			;called at end of dodos routine
+       pha             	;save type terminator flag
+       lda xcnt        	;'dosset' routine
+       ldx #<dosstr
+       ldy #>dosstr
+       jsr setnam
+       lda dosla
+       ldx dosfa
+       ldy dossa
+       jsr setlfs
+
+       pla             	;see if 'do trans' flag set
+       beq dosout      	;skip if not
+
+       ldx xcnt        	;'trans' routine : get length of string
+       sec             	;flag 'not real open'
+       jsr open
+       lda dosla
+       sec             	;flag 'not real close'
+       jmp close
+
+dosout
+       rts
+
+
+dodos  			;dos 'interpreter' routine
+       jsr oldclr      	;clear old status
+       ldx #0          	;set up counter
+       stx xcnt
+doslop
+       lda dostbl,y
+       beq dosdun      	;a zero is a terminator
+       cmp #$80
+       beq dosdun      	;..as is an $80
+
+       tax
+       dex             	;1?
+       beq dos100
+       dex             	;2?
+       beq dos200
+       dex             	;3?
+       beq dos300
+       dex             	;4?
+       beq dos400
+       dex             	;5?
+       beq dos500
+       dex             	;6?
+       beq dos600
+       dex             	;7?
+       beq dos700
+       dex             	;8?
+       beq dos800
+       dex             	;9?
+       beq dos900
+
+dosput 			;put in string, increment string counter
+       jsr dosbld      	;put in string
+dospt1 			;increment pointer
+       iny
+       bne doslop      	;always
+
+
+
+dos100 			;put in 1st drive iff parsts and $10 <> 0
+       lda parsts
+       and #$10
+       beq dospt1      	;don't put in string
+
+
+dos200 			;put in 1st drive
+       lda dosds1
+       jmp dos301
+
+
+dos300 			;put in 2nd drive number
+       lda dosds2
+dos301
+       ora #'0'        	;make ascii
+       bne dosput      	;put in string (always)
+
+
+dos400 			;put in '@' iff msb of parsts is set
+       lda #'@'
+       bit parsts
+       bmi dosput      	;put in string
+       bpl dospt1      	;don't put in string
+
+
+dos500 			;put in ':', filename1 iff length of filename1 > 0
+       lda dosf1l
+       beq dospt1      	;len=0, quit
+       lda #':'
+       jsr dosbld      	;subby to put in string
+
+
+dos600 			;put in filename1
+       tya             	;save pointer
+       pha
+       lda dosf1a
+       ldy dosf1a+1    	;get address of filename1
+       ldx dosf1l      	;..and length
+       jmp dos801      	;common routine
+
+
+dos700 			;put in ':', filename2 iff length of filename2 > 0
+       lda dosf2l
+       beq dospt1      	;len=0, quit
+       lda #':'
+       jsr dosbld      	;subby to put in string
+
+
+dos800 			;put in filename2
+       tya             	;save pointer
+       pha
+       lda dosf2a
+       ldy dosf2a+1    	;get address of filename2
+       ldx dosf2l      	;..and length
+dos801
+       sta index1
+       sty index1+1
+       stx voicno      	;temp for length
+       ldy #0
+dos802
+       jsr indin1      	;get a character of name
+       jsr dosbld      	;put in string
+       iny
+       cpy voicno
+       bne dos802
+       pla             	;restore pointer
+       tay
+       jmp dospt1
+
+
+dos900 			;put in ',', id iff dosdid <> 0
+       lda dosdid
+       beq dospt1      	;quit if zero
+       lda #','
+       jsr dosbld      	;put ',' in string
+       lda dosdid
+       jsr dosbld      	;put 2 character id in string
+       lda dosdid+1
+       jsr dosbld
+       jmp dospt1
+
+
+dosbld 			;subby to put character in string
+       ldx xcnt
+       sta dosstr,x
+       inc xcnt
+       rts
+
+	.PAGE
+;  TABLE OF STRINGS FOR DOS INTERPRETER
+;
+DOSTBL
+DOSCM1 				;DIRECTORY
+       .BYTE '$',7,5,0
+DOSCM2 				;SAVE
+       .BYTE 4
+DOSCM3 				;LOAD
+       .BYTE 2,':',6,0
+DOSCM4 				;HEADER
+       .BYTE 'N',2,':',6,9,$80
+DOSCM5 				;SCRATCH
+       .BYTE 'S',2,':',6,$80
+DOSCM6 				;COLLECT
+       .BYTE 'V',2,$80
+DOSCM7 				;COPY
+       .BYTE 'C',3,7,'=',2,5,$80
+DOSCM8 				;RENAME
+       .BYTE 'R',2,':',8,'=',6,$80
+DOSCM9 				;BACKUP
+       .BYTE 'D',3,'=',2,$80
+
+;.end
