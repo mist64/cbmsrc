@@ -154,21 +154,42 @@ scolor
 
 ;  remove character from queue
 ;
+; ********** commented code here replaced with that following
+;	this is a REV  5 change.
+;
+;	10 getkey a$:print a$:goto 10
+;	rem this line reacted horribly when function keys depressed.
+;
+;lp2
+;       ldy kyndx       	;are there any pf keys?
+;       beq lp3         	;branch if not
+;       ldy keyidx      	;get index to current char
+;       lda pkybuf,y    	;get current byte
+;       dec kyndx       	;1 byte down
+;       inc keyidx      	;bump index to next char
+;       cli
+;       rts
+;lp3
+;       ldy keyd        	;get key from irq buffer
+;       ldx #0
+;
+;
 lp2
-       ldx kyndx       	;are there any pf keys?       **(07/10/84 fix)
-       beq lp3         	;branch if not
-       ldy keyidx      	;get index to current char
-       lda pkybuf,y    	;get current byte
-       dec kyndx       	;1 byte down
-       inc keyidx      	;bump index to next char
-       cli
-       clc		;**(07/10/84 fix) always a good return from kybd!
-       rts
-       nop		;**(07/10/84 fix) placeholder
-
-lp3
-       ldy keyd        	;get key from irq buffer
-			;**(07/10/84 fix) .x=0 from 'lp2'
+       LDX KYNDX       	;are there any pf keys?
+       BEQ LP3         	;branch if not
+       LDY KEYIDX      	;get index to current char
+       LDA PKYBUF,Y    	;get current byte
+       DEC KYNDX       	;1 byte down
+       INC KEYIDX      	;bump index to next char
+       CLI
+       CLC
+       RTS
+LP3
+       LDY KEYD        	;get key from irq buffer
+       NOP
+;
+;*********	end of rev 5 change
+;
 lp1
        lda keyd+1,x
        sta keyd,x
