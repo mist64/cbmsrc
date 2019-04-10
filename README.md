@@ -69,7 +69,7 @@ The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from [Da
 
 The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
 
-* Comments say this is for the 2040. The 2040 and the 4040 have identical hardware, the 4040 is just a 4040 with DOS V2.
+* Comments say this is for the 2040. The 2040 and the 4040 have identical hardware, the 4040 is just a 2040 with DOS V2.
 
 ## DOS_8250
 
