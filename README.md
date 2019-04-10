@@ -36,9 +36,12 @@ The sources have been verified to build the correct -03 KERNAL binary, but no gu
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
-## BASIC_TED, KERNAL_TED
+## BASIC_TED, KERNAL_TED_0{4|5}
 
 The Commodore Plus/4, C16 and C116 BASIC 3.5 and KERNAL source (1984). Source: [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/index.html)
+
+* KERNAL_TED_04 is 318004-04 (PAL) and 318005-04 (NTSC). $FF80 = $84/$04. (It was reconstructed from kernal/kernal.xrf in the dump.)
+* KERNAL_TED_05 is 318004-05 (PAL) and 318005-05 (NTSC). $FF80 = $85/$05. (The sources were missing a patch, which was reconstructed from kernal/kernal.lst in the dump.)
 
 ##  BASIC_C128, KERNAL_C128_0{3|5|6}, EDITOR_C128[_DIN], MONITOR_C128
 
