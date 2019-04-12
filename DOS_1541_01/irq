@@ -1,0 +1,34 @@
+.PAGE 'IRQ'
+;
+;
+;
+SYSIRQ	PHA             ; SAVE .A,.X,.Y
+	TXA
+	PHA
+	TYA
+	PHA
+;
+;
+	LDA IFR1        ; TEST IF ATN
+	AND #2
+	BEQ IRQ10       ; NOT ATN
+;
+	JSR ATNIRQ      ; HANDLE ATN REQUEST
+;
+;
+IRQ10	LDA IFR2        ; TEST IF TIMER
+	ASL A
+	BPL IRQ20       ; NOT TIMER
+;
+	JSR LCC         ; GOTO CONTROLLER
+;
+IRQ20	PLA             ; RESTORE .Y,.X,.A
+	TAY
+	PLA
+	TAX
+	PLA
+	RTI
+;
+;
+;
+.END

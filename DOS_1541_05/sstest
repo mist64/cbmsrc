@@ -1,0 +1,42 @@
+;*********************************
+;* SSTST: TEST SSNUM & SSIND FOR *
+;*        RESIDENCE & RANGE.     *
+;*   VARS:  SSNUM,SSIND,DIRBUF   *
+;*                               *
+;*   FLAGS: .N RNG  .V RES  ER   *
+;*           0  OK   0 YES  ER0  *
+;*           0 MAYBE 1 NO   ER1  *
+;*           1 NO    0 YES  ER2  *
+;*           1 NO    1 NO   ER3  *
+;*********************************
+;
+SSTEST
+	JSR SSSET       ;SET POINTER & SS #
+	CMP SSNUM
+	BNE ST20        ;NOT THIS SS
+;
+	LDY SSIND
+	LDA (DIRBUF)Y
+	BEQ ST10
+	BIT ER0         ;OK, RESIDENT
+	RTS
+ST10
+	BIT ER2         ;OUT OF RANGE, RES
+	RTS
+ST20
+	LDA SSNUM
+	CMP #NSSL
+	BCS ST30
+	ASL A
+	TAY
+	LDA #4
+	STA DIRBUF
+	LDA (DIRBUF)Y
+	BNE ST40
+ST30
+	BIT ER3         ;WAY OUT OF RANGE
+	RTS
+ST40
+	BIT ER1         ;NOT RES, RANGE???
+	RTS
+.END

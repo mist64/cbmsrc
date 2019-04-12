@@ -1,0 +1,85 @@
+.PAGE 'REL4'
+;*
+;*
+;**********************************
+;*
+;*
+;*  SETLST
+;*
+;*
+;**********************************
+;*
+;*
+SETLST	LDX LINDX
+	LDA NR,X
+	STA R1
+	DEC R1
+	CMP #2
+	BNE SETL01
+	LDA #$FF
+	STA R1
+SETL01
+	LDA RS,X
+	STA R2
+;
+	JSR GETPNT
+	LDX LINDX
+	CMP R1
+	BCC SETL10
+	BEQ SETL10
+;
+	JSR DBLBUF
+	JSR FNDLST
+	BCC SETL05
+;
+	LDX LINDX
+	STA LSTCHR,X
+	JMP DBLBUF
+;
+SETL05	JSR DBLBUF
+	LDA #$FF
+	STA R1
+;
+SETL10	JSR FNDLST
+	BCS SETL40
+;
+	JSR GETPNT
+;
+SETL40	LDX LINDX
+	STA LSTCHR,X
+	RTS
+;*
+;*
+;*
+;*********************************
+;*
+;*
+;*  FNDLST
+;*
+;*
+;*********************************
+;*
+;*
+FNDLST
+	JSR SET00
+	LDY R1          ;OFFSET TO START AT
+;
+FNDL10	LDA (DIRBUF),Y
+	BNE FNDL20
+;
+	DEY
+	CPY #2
+	BCC FNDL30
+;
+	DEC R2          ;LIMIT COUNTER
+	BNE FNDL10
+;
+FNDL30	DEC R2
+	CLC             ; NOT FOUND HERE
+	RTS
+;
+FNDL20	TYA             ;FOUND THE END CHAR
+	SEC
+	RTS
+;
+.END

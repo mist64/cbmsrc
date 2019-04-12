@@ -1,0 +1,59 @@
+.PAGE 'I/ODEF.SF'
+;*****************************
+;*      I/O DEFINITIONS      *
+;*****************************
+;
+UNLSN	=$3F            ; IEEE UNLISTEN COMMAND
+UNTLK	=$5F            ; IEEE UNTALK COMMAND
+NOTRDY	=$0             ; NOT READY
+TALKER	=$80            ; IEEE TALKER FLAG
+LISNER	=1 ; IEEE LISTENER FLAG
+EOIOUT	=$80            ; TALK WITH EOI
+EOISND	=$08            ; NOT(EOI) TO SEND
+EOI	=$08            ; NOT(EOI) TO SEND
+RDYTLK	=$88            ; TALK NO EOI
+RDYLST	=$1             ; READY TO LISTEN
+RNDRDY	=RDYTLK+RDYLST  ; RANDOM CHNRDY
+RNDEOI	=EOIOUT+RDYLST  ; RANDOM W/ EOI
+.SKI 3
+;I/O REGISTERS
+.SKIP
+; MOS 6522-A
+.SKI
+	* =$1800
+;IEEE CONTROL PORT
+PB	*=*+1           ; SERIAL PORT
+PA1	*=*+1           ; UNUSED PORT
+DDRB1	*=*+1
+DDRA1	*=*+1           ;IEEE DATA DIR
+T1LC1	*=*+1           ; TIMER 1 LOW COUNTER
+T1HC1	*=*+1           ; TIMER 1 HI COUNTER
+T1LL1	*=*+1           ; TIMER 1 LOW LATCH
+T1HL1	*=*+1           ; TIMER 1 HI LATCH
+T2LC1	*=*+1           ; TIMER 2 LOW COUNTER
+T2HC1	*=*+1           ; TIMER 2 HI COUNTER
+SR1	*=*+1           ; SHIFT REG
+ACR1	*=*+1           ; AUX CONTROL REG
+PCR1	*=*+1
+IFR1	*=*+1
+IER1	*=*+1
+;
+;
+;
+;  BITS FOR SERIAL HANDSHAKE
+;
+DATIN	=$1             ;DATA IN LINE
+DATOUT	=$2             ; DATA OUT
+CLKIN	=$4             ;CLOCK IN
+CLKOUT	=$8             ;CLOCK OUT
+ATNA	=$10            ;ATNA ACK
+ATN	=$80            ; ATN IN
+;
+;
+LED0	=8 ; ACT LED
+LED1	=0 ; NO LED
+LEDPRT=$1C00  ; ON PB OF $1C00
+LEDOUT=$1C02 ; DDRB  OF $1C00 FOR OUTPUT-LED
+;
+;
+.END

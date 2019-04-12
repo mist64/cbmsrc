@@ -1,0 +1,52 @@
+.PAGE 'I/ODEF'
+;*****************************
+;*      I/O DEFINITIONS      *
+;*****************************
+;
+UNLSN	=$3F            ; IEEE UNLISTEN COMMAND
+NOTRDY	=$0             ; NOT READY
+TALKER	=$80            ; IEEE TALKER FLAG
+LISNER	=1 ; IEEE LISTENER FLAG
+EOIOUT	=$80            ; TALK WITH EOI
+EOISND	=$08            ; NOT(EOI) TO SEND
+RDYTLK	=$88            ; TALK NO EOI
+RDYLST	=$1             ; READY TO LISTEN
+RNDRDY	=RDYTLK+RDYLST  ; RANDOM CHNRDY
+RNDEOI	=EOIOUT+RDYLST  ; RANDOM W/ EOI
+.SKI 3
+;I/O REGISTERS
+.SKIP
+; MOS 6532-1
+.SKI
+	* =$200
+IEEEDI	*=*+1           ;IEEE DATA IN
+PADD1	*=*+1           ;IEEE DATA DIR
+IEEEDO	*=*+1           ;IEEE DATA OUT
+PBDD1	*=*+1           ;IEEE DATA OUT DIR
+.SKIP2
+; MOS 6532-2
+.SKIP
+	* =$280         ;IEEE CONTROL PORT  
+PAD2	*=*+1
+ATNA	=1
+DACO	=2 ;(INVERTED)
+RFDO	=4
+EOIO	=8
+DAVO	=16
+EOII	=32
+DAVI	=64
+ATNI	=128            ;(INVERTED)
+PADD2	*=*+1
+PBD2	*=*+1
+;BITS 0-2 =DEVICE # SELECT
+LED1	=$8             ;ACTIVE LED 1
+LED0	=$10            ;ACTIVE LED 0
+ERRLED	=32             ;HARDWARE INIT ERR LED
+NDACI	=64
+NRFDI	=128
+PBDD2	*=*+1
+ATNND	*=*+1           ;ATN IS IRQ CAUSING
+ATNPD	*=*+1
+ATNNE	*=*+1
+ATNPE	*=*+1
+.END

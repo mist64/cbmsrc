@@ -1,0 +1,47 @@
+.PAGE 'SSEND'
+;*********************************
+;* SSEND: POSITION SS & BUFTAB   *
+;*        TO END OF LAST RECORD. *
+;*   VARS:                       *
+;*********************************
+;
+SSEND
+	JSR SSSET
+	STA SSNUM
+	LDA #4
+	STA DIRBUF
+	LDY #SSIOFF-6
+	BNE SE20
+SE10
+	DEY
+	DEY
+	BMI BREAK
+SE20
+	LDA (DIRBUF)Y   ;LOOK FOR LAST SS #
+	BEQ SE10        ;T=0: NOT YET
+	TYA
+	LSR A
+	CMP SSNUM       ;CHECK SS #
+	BEQ SE30        ;THIS IS LAST SS
+;
+	STA SSNUM
+	LDX LINDX
+	LDA SS,X
+	JSR IBRD        ;READ LAST SS
+SE30
+	LDY #0          ;SET SSIND
+	STY DIRBUF
+	LDA (DIRBUF)Y   ;DEBUG
+	BNE BREAK
+	INY
+	LDA (DIRBUF)Y
+	TAY             ;BACK UP TO TRACK
+	DEY
+	STY SSIND
+	TYA
+	JMP SETSSP
+;
+BREAK
+	LDA #$67
+	JSR CMDER2
+.END

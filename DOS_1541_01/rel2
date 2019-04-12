@@ -1,0 +1,153 @@
+.PAGE 'REL2'
+;**********************************
+;*
+;* RELPUT
+;*
+;*
+;**********************************
+;*
+;*
+RELPUT	JSR SDIRTY      ;WRITE DATA TO BUFFER
+	JSR GETACT
+	ASL A
+	TAX
+	LDA DATA
+	STA (BUFTAB,X)
+;
+	LDY BUFTAB,X    ;INC THE POINTER
+	INY
+	BNE RELP05
+	LDY LINDX
+	LDA NR,Y
+	BEQ RELP07
+;
+RELP06
+	LDY #2
+RELP05
+	TYA
+	LDY LINDX
+;
+	CMP NR,Y        ;TEST IF NR=POINTER
+	BNE RELP10      ;NO,SET NEW POINTER
+;
+RELP07	LDA #OVRFLO     ;YES,SET OVERFLOW
+	JMP SETFLG
+;
+RELP10	;WRITE BACK NEW POINTER
+	INC BUFTAB,X
+;
+	BNE RELP20      ;TEST IF =0
+	JSR NRBUF       ;PREPARE NXT BUFFER
+;
+RELP20	RTS
+;*
+;*
+;*
+;*********************************
+;*
+;*  WRTREL
+;*
+;*
+;*********************************
+;*
+;*
+WRTREL
+	LDA #LRF+OVRFLO ;CHECK ALL FLAGS
+	JSR TSTFLG
+	BNE WR50        ;SOME FLAG IS SET
+WR10
+	LDA DATA        ;READY TO PUT DATA
+	JSR RELPUT
+WR20
+	LDA EOIFLG
+	BEQ WR40        ;EOI WAS SENT
+	RTS
+WR30
+	LDA #OVRFLO
+	JSR TSTFLG
+	BEQ WR40        ;NO REC OVERFLOW
+	LDA #RECOVF
+	STA ERWORD      ;SET ERROR FOR END OF PRINT
+WR40
+	JSR CLREC       ;CLEAR REST OF RECORD
+	JSR RD40
+	LDA ERWORD
+	BEQ WR45
+	JMP CMDERR
+WR45
+	JMP OKERR
+;
+;
+WR50
+	AND #LRF
+	BNE WR60        ;LAST REC, ADD
+	LDA EOIFLG
+	BEQ WR30
+WR51
+	RTS
+;
+WR60
+	LDA DATA
+	PHA
+	JSR ADDREL      ;ADD TO FILE
+	PLA
+	STA DATA
+	LDA #LRF
+	JSR CLRFLG
+	JMP WR10
+;*
+;*
+;*
+;********************************
+;*
+;*   CLREC
+;*
+;*********************************
+;
+CLREC	LDA #OVRFLO     ;PUT 0'S INTO REST OF RECORD
+	JSR TSTFLG
+	BNE CLR10
+;
+	LDA #0
+	STA DATA
+	JSR RELPUT
+;
+	JMP CLREC
+;
+CLR10	RTS
+;
+;
+;*
+;*
+;*******************************
+;*
+;*   SDIRTY
+;*
+;*******************************
+;*
+;
+SDIRTY	LDA #DYFILE
+	JSR SETFLG
+	JSR GAFLGS
+	ORA #$40
+	LDX LBUSED
+	STA BUF0,X
+	RTS
+;
+;*
+;*
+;*******************************
+;*
+;*   CDIRTY
+;*
+;*******************************
+;*
+;
+CDIRTY	JSR GAFLGS
+	AND #$BF
+	LDX LBUSED
+	STA BUF0,X
+	RTS
+;
+;
+.END
