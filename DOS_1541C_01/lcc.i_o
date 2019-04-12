@@ -1,0 +1,67 @@
+.PAGE 'LCC.I/O'
+;
+CNTST= *
+;
+;
+;
+;     DEFS FOR LOW COST CONTROLLER
+;
+;
+;     WRITTEN BY GLENN STARK
+;     4/1/80
+;
+;
+;   (C) COMMODORE BUSINESS MACHINES
+;
+TIMER1	=$1805          ; TIMER 1 COUNTER
+;
+;
+;
+;   MOS 6522
+;   ADDRESS $1C00
+;
+	* =$1C00
+;
+DSKCNT	*=*+1           ; PORT B
+; DISK I/O CONTROL LINES
+; BIT 0: STEP IN
+; BIT 1: STEP OUT
+; BIT 2: -MOTOR ON
+; BIT 3: ACT LED
+; BIT 4: WRITE PROTECT SENSE
+; BIT 5: DENSITY SELECT 0
+; BIT 6: DENSITY SELECT 1
+; BIT 7: SYNC DETECT
+;
+;
+DATA2	*=*+1           ; PORT A
+; GCR DATA INPUT AND OUTPUT PORT
+;
+DDRB2	*=*+1           ; DATA DIRECTION CONTROL
+DDRA2	*=*+1           ; DATA DIRECTION CONTROL
+;
+T1LC2	*=*+1           ; TIMER 1 LOW COUNTER
+T1HC2	*=*+1           ; TIMER 1 HI COUNTR
+;
+T1LL2	*=*+1           ; TIMER 1 LOW LATCH
+T1HL2	*=*+1           ; TIMER 1 HI LATCH
+;
+T2LL2	*=*+1           ; TIMER TWO LOW LATCH
+T2LH2	*=*+1           ; TIMER TWO HI LATCH
+;
+SR2	*=*+1           ; SHIFT REGISTER
+;
+ACR2	*=*+1
+;
+PCR2	*=*+1
+;
+IFR2	*=*+1
+;
+IER2	*=*+1
+;
+;
+	* =CNTST
+;
+;
+;
+.END
