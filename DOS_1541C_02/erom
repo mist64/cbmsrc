@@ -1,0 +1,4 @@
+	*=$E000
+ECHKSM
+	.BYTE 0         ;CHECKSUM FOR $E-$F ROM
+.END

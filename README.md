@@ -102,7 +102,7 @@ The Commodore 1540 DOS V2.6 source (1980), 325302-01/325303-01. Extracted from 1
 * The source contains both the IEEE-488 and the IEC serial interface code, so it represents both the CBM 2031 and the Commodore 1540. Different `master` source files build different configurations.
 * The power-on message always says "`CBM DOS V2.6 V170`" though, which corresponds to the 1540.
 
-## DOS_1541_0{1|2|3|5|6}, DOS_1541C_01
+## DOS_1541_0{1|2|3|5|6}, DOS_1541C_0{1|2}
 
 The Commodore 1541 DOS V2.6 source (1981). Reconstructed from DOS_1540 and DOS_1571 to match the ROM images.
 
@@ -112,6 +112,8 @@ The Commodore 1541 DOS V2.6 source (1981). Reconstructed from DOS_1540 and DOS_1
 * DOS_1541_05 is 325302-01/901229-05 (shipped with the short board 1541).
 * DOS_1541_06 is 325302-01/901229-06.
 * DOS_1541C_01 is 251968-01 (shipped with the 1541C)
+* DOS_1541C_02 is 251968-02 ([release notes](http://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541C.251968-02.txt))
+* 251968-03 (1541-II) is a TODO.
 
 ## DOS_1571
 

@@ -1,0 +1,91 @@
+	*=ROM           ;+$300 ;ROM PATCH
+;CODE ;CONTROLLER FORMAT CODE
+;*=*+$3A1
+CCHKSM	.BYTE 0
+;
+	.BYTE $46
+;
+CLEAR	LDA PCR2        ; ENABLE WRITE
+	AND #$FF-$E0
+	ORA #$C0
+	STA PCR2
+;
+	LDA #$FF        ; MAKE PORT AN OUTPUT
+	STA DDRA2
+;
+	LDA #$55        ; WRITE A 1F PATTERN
+	STA DATA2
+;
+	LDX #3
+	LDY #00
+CLER10	BVC *
+	CLV
+	DEY
+	BNE XLER10
+;
+	DEX
+	BNE XLER10
+;
+	RTS
+;
+;
+;----------------------------------------------------
+;     PATCH 15  *ROM DS 01/21/85*
+;
+PTCH15	LDY LINDX
+	JMP RNDGET
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 41
+;
+PTCH41  STA NBKL,X
+	STA NBKH,X
+	LDA #0
+	STA LSTCHR,X
+	RTS
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 67
+;
+PTCH67
+	PHP
+	SEI
+	LDA #0
+	SED
+PTH671	CPX #0
+        BEQ PTH672
+;
+        CLC
+        ADC #1
+        DEX
+        JMP PTH671
+PTH672	PLP
+	JMP HEX5
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 66
+;
+PTCH66
+	CMP #3
+	BCS PTH661
+;
+	LDA #DSKFUL
+	JSR ERRMSG
+;
+PTH661	LDA #1
+	RTS
+;
+	  ; TRACK CUTOFFS
+TRACKN  .BYTE 41,31,25,18
+;
+	.BYTE "COPYRIGHT (C)1985 COMMODORE ELECTRONICS, LTD.", CR
+	.BYTE "ALL RIGHTS RESERVED", CR
+;
+FREEC0	*=*+103         ; C0 PATCH SPACE
+.END
