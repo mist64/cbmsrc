@@ -1,0 +1,63 @@
+.PAGE 'NULBUF'
+;*********************************
+;* NULBUF: SET NULL RECORDS IN   *
+;*         ACT-BUF FOR EXTENTION *
+;*    VARS:  NR,RS,LX,ACT-BUF    *
+;*      IN: NR= LAST RECORD      *
+;*          POSITION IN PREVIOUS *
+;*          BUFFER.              *
+;*     OUT: NR= LAST RECORD      *
+;*          POSITION IN BUFFER   *
+;*          FOR NEXT NULBUF OR   *
+;*          TO SET LSTCHR.       *
+;*********************************
+;
+NULBUF
+	JSR SET00       ;SET INDIRECT PTR
+	LDY #2
+	LDA #0
+NB10
+	STA (DIRBUF),Y  ;CLEAR BUFFER
+	INY
+	BNE NB10
+;
+	JSR ADDNR       ;ADVANCE NR
+NB20
+	STA NR,X
+	TAY
+	LDA #$FF
+	STA (DIRBUF),Y  ;INIT RECORD W/ CR
+	JSR ADDNR
+	BCC NB20        ;NOT DONE
+;
+	BNE NB30
+	LDA #0
+	STA NR,X
+NB30
+	RTS
+;
+; ADD RS & NR, LEAVE IN ACCUM
+; C=1: CROSS BUFFER BOUNDARY
+;
+ADDNR
+	LDX LINDX
+	LDA NR,X
+	SEC
+	BEQ AN05
+;
+	CLC
+	ADC RS,X
+	BCC AN10
+	BNE AN05
+	LDA #2
+	BIT ER00
+	RTS
+;
+AN05
+	ADC #1          ;ADJUST FOR LINK
+	SEC
+AN10
+	RTS
+;
+;
+.END

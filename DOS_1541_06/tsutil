@@ -1,0 +1,192 @@
+.PAGE 'TSUTIL'
+;*
+;*
+;*********************************
+;*
+;*  SCRUB
+;*
+;*  WRITE OUT BUFFER IF DIRTY
+;*
+;*********************************
+;*
+;*
+SCRUB
+	JSR GAFLGS
+	BVC SCR1        ;NOT DIRTY
+;
+	JSR WRTOUT
+	JSR WATJOB
+SCR1	RTS
+;*
+;*
+;*********************************
+;*
+;*  SETLNK
+;*
+;*  PUT TRACK,SECTOR INTO BUFFER
+;*
+;*********************************
+;*
+;*
+SETLNK	JSR SET00
+;
+	LDA TRACK
+	STA (DIRBUF),Y
+	INY
+	LDA SECTOR
+	STA (DIRBUF),Y
+	JMP SDIRTY
+;
+;*
+;*
+;********************************
+;*
+;*  GETLNK
+;*
+;*  GET LINK FROM BUFFER INTO
+;*  TRACK AND SECTOR
+;*
+;********************************
+;*
+;*
+GETLNK	JSR SET00
+;
+	LDA (DIRBUF),Y
+	STA TRACK
+	INY
+	LDA (DIRBUF),Y
+	STA SECTOR
+	RTS
+;*
+;*
+;********************************
+;*
+;*  NULLNK
+;*
+;*  SET TRACK LINK=0 & SECTOR
+;*  LINK=LAST NON-ZERO CHAR.
+;*
+;*********************************
+;*
+;*
+NULLNK
+	JSR SET00
+	LDA #0
+	STA (DIRBUF)Y
+	INY
+	LDX LINDX
+	LDA NR,X
+	TAX
+	DEX
+	TXA
+	STA (DIRBUF)Y
+	RTS
+;
+;*
+;*
+;*******************************
+;*
+;* SET00
+;*
+;* SETUP UP POINTER TO BUFFER
+;*
+;*******************************
+;*
+;*
+SET00	JSR GETACT
+	ASL	A
+	TAX
+	LDA BUFTAB+1,X
+	STA DIRBUF+1
+	LDA #0
+	STA DIRBUF
+	LDY #0
+	RTS
+;
+;*
+;*
+;*******************************
+;*
+;*  GETHDR
+;*
+;*  READ TRACK,SETOR FROM HEADER
+;*
+;*******************************
+;*
+;*
+CURBLK	JSR FNDRCH
+GETHDR	JSR GETACT
+	STA JOBNUM
+	ASL A
+	TAY
+	LDA HDRS,Y      ;4/12**************
+	STA TRACK
+	LDA HDRS+1,Y    ;4/12**************
+	STA SECTOR
+	RTS
+;
+;*
+;*
+;******************************
+;*
+;* WRTAB,RDAB  WRTOUT,RDIN
+;* WRTSS,RDSS
+;*
+;******************************
+;*
+;*
+WRTAB	LDA #WRITE
+	STA CMD
+	BNE SJ10
+;
+RDAB	LDA #READ
+	STA CMD
+	BNE SJ10
+;
+WRTOUT	LDA #WRITE
+	STA CMD
+	BNE SJ20
+;
+RDIN	LDA #READ
+	STA CMD
+	BNE SJ20
+;
+WRTSS	LDA #WRITE
+	STA CMD
+	BNE RDS5
+;
+RDSS	LDA #READ
+RDS5	STA CMD
+	LDX LINDX
+	LDA SS,X
+	TAX
+	BPL SJ30        ;WAS...BNE SJ30
+;
+SJ10	JSR SETHDR
+	JSR GETACT
+	TAX
+	LDA DRVNUM
+	STA LSTJOB,X
+SJ20	JSR CDIRTY
+	JSR GETACT
+	TAX
+SJ30	JMP SETLJB
+;*
+;*
+;*
+;***************************
+;*
+;*     RDLNK
+;*
+;***************************
+;*
+;*
+RDLNK	LDA #0
+	JSR SETPNT
+	JSR GETBYT
+	STA TRACK
+	JSR GETBYT
+	STA SECTOR
+	RTS
+;
+.END

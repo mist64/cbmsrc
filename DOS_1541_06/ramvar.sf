@@ -1,0 +1,213 @@
+.PAG 'RAMVAR.SF'
+;PERMANENT ADDRESS VARIABLES
+;
+	*=ZP2
+;
+VNMI	*=*+2           ;INDIRECT FOR NMI
+NMIFLG	*=*+1
+AUTOFG	*=*+1
+SECINC	*=*+1           ;SECTOR INC FOR SEQ
+REVCNT	*=*+1           ; ERROR RECOVERY COUNT
+.SKIP
+BUFS	= $300          ; START OF DATA BUFS
+FBUFS	= BUFS          ;FORMAT DOWNLOAD IMAGE
+.SKI 2
+;*
+;*********************************
+;*
+;*      ZERO PAGE VARIABLES
+;*
+;*********************************
+;*
+USRJMP	*=*+2           ; USER JMP TABLE PTR
+BMPNT	*=*+2           ; BIT MAP POINTER
+TEMP	*=*+6           ; TEMP WORK SPACE
+IP	*=*+2           ; INDIRECT PTR VARIABLE
+LSNADR	*=*+1           ; LISTEN ADDRESS
+TLKADR	*=*+1           ;TALKER ADDRESS
+LSNACT	*=*+1           ; ACTIVE LISTENER FLAG
+TLKACT	*=*+1           ; ACTIVE TALKER FLAG 
+ADRSED	*=*+1           ; ADDRESSED FLAG
+ATNPND	*=*+1           ;ATTENTION PENDING FLAG
+ATNMOD	*=*+1           ;IN ATN MODE
+PRGTRK	*=*+1           ;LAST PROG ACCESSED
+DRVNUM	*=*+1           ;CURRENT DRIVE #
+TRACK	*=*+1           ;CURRENT TRACK
+SECTOR	*=*+1           ;CURRENT SECTOR
+LINDX	*=*+1           ;LOGICAL INDEX
+SA	*=*+1           ;SECONDARY ADDRESS
+ORGSA	*=*+1           ;ORIGINAL SA
+DATA	*=*+1           ; TEMP DATA BYTE
+;*
+;*
+T0	=TEMP
+T1	=TEMP+1
+T2	=TEMP+2
+T3	=TEMP+3
+T4	=TEMP+4
+R0	*=*+1
+R1	*=*+1
+R2	*=*+1
+R3	*=*+1
+R4	*=*+1
+RESULT	*=*+4
+ACCUM	*=*+5
+DIRBUF	*=*+2
+ICMD	*=*+1           ;IEEE CMD IN
+MYPA	*=*+1           ; MY PA FLAG
+CONT	*=*+1           ; BIT COUNTER FOR SER
+;*
+;*********************
+;*
+;*  ZERO PAGE ARRAY
+;*
+;***********************
+;*
+BUFTAB	*=*+CBPTR+4     ; BUFFER BYTE POINTERS
+CB=BUFTAB+CBPTR
+BUF0	*=*+MXCHNS+1
+BUF1	*=*+MXCHNS+1
+NBKL
+RECL	*=*+MXCHNS
+NBKH
+RECH	*=*+MXCHNS
+NR	*=*+MXCHNS
+RS	*=*+MXCHNS
+SS	*=*+MXCHNS
+F1PTR	*=*+1           ; FILE STREAM 1 POINTER
+;
+;***********************
+; $4300 VARS MOVED TO ZP
+;
+RECPTR	*=*+1
+SSNUM	*=*+1
+SSIND	*=*+1
+RELPTR	*=*+1
+ENTSEC	*=*+MXFILS      ; SECTOR OF DIRECTORY ENTRY
+ENTIND	*=*+MXFILS      ; INDEX OF DIRECTORY ENTRY
+FILDRV	*=*+MXFILS      ; DEFAULT FLAG, DRIVE #
+PATTYP	*=*+MXFILS      ; PATTERN,REPLACE,CLOSED-FLAGS,TYPE
+FILTYP	*=*+MXCHNS      ; CHANNEL FILE TYPE
+CHNRDY	*=*+MXCHNS      ; CHANNEL STATUS
+EOIFLG	*=*+1           ; TEMP EOI
+JOBNUM	*=*+1           ; CURRENT JOB #
+LRUTBL	*=*+MXCHNS-1    ;LEAST RECENTLY USED TABLE
+NODRV	*=*+2           ; NO DRIVE FLAG
+DSKVER	*=*+2           ; DISK VERSION FROM 18.0
+ZPEND=*
+	*=$200
+CMDBUF	*=*+CMDLEN+1
+CMDNUM	*=*+1           ; COMMAND #
+LINTAB	*=*+MAXSA+1     ; SA:LINDX TABLE
+CHNDAT	*=*+MXCHNS      ; CHANNEL DATA BYTE
+LSTCHR	*=*+MXCHNS      ; CHANNEL LAST CHAR PTR
+TYPE	*=*+1           ; ACTIVE FILE TYPE
+;
+;*
+;*******************
+;*
+;* RAM VARIABLES IN $4300
+;*
+;*******************
+;*
+;  *=$4300
+STRSIZ	*=*+1
+;ZP:  RECPTR *=*+1
+;ZP:  SSNUM  *=*+1
+;ZP:  SSIND  *=*+1
+;ZP:  RELPTR *=*+1
+.SKIP
+TEMPSA	*=*+1           ; TEMPORARY SA
+;ZP:  EOIFLG *=*+1           ; TEMP EOI
+CMD	*=*+1           ; TEMP JOB COMMAND
+.SKIP
+LSTSEC	*=*+1           ; 
+BUFUSE	*=*+2           ; BUFFER ALLOCATION
+;ZP:  JOBNUM *=*+1           ; CURRENT JOB #
+MDIRTY	*=*+2           ;BAM 0 & 1 DIRTY FLAGS
+ENTFND	*=*+1           ;DIR-ENTRY FOUND FLAG
+DIRLST	*=*+1           ;DIR LISTING FLAG
+CMDWAT	*=*+1           ;COMMAND WAITING FLAG
+LINUSE	*=*+1           ;LINDX USE WORD
+LBUSED	*=*+1           ;LAST BUFFER USED
+REC	*=*+1
+TRKSS	*=*+1
+SECSS	*=*+1
+.PAGE
+;*
+;********************************
+;*
+;*  RAM ARRAY AREA
+;*
+;********************************
+;*
+LSTJOB	*=*+BFCNT       ; LAST JOB
+;ZP:  LINTAB *=*+MAXSA+1     ; SA:LINDX TABLE
+;ZP:  CHNDAT *=*+MXCHNS      ; CHANNEL DATA BYTE
+DSEC	*=*+MXCHNS      ; SECTOR OF DIRECTORY ENTRY
+DIND	*=*+MXCHNS      ; INDEX OF DIRECTORY ENTRY
+ERWORD	*=*+1           ; ERROR WORD FOR RECOVERY
+ERLED	*=*+1           ; ERROR LED MASK FOR FLASHING
+PRGDRV	*=*+1           ; LAST PROGRAM DRIVE
+PRGSEC	*=*+1           ; LAST PROGRAM SECTOR
+WLINDX	*=*+1           ; WRITE LINDX
+RLINDX	*=*+1           ; READ LINDX
+NBTEMP	*=*+2           ; # BLOCKS TEMP
+.SKIP 3
+CMDSIZ	*=*+1           ; COMMAND STRING SIZE
+CHAR	*=*+1           ; CHAR UNDER PARSER
+LIMIT	*=*+1           ; PTR LIMIT IN COMPAR
+F1CNT	*=*+1           ; FILE STREAM 1 COUNT
+F2CNT	*=*+1           ; FILE STREAM 2 COUNT
+F2PTR	*=*+1           ; FILE STREAM 2 POINTER
+;  PARSER TABLES
+FILTBL	*=*+MXFILS+1    ; FILENAME POINTER
+;ZP:   FILENT *=*+MXFILS      ; DIRECTORY ENTRY
+;ZP:   FILDAT *=*+MXFILS      ; DRIVE #, PATTERN
+FILTRK	*=*+MXFILS      ; 1ST LINK/TRACK
+FILSEC	*=*+MXFILS      ;         /SECTOR
+.SKIP
+;  CHANNEL TABLES
+;ZP:  FILTYP *=*+MXCHNS ; CHANNEL FILE TYPE
+;ZP:  CHNRDY *=*+MXCHNS      ; CHANNEL STATUS
+;ZP:   LSTCHR *=*+MXCHNS      ; CHANNEL LAST CHAR PTR
+.SKIP
+PATFLG	*=*+1           ; PATTERN PRESENCE FLAG
+IMAGE	*=*+1           ; FILE STREAM IMAGE
+DRVCNT	*=*+1           ; NUMBER OF DRV SEARCHES
+DRVFLG	*=*+1           ; DRIVE SEARCH FLAG
+LSTDRV	*=*+1           ; LAST DRIVE W/O ERROR
+FOUND	*=*+1           ; FOUND FLAG IN DIR SEARCHES
+DIRSEC	*=*+1           ; DIRECTORY SECTOR
+DELSEC	*=*+1           ; SECTOR OF 1ST AVAIL ENTRY
+DELIND	*=*+1           ; INDEX  "
+LSTBUF	*=*+1           ; =0 IF LAST BLOCK
+INDEX	*=*+1           ; CURRENT INDEX IN BUFFER
+FILCNT	*=*+1           ; COUNTER, FILE ENTRIES
+TYPFLG	*=*+1           ; MATCH BY TYPE FLAG
+MODE	*=*+1           ; ACTIVE FILE MODE (R,W)
+;ZP:  TYPE   *=*+1           ; ACTIVE FILE TYPE
+JOBRTN	*=*+1           ;JOB RETURN FLAG
+EPTR	*=*+1           ;PTR FOR RECOVERY
+TOFF	*=*+1           ;TOTAL TRACK OFFSET
+UBAM	*=*+2           ; LAST BAM UPDATE PTR
+TBAM	*=*+4           ; TRACK # OF BAM IMAGE
+BAM	*=*+16          ; BAM IMAGES
+.SKI
+;*
+;*****************************************
+;*
+;*   OUTPUT BUFFERS
+;*
+;********************************************
+;*
+;    *=$4400-36-36
+NAMBUF	*=*+36          ; DIRECTORY BUFFER
+ERRBUF	*=*+36          ; ERROR MSG BUFFER
+WBAM	*=*+1           ; DON'T-WRITE-BAM FLAG
+NDBL	*=*+2           ; # OF DISK BLOCKS FREE
+NDBH	*=*+2
+PHASE	*=*+2
+RAMEND=*
+.SKIP 2
+.END

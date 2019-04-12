@@ -1,0 +1,53 @@
+;**********************************************
+;*                                            *
+;*   COMMODORE BUSINESS MACHINES SOFTWARE     *
+;*                                            *
+;**********************************************
+;
+;**********************************************
+;*                                            *
+;*   DISK OPERATING SYSTEM AND                *
+;*   CONTROLLER ROUTINES                      *
+;*   FOR THE FOLLOWING CBM MODELS:            *
+;*     VS170 SERIAL DISK                      *
+;*     WITH SINGLE SA390 DRIVE                *
+;*     RELEASED AS:                           *
+;*       901636-01 $C000-$DFFF                *
+;*       904637-01 $E000-$FFFF                *
+;*   COPYRIGHT (C) 1981 BY                    *
+;*   COMMODORE BUSINESS MACHINES (CBM)        *
+;*                                            *
+;**********************************************
+.SKIP 3
+; ****LISTING DATE --10:00 06 MAY    1981 ****
+.SKIP 3
+;**********************************************
+;*   THIS SOFTWARE IS FURNISHED FOR USE IN    *
+;*  THE SINGLE DRIVE FLOPPY DISK UNIT ONLY.   *
+;*                                            *
+;*   COPIES THEREOF MAY NOT BE PROVIDED OR    *
+;*  MADE AVAILABLE FOR USE ON ANY OTHER       *
+;*  SYSTEM.                                   *
+;*                                            *
+;*   THE INFORMATION IN THIS DOCUMENT IS      *
+;*  SUBJECT TO CHANGE WITHOUT NOTICE.         *
+;*                                            *
+;*   NO RESPONSIBILITY IS ASSUMED FOR         *
+;*  RELIABILITY OF THIS SOFTWARE. RSR         *
+;*                                            *
+;**********************************************
+.PAG 'COMMON'
+; COMMON AREA DEFINES
+.SKIP
+	*=0
+JOBS	*=*+6           ; JOB QUE
+HDRS	*=*+12          ; JOB HEADERS
+DSKID	*=*+4           ;MASTER COPY OF DISK ID
+HEADER	*=*+5           ;IMAGE OF LAST HEADER
+ACTJOB	*=*+1           ;CONTROLLER'S ACTIVE JOB
+WPSW	*=*+2           ;WRITE PROTECT CHANGE FLAG
+LWPT	*=*+2           ;LAST STATE OF WP SWITCH
+;
+;
+.END
+; RSR
