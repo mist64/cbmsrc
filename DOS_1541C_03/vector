@@ -1,0 +1,175 @@
+.PAG VECTOR
+ECHKSM	.BYT 0          ;$E-$F CHECKSUM
+NMI	JMP (VNMI)
+;
+PATCH	;PATCH AREA
+PEA7A	STA LEDPRT      ;PATCH FOR POWER-ON ERRORS
+	STA LEDOUT      ;TURN DDRB TO OUTPUT
+	JMP REA7D       ;RETURN TO LED BLINK CODE
+;
+;---------------------------------------------------
+; PATCH AREA FOR 1541 DISK WITH SLOW SERIAL RECEIVE
+;
+SLOWD	TXA             ; ONLY AFFECT .A
+	LDX #5          ; INSERT 40US OF DELAY WITH THIS ROUTINE
+SLOWE	DEX
+	BNE SLOWE
+	TAX
+	RTS
+;
+;---------------------------------------------------
+;
+CLKDAT	JSR CLKLOW      ; NEW CLOCK LOW AND...
+	JMP DATHI       ; DATA HI FOR PATCH AREA
+;
+;---------------------------------------------------
+;
+NNMI	LDA CMDBUF+2    ; NEW NMI ROUTINE CHECK FOR
+	CMP #'-'
+	BEQ NNMI10      ; IF UI- THEN NO DELAY
+	SEC
+	SBC #'+'
+	BNE NMI         ; IF NOT UI+ THEN MUST BE A REAL UI COMMAND
+NNMI10	STA DRVTRK+1
+	RTS
+;
+;
+;---------------------------------------------------
+;      PATCH 5   *ROM-05 8/18/83*
+;
+;CLOCK LINE HI ON PWR ON
+;
+PATCH5	STX  DDRA1      ; SET DIRECTION
+	LDA #$02        ; SET CLOCK HIGH
+	STA PB
+	LDA  #$1A       ; SET DDRA REG B
+	STA DDRB1
+	JMP DKIT10      ; RETURN
+;
+;
+;---------------------------------------------------
+;      PATCH 6   *ROM DS 8/18/83*
+;
+;FIX EOI TIMING TO WAIT ALL DEVICES
+;
+;
+PATCH6	LDA PB          ; TEST DATA LINE
+	AND #$01        ; EVERY ONE RDY ?
+	BNE PATCH6
+	LDA #$01        ; WAIT 255 USEC
+	STA T1HC1       ; SET TIMER
+	JMP ACP00       ; RETURN
+;
+;
+;---------------------------------------------------
+;     PATCH 7   *** ROM DS 03/15/85 ***
+;
+;
+PATCH7	LDA #$FF        ; CLEAR FORMAT FLAGS
+	STA FTNUM       ;
+	JMP FORMAT      ; TRANSFER FORMAT TO RAM
+;
+;
+;----------------------------------------------------
+;     PATCH 11  *ROM DS 01/21/85*
+;
+PTCH11	STA NODRV       ; CLR NODRV
+	JMP SETLDS      ; SET LEDS
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 54
+;
+PTCH54  CMP #2          ; ERROR ?
+	BCC PTH541
+;
+	CMP #15         ; NO DRV CONDITION ?
+	BEQ PTH541
+;
+	JMP RTCH54      ; BAD, TRY ANOTHER
+PTH541	JMP STL50       ; OK
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 31
+;
+PTCH31	SEI
+	LDX #TOPWRT     ; SET STACK POINTER
+	TXS
+	JMP RTCH31
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 30
+;
+PTCH30	BIT PA1
+	JMP ATNSRV
+
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 50
+;
+PTCH50	.BYTE $BD,$FF,$00       ; READ NODRV,X ABSOLUTE
+	RTS
+;
+;----------------------------------------------------
+;
+;     PATCH 52
+;
+PTCH52	LDX DRVNUM      ; GET OFFSET
+	.BYTE $BD,$FF,$00       ; READ NODRV,X ABSOLUTE
+	JMP RTCH52
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 43
+;
+;
+PTCH43	LDA #0          ; CLR NODRV
+	.BYTE $9D,$FF,$00       ; WRITE NODRV,X ABSOLUTE
+	JMP RTCH43
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 44
+;
+;
+PTCH44	TYA             ; SET/CLR NODRV
+	.BYTE $9D,$FF,$00       ; WRITE NODRV,X ABSOLUTE
+	JMP RTCH44
+;
+;
+;----------------------------------------------------
+;
+;     PATCH 51
+;
+PTCH51	STA WPSW,X      ; CLR WP SWITCH
+	.BYTE $9D,$FF,$00       ; WRITE NODRV,X ABSOLUTE
+	JMP RTCH51
+;
+;DEFAULT TABLE FOR USER COMMAND
+;
+	*= $FFE6
+	.WORD FORMAT
+	.WORD TRNOFF
+UBLOCK	.WORD UBLKRD
+	.WORD UBLKWT
+.SKIP
+	.WORD $0500     ;LINKS TO BUFFER #2
+	.WORD $0503
+	.WORD $0506
+	.WORD $0509
+	.WORD $050C
+	.WORD $050F
+	*= $FFFA
+	.WORD NNMI
+	.WORD DSKINT
+	.WORD SYSIRQ
+.END

@@ -1,0 +1,92 @@
+.PAGE 'TSTFLG'
+;*
+;*
+;**********************************
+;*
+;* SCFLG
+;* SETFLG
+;* CLRFLG
+;* TSTFLG
+;*
+;*********************************
+;*
+;*
+SCFLG	BCC CLRFLG
+;
+SETFLG	LDX LINDX
+	ORA FILTYP,X
+	BNE CLRF10
+;
+CLRFLG	LDX LINDX
+	EOR #$FF
+	AND FILTYP,X
+CLRF10	STA FILTYP,X
+	RTS
+;
+;
+TSTFLG	LDX LINDX
+	AND FILTYP,X
+	RTS
+;
+;*
+;*
+;******************************
+;*
+;*
+;*  TSTWRT
+;*
+;******************************
+;*
+;*
+TSTWRT	JSR GETACT
+	TAX
+	LDA LSTJOB,X
+	AND #$F0
+	CMP #$90
+	RTS
+;*
+;*
+.PAGE 'TEST CHANNEL'
+;
+; TEST FOR ACTIVE FILES FROM
+; LINDX TABLE
+;
+; C=1 FILE NOT ACTIVE X=18,Y=?,A=?
+; C=0 FILE ACTIVE X=ENTFND,Y=LINDX,A=?
+;
+;
+TSTCHN	LDX #0          ;START SEARCH AT TOP
+TSTC20	STX TEMP+2      ;SAVE TO LOOK ON
+	LDA LINTAB,X    ;GET LINDX
+	CMP #$FF
+	BNE TSTC40      ;IF PLUS TEST IT
+TSTC30	LDX TEMP+2      ;NOT ACTIVE
+	INX
+	CPX #MAXSA-2    ;SEARCHED ALL
+	BCC TSTC20      ;NO
+TSTRTS	RTS             ;YES
+;
+;
+TSTC40	STX TEMP+2      ;SAVE X
+	AND #$3F
+	TAY             ;USE LINDX AS INDEX
+	LDA FILTYP,Y    ;RIGHT DRIVE # ?
+	AND #1
+	STA TEMP+1
+	LDX ENTFND      ;INDEX ENTRY FOUND
+	LDA FILDRV,X
+	AND #1
+	CMP TEMP+1      ;SAME DRIVE # ?
+	BNE TSTC30      ;NO
+	LDA DSEC,Y      ;YES - SAME DIR. ENTRY ?
+	CMP ENTSEC,X
+	BNE TSTC30      ;NO
+	LDA DIND,Y
+	CMP ENTIND,X
+	BNE TSTC30      ;NO
+	CLC             ;SET FLAG
+	RTS
+;
+;
+;
+.END

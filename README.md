@@ -113,7 +113,7 @@ The Commodore 1541 DOS V2.6 source (1981). Reconstructed from DOS_1540 and DOS_1
 * DOS_1541_06 is 325302-01/901229-06.
 * DOS_1541C_01 is 251968-01 (shipped with the 1541C)
 * DOS_1541C_02 is 251968-02 ([release notes](http://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541C.251968-02.txt))
-* 251968-03 (1541-II) is a TODO.
+* DOS_1541C_03 is 251968-03 (shipped with the 1541-II)
 
 ## DOS_1571
 

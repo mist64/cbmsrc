@@ -1,0 +1,92 @@
+.PAGE 'GETACT'
+;*********************************
+;* GETACT: GET ACTIVE BUFFER #   *
+;*   VARS: BUF0,BUF1,LINDX       *
+;*   REGS: OUT: .A= ACT BUFFER # *
+;*              .X= LINDX        *
+;*   FLAGS:     .N=1: NO ACT-BUF *
+;*********************************
+;
+GETACT
+	LDX LINDX
+	LDA BUF0,X
+	BPL GA1
+	LDA BUF1,X
+GA1
+	AND #$BF        ; STRIP DIRTY BIT
+	RTS
+;
+;*********************************
+;* GAFLG: GET ACTIVE BUFFER #;   *
+;*        SET LBUSED & FLAGS.    *
+;*   REGS: OUT: .A= ACT BUFFER # *
+;*              .X= LINDX        *
+;*   FLAGS:     .N=1: NO ACT-BUF *
+;*              .V=1: DIRTY BUF  *
+;*********************************
+;
+GAFLGS
+	LDX LINDX
+GA2	STX LBUSED      ;SAVE BUF #
+	LDA BUF0,X
+	BPL GA3
+;
+	TXA
+	CLC
+	ADC #MXCHNS+1
+	STA LBUSED
+	LDA BUF1,X
+GA3
+	STA T1
+	AND #$1F
+	BIT T1
+	RTS
+;
+;******************************
+;******************************
+;
+; GET CHANNELS INACTIVE
+; BUFFER NUMBER.
+;
+;    INPUT PARAMETERS:
+;        LINDX - CHANNEL #
+;
+;    OUTPUT PARAMETERS:
+;        A <== INACTIVE BUFFER #
+;           OR
+;        A <== $FF IF NO
+;            INACTIVE BUFFER.
+;
+;******************************
+;
+GETINA	LDX LINDX
+	LDA BUF0,X
+	BMI GI10
+	LDA BUF1,X
+GI10	CMP #$FF
+	RTS
+;
+;*****************************
+;**********  P U T I N A  ****
+;*****************************
+;
+; PUT INACTIVE BUFFER
+;
+;    INPUT PARAMTERS:
+;        A = BUFFER #
+;
+;    OUTPUT PARAMTERS:
+;        NONE
+;
+;*****************************
+;
+PUTINA	LDX LINDX
+	ORA #$80
+	LDY BUF0,X
+	BPL PI1
+	STA BUF0,X
+	RTS
+PI1	STA BUF1,X
+	RTS
+;
+.END
