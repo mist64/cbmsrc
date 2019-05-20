@@ -123,6 +123,10 @@ The Commodore 1571 DOS source (3.0, 1986), updated version (310654-05). Extracte
 
 The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Extracted from 1581-source.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
 
+## RAMDOS
+
+The C64/C128 RAMDISK DOS V4.3 source (1987). Extracted from [ramdos.zip](http://www.zimmers.net/anonftp/pub/cbm/src/drives/ramdos.zip). This is a version of Commodore DOS running on the C64/C128 for using a REU (RAM Expansion Unit) as a RAM disk.
+
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com

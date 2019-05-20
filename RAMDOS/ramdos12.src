@@ -1,0 +1,5009 @@
+;
+;	change list after v1.0
+;
+version	.macro			; declare 3 char version here
+	.byte "4.3"
+	.endm
+;
+;	when	   who	version	what
+;	--------   ---	----	---------------------------------------------
+;	11/13/87   fab  V4.3	Added patch to correctly handle CLOSE for
+;				C128 opration.  Patch added to match posted
+;				version of RAMDOS128.BIN.
+;
+;	10/26/87   fab  V4.2	RBASIN did not check for prior status error-
+;				added code at DISK_IO to exit if bad status.
+;				This caused a problem especially for Relative
+;				file reads of empty records.
+;
+;				EOF_CHECK did not preserve prior status-
+;				added  ora status/ sta status.  This caused a
+;				problem for file read loops expecting some kind
+;				of error status when past end of file.
+;
+;				READ_BYTE did not set TIMEOUT status bit, and
+;				now it does (eg, read past EOF & you get ST=66).
+;
+;				Relative file writes did not report OVERFLOW
+;				if given too much data for one record, and
+;				instead placed the excess data into subsequent
+;				records.  Changed write_byte_rel to properly
+;				update current record only and report error.
+;				Fix assumes that a chkin/out implies a prior
+;				clrchn was performed.
+;
+;				CLOSEing the command channel now closes all
+;				other user channels on disk side, as it should.
+;				Also, for C128 mode only, the status of carry
+;				is important as it should be (i.e., c=1 means
+;				not a real CLOSE, just remove crap from tables).
+;
+;	8/26/87    fab  V4.1	Added NEW command.  Simply sets disk_end=start.
+;
+;				Added range check to set_unit_number (4-30).
+;
+;				F access command string failed when a parameter
+;				was equal to <CR>.  It's okay now.
+;
+;				Added code to strip trailing <CR> if any from
+;				any filename processed by init_get_filename.
+;
+;	8/24/87	   hcd  V4.0	added 'F' access ( as opposed to 'RWMA' ).
+;
+;				F access allows both reading and writing a
+;				file like sequential read and sequential
+;				write access. The file pointer merely points to
+;				the byte to operate on for reads or writes.
+;
+;				F access is legal for SEQ or PRG files only.
+;
+;				F access allows the POSITION command to be used
+;				to position the r/w head at any byte in the 
+;				file. Positioning the head past the end of the
+;				file causes the file to be expanded, $FF is the
+;				padding char.
+;
+;				The format for the F access version of the
+;				position command is:
+;
+;					P:<channel><lpage><hpage>[<byte>]
+;
+;				where:
+;
+;					<channel> is the file's channel
+;					<hpage><lpage><byte> is a three byte
+;					pointer into the file. Three nulls
+;					would point the the first byte in the 
+;					file.
+;
+;					<byte> is optional, if omitted it
+;					defaults to zero.
+;
+;					Note the odd order for the arguements.
+;
+;
+;
+;	8/20/87	   hcd  V3.6    added flush block call to read_byte_default.
+;				This is required before all DMAs directly
+;				to disk ram. Its omission had caused strange
+;				happenings when a file was opened for write,
+;				and a previously open read file was then opened.
+;
+;				The rule is that any system calls which 
+;				access disk memory directly ( as opposed to
+;				accessing disk memory via the default page ),
+;				must flush the default block before execution,
+;				and must unflush the block after execution.
+;
+;				added flush block to do_load also.
+;
+;				Corrected "FILE TOO LARGE" mispelling.
+;
+;				Fixed bug with cleanup command write call
+;				to interpret command. Bad commands would
+;				shown errors because the command would be
+;				interpreted ( via cleanup ), then the commands
+;				cr would be interpreted as an ok command
+;				clearing the error channel. Fix was implemented
+;				by causeing commands of a single <cr> to
+;				have no effect on error channel.
+;
+;				Caused serial buss timeout bit to be set when
+;				an attempt to read past the end of a file
+;				occurs. This is to accomodate BASIC7.0 DOS
+;				input command which is not satisfied by a
+;				simple EOF status.
+;
+;	7/20/87    hcd  V3.5    BA ( the system bank variable ) was corrected
+;				to reflect the proper address. It was $cb.
+;				It is $c6.
+;
+;				Corrected "FILE NAME EXSISTS" mispelling.
+;
+;				Corrected "FILES SCRATCHED" error message
+;				where the number of files scratched was
+;				incorrect.
+;
+;				Removed enhancement allowing for files 
+;				> 10K block long. This causes the
+;				directory format display to be correct.
+;				( filenames were shifted one char right )
+;
+;				Caused cleanup_command_write to force any
+;				command in buffer to interpreted. This is
+;				in line with serial buss standard that clrch
+;				can terminate a command.
+;
+;	5/27/87    hcd  V3.4	corrected save bug (saved 1 too many bytes
+;				causing load to load 1 too many)
+;
+;	4/8/87	   hcd  V3.3	corrected bug in sniff_disk_size which
+;				smelled 512k when only 256k exsisted
+;				on some ramdisk units. (erp)
+;
+;	11/12/86   hcd 	V3.2	added copyright message to jump vectors.
+;				corrected error 73 text to include Vx.x 
+;				correctly from version macro.
+;
+;	11/11/86   hcd	V3.1	added USR files.
+;				corrected error in M-W for unit change.
+;				corrected pattern matching bug where ending *
+;				in filename may mean 0-n chars.
+;
+;
+;c64	= 1		; define this flag to force c65 assy
+rel_flag =1		; define this flag to enable rel file code....
+position_flag =1 	; define this flag to allow position command on
+;			  program and relative files.
+;
+;
+	.ifdef position_flag
+	.ifndef rel_flag
+	*** error ***	illegal to assemble with position and no rel files
+	.endif
+	.endif
+;
+	.ifdef	c64
+;
+	.nam	C64 RAMDISK DOS
+;
+default_unit_number	= $08		unit 8
+default_interface_page	= $cf		place for interface page
+;
+swapped_dos_base	= $6000		install the dos here boss....
+;
+	.else
+	.nam	C128 RAMDISK DOS
+;
+default_unit_number	= $09		unit 9
+default_interface_page	= $0e		place for interface page
+;
+down_load_area		= $3e4		start of down load area
+swapped_dos_base	= $2000
+;
+	.endif
+;
+curzpg	= $fe
+curram	= swapped_dos_base
+code_start = swapped_dos_base+$300
+swapped_code_start = swapped_dos_base
+swapped_code_size = $1fff
+;
+	.blist
+	.nclist
+	.include macros
+;
+	* = code_start
+;
+	jmp install		; install at default location
+	jmp reinstall		; reinstall at default location
+	jmp install_on_page	; install anywhere
+	jmp reinstall_on_page	; reinstall anywhere
+	jmp copyright_message	; print copyright message
+;
+;
+	.subttl	"EQUATES"
+;**************************************************************
+;		EQUATES
+;**************************************************************
+;
+cr	= $0d
+;
+;	kernal_declares
+;
+status	= $90
+svxt	= $92
+verck	= $93
+ldtnd	= $98
+dfltn	= $99
+dflto	= $9a
+eal	= $ae
+eah	= $af
+fnlen	= $b7
+la	= $b8
+sa	= $b9
+fa	= $ba
+fnadr	= $bb
+stal	= $c1
+stah	= $c2
+memuss	= $c3
+	.ifndef c64
+ba	= $c6
+fnbank	= $c7
+	.endif
+;
+inmi	= $0318
+iopen	= $031a
+iclose	= $031c
+ichkin	= $031e
+ickout	= $0320
+iclrch	= $0322
+ibasin	= $0324
+ibsout	= $0326
+; istop
+igetin	= $032a
+iclall	= $032c
+; exmon
+iload	= $0330
+isave	= $0332
+;
+d1prb	= $dc01		key scan port
+d1ddrb	= $dc03		key scan port ddr
+d2icr	= $dd0d		icr for nmni 6526
+;
+	.ifdef c64
+fat	= $0263
+;
+print	= $e716		; direct entry to screen printer.
+;
+cheap_open = $f34a
+jxrmv	= $f2f2		remove lat fat sat entry whose index is in .a
+lookup	= $f30f		
+jltlk	= $f314
+getlfs	= $f31f	; jz100
+;
+_luking	= $f5af		print looking for filename
+loding	= $f5d2		print loading
+_saving	= $f68f		print saving filename
+;
+no_restor_restore = $fe69	; run stop restore less the restor....
+fake_nmi	= $fe72		; calls nmi232, and does a prend...
+;
+kernal_error	= $f715		; kernal error handler
+ud60		= $f6bc
+;
+	.else
+;
+fat	= $036c
+;
+system_vector = $0a00
+;
+print	= $c00c		direct entry into screen print...
+;
+cheap_open = $efbd
+jxrmv	= $f1e5		remove lat fat sat entry whose index is in .a
+lookup	= $f202
+jltlk	= $f207
+getlfs	= $f212
+;
+_luking	= $f50f		print looking for filename
+loding	= $f533		print loading
+_saving	= $f5bc		print saving filename
+;
+no_restor_restore = $fa56	; run stop restore less the restor....
+fake_nmi	= $fa5f		; calls nmi232, and does a prend...
+;
+kernal_error	= $f699		; kernal error handler
+fnadry		= $f7ae		; indirect load file name address
+getcfg		= $ff6b		; .a <= mmu setting for config .x
+ud60		= $f63d
+;
+	.endif
+;
+cint		= $ff81
+ioinit		= $ff84
+restor		= $ff8a
+clrch		= $ffcc
+stop		= $ffe1
+;
+;
+	.subttl	"ram declarations" 
+;*************************************************************************
+;		GENERAL SYSTEM RAM
+;*************************************************************************
+;
+	ram	data_block,256	data block buffer
+;
+dir_filelen	= data_block	number of blocks for this file
+dir_access	= data_block+2	access char if open, null otherwise ( R,W,L,$ )
+dir_filetype	= data_block+3	type char for file ( S,P,L )
+dir_last_byte	= data_block+4	pointer to last byte
+dir_end_record	= data_block+5	two bytes indicating number of rel file records
+dir_record_len	= data_block+7	record length for rel files
+dir_filename	= data_block+8
+;				use rest of file for data
+dir_data_start	= dir_filename+18
+dir_data_offset	= dir_data_start-data_block
+dir_load_addr	= dir_data_offset+data_block
+dir_load_data_offset	= dir_data_offset+2
+;
+	ram first_block,2	; pointer to location of first data
+;				on disk after dos code and ram
+	ram disk_end,2		; pointer to one past last data block in disk
+;				( if disk_end == first_block then disk empty )
+	ram disk_max,2		; highest legal value for disk_end
+;				; this is the number of blocks on the disk
+	ram channel_blocks,2 	; this stores the pointer to channel
+;				storage on disk ( less than first block )
+	ram default_channel_number	; current channel in default_channel
+;
+	ram cleanup_vector,2	; pointer to cleanup routine for fastop
+;
+default_channel = curram
+	ram channel_access,1	( R,W,L,$ )	read/write/relative/directory
+	ram directory_block,2	( first_block - 1 )
+	ram current_byte,1
+	ram current_block,2	point directly to next byte
+	ram end_byte,1
+	ram end_block,2		point directly to last byte
+	.ifdef rel_flag
+	ram current_record_byte	rel file, current byte in record
+	ram current_record,2	index of current record
+	ram current_record_len	length of current record
+;	ram rel_write_flag	flag for interface to disk_unlsn for rel only
+	ram end_record,2	index of last record in rel file
+	ram record_len		length of physical record
+	.endif
+default_channel_end
+channel_len = curram-default_channel	used to allocate channels
+;
+;
+	ram	default_block,2	; current block in the data_block buffer
+;
+	zpage	pntr,2		all I want is a pointer to use
+	ram	pntr_save,2	save this too shithead....
+;
+;
+	ram	eof_flag	internal eof flag
+	ram 	data_byte	data byte buffer
+	ram	interface_page	page number of the dma interface block
+	ram	disk_fa		our unit number ( can you say 9 )
+	ram 	alt_filename,17	alternate filename for copy/rename
+;
+;
+;
+	.subttl	"DMA DECLARATIONS"
+;****************************************************************************
+;		DMA DECLARES
+;****************************************************************************
+;
+;
+	.ifndef c64
+mmucr	= $ff00			; mmu configuration 
+mmurcr	= $d506
+	.endif
+;
+dma	= $df00			; base of dma unit
+vicspeed = $d030		; must do for c64 mode on c128
+;
+dma_status	= dma			; dma status
+;		b7	- irq pending
+;		b6	- dma complete
+;		b5	- block verify error
+;		b4	- size register
+;		b3-0	- version
+;
+dma_cmd	= dma+1			; dma command
+;	b7 =1 	arm transfer
+;	b6	
+;	b5 =1	autoload enable
+;	b4 =1	disable $ff00 decode
+;	b3	
+;	b2	
+;	b1:b0
+;		00	write	c128 --> disk
+;		01	read	c128 <-- disk
+;		10	swap	c128 <-> disk
+;		11	compare	c128 == disk
+;
+dma_immediate_write 	= %10110000
+dma_immediate_read	= %10110001
+dma_immediate_swap	= %10110010
+dma_immediate_compare	= %10110011
+;
+dma_banked_write 	= %10100000
+dma_banked_read		= %10100001
+dma_banked_swap		= %10100010
+dma_banked_compare	= %10100011
+;
+dma_fastop_write	= %10010000
+dma_fastop_read		= %10010001
+;
+dma_cpu_addr	= dma+2		; c128 addr
+dma_disk_addr	= dma+4		; disk low order adder
+dma_disk_block	= dma+5		; disk block ( two bytes )
+dma_disk_bank	= dma+6		; disk bank
+;
+dma_len		= dma+7		; two bytes for length of transfer
+;
+dma_ifr		= dma+9		; interupt mask register
+dma_acr		= dma+10	; address_control_register
+;
+;
+;
+	.subttl	"COPYRIGHT MESSAGE"
+;************************************************************************
+;		COPYRIGHT MESSAGE
+;************************************************************************
+;
+copyright_message
+	ldx #0
+10$	txa
+	pha
+	lda 100$,x
+	jsr print
+	pla
+	tax
+	inx
+	cpx #110$-100$
+	bne 10$
+	rts
+;
+100$	.byte $0d
+	.byte "(C) 1986 COMMODORE ELECTRONICS, LTD. ",$0d
+	.byte "        ALL RIGHTS RESERVED. ",$0d
+110$	;
+;
+;
+	.subttl	"ERROR TEXT"
+;************************************************************************
+;		ERROR TEXT
+;************************************************************************
+;
+error	.macro %n,%s,%a,%b,%c,%d
+%s	= %n
+	.ifb <%d>
+	.ifb <%c>
+	.ifb <%b>
+	.byte %n,"%a",0
+	.else
+	.byte %n,"%a %b",0
+	.endif
+	.else
+	.byte %n,"%a %b %c",0
+	.endif
+	.else
+	.byte %n,"%a %b %c %d",0
+	.endif
+	.endm
+;
+error_text
+	ERROR 00,OK,OK
+	ERROR 01,FILES_SCRATCHED,FILES,SCRATCHED
+	ERROR 13,DOS_CONFUSED,DOS,CONFUSED
+	ERROR 30,SYNTAX_ERROR,SYNTAX,ERROR
+	ERROR 31,ILLEGAL_COMMAND,SYNTAX,ERROR
+	ERROR 32,LONG_LINE,SYNTAX,ERROR
+	ERROR 33,ILLEGAL_WILD_CARD,SYNTAX,ERROR
+	ERROR 34,NO_FILENAME,SYNTAX,ERROR
+	ERROR 50,RECORD_NOT_PRESENT,RECORD,NOT,PRESENT
+	ERROR 51,OVERFLOW_IN_RECORD,OVERFLOW,IN,RECORD
+	ERROR 52,FILE_TOO_LARGE,FILE,TOO,LARGE
+	ERROR 60,FILE_OPEN,FILE,OPEN
+	ERROR 61,FILE_NOT_OPEN,FILE,NOT,OPEN
+	ERROR 62,FILE_NOT_FOUND,FILE,NOT,FOUND
+	ERROR 63,FILE_EXISTS,FILE,EXISTS
+	ERROR 64,FILE_TYPE_MISMATCH,FILE,TYPE,MISMATCH
+	ERROR 66,ILLEGAL_TRACK_AND_SECTOR,ILLEGAL,TRACK,AND,SECTOR
+	ERROR 70,NO_CHANNEL,NO,CHANNEL
+	ERROR 72,DISK_FULL,DISK,FULL
+;
+INIT_ERROR = 73
+	.byte 73,"CBM DOS V"
+	version
+	.ifdef c64
+	.byte " 1764",0
+	.else
+	.byte " 1750",0
+	.endif
+;
+	ERROR 00,NULL,BAD,ERROR,NUMBER
+;
+;
+;
+	.subttl	"ERROR CHANNEL"
+;************************************************************************
+;		ERROR CHANNEL
+;************************************************************************
+;
+;	ERROR_CHANNEL
+;
+;	read_error_channel	
+;		returns one byte from error channel
+;		sets eof flag at end of error
+;	error_channel_scratch_set_up
+;		formats message for this message
+;		entry: x,a = number of files scratched
+;	clear_error
+;		resets any pending errors to ok message
+;	error_channel_init_set_up
+;		inits error channel
+;	error_channel_set_up	
+;		general purpose error entry ( .a = error number )
+;	format_error_message
+;		formats all error messages
+;		entry:	a = error number
+;
+error_pntr = pntr
+;
+	ram error_number
+	ram error_track
+	ram error_sector
+;
+max_error_length = 50
+	ram error_line,max_error_length
+;
+	ram error_current_byte
+	ram error_end_byte
+;
+;
+error_cleanup
+	clc
+	adc error_current_byte	advance current byte by .a
+	sta error_current_byte
+	rts
+;
+read_error_channel
+	ldx error_current_byte	if	at end of error message
+	cpx error_end_byte
+	bcc 10$			
+	jsr clear_error			clear error message
+	clc
+	jmp disk_system_return_cr_eof	return cr_eof
+;
+10$	ldi error_cleanup	cleanup vector point to error cleanup
+	std cleanup_vector
+	ldi error_line-swapped_code_start
+	clc			dma_disk_addr points to appropriate error line
+	adc error_current_byte
+	bcc 20$
+	inx
+20$	std dma_disk_addr
+	lda #0
+	sta dma_disk_bank
+;
+	lda error_end_byte	.a <= number of bytes left to return to user
+	sec
+	sbc error_current_byte
+;
+	ldx system_reg_x	restore x,y
+	ldy system_reg_y
+	sec			this is a read operation
+	jmp return_execute_fastop	return via fastop
+;
+;
+
+;
+	ram scratched_files_temp,2
+	ram scratched_files_temp2,2
+	ram scratched_files_digit
+;
+error_channel_scratch_set_up	;
+	std scratched_files_temp	save number of files trashed
+	ldy #1
+	jsr format_error_message_scratch	format first part of line
+;
+	lda #0			clear the digit
+	sta scratched_files_digit
+;
+	ldi 10000		try 10000's
+	jsr 100$
+	ldi 1000		try 1000's
+	jsr 100$
+	ldi 100			try 100's
+	jsr 100$
+;
+	lda scratched_files_temp use exsisting software for last two digits
+	jsr add_error_decimal
+	jsr add_error_comma	do the comma and trailing '00'
+	lda #0
+	jmp add_error_decimal	and return
+;
+;
+100$	std scratched_files_temp2	save subtractor
+;
+	lda scratched_files_digit	clear ones digit
+	and #$f0
+	sta scratched_files_digit
+;
+110$	lda scratched_files_temp	while can subtract temp2 from temp1
+	sec
+	sbc scratched_files_temp2
+	tax
+	lda scratched_files_temp+1
+	sbc scratched_files_temp2+1
+	bcc 120$			do
+	sta scratched_files_temp+1		save result
+	stx scratched_files_temp
+	lda scratched_files_digit		inc digit and or in the $30
+	adc #$00
+	ora #$30
+	sta scratched_files_digit
+	bne 110$
+;
+120$	lda scratched_files_digit	if	digit <> 0
+	beq 130$
+	jsr add_error_byte			add digit to error message
+130$	rts				return
+;
+;
+error_channel_init_set_up
+	ldy #73
+	.byte $2c
+clear_error
+error_channel_ok_set_up
+	ldy #0
+	lda #0
+	tax
+	jmp format_error_message
+;
+error_channel_set_up
+	tay
+	ldd current_block
+;
+format_error_message
+	jsr format_error_message_scratch
+;
+	lda error_track
+	jsr add_error_decimal
+	jsr add_error_comma
+	lda error_sector
+	jmp add_error_decimal
+;
+format_error_message_scratch
+	sty error_number
+	stx error_track
+	sta error_sector
+;
+	lda #0
+	sta error_current_byte
+	sta error_end_byte
+	lda error_number
+	jsr add_error_decimal
+	jsr add_error_comma
+	lda #$20
+	jsr add_error_byte
+	jsr add_error_text
+	jsr add_error_comma
+	rts
+;
+add_error_decimal
+	cmp #100
+	bcc 30$
+	cmp #200
+	bcc 10$
+	sbc #200
+	pha
+	lda #2
+	jmp 20$
+10$	sec
+	sbc #100
+	pha
+	lda #1
+20$	jsr add_error_digit
+	pla
+30$	ldx #$ff
+40$	inx
+	sec
+	sbc #10
+	bcs 40$
+	pha	
+	txa
+	jsr add_error_digit
+	pla
+	clc
+	adc #10
+;	jmp add_error_digit
+;
+add_error_digit
+	ora #$30
+	.byte $2c
+add_error_comma
+	lda #','
+add_error_byte
+	ldx error_end_byte
+	sta error_line,x
+	cpx #max_error_length-2
+	beq 80$
+	inc error_end_byte
+80$	lda #0
+	sta error_line+1,x
+	clc
+	rts
+;
+add_error_text
+	ldi error_text		error_pntr <= start of messages
+	std error_pntr
+20$	lda error_number	do	a <= error number
+	ldx #0				if	(error_pntr) = .a
+	cmp (error_pntr,x)
+	beq 70$					break
+	jsr 100$			read until one past null
+	bne 20$			while	not at a second null
+;
+;
+70$	jsr 110$		do	point and fetch next byte
+	beq 80$				if	null, break
+	jsr add_error_byte		add byte to message
+	jmp 70$			loop
+80$	clc			exit happy
+	rts
+;
+100$	jsr 110$		do	point to and fetch next byte
+	bne 100$			while	byte not null
+110$ 	incd error_pntr		point to next byte
+	ldx #0			.a <= next byte
+	lda (error_pntr,x)
+	rts			return
+;
+	.subttl	"SELECT CHANNELS"
+;******************************************************************
+;		SELECT_CHANNELS
+;******************************************************************
+;
+num_channels = 17
+directory_channel = 16
+;
+init_channels
+	ldx #num_channels-1
+10$	txa
+	jsr select_channel_a
+	jsr clear_channel
+	ldx default_channel_number
+	dex
+	bpl 10$
+	rts
+;
+clear_channel		; set all channel data to zero
+	ldx #channel_len-1
+	lda #0
+20$	sta default_channel,x
+	dex
+	bpl 20$
+	rts
+;
+select_channel_given_sa
+	lda sa
+	and #$0f
+	.byte $2c
+;
+select_dir_channel
+	lda #16
+;
+select_channel_a
+	cmp default_channel_number
+	beq 80$
+;
+10$	pha			save channel to get
+;
+	ldi default_channel	set up cpu addr
+	std dma_cpu_addr
+	lda channel_blocks+1	set up bank
+	sta dma_disk_bank
+	ldi channel_len		set up length
+	std dma_len
+;
+;
+	lda default_channel_number	write the default channel
+	ldy #dma_immediate_write
+	jsr 50$
+	pla				mark new channel number
+	sta default_channel_number	
+	ldy #dma_immediate_read		
+	jsr 50$				read the new channel
+80$	lda default_channel_number	.a <= channel number
+	ldx channel_access		.x <= channel open flag
+	clc
+	rts
+;
+50$	asl a
+	tax
+	lda 100$,x
+	sta dma_disk_addr		set up byte address
+	lda 100$+1,x
+	adc channel_blocks		correct for page boundary
+	sta dma_disk_block
+	sty dma+1			do dat dma, oh yeah, do wah do wah
+	rts
+;
+;
+	channel_offset_temp = 0	
+100$
+	.rept num_channels
+	.word channel_offset_temp
+channel_offset_temp = channel_offset_temp+channel_len
+	.iflt $200-channel_offset_temp
+	***	CHANNELS TOO LARGE 	****
+	.endif
+	.endr
+;
+;
+
+	.subttl	"ACCESS DISK"
+;******************************************************************
+;		ACCESS_DISK
+;******************************************************************
+;
+;
+access_new_current_block
+	std current_block
+access_current_block
+	ldd current_block
+access_block_a
+access_block
+	cpd default_block		if	already have desired block
+	beq access_block_ret			go return
+	phd				save block to load
+	jsr flush_block			flush the current block to disk
+	pld				recall block to load
+	std default_block		save as current block
+;
+;
+unflush_block		;	read the new default block in.
+	ldy #dma_immediate_read
+	.byte $2c
+flush_block
+	ldy #dma_immediate_write	y <= write ( auto load )
+	jsr dma_data_block_setup	set up dma controller
+	ldd default_block		x,a <= default block	pla
+
+	std dma_disk_block		write block to dma controller
+	sty dma+1			do the dma
+access_block_ret
+	clc				return happy
+	rts
+;
+;
+dma_data_block_setup		;	set up dma controller for data block
+	ldx #110$-100$-1		( y must be preserved )
+10$	lda 100$,x
+	sta dma+2,x
+	dex
+	bpl 10$
+	rts
+;
+100$	.word	data_block	; c128 addr
+	.byte 0			; low order ramdisk address
+	.word 0			; ramdisk block - overwritten
+	.word $100		; number of bytes to move
+	.word 0			; ifr
+	.word 0			; increment both sets of registers
+110$
+;
+;
+;
+;
+	.subttl	"READ BYTE"
+;**************************************************************************
+;		READ BYTE
+;**************************************************************************
+;
+;
+read_byte_given_sa
+	jsr select_channel_given_sa
+	cmp #15			if	 error channel
+	bne 10$
+	jmp 				read_error_channel
+10$	cpx #0			if	channel not open
+	bne 20$
+	lda #$46			;<4.2 fab>
+	sta status			;<4.2 fab> set EOF and TIMEOUT bits
+	lda #no_channel
+	jmp 				disk_system_return_error
+;
+20$	cpx #'$			if	not directory channel
+	bne 				read_byte_default
+	jmp 			directory_read
+;
+read_byte_default_cleanup
+	tay			save number of bytes moved
+	beq 80$			exit iff none
+	clc			current_byte += number of bytes moved
+	adc current_byte
+	sta current_byte
+	bcc 10$			
+	incd current_block
+10$	jsr unflush_block	unflush the block ( think about it... )
+80$	rts			return
+;
+;
+;
+read_byte_default
+;
+	lda channel_access
+	cmp #'R
+	beq 10$
+	.ifdef	rel_flag
+	.ifdef	position_flag
+	cmp #'F
+	beq 10$
+	.endif
+	cmp #'L			if	 rel file
+	bne 90$
+	jmp read_byte_rel		call special routinue
+	.endif
+90$	lda #file_open
+	jmp disk_system_return_error
+;
+10$	sec			a,x,y <= end_byte - current_byte - 1
+	lda end_byte
+	sbc current_byte
+	tay
+	lda end_block
+	sbc current_block
+	tax
+	lda end_block+1
+	sbc current_block+1
+	bcs 20$			if	< 0
+	jmp				disk_system_return_eof_timeout
+;
+20$	bne 25$			.y <= min(  xay, $ff )
+	txa
+	beq 50$
+25$	ldy #$ff
+;
+50$	tya			save y while we flush the block....
+	pha
+	jsr flush_block
+ 	pla
+ 	tay			if y = 0
+ 	bne 60$				( must be time for last byte )
+;
+	lda #$40			set eof status
+	sta status
+	iny				y <= 1
+;
+60$	ldi read_byte_default_cleanup	
+;				x,a <= cleanup vector
+	sec			this is a read operation
+	jmp io_fastop		setup fastop and return
+;
+;
+	.subttl	"WRITE BYTE"
+;**************************************************************************
+;		WRITE_BYTE
+;**************************************************************************
+;
+write_byte_given_sa
+	jsr 			select_channel_given_sa
+	cmp #15			if	command channel
+	bne 10$
+	jmp 				command_channel_write
+;
+10$	cpx #'W			if	write access
+	beq 				write_byte_default
+;
+	.ifdef rel_flag
+	.ifdef position_flag
+	cpx #'F			if	fast access
+	beq				write_byte_default
+	.endif
+	cpx #'L			if	relative access
+	bne 90$
+	jmp 				write_byte_rel
+	.endif
+;
+90$	lda #no_channel		complain no channel
+	jmp disk_system_return_error
+;
+;
+cleanup_write_byte
+	tay			save bytes transferred in .y
+	beq 80$			exit if zero
+;
+	dey
+	tya			current_byte += number of bytes transfered-1
+	clc				( guarentted never to carry )
+	adc current_byte
+	sta current_byte
+;				if	current block=end_block
+	cmpdr current_block,end_block,x
+	bne 10$
+;
+	cmp end_byte			if	.a > endbyte
+	bcc 10$
+	sta end_byte				end_byte <= a
+;
+10$	inc current_byte		inc current_byte
+	bne 20$				if	wrap
+	incd current_block			inc the block number too
+;
+20$
+80$	jmp unflush_block	unflush_data_block and return
+;
+;
+write_byte_default
+;
+20$	jsr write_byte_immediate	write the damn byte....
+	bcs 90$				puke if error
+;
+;	set up fastop if appropriate
+;
+	lda #$00			.a <= number of bytes i could write to
+	sec					current block
+	sbc current_byte
+;
+40$	cmp #0				if	.a = 0
+	bne 50$
+	clc					go return happy
+90$	jmp disk_system_return
+;
+50$	pha				save .a
+	jsr flush_block			flush default block to disk
+	pla
+	tay				.y <- saved number of bytes to fastop
+	ldi cleanup_write_byte		x,a <= cleanup vector
+	clc				clc means write operation
+	jmp io_fastop			set up fastop and return
+;
+;
+;	write_byte_immediate
+;		writes data byte to current file at current file pointer
+;		also may make an effort to expand the file. If file expansion
+;		must take place, any expansion area is filled withg $FFs.
+;
+;
+write_byte_immediate
+;				while current_byte > end_byte
+30$	lda end_block+1
+	cmp current_block+1
+	bne 33$
+	lda end_block
+	cmp current_block
+	bne 33$
+	lda end_byte
+	cmp current_byte
+33$	bcs 70$
+;
+	lda end_byte		do	if	end_byte = $ff
+	cmp #$ff
+	bne 40$
+;
+	ldd current_block			save current block
+	phd
+	ldd end_block				x,a <= end_block+1
+	clc
+	adc #1
+	bcc 35$
+	inx
+35$	jsr grow_disk				expand disk at and after x,a
+	tay					.y <= possible error
+	pld
+	std current_block			restore current block
+	tya					.a <= possible error
+	bcs 90$
+;
+;
+	incd end_block				inc end_block
+	ldd directory_block			( inform directory file )
+	jsr access_block_a
+	incd dir_filelen
+;
+40$	inc end_byte			inc end_byte
+	ldd end_block			access last block
+	jsr access_block_a
+	lda #$ff			write a fill charecter
+	ldy end_byte
+	sta data_block,y
+	jmp 30$			loop
+;
+70$	jsr access_current_block	access the current block
+;
+	ldy current_byte	write the byte
+	lda data_byte
+	sta data_block,y
+;
+	inc current_byte	point to next byte
+	bne 80$
+	incd current_block
+;
+80$	clc			return happy
+90$	rts
+;
+	.ifdef rel_flag
+;
+	.subttl	"REL FILES"
+;**************************************************************************
+;		REL FILES
+;**************************************************************************
+;
+;directory:
+;	dir_record_len		1	record length
+;	dir_end_record		2	number of records we have
+;
+;channel	current_record		2	current record number
+;	current_record_byte	1	position in current record
+;	current_record_len	1	length of current record
+;	rel_write_flag		1	write flag...
+;	record_len		1	length of physical record
+;	end_record		2	maximum record number written
+;
+;access_record
+;	current_block/byte <= address of current_record,current_record_byte
+;;
+;add_record
+;	adds one record to end of file
+;	$ff plus nulls
+;;
+;fill_record
+;	fills current record from current byte to end of record with nulls.
+;	this may be a nop if current record is full
+;;
+;scan_record
+;	returns number of bytes in current record.
+;	this involves scanning the record.
+;
+;;; read_byte_rel
+;;	always returns current byte ( even if past end of record )
+;;	if past (conceptual )end of record
+;;		will return nulls to end of physical record before eof
+;;	otherwise will return bytes until EOF.
+;;	at time EOF is returned, read_byte_rel will advance current record
+;;	to start of succedding record.
+;;
+;; write_byte_rel
+;;	if	record not present
+;;		add records as neccesary
+;;		if	error
+;;			let user know about problem ( disk full ! )
+;;	if	record is not full
+;;		writes bytes at current record until record full.
+;;	else
+;;		returns record overflow error
+;;
+;; position command
+;;	if	channel is not open
+;;		no channel error
+;;	if	not relative file
+;;		complain
+;;	set record number
+;;	current_record_byte <= 0
+;;	if	record length specified
+;;		if	greater than max
+;;			puke record_overflow
+;;		else
+;;			set current_record_byte
+;;	if	record not present
+;;		return record_not_present_error
+;;
+;;
+;
+;
+;	access_record
+;
+;	sets current byte to point at area in current record/current_record_byte
+;
+;	returns error if record not present
+;
+;
+	ram access_record_temp,3
+access_record	
+;				current_block <= start of file+current_record_byte
+	clc
+	lda #dir_data_offset
+	adc current_record_byte
+	sta current_byte
+	ldi 0
+	addc directory_block
+	std current_block
+;
+	ldy channel_access
+	cpy #'F
+	bne 5$
+;
+	add current_record
+	bcs 9$
+	std current_block
+9$	lda #file_too_large
+	rts
+;
+5$	lda #0			temp <= 00:recordnumber
+	sta access_record_temp+2
+	ldd current_record
+	std access_record_temp
+;
+	lda record_len		.a <= physical record_length
+10$	lsr a			do	a >>1
+	pha				save .a
+	bcc 20$				if	carry
+	clc					current += temp
+	lda access_record_temp
+	adc current_byte
+	sta current_byte
+	lda access_record_temp+1
+	adc current_block
+	sta current_block
+	lda access_record_temp+2
+	adc current_block+1
+	sta current_block+1
+20$	asl access_record_temp		temp <<1
+	rol access_record_temp+1
+	rol access_record_temp+2
+	pla				recall .a
+	bne 10$			while	.a <> 0
+;
+	lda #record_not_present	.a <= record not present error code
+;				set carry if record no present
+	cmpdr current_record,end_record,x
+	rts			return
+;
+;
+
+add_record
+	ldd current_record	save current record on stack
+	phd
+	lda current_record_byte	save current record byte
+	pha
+	lda data_byte		save current data_byte on stack
+	pha
+;
+5$	jsr 10$			do	add a record
+	bcs 90$				puke if error
+;	lda current_byte	while	another record would fit in this block
+;	clc
+;	adc record_len
+;	bcc 5$
+;
+	clc			happy
+90$	tay			save possible error code
+	pla
+	sta data_byte		restore data byte from stack
+	pla
+	sta current_record_byte
+	pld			restore current record
+	std current_record
+	tya			restore possible error code
+	rts			return
+;
+;
+;
+;
+;
+10$	ldd end_record		if	 end record = $ffff
+	cpi $ffff
+	bcs 95$				exit file too large
+	std current_record	current_record <= end_record
+	lda #0			current_record_byte <= 0
+	sta current_record_byte
+	jsr access_record	access_record
+	lda #$ff		write $ff
+	sta data_byte
+	jsr write_byte_immediate
+	bcs 19$			puke if errror
+	inc current_record_byte	point to next byte
+	jsr pad_record		pad remainder of record with nulls
+	bcs 19$			if	no error
+	incd end_record			indicate new end record
+19$	rts
+;
+95$	lda #file_too_large
+	sec
+	rts
+;
+;
+;	pad_record	fills out remainder of record with nulls
+;
+;			NOTE: current_block/byte must be aligned with
+;			      current_record/current_record_byte before
+;			      using this routine. ( This can be done by
+;			      calling access_record first.
+;
+pad_record		; fills out remainder of record with nulls
+10$	lda current_record_byte
+	cmp record_len
+	bcs 80$
+	lda #0
+	sta data_byte
+	jsr write_byte_immediate
+	bcs 90$
+	inc current_record_byte
+	bne 10$
+80$	clc
+90$	rts
+;
+;
+scan_record
+	lda current_record_byte	save current byte on stack
+	pha
+	lda #0				access the record
+	sta current_record_byte
+	sta current_record_len
+	jsr access_record		( pukes if record not present )
+	bcs 90$
+;
+20$	lda current_record_byte		while 	current_record_byte < record_len
+	cmp record_len
+	bcs 80$
+;
+	jsr access_current_block	do	access the data block
+	ldy current_byte			if	current byte <> 0
+	lda data_block,y
+	beq 30$
+	lda current_record_byte				len <= current index
+	sta current_record_len
+30$	inc current_byte			current_byte++
+	bne 40$					if	zero
+	incd current_block				current_block++
+40$	inc current_record_byte			current_record_byte++
+	bne 20$	
+;
+80$	pla			restore current_record byte
+	sta current_record_byte
+	clc
+	rts
+;
+
+90$	tay
+	pla
+	tya
+	rts
+;
+;
+read_a_byte_from_the_record
+	jsr access_record
+	bcs 90$
+	jsr access_current_block
+	ldx current_byte
+	lda data_block,x
+	clc
+90$	rts
+;
+;
+; 
+; read_byte_rel
+;	always returns current byte ( even if past end of record )
+;	if past (conceptual )end of record
+;		will return nulls to end of physical record before eof
+;	otherwise will return bytes until EOF.
+;	at time EOF is returned, read_byte_rel will advance current record
+;	to start of succedding record.
+;
+cleanup_write_byte_rel
+;				correct current_record_byte
+	jsr cleanup_read_byte_rel
+	jsr access_record	access the record
+	jsr pad_record		pad the remainder of the record with nulls.
+	bcs 80$
+	incd current_record	point to start of next record
+	lda #0
+	sta current_record_byte
+80$	clc			return happy
+	rts
+;
+cleanup_read_byte_rel
+	clc
+	adc current_record_byte
+	sta current_record_byte
+	jmp unflush_block
+;
+read_byte_rel
+	ldi cleanup_read_byte_rel
+	std cleanup_vector	set up cleanup vector
+	jsr scan_record		scan record for length
+	bcs 90$			puke if error
+	jsr access_record	set up current_block/byte
+;
+	sec			.a <= bytes in record-current_record_byte
+	lda current_record_len
+	sbc current_record_byte
+	beq 64$			if	 0, go do that eof thing...
+;
+;	bcs 20$			if	< 0
+;	lda record_len			.a <= number of bytes left in physrecord
+;	clc					-1
+;	sbc current_record_byte
+;
+20$	sec			let fastop move most of the bytes...
+	jmp rel_fastop
+90$	jmp disk_system_return_error
+;
+64$	jsr read_a_byte_from_the_record	read a byte
+	ldx #0				point to start of next record
+	stx current_record_byte		( .a must be preserved )
+	incd current_record
+	jmp disk_system_return_eof	return data byte and eof to user
+;
+
+write_byte_rel
+	clc				;<4.2 fab>
+	jsr write_byte_rel_flag_carry	;<4.2 fab> it's ok if clrchn was done
+	bne 95$				;<4.2 fab> puke
+
+	ldi cleanup_write_byte_rel
+	std cleanup_vector
+10$	cmpdr current_record,end_record,x
+	bcc 20$
+	jsr add_record
+	bcc 10$
+	.byte $2c
+
+95$	lda #overflow_in_record
+90$	jmp disk_system_return_error
+
+20$	lda record_len			if	 record is full
+	sec
+	sbc current_record_byte
+	bcc 95$					puke
+	beq 95$
+	pha				;<4.2 fab>
+	jsr write_byte_rel_flag_carry	;set flag to puke later if no clrchn
+	pla				;<4.2 fab>
+	clc				c=0
+
+rel_fastop
+	php				save .c
+	pha				save .a
+	jsr 				access_record
+	jsr 				access_current_block
+	jsr 				flush_block
+	lda current_byte		set up dma address
+	sta dma_disk_addr
+	ldd current_block
+	std dma_disk_block
+	pla				restore .c ,.a
+	plp
+	jmp return_execute_fastop	go do it...
+;
+;
+write_byte_rel_flag_carry	;<4.2 fab & hcd>
+;
+	lda interface_page	get pntr to write_byte_rel_flag
+	sta pntr+1
+	lda #<write_byte_rel_flag
+	sta pntr
+;
+	ldy #0			.c=0  read it
+	lda (pntr),y		.c=1  set it
+	bcc 10$
+	rol a
+	sta (pntr),y
+10$	rts
+;
+;
+position_command
+	jsr get_filename_char	read channel number
+	bcs 94$
+	tya
+	and #$0f
+	jsr select_channel_a	select channel
+	
+	lda channel_access	
+	.ifdef position_flag
+	cmp #'F			if	not open for fast access
+	beq 10$				or
+	.endif
+	cmp #'L			if	not open for rel
+	bne 95$				go complain
+;
+10$	jsr get_filename_char	get low byte of record number
+	tya
+	bcs 94$
+	sta current_record
+	jsr get_filename_char	get high byte of record number
+	tya
+	bcs 94$
+	sta current_record+1
+	lda #0			current_record_byte <= 0
+	sta current_record_byte
+	jsr get_filename_char
+	tya
+	bcs 80$
+;
+	.ifdef position_flag
+	ldy channel_access	
+	cpy #'F			if	not open for fast access
+	beq 50$
+	.endif
+;
+	cmp #0				if	not zero
+	beq 80$
+	tay					decrement
+	dey					
+	tya
+	cmp record_len				if	> record length
+	bcs 93$						puke
+50$	sta current_record_byte		
+80$	lda current_record		if	current record != 0
+	bne 85$
+	lda current_record+1			decd current record
+	beq 88$
+	dec current_record+1
+85$	dec current_record
+88$	jmp access_record		go access record
+;
+;
+95$	lda #no_channel
+	.byte $2c
+94$	lda #syntax_error
+	.byte $2c
+93$	lda #overflow_in_record
+90$	sec
+	rts
+;
+	.endif
+;
+	.subttl	"GROW DISK
+;**************************************************************************
+;		GROW DISK
+;**************************************************************************
+;
+	ram	swap_block,2
+	ram	swap_delta,2
+; 
+;	entry:
+;		x,a	lowest block number to shift up by one.
+;			( if == disk end then disk simply expanded )
+;
+;
+;
+grow_disk
+	std swap_block		save swap block
+	ldd disk_end		x,a <= disk_end after grow opeartion
+	clc
+	adc #$01
+	bne 5$
+	inx
+5$	cpd disk_max		if	 >= disk_max
+	bcc 10$
+	lda #disk_full			puke
+	rts
+;
+10$	ldi 1			adjust all pointers into disk
+	jsr adjust_pointers
+;
+	ldd swap_block		point to swap block & load into current_block
+	jsr access_block_a
+;
+70$	incd swap_block		do	swap_block <= address of next
+	jsr dma_data_block_setup	set up for data block dma
+	ldd swap_block			dma_disk_block <= swap_block 
+	std dma_disk_block				( next block )
+	cpd disk_end			if	>= disk_end
+	bcs 80$					break
+	lda #dma_immediate_swap		swap a roo
+	sta dma+1
+	jmp 70$
+;
+80$	clc
+	rts
+;
+;
+;
+adjust_pointers
+	std swap_delta
+	lda default_channel_number	save current channel
+	pha
+	ldx #num_channels-1		x <= number of channels
+10$	txa				do
+	jsr select_channel_a			select channel x
+	lda channel_access			if	open
+	beq 20$
+;
+	ldd end_block					adjust end block
+	jsr adjust_pointer
+	std end_block
+;
+	ldd current_block				adjust current block
+	jsr adjust_pointer
+	std current_block
+;
+	ldd directory_block				adjust dir block
+	jsr adjust_pointer
+	std directory_block
+;
+20$	ldx default_channel_number	while	0 <> (x <= default_channel-1 )
+	dex
+	bpl 10$
+;
+	pla			
+	jsr select_channel_a		restore to correct channel
+;
+	ldd disk_end			oh yeah, fix the disk_end too
+	jsr adjust_pointer
+	std disk_end
+	clc
+	rts
+;
+adjust_pointer
+	cpd swap_block
+	bcc 20$
+	add swap_delta
+20$	rts
+;
+
+	.subttl	"DELETE FILE & COMPACT DISK"
+;************************************************************************
+;		DELETE FILE ( also crushes disk )
+;************************************************************************
+;
+;		delete_file
+;			entry:	data page has directory block on it
+;
+delete_file
+	ldd default_block	swap block <= default_block
+	std swap_block
+;	
+	ldd dir_filelen		stack number of blocks
+	phd
+	ldd dir_filelen
+;
+	eor #$ff		x,a <- ones complement of x,a
+	tay			( we wish to remove (-x,a)+1 blocks
+	txa
+	eor #$ff
+	tax
+	tya
+;
+5$	jsr adjust_pointers	modify relavent pointers by that amount
+	pld
+	std swap_delta		save number of blocks in delta to move disk by
+;				do
+10$	ldd swap_block			point to block to move down
+	sec
+	addc swap_delta
+	jsr access_block_a		access that block
+	ldd swap_block			tell access new number for block
+	std default_block
+	incd swap_block			point to next location
+;				while	within the disk domain
+	cmpdr disk_end,swap_block,a
+	bcs 10$
+;
+	rts			return happy
+;
+;
+
+	.subttl	"UTILITIES
+;************************************************************************
+;			UTILITIES
+;************************************************************************
+;
+to_lower
+	cmp #$40
+	bcc 20$
+	cmp #$80
+	bcc 10$
+	cmp #$c0
+	bcc 20$
+10$	and #$1f
+	ora #$40
+20$	clc
+	rts
+;
+exptab	.byte $01,$02,$04,$08,$10,$20,$40,$80
+;
+;
+	.subttl	"DIRECTORY OPERATIONS
+;************************************************************************
+;		DIRECTORY OPERATIONS
+;************************************************************************
+;
+;		find_a_file_for_open
+;		find_nth_matching_file
+;
+	ram filename,17
+	ram file_type
+	ram parse_access,1
+	ram type_char,1
+	ram wild_char,1
+	ram replace_flag,1
+	.ifdef rel_flag
+	ram parse_record_len,1
+	.endif
+	ram found_flag,1
+;
+;
+;
+find_a_file
+;
+	jsr select_dir_channel
+	ldd first_block
+;
+10$	std current_block
+	cpd disk_end
+	bcc 20$
+	beq 15$
+	lda #dos_confused
+	.byte $2c
+15$	lda #file_not_found
+90$	sec
+	rts
+;
+20$	jsr access_current_block
+	bcs 90$
+	jsr compare_filenames
+	bcs 30$
+	ldd current_block
+	rts
+;
+30$	ldd dir_filelen
+	sec
+	addc current_block
+	jmp 10$
+;
+find_open_file
+	jsr select_dir_channel
+	ldd first_block
+10$	std current_block
+	cpd disk_end
+	bcc 20$
+	beq 15$
+	lda #dos_confused
+	.byte $2c
+15$	lda #file_not_found
+90$	sec
+	rts
+;
+20$	jsr access_current_block
+	lda dir_access
+	beq 30$
+	ldd current_block
+	clc
+	rts
+;
+30$	ldd dir_filelen
+	sec
+	addc current_block
+	jmp 10$
+;
+compare_filenames
+	ldx #$ff
+10$	inx
+	lda dir_filename,x
+	bne 20$
+	lda filename,x
+	beq 80$
+	cmp #'*
+	bne 90$
+80$	clc
+	rts
+;
+20$	lda filename,x
+	beq 90$
+	cmp dir_filename,x
+	beq 10$
+	cmp #'?
+	beq 10$
+	cmp #'*
+	beq 80$
+90$	sec
+	rts
+;
+;
+
+	.subttl	"GENERAL PURPOSE OPEN ROUTINE"
+;************************************************************************
+;		OPENS 
+;************************************************************************
+;
+;
+;
+;	open:
+;		0-14	<$><:>filename<,<s|p|r>>
+;			<@><<0>:>filename<,<s|p|r>><,<r|w|a|m>>
+;		15 only:
+;			Rename<0<:>>filename=<0<:>>filename
+;			Copy<0<:>>filename=<0<:>>filename
+;			Scratch<0<:>>filename
+;			New<0<:>>filename,idh			<4.1 fab>
+;			Initialize<0<:>>
+;			Validate<0<:>>
+;			P<96+channel_number><record_low><record_high><offset>
+;			UJ:
+;
+;
+;	dir_file
+;	parse_filename
+;	second_filename
+;	file_type	<p>,<s>,<r>
+;	access_type	<r>,<w>,<m>,<a>
+;	replace_flag
+;
+;
+;	ram filename,17
+;	ram parse_access,1
+;	ram type_char,1
+;	ram wild_char,1
+;	ram replace_flag,1
+;	ram found_flag,1
+;
+;
+;
+	.subttl	"LOW LEVEL PARSING
+;************************************************************************
+;		PARSING	low level utilities
+;************************************************************************
+;
+	ram get_filename_index		pointer to next char
+	ram get_filename_len		max chars to get
+	ram get_filename_source		0 = from basic, 1 = from command
+	ram remote_filename_buffer,256	copy of filename from user
+;
+;	get_filename_char
+;		exit:	c = 0	y = char 
+;			.a	type of char
+;			c = 1	no char there
+;	un_get_filename_char
+;		ungets a gotton filename char
+;
+;	init_get_filename
+;		inits all this stuff for geting from user filenames
+;	init_get_filename_from_command
+;		inits all this stuff for geting from command.
+;
+parse_init
+	lda #0
+	sta parse_access
+	sta type_char
+	sta wild_char
+	sta replace_flag
+	.ifdef rel_flag
+	sta parse_record_len
+	.endif
+;
+init_get_filename
+	jsr read_users_filename
+	ldy fnlen
+	lda remote_filename_buffer-1,y	;<4.1 fab>
+	ldx #0
+	beq igf_really
+
+init_get_filename_from_command
+	ldx #1		; source
+	ldy command_len ; len
+	lda command-1,y			;<4.1 fab>
+
+igf_really
+	cmp #cr		;for 1541 compatibility, strip trailing <CR> if any
+	bne 10$		;<4.1 fab>
+	dey		;<4.1 fab>
+
+10$	stx get_filename_source
+	sty get_filename_len
+	lda #0
+	sta get_filename_index
+	clc
+	rts
+;
+unget_filename_char
+	dec get_filename_index
+	rts
+;
+get_filename_char
+	ldy get_filename_index	if	index >= len
+	cpy get_filename_len
+	bcs 80$				go return error
+;
+	lda get_filename_source	if	source is ram
+	bne 10$
+	lda remote_filename_buffer,y
+;	jsr read_yth_filename_byte
+	jmp 20$			else
+10$	lda command,y			read char from command
+;
+20$	inc get_filename_index	point to next char
+	jsr classify_char	classify_char
+	clc			return happy
+80$	rts
+;
+;	classsify_char
+;		entry:	a= char
+;		exit:	a = class
+;			y = char
+;			c = 0
+;
+classify_char
+	ldx #7
+10$	cmp classy_chars,x
+	beq 80$
+	dex
+	bne 10$
+	tay
+	lda #0
+	rts
+;
+80$	tay
+	lda exptab,x
+	cmp #%00000100
+	beq 85$
+	cmp #%00000010
+	bne 88$
+85$	sty wild_char
+88$	clc
+	rts
+;
+classy_chars
+	.byte ' ?*"@=$,'
+;
+;
+;	classes	7	6	5	4	3	2	1	0
+;	class	<comma>	<$>	<=>	<@>	<">	<*>	<?>	< >
+;		
+;
+	.subttl	"MID LEVEL PARSING
+;************************************************************************
+;		PARSING		mid level calls
+;************************************************************************
+;	get_filename
+;		entry:	cur_filename_char = users string
+;		exit:	cur_filename_char = advanced
+;	get_mod_type
+;		entry:	cur_filename_char = pointer to users string
+;
+get_filename
+	ldx #$ff		x <= 0
+10$	inx			do	x++;
+	lda #0				filename,x <= 0
+	sta filename,x
+	jsr get_filename_char		get char	( into y )
+	bcs 90$				exit if none
+	and #%10100000			if	not correct type
+	bne 80$					backup and exit
+	ldx #$ff			x <= -1
+20$	inx				do	x++
+	cpx #16					if	x==16
+	beq 80$						backup and exit
+	lda filename,x			while	filename,x <> 0
+	bne 20$
+	tya				filename,x <= y
+	sta filename,x
+	jmp 10$			loop
+;
+80$	jsr unget_filename_char
+90$	clc
+	rts
+;
+;
+;	get_mod_type
+;		entry:	cur_filename_char = pointer to users string
+;		exit:	type & access flags set if such is found
+;			things advanced
+;			if	comma found, but not legal mod
+;				routine pukes.
+;
+get_mod_type
+	jsr get_mod_type_2
+	.ifdef rel_flag
+	jsr get_mod_type_2
+	.endif
+get_mod_type_2
+	jsr get_filename_char
+	bcs 80$
+;
+	cpy #',
+	bne 70$
+;
+	jsr get_filename_char
+	bcs 70$
+;
+	tya
+	jsr to_lower
+;
+	cmp #'P
+	beq get_type
+	cmp #'S
+	beq get_type
+	cmp #'U
+	beq get_type
+;
+	cmp #'R
+	beq get_access
+	cmp #'W
+	beq get_access
+	cmp #'A
+	beq get_access
+	cmp #'F
+	beq get_access
+;
+	.ifdef rel_flag
+	cmp #'L
+	beq get_rel_length
+	.endif
+;
+	jsr unget_filename_char
+70$	jsr unget_filename_char
+80$	clc	
+	rts
+;
+	.ifdef rel_flag
+get_rel_length
+	jsr get_type
+	bcs 90$
+	jsr get_filename_char
+	bcs 80$
+	cpy #',
+	bne 70$
+	jsr get_filename_char
+	bcs 90$
+	sty parse_record_len
+	jmp get_end_mod
+;
+70$	jsr unget_filename_char
+80$	clc
+	rts
+;
+90$	lda #syntax_error
+	sec
+	rts
+	.endif
+;
+;
+get_type
+	ldy type_char
+	sta type_char
+	jmp get_end_mod
+;
+get_access
+	ldy parse_access
+	sta parse_access
+;
+get_end_mod
+	tya				stack previous mod char
+	pha
+10$	jsr get_filename_char		do	eat chars
+	bcs 80$				until	none left
+	and #%10100000				or comma, or equals sign
+	beq 10$
+	jsr unget_filename_char		if	comma or eq, unget
+80$	clc				clc
+	pla				recall previous mod char
+	beq 88$				if	<> 0
+	lda #syntax_error			syntax error
+	sec
+88$	rts				return
+;
+;	eat_zero_colon
+;		skips over <0><:>  iff present
+;
+;
+eat_zero_colon
+	jsr 		get_filename_char
+	bcs 80$		exit if none
+	cpy #':		if	colon
+	beq 80$			exit
+;
+10$	cpy #'0		if	zero
+	bne 70$		
+	jsr 			get_filename_char
+	bcs 80$			if	there
+	cpy #':				if	colon
+	beq 80$					exit
+70$	jsr 		unget_filename_char
+80$	clc		exit
+	rts
+;
+;
+
+	.subttl	"HIGH LEVEL PARSING
+;************************************************************************
+;		PARSING		high level calls
+;************************************************************************
+;
+;
+;
+;	parse_for_open
+;
+parse_for_open
+	jsr parse_init
+;
+	jsr get_filename_char
+	bcs 80$
+	cpy #'@
+	bne 10$
+5$	sty replace_flag
+	jsr get_filename_char
+	bcs 30$
+	cpy #'@
+	beq 5$
+	jsr unget_filename_char
+	jmp 30$
+;
+10$	cpy #'$
+	bne 20$
+	sty parse_access		;!!!! kludge defining directory read as an
+;					type of access....
+	jmp 30$
+20$	jsr unget_filename_char
+;
+30$	jsr eat_zero_colon	eat zero colon
+;
+	jsr get_filename	get the filename
+	jsr get_mod_type	get modifiers
+	bcs 90$
+	jsr get_filename_char	if more stuff left
+	bcs 80$
+	lda #syntax_error		puke
+90$	sec
+	rts
+;
+80$	clc			return
+	rts
+;
+;
+;
+	.subttl	"OPEN CHANNEL"
+;************************************************************************
+;			NORMAL OPENS
+;************************************************************************
+;
+;
+;
+;	open 1	= parse
+;		check for existence of file
+;		do all checking which is independent of access
+;
+;	open 2	= type dependent checking & actual opens
+;
+open_channel_given_sa
+	jsr select_channel_given_sa
+	cmp #15
+	bne 5$
+	jmp command_channel_open
+;
+5$	cpx #0			if	channel is open
+	beq 10$
+;
+	jsr close_channel_given_sa	close it for the asshole
+;
+10$	jsr clear_error		clear any old errors
+	jsr parse_for_open	parse users filename
+	bcs 90$
+;
+	lda parse_access		if	open of directory file
+	cmp #'$
+	bne 15$
+	jmp directory_open			call directory_open
+;
+15$	lda #no_filename
+	ldx filename		if	no filename
+	beq 90$				puke
+;
+	lda #0			found_flag <= 0
+	sta found_flag
+;
+	lda parse_access		if	no parse_access
+	bne 20$
+	lda #'R				access <= read
+	sta parse_access
+;
+20$	jsr find_a_file		attempt to find the file
+	bcs 80$			if	found
+;
+	phd				save file location
+	jsr select_channel_given_sa	get our channel
+	pld				recall file location
+	std current_block		get the directory_block
+	jsr access_current_block
+	bcs 90$
+;
+	lda #file_open			puke if file is open
+	ldx dir_access
+	bne 90$
+;
+	ldx dir_filetype		x <= directory type
+;
+30$	lda type_char			a <= type_char
+	stx type_char			type_char <= x
+	beq 40$				if	a <> 0
+	cmp dir_filetype			if	a <> dir_filetype
+	beq 40$
+	lda #file_type_mismatch				file_type_mismatch
+90$	sec						puke
+	rts
+;
+40$	inc found_flag			set found_flag
+80$	lda type_char		if	no file type specified or found
+	bne 83$
+	lda #'S				default too sequential file type 
+	sta type_char
+83$
+;
+	.ifdef rel_flag
+	cmp #'L			if	relative file
+	bne 84$
+	jmp open2_rel		do up the rel file parse
+84$
+	.endif
+;
+	lda parse_access	if	open for read
+	cmp #'R
+	beq open2_read			call open for read
+	cmp #'A			if	open for append
+	beq open2_append
+	.ifdef position_flag
+	cmp #'F			if	access for fast
+	bne 85$ 
+	jmp open2_fast			go open for fast
+	.endif
+85$	jmp open2_write		call open for write
+;
+;	access request
+;	 replace_request
+;	  wild present
+;	   type request
+;	    found_flag
+;	r1---	error syntax ( replace and read access incompat )
+;	r0--0	error file not found
+;	r0-s1	open for sequential
+;	r0-p1	open prog for read
+;	r0-l1	open rel for read
+;	r1---	error syntax ( replace and read access incompat )
+;	r0--0	error file not found
+;	r0-s1	open for sequential
+;	r0-p1	open prog for read
+;	r0-l1	open rel for read
+;
+;	access request
+;	 replace_request
+;	  wild present
+;	   type request
+;	    found_flag
+;	f-1--	error syntax ( illegal wild cards )
+;	f-0$-	error syntax ( not on directory file , file_type_mismatch )
+;	f-0L-	error syntax ( not on rel files, file type mismatch )
+;	f-0s0	open new seq file using open2_write
+;	f-0p0	open new prg file using open2_write
+;	f00s1	open existing seq file using open2_read
+;	f00p1	open existing prg file using open2_read
+;	f10s1	open existing seq file using open2_write
+;	f10p1	open existing prg file using open2_write
+;	
+;
+;	access request
+;	 replace_request
+;	  wild present
+;	   type request
+;	    found_flag
+;	w-000	open seq file for write new
+;	w-0s0	open seq file for write new
+;	w-0p0	open prg file for write new
+;	w-0l0	open rel file for write new
+;	w1001	open seq file for write	( delete old )
+;	w10s1	open seq file for write ( delete old )
+;	w10p1	open prg file for write	( delete old )
+;	w10l1	open rel file for write	( delete old )
+;	w-!--	error illegal use of wild cards
+;	w00-1	error file exists
+;
+;	w-!--	error illegal use of wild cards
+;	w00-1	error file exists
+;	w-000	open seq file for write new
+;	w-0s0	open seq file for write new
+;	w-0p0	open prg file for write new
+;	w-0l0	open rel file for write new
+;	w1001	open seq file for write	( delete old )
+;	w10s1	open seq file for write ( delete old )
+;	w10p1	open prg file for write	( delete old )
+;	w10l1	open rel file for write	( delete old )
+;
+;	open2_read	directory_block is current_block
+;
+open2_read
+	lda #syntax_error
+	ldx replace_flag	if	open for replace ( and read )
+	bne 90$				puke
+;
+	lda #file_not_found	if	file not found
+	ldx found_flag
+	beq 90$				puke
+;
+	jsr access_current_block access_current_block
+	bcs 90$
+;				access_channel
+	jsr select_channel_given_sa
+;
+	ldd default_block	copy default_block
+;
+	std directory_block	mark the directory_block in channel
+	std current_block	mark pointing to first block
+;
+	add dir_filelen		add in the file length
+	std end_block		end_block <= x,a
+;
+	lda #dir_data_offset	first byte pointer
+	sta current_byte
+;
+	lda dir_last_byte	end_byte <= from dir entry
+	sta end_byte
+;
+	.ifdef rel_flag
+;
+	lda dir_record_len	mark record length and end record
+	sta record_len
+	ldd dir_end_record
+	std end_record
+	ldi 0			clear current record
+	std current_record
+	sta current_record_len
+	sta current_record_byte
+;	sta rel_write_flag
+;
+	.endif
+;
+;
+	lda parse_access	mark channel access type
+	sta channel_access
+	sta dir_access		mark directory block as open
+;
+80$	clc			return happy
+	rts	
+;
+90$	sec			error exit
+	rts
+;
+open2_append
+	lda #'W			uh.. pretend this is opening for write...
+	sta parse_access
+	ldx found_flag		if	file not found
+	beq open2_write			go open for write
+;
+	lda #illegal_wild_card	if	wild cards
+	ldx wild_char
+	bne 90$				puke
+;
+	jsr open2_read		open as if for read
+	bcs 90$			puke if error
+;
+	lda end_byte		current block,byte <= end block,byte
+	sta current_byte
+	ldd end_block
+	std current_block
+;
+	inc current_byte	advance current block,byte by one
+	bne 20$
+	incd current_block
+20$	clc			return happy
+	rts
+;
+90$	sec
+	rts
+;
+	.ifdef position_flag
+open2_fast
+	lda #illegal_wild_card
+	ldx wild_char
+	bne 90$
+	lda #syntax_error
+	ldx type_char
+	cpx #'S
+	beq 10$
+	cpx #'P
+	beq 10$
+	sec
+	rts
+;
+10$	lda found_flag
+	beq open2_write
+	lda replace_flag
+	bne open2_write
+	jmp open2_read
+;
+90$	sec
+	rts
+;
+	.endif
+;
+open2_write
+	lda #illegal_wild_card
+	ldx wild_char		if	wild_char <> 0
+	beq 10$				puke
+	jmp 90$
+;
+10$	ldx found_flag		if	found_flag <> 0
+	beq 20$
+	lda #file_exists	
+	ldx replace_flag		if	not open for replace
+	beq 90$					puke
+;
+	jsr access_current_block
+	jsr delete_file			delete file and directory entry
+;
+20$	jsr select_channel_given_sa
+	jsr clear_channel
+	ldd disk_end		point to end of disk
+	std current_block	this will be the current block
+	std directory_block	entire file is here
+	std end_block
+;
+	jsr grow_disk		make it grow from the end
+	bcs 90$			puke if error
+;
+	jsr select_channel_given_sa
+	jsr access_current_block access the directory block to use
+;
+	ldy #17			copy filename to dir block
+70$	lda filename,y
+	sta dir_filename,y
+	dey
+	bpl 70$
+;
+	lda type_char		markl type in channel & directory
+	sta dir_filetype
+;
+	.ifdef rel_flag
+	lda parse_record_len	mark record_lengths ( in case rel )
+	sta dir_record_len
+	sta record_len
+	.endif
+;
+	ldi 0
+	std dir_filelen		number of blocks <= 0
+;
+	lda #dir_data_offset	mark last byte in dir file
+	sta dir_last_byte
+	sta end_byte		mark last & current byte in channel
+	sta current_byte
+;
+	lda parse_access	mark directory & channel entry as open for write
+	sta dir_access
+	sta channel_access
+;
+;				if rel file, end_record is already cleared 
+;
+80$	clc			return happy
+	rts
+;
+90$	sec
+	rts
+;
+	.ifdef rel_flag
+open2_rel
+	lda #'L			set access and filetype to relative
+	sta parse_access
+	sta type_char
+;
+	ldx found_flag		if	found_flag <>  0 
+	beq 20$
+;
+	jsr access_current_block	access directory block
+	lda dir_record_len		parse_record_len <= dir_rec_len
+	ldx parse_record_len		if 	user specification of rec len
+	sta parse_record_len
+	beq 10$
+	cpx parse_record_len			if	wrong
+	bne 95$						HA ! puke !
+;
+10$	ldx replace_flag		if	not open for replace
+	bne 20$					go open it for read
+	jmp open2_read
+;
+20$	lda parse_record_len	if	record len zero
+	beq 95$				go puke
+	ldx found_flag		if	file not present
+	bne 30$	
+	lda #illegal_wild_card
+	ldx wild_char			if	wild_char <> 0
+	bne 90$					puke
+30$	jmp open2_write		go open file for write
+;
+95$	lda #record_not_present
+90$	sec
+	rts
+;
+	.endif
+;
+;	
+;
+	.subttl	"CLOSE CHANNEL"
+;************************************************************************
+;			CLOSE CHANNEL
+;************************************************************************
+;
+close_all_channels
+	ldx #num_channels-1
+10$	txa
+	pha
+	jsr select_channel_a
+	jsr close_channel_default
+	pla
+	tax
+	dex
+	bpl 10$
+	clc
+	rts
+;
+;
+close_channel_given_sa_user		;<4.2 fab>
+	lda sa				;<4.2 fab> if closing command channel...
+	and #$0f			;<4.2 fab>
+	cmp #15				;<4.2 fab>
+	beq close_all_channels		;<4.2 fab> ...then close all others too.
+
+close_channel_given_sa
+	jsr select_channel_given_sa
+;
+close_channel_default
+	lda default_channel_number	.a <= channel number
+	ldx channel_access		.x <= channel open flag
+;			if	not open
+	beq 80$
+	cmp #15			if	not command channel or dir file
+	beq 70$
+	cpx #'$
+	beq 70$
+;
+	ldd directory_block		access the directory block
+	std current_block
+	jsr access_current_block
+	bcs 90$
+;
+	lda end_byte			copy length of file to dir_blocks
+	sta dir_last_byte
+;
+	ldd end_block
+	sbd directory_block
+	std dir_filelen
+;
+	.ifdef rel_flag	
+	ldd end_record			copy number of recordes to directory
+	std dir_end_record
+	.endif
+;
+	lda #0				mark dir as closed
+	sta dir_access
+;
+70$	lda #0			mark channel as closed
+	sta channel_access
+;
+80$	clc		return happy
+90$	rts
+;
+;
+
+	.subttl	"COMMAND CHANNEL"
+;************************************************************************
+;		COMMAND CHANNEL OPEN AND WRITE
+;************************************************************************
+;
+;
+command_len_max = 40	max length of command
+	ram command_len		length of command
+	ram command,41		actual command text
+;
+;
+command_channel_open
+	lda #15
+	jsr select_channel_given_sa
+	lda #'W
+	sta channel_access		; mark the channel as open
+;
+	jsr init_get_filename		read filename into filename_buffer
+	ldy fnlen			if	filename not present
+	clc
+	beq 8$					return happy
+	cpy #command_len_max		if	filename too long
+	bcc 10$
+	lda #long_line				puke
+8$	rts
+;
+10$	sty command_len			mark length of command
+	dey
+20$	lda remote_filename_buffer,y	copy name to command_buffer
+	sta command,y
+	dey
+	bpl 20$
+;
+command_clear_and_interpret
+	jsr interpret_command		interpret the command
+	ldx #0				clear command length
+	stx command_len	
+	rts				return possible error
+;
+;
+cleanup_command_write
+	clc				add in length of command
+	adc command_len
+	sta command_len
+	beq 10$
+	jsr command_clear_and_interpret	execute command
+	bcc 10$
+	jsr error_channel_set_up	possible_error ?
+10$	rts
+;
+;
+command_channel_write
+	ldy data_byte		.y <= data to write
+
+;	lda command_len		if command length is null
+;	bne 5$
+;	cpy #cr				if command is simple cr
+;	bne 5$
+;	clc
+;	jmp disk_system_return			just return
+;
+;					( command was interpreted by 
+;					cleanup command write )
+;
+5$	lda #command_len_max	.a <= number of free bytes in command
+	sec
+	sbc command_len
+	bcs 20$			if	< 0
+;
+	cpy #cr				if	char is a cr
+	bne 10$
+	lda #0					command_len <= 0
+	sta command_len
+10$	lda #long_line			puke long line error
+	jmp disk_system_return_error
+;
+20$	cpy #cr			if	char is a cr
+	bne 30$
+	jsr 				interpret_command
+	ldx #0				clear command
+	stx command_len
+	jmp disk_system_return		return to user passing possible error
+;
+30$	tay			save free bytes in .y
+	ldi cleanup_command_write
+	std cleanup_vector	set up cleanup vector
+;				set up dma disk address
+	ldi command-swapped_code_start
+	clc
+	adc command_len
+	bcc 40$
+	inx
+40$	std dma_disk_addr
+	lda #0
+	sta dma_disk_bank
+;
+	tya			.a <= number of bytes can write
+	clc			this is a write operation
+	jmp return_execute_fastop
+;
+;
+;		
+;
+	.subttl	"COMMAND DISPATCH"
+;************************************************************************
+;		COMMAND DISPATCH
+;************************************************************************
+;	commands:
+;		Rename<0<:>>filename=<0<:>>filename
+;		Copy<0<:>>filename=<0<:>>filename
+;		Scratch<0<:>>filename
+;		New<0<:>>filename,idh			<4.1 fab>
+;		Initialize<0<:>>
+;		Validate<0<:>>
+;		P<96+channel_number><record_low><record_high><offset>
+;		Uxxxx
+;
+com_def	.macro %c,%r
+	.byte %c
+	.dbyte %r-1
+	.endm
+;
+commands
+	com_def 'S',scratch_command
+	com_def 'R',rename_command
+	com_def 'C',copy_command
+	com_def 'N',new_command		;<4.1 fab>
+	com_def 'M',m_command		; m-w,m-r ( used only for dev change )
+	com_def 'I',init_command
+	com_def 'U',u_command
+	com_def 'V',validate_command
+	.ifdef rel_flag
+	com_def 'P',position_command
+	.endif
+	.byte 0
+;
+command_pntr	= pntr
+;
+next_command
+	jsr 10$
+	jsr 10$
+10$	incd command_pntr
+	rts
+;
+;
+interpret_command
+	jsr error_channel_ok_set_up
+	jsr parse_init
+	jsr init_get_filename_from_command
+	ldi commands
+	std command_pntr
+	lda command_len	
+	beq 80$
+;
+	jsr get_filename_char
+	tya
+	tax
+;
+	ldy #<-3
+10$	iny
+	iny
+	iny
+	lda (command_pntr),y
+	bne 20$
+	lda #illegal_command
+	sec
+	rts
+;
+20$	txa
+	cmp (command_pntr),y
+	bne 10$
+;
+;
+30$	iny				push command address on stack for rts
+	lda (command_pntr),y
+	pha
+	iny
+	lda (command_pntr),y
+	pha
+;
+40$	nop
+;
+80$	clc
+	rts
+;
+eat_until_colon
+	jsr get_filename_char		eat chars until colon encountered
+	bcs 80$				( or end of command encountered )
+	cpy #':
+	bne eat_until_colon
+80$	clc
+	rts
+;
+;
+;
+	.subttl	"INDIVIDUAL COMMANDS"
+;************************************************************************
+;		COMMANDS
+;************************************************************************
+;
+	ram scratch_cntr,2
+;
+scratch_command
+	jsr eat_until_colon
+	jsr get_filename
+	bcs 90$
+;			no need to consider rest of filename
+	ldi 0000	cntr <= 0
+	std scratch_cntr
+;
+10$	jsr find_a_file	while	can find a file with matching name
+	bcc 20$
+	cmp #file_not_found
+	beq 80$
+	sec
+	rts
+;				do
+20$	ldd current_block		close any channels which may be pointing
+	jsr close_pointing_channels
+	incd scratch_cntr			cntr++
+	jsr delete_file				delete file
+	bcc 10$
+;
+90$	sec
+	rts
+;
+80$	ldd scratch_cntr	return cntr
+	jmp error_channel_scratch_set_up
+;
+;
+;
+	ram close_pointing_block,2
+	ram channel_exception
+;
+close_pointing_channels			; except directory channel
+	std close_pointing_block	; save block to deal with
+	lda default_channel_number	; channel exception <= currentt channel
+	sta channel_exception
+	lda #num_channels-1 		; .a <= highest channel number
+10$	jsr select_channel_a		do	select channel a
+	beq 30$					if	open
+	ldd close_pointing_block		andif 	dirblock=outblock
+	cpd directory_block
+	bne 30$
+	lda default_channel_number		andif	not our channel
+	cmp channel_exception
+	beq 30$
+	lda #0
+	sta channel_access				close channel
+30$	lda default_channel_number		.a <= default_channel-1
+	clc
+	adc #$ff
+	bcs 10$				while	a > 0
+	lda channel_exception		restore our channel
+	jmp select_channel_a
+;
+validate_command
+	jsr close_all_channels
+	jsr clear_error
+10$	jsr find_open_file
+	bcs 80$
+	jsr delete_file
+	bcc 10$
+;
+80$	cmp #file_not_found
+	bne 90$
+	clc
+90$	rts
+;
+;
+new_command				;<4.1 fab>  added routine
+	ldd first_block
+	std disk_end
+	clc
+	rts
+;
+;
+rename_command
+	jsr parse_for_rename_copy
+	bcs 90$
+;
+	ldx #$ff
+10$	inx
+	lda alt_filename,x
+	sta dir_filename,x
+	bne 10$
+	clc
+	rts
+;
+90$	sec
+	rts
+;
+	ram copy_block,2
+;
+copy_command
+	
+	jsr parse_for_rename_copy	puke if parse fails
+	bcs 90$
+;	
+	ldd dir_filelen		if	will not fit
+	sec
+	addc disk_end
+	cpd disk_max
+	beq 10$
+	bcs 91$				puke
+;
+10$	std copy_block		save limiting location for copy
+;
+	ldd disk_end		save where new dir_block will be
+	phd
+;
+20$	ldd disk_end		do	fake out access_disk
+	std default_block
+	incd current_block		point to next block
+	incd disk_end			add block to disk
+	jsr access_current_block	do it.
+	cmpdr disk_end,copy_block,a
+	bne 20$			loop 	until disk_end = copy_block
+;
+	pld			point 	to new directory block
+	std current_block
+	jsr access_block_a
+	ldx #$ff		copy alt_filename to new block
+30$	inx
+	lda alt_filename,x
+	sta dir_filename,x
+	bne 30$
+;
+	sta dir_access		mark file as closed
+;
+	clc			return happy
+	rts
+;
+91$	lda #disk_full
+90$	sec
+	rts
+;
+;
+uj_command
+ui_command
+ucolon_command
+	jsr close_all_channels		; close all channels
+	jmp error_channel_init_set_up	; reset init message & return
+;
+init_command
+	jsr close_all_channels
+	jmp clear_error
+;
+u_command
+	jsr get_filename_char	; get second another char
+	bcs 90$
+	cpy #':			; if colon
+	beq ucolon_command	;	do ucolon
+	cpy #'J			; if	j
+	beq uj_command		;	go do dat uj command stuff..
+	cpy #'I			; if	i
+	beq ui_command		;	do ui command stuff
+	cpy #'0			; if 	not zero
+	bne 90$				puke
+	jsr get_filename_char	; get more
+	bcs 90$
+	cpy #'>			; if	not >
+	bne 90$				puke
+	clc
+	.byte $24
+90$	sec
+; rem
+;
+set_unit_or_bitch
+	bcs 90$
+	jsr get_filename_char
+	bcs 90$
+	tya			; .a <= char masked to 0-31
+	cmp #31			; <4.1 fab>
+	bcs 90$
+	cmp #4
+	bcc 90$
+	jmp set_unit_number	; go set unit number and return
+;
+90$	lda #illegal_command
+	sec
+	rts
+;
+;
+m_command
+	jsr get_filename_char	; eat dash
+	jsr get_filename_char	; check for W
+	bcs 90$
+	cpy #'W
+	bne 90$
+	jsr get_filename_char	; get low order address
+	bcs 90$
+	cpy #119		; if not 119 or 120
+	beq 10$
+	cpy #120
+	bne 90$			;	puke
+10$	jsr get_filename_char	; get high order address
+	bcs 90$
+	cpy #0			; if	not null
+	bne 90$				puke	
+	jsr get_filename_char	; eat the number of bytes to write...
+	bcs 90$			; puke if not there or null
+	cpy #0
+	beq 90$
+	clc
+	.byte $24
+90$	sec
+	jmp set_unit_or_bitch
+;
+;
+;
+	.subttl	"PARSE FOR RENAME/COPY"
+;************************************************************************
+;		"PARSE FOR RENAME/COPY"
+;************************************************************************
+;
+;	does parsing.	copys first filename to alt_filename
+;			verifys that first does not exist.
+;			parse second file name
+;			verifies that file does exist.
+;			returns with current channel pointing to default block
+;
+;
+;
+parse_for_rename_copy
+	jsr eat_until_colon
+	jsr get_filename
+	bcs 90$
+;
+	lda wild_char		puke if dem wild chars
+	bne 91$
+;
+	jsr find_a_file
+	lda #file_exists
+	bcc 90$
+;
+	ldx #$ff
+10$	inx
+	lda filename,x
+	sta alt_filename,x
+	bne 10$
+;
+	jsr get_filename_char
+	bcs 90$
+	cpy #'=
+	bne 91$
+;
+	jsr eat_zero_colon
+	jsr get_filename
+	bcs 90$
+;
+	lda #no_filename
+	ldx filename
+	beq 90$
+;
+	jsr find_a_file
+	bcs 92$
+	jmp access_new_current_block
+;
+92$	lda #file_not_found
+	.byte $2c
+91$	lda #syntax_error
+90$	sec
+	rts
+;
+;
+	.subttl	"READ DIRECTORY"
+;************************************************************************
+;		READ DIRECTORY FOR USER
+;************************************************************************
+;
+;
+	ram	dir_line,50
+;
+;	directory open
+;		entry:	parse for open called
+;			filename = filename
+;			filetype = filetype
+;			parse_access = $
+;			end byte in file not checked
+;			default channel is users channel
+;
+;
+;
+directory_open
+	lda #'$		mark channel access as directory
+	sta channel_access
+;
+	jsr select_dir_channel
+	lda #0
+	sta current_byte	clear the currents
+	sta current_block
+	sta current_block+1
+;
+	lda filename		if	filename is null
+	bne 20$
+	sta filename+1			filename <= "*"
+	lda #'*			
+	sta filename
+20$	jmp format_first_line	format first line and return
+;
+;
+directory_cleanup
+	clc
+	adc current_byte
+	sta current_byte
+	rts
+;
+;
+directory_read
+	jsr select_dir_channel	select the directory channel
+	ldy current_byte	if	no bytes left in line
+	cpy end_byte
+	bcc 80$
+;
+	jsr 				directory_format_next_line
+	bcc 80$				if	done
+	clc
+	jmp disk_system_return_eof_timeout	go return timeout
+;
+80$	ldi directory_cleanup	cleanup vector point to directory cleanup
+	std cleanup_vector
+	ldi dir_line-swapped_code_start
+	clc			dma_disk_addr points to appropriate dir line
+	adc current_byte
+	bcc 85$
+	inx
+85$	std dma_disk_addr
+	lda #0
+	sta dma_disk_bank
+;
+	lda end_byte		.a <= number of bytes left to return to user
+	sec
+	sbc current_byte
+;
+	ldx system_reg_x	restore x,y
+	ldy system_reg_y
+	sec			this is a read operation
+	jmp return_execute_fastop	return via fastop
+;
+;
+;
+;	directory_format_next_line
+;
+;		entry:	current channel is directory channel
+;			filename is set up
+;		exit:	c=0	operation is ok
+;			c=1	EOF return one null to user
+;
+;
+directory_format_next_line
+10$	zchk current_block		if	current_block = 0
+	bne 20$
+	ldd first_block				x,a <= first_data_block
+	jmp 40$				else
+	
+20$	ldd current_block			if	current_block >= end of disk
+	cpd disk_end
+	bcc 30$
+	rts						return c=1 ( done )
+;
+30$	jsr access_current_block		access_current_block
+	ldd current_block			x,a <=  address of next block
+	sec
+	addc dir_filelen
+;
+40$	std current_block		current_block <= x,a
+	cpd disk_end			if	>= disk_end
+	bcc 50$
+	jsr 					format_last_line
+	jmp 70$				else
+;
+50$	jsr access_current_block		access the block
+;
+	jsr compare_filenames			compare the filenames
+	bcs 10$					if	no match, 
+;							go look for next
+;	lda type_char				if	type specified
+;	beq 60$
+;	cmp dir_filetype				if	<> dir_filetype
+;	bne 10$							go look for next
+;
+60$	jsr format_nth_line			format the nth line
+;
+70$	lda #0				current_byte <= 0
+	sta current_byte
+	clc				return c=0
+	rts
+;
+format_first_line
+	ldx #end_first_line_text-first_line_text
+	stx end_byte
+	dex	
+10$	lda first_line_text,x
+	sta dir_line,x
+	dex
+	bpl 10$
+	clc
+	rts
+;
+first_line_text
+	.byte $01,$10	; load address
+	.byte $01,$10	; next line address
+	.byte $00,$00	; line number
+	.byte $12,$22	; rvs on, quote
+;	       0123456789abcdef
+	.byte "RAMDISK V"
+	version
+	.byte "    "	; 16 char disk name
+;
+	.byte $22	; terminal quote
+	.byte " HD 00"	; id and version
+	.byte 0		; trailing null
+;
+end_first_line_text
+;
+;
+;
+last_line_text
+	.byte $01,$10	; next line address
+	.byte $00,$00	; line number
+;	       0123456789abcdef01234567
+	.byte "BLOCKS FREE             ",0,0
+end_last_line_text
+;
+format_last_line
+	ldx #end_last_line_text-last_line_text
+	stx end_byte
+	dex
+10$	lda last_line_text,x
+	sta dir_line,x
+	dex
+	bpl 10$
+;
+	ldd disk_max		; set up the number of free blocks
+	sbd disk_end
+	std dir_line+2
+	clc
+	rts
+;
+format_nth_line
+	ldx #32
+	stx end_byte
+;
+	lda #$20		clear line except line number and link
+10$	sta dir_line,x
+	dex
+	cpx #3
+	bne 10$
+;
+	lda #$22		opening quote
+	sta dir_line+4
+;
+	ldx #0			copy filename until 17 chars or null
+20$	lda dir_filename,x
+	sta dir_line+5,x
+	beq 30$
+	inx
+	cpx #17
+	bne 20$
+;
+30$	lda #$22		close quote
+	sta dir_line+5,x
+;
+	ldy #'S			set up type of file....
+	lda #'E
+	ldx #'Q
+	cpy dir_filetype
+	beq 40$
+;
+	ldy #'P
+	lda #'R
+	ldx #'G
+	cpy dir_filetype
+	beq 40$
+;
+	ldy #'U
+	lda #'S
+	ldx #'R
+	cpy dir_filetype
+	beq 40$
+;
+	ldy #'R
+	lda #'E
+	ldx #'L
+;
+	cpx dir_filetype
+	beq 40$
+;
+	lda #'?
+	tax
+	tay
+;
+;
+40$	sty dir_line+23
+	sta dir_line+24
+	stx dir_line+25
+;
+	lda dir_access		if	file is open for write
+	cmp #'W
+	bne 50$
+	lda #'*				mark it as such
+	sta dir_line+22
+;
+50$	ldd dir_filelen	mark number of blocks
+	addi $0001
+	std dir_line+2
+;
+70$	cpi 1000	if	< 1000 blocks
+	bcs 80$
+	cpi 100			if	< 100 blocks
+	bcs 72$
+	cpi 10				if	< 10 blocks
+	bcs 71$
+;
+	jsr 100$				insert space
+71$	jsr 100$			insert space
+72$	jsr 100$		insert space
+;
+;
+80$	lda #0		terminating null
+	sta dir_line+31	
+	clc		return happy
+	rts
+;
+;
+100$	ldx #4			insert a space in front of name
+	lda #$20
+;
+110$	ldy dir_line,x
+	sta dir_line,x
+	tya
+	inx
+	cpx #32
+	bne 110$
+	rts
+;
+
+	.subttl	"LOAD HIGH LEVEL"
+;*****************************************************************************
+;			LOAD
+;*****************************************************************************
+;
+;
+;
+;	sa	=0	memuss = loading address
+;		<>0	load at address specified by file
+;
+;	.a 	= 0	load
+;	.a 	<> 0	vefify only
+;
+;	ba	destination bank
+;	
+;	file_not_found_exit
+;		set b1 of status 
+;		error4
+;
+;	load of directory
+;	load of file...
+;
+;
+;rload	ldx fa			; load
+;	fa_cmp x
+;	beq 10$
+;	continue load
+;10$	abs_ref jsr,swap_disk
+;	jmp disk_load
+;
+disk_load
+	sta verck
+	lda fnlen		if	user has no filename
+	bne 5$
+	lda #8				.a <-= kernal kernal error code
+	bne 90$				go return kernal error
+;
+5$	jsr disk_load_1
+;
+	bcc 80$
+;
+	cmp #0			if	error code is zero
+	bne 20$
+	lda verck			if	verck is zero
+	bne 10$
+	lda #16					.a <= 16 ( out of mem error )
+	bne 90$				go return via kernal err handler
+;
+10$	lda #$10			set bits in status for verify error
+	ora status
+	sta status
+	bne 80$				go return happy
+;
+20$	jsr error_channel_set_up set up the error code for error channel
+	lda #$02		set up IEEE timeout error
+	ora status
+	sta status
+;
+	lda #4			return file not found error in kernal
+	bne 90$
+;
+80$	lda #$40	return EOF in error status
+	ora status
+	sta status
+	ldx eal		good exit return end load address
+	ldy eah
+	clc
+	jmp disk_direct_return	return to user directly
+;
+;
+90$	tay			save error code in .a
+100$	= kernal_error-1
+	lda #>100$		stack a return to kernal error routine
+	pha
+	lda #<100$
+	pha
+	tya			.a <= error code
+	jmp disk_direct_return	return to that after swapping out DOS
+;
+;
+;
+;	disk_load_1
+;		does all the major parsing and performs the load
+;
+;		exit:
+;			eal,eah	point to last byte + 1
+;			c=0	ok
+;			c=1	.a = 0 	verck = 0	out of memory error
+;			c=1	.a = 0	verck != 0	verify error
+;			c=1	.a != 0			error code in .a
+;
+disk_load_1
+	lda #0			clear status
+	sta status
+;
+	jsr luking
+	jsr parse_for_open	parse input stuff
+	bcs 90$			puke if error
+	jsr get_filename_char	if	more
+	bcc 91$				puke syntax
+	lda replace_flag	if	replace flag
+	bne 91$
+;
+	lda parse_access	if	 $
+	cmp #'$
+	bne 10$
+	jmp directory_load		goto directory_load
+;
+10$	ora type_char		if	type char or access char
+	bne 91$				puke
+;
+	lda #no_filename	if	no filename
+	ldx filename
+	beq 90$				puke
+;
+	jsr find_a_file		if	cannot find file
+	bcs 90$				puke
+;
+	std current_block	get the directory block
+	jsr access_current_block
+;
+	lda #file_type_mismatch	if	not prg file
+	ldx dir_filetype
+	cpx #'P
+	bne 90$				puke
+;
+	ldx dir_access		if	not open
+	beq do_load			go do the load
+	lda #file_open		file_open error
+	.byte $2c
+92$	lda #file_not_found
+	.byte $2c
+91$	lda #syntax_error
+90$	sec
+	rts
+;
+;
+	.subttl	"LOAD LOW LEVEL"
+;*****************************************************************************
+;			DO_LOAD
+;*****************************************************************************
+;
+;
+;	do_load
+;		entry:
+;			sa	=0	memuss = loading address
+;				<>0	load at address specified by file
+;			verck 	= 0	load
+;			 	<> 0	vefify only
+;			ba	destination bank
+;			load save channel selected
+;			current_block is directory block & is accessed
+;
+;		exit:	c=0	load completed
+;			c=1	verck <> 0	verify error
+;			c=1	verck = 0	out of mem error ( $ff00 )
+;
+do_load	jsr loding		tell user
+	jsr flush_block		flush disk buffers ( play it safe )
+;
+10$	ldd memuss		set up the cpu address to load at
+	ldy sa
+	beq 20$
+	ldd data_block+dir_data_offset
+20$	std dma_cpu_addr
+;
+	ldy #dir_data_offset+2	set up the disk address to load from
+	sty dma_disk_addr
+	ldd current_block
+	std dma_disk_block
+;				; calculate length of transfer
+;			256*dir_len+end_byte-(dir_data_offset+2)+1
+	sec
+	lda dir_last_byte
+	sbc #dir_data_offset+1
+	tay
+	ldd dir_filelen
+	sbc #0
+	bcs 30$
+	dex
+	jmp 30$
+;
+;
+;
+255$	ldx #0		; entry for directory load routine
+	txa
+	ldy end_byte	; x,a,y <= length in bytes for xfer
+;
+;
+30$	sty dma_len		mark length based on file
+	sta dma_len+1
+	cpx #0			save set Z flag if not too large
+	php
+;
+	ldi $efff		x,a <= length of xfer to $efff
+	sbd dma_cpu_addr
+	plp			recall z flag
+	bne 50$			if	Z flag or x,a < transfer len
+	cpd dma_len
+	bcs 60$
+50$	std dma_len			length <= len to $efff
+	jsr 60$				call 60$
+	jmp 90$				return error
+;
+60$	ldd dma_cpu_addr	tell user end address
+	add dma_len
+	std eal
+	lda dma_len		if	length is zero
+	ora dma_len+1
+	beq 80$				done....
+;
+	ldy #dma_banked_read	y <=  code for loads
+	lda verck		if	verck
+	beq 70$
+	ldy #dma_banked_compare		y <= code for verify
+70$	jsr remote_dma		do the remote_dma operation
+	lda verck		if	no verck
+	beq 80$				return happy
+	lda dma_status		.a < status
+	and #%00100000		verck	<= fault status
+	sta verck		if	none
+	beq 80$				exit happy
+;
+90$	lda #0			complain, but no error
+	sec
+	rts
+;
+80$	clc
+	rts
+directory_load_entry	= 255$
+;
+;
+	.subttl "DIRECTORY LOAD"
+;*****************************************************************************
+;			DIRECTORY_LOAD
+;*****************************************************************************
+;
+;
+;	DIRECTORY_LOAD
+;		entry:
+;			sa	=0	memuss = loading address
+;				<>0	load at address specified by file
+;			verck 	= 0	load
+;			 	<> 0	vefify only
+;			ba	destination bank
+;
+;		exit:	c=0	load completed
+;			c=1	verck <> 0	verify error
+;			c=1	verck = 0	out of mem error ( $ff00 )
+;
+directory_load
+	jsr loding		tell user
+	jsr directory_open	do normal directory open
+;
+10$	ldd memuss		eal,eah <=  cpu address to load at
+	ldy sa
+	beq 20$
+	ldi $1010
+20$	std eal
+;
+	dec end_byte		remove the first two bytes from directory line
+	dec end_byte		( can you say load address ? )
+	ldx #$ff
+30$	inx
+	lda dir_line+2,x
+	sta dir_line,x
+	cpx end_byte
+	bcc 30$
+;
+;				do
+40$	jsr 100$			load a sinfle line
+;
+	bcs 90$				exit if error
+;
+	jsr directory_format_next_line	format the next line
+	bcc 40$			loop 	while another line ready
+;			
+	ldx #0			make dir_line contain a single null...
+	stx dir_line
+	inx
+	stx end_byte
+	jsr 100$		send that
+;
+90$	lda #0			return a null
+	rts			return
+;
+100$	ldi dir_line-swapped_code_start	disk addr is where dir line is
+;					when disk swapped out !!!!
+	std dma_disk_addr
+	lda #0
+	sta dma_disk_bank
+;
+	ldd eal				cpu addr <= eal,eah
+	std dma_cpu_addr
+;
+	jmp directory_load_entry	use a hunk of normal load for xfer
+;
+
+	.subttl	"SAVE"
+;********************************************************************
+;			SAVE
+;********************************************************************
+;
+;	enrty
+;		(y,x)	eal	ending address of area to save
+;		(@a)	stal	starting address of area to save
+;		ba		bank source
+;
+;
+;rsave	lda fa			; save
+;	fa_cmp a
+;	beq 10$
+;	continue save
+;10$	abs_ref jsr,swap_disk
+;	jmp disk_load
+;
+;
+disk_save_1
+	lda #0			clear status
+	sta status
+	jsr saving
+	jsr parse_for_open	parse input stuff
+	bcs 90$
+;
+10$	lda type_char		if	type char,access_char,wild_char <> 0
+	ora parse_access		( includes save "$:asda" )
+	ora wild_char
+	bne 91$				puke
+;
+	lda #no_filename	if	no filename
+	ldx filename
+	beq 90$				puke
+;
+	jsr find_a_file		if	can find file
+	bcs 20$
+	std current_block
+	jsr access_current_block
+;
+	lda #file_exists		if	no replace
+	ldx replace_flag
+	beq 90$					puke
+;
+	lda #file_type_mismatch		if	not prg file
+	ldx dir_filetype
+	cpx #'P
+	bne 90$					puke
+;
+	lda #file_open			if	open
+	ldx dir_access
+	bne 90$					puke
+;
+	jsr delete_file			delete the file
+;
+20$	jmp do_save
+;
+92$	lda #file_not_found
+	.byte $2c
+91$	lda #syntax_error
+90$	sec
+	rts
+;
+;
+do_save	ldd disk_end		save always at end of disk....
+	cpd disk_max		if 	full
+	bcc 1$
+;
+	lda #disk_full			puke
+	sec
+	rts
+;
+1$	jsr access_new_current_block	block x,a <= current
+;
+	ldd stal		write starting address
+	std data_block+dir_data_offset
+;
+	ldd eal			x,a <= length of file
+	sbd stal
+;
+	tay			stack length (preserve x, a)
+	phd
+	tya
+;
+	addi $ffff		point to last byte, not last+1
+;
+	clc			add header offset & mark header
+	adc #dir_data_offset+2
+	sta dir_last_byte
+	txa
+	adc #0
+	sta dir_filelen
+;
+	lda #0			
+	sta dir_filelen+1
+	asl dir_filelen+1
+	sta dir_access		mark access as closed
+;
+	lda #'P			mark type
+	sta dir_filetype
+;				copy name to header
+	ldx #$ff
+10$	inx
+	lda filename,x
+	sta dir_filename,x
+	bne 10$
+;
+	jsr flush_block		flush current block to ramdisk
+;
+	pld			recall length of transfer
+	std dma_len		write to dma controller
+	ldd stal		write start address to controller
+	std dma_cpu_addr
+;
+	ldd current_block	set up disk dma address
+	std dma_disk_block
+	lda #dir_data_offset+2
+	sta dma_disk_addr
+;				oh yeah.. check size of disk after save
+;
+	ldd dir_filelen		x,a <= end of disk after save
+	sec
+	addc disk_end
+	cpd disk_max		if	> disk_max
+	bcc 80$				
+;
+	lda #disk_full			puke
+	rts
+;
+80$	std disk_end		mark new end of disk
+;
+	ldy #dma_banked_write	use dma to do save
+	jsr remote_dma
+	jsr unflush_block	read back into default page
+;
+	clc			return happy
+	rts
+;
+;
+
+	.subttl	"DOS ENTRY ROUTINES"
+;****************************************************************************
+;		FIRST_DISK_ROUTINES
+;****************************************************************************
+;
+	ram system_reg_x
+	ram system_reg_y
+;
+disk_io
+	jsr cleanup_fastop_pntr
+	stx system_reg_x		save regies...
+	sty system_reg_y
+	sta data_byte
+	bcc 10$
+	lda status			;<4.2 fab>
+	bne 5$				;<4.2 fab> bad prior status?
+	jmp read_byte_given_sa		;<4.2 fab> ...no, do basin
+5$	jmp disk_system_return_cr_eof	;<4.2 fab> ...yes, just pass <cr> & exit
+;
+10$	jmp write_byte_given_sa
+;
+	.ifdef rel_flag
+disk_ckout
+	.endif
+cleanup_user_dma
+	jsr cleanup_fastop_pntr	( so much for that )
+	jmp disk_direct_return	return
+;
+;
+disk_close
+	.ifdef rel_flag
+	bcc disk_ckout
+	.endif
+	jsr cleanup_fastop_pntr		; clean up....
+	txa				move index to .a
+	jsr jxrmv			remove the bugger please ( .a = index )
+	.ifndef c64
+	plp				;<4.2 fab> if c128, is this a real close (c=0)?
+;	bcs 10$				; branch if a special close...
+	nop				;<4.3 fab> placeholders
+	nop
+	.endif
+	.ifdef c64
+	jsr close_channel_given_sa_user	close our version of it  <4.2 fab>
+	.endif
+	.ifndef c64
+	jsr close_channel_given_sa_patch close our version of it  <4.2 fab>
+	.endif
+	.ifndef c64
+10$	clc				;<4.2 fab> always happy
+	.endif
+	jmp disk_system_return		return to user
+;
+;
+disk_open_nmi
+	jsr cleanup_fastop_pntr	clean house there shit head
+	sta data_byte		save .a
+	bcs 10$			if	c=0
+	jmp disk_run_stop_restore	uh oh... better call maaco...
+;
+10$	lda fa			if	not for disk
+	cmp disk_fa
+	beq disk_open			stack return address of continue
+	lda copen+1	x,a <= open stuff
+	pha
+	lda copen
+	pha
+	lda data_byte
+	jmp disk_direct_return		do a direct return to let someone else
+;					have this open...
+;
+disk_open
+	lda fa		save file address on stack
+	pha	
+	lda #0
+	sta fa
+	jsr cheap_open		; jump right on in here boys.... 
+	tay			restore stacked fa preserveing .a,.x
+	pla
+	sta fa
+	tya
+	bcs disk_direct_return
+	lda fa
+	sta fat,x		; just stick the data where ever
+	jsr open_channel_given_sa
+	jmp disk_system_return
+;
+;
+disk_load_save
+	php		save that carry too
+	pha		better save that .a
+;
+	jsr 	cleanup_fastop_pntr
+;
+	lda fa		if	uh.. its not for us...
+	cmp disk_fa
+	beq disk_load_save_2
+;
+	pla			data byte <= .a
+	sta data_byte
+	plp			recall who it was ( load or save )
+	bcc 10$			if	save
+	lda csave+1			stack return to continue vector
+	pha
+	lda csave
+	pha
+	lda data_byte
+	jmp disk_direct_return		return to user to let save to elsewhere
+;
+10$	lda cload+1		stack a reutrn to load
+	pha
+	lda cload
+	pha
+	lda data_byte
+	jmp disk_direct_return	return to user to load from elsewhere
+
+disk_load_save_2
+	pla		recall that .a
+	plp		recall load / save
+	bcs disk_save
+	jmp disk_load
+disk_save
+	jsr disk_save_1
+	jmp disk_system_return
+;
+disk_system_return_eof_timeout
+	lda #$42
+	sta status
+	lda #0
+	jmp disk_system_return_timeout_entry
+;
+;
+disk_system_return_error
+	sec
+	bcs disk_system_return
+disk_system_return_cr_eof
+	lda #cr
+	.byte $2c
+disk_system_return_null_eof
+	lda #0
+disk_system_return_eof
+	sta data_byte			data byte <- value to return
+	lda #$ff			set eof flag
+	sta eof_flag
+	clc				this returns no errors
+disk_system_return
+	bcc 20$				if	error
+	rol eof_flag				set eof flag
+	jsr error_channel_set_up	set up error channel
+	lda #cr				errors return carriage returns
+	sta data_byte
+;
+20$	jsr eof_check			set up eof status
+50$	lda data_byte
+disk_system_return_timeout_entry
+	ldx system_reg_x		set up registers
+	ldy system_reg_y
+	clc				return no buss error
+;
+disk_direct_return
+	sta data_byte			save .a
+	lda interface_page
+	pha				stack return to fast
+	lda #<fast-1
+	pha
+	lda interface_page		stack return to swap disk
+	pha
+	lda #<swap_disk-1
+	pha
+	lda pntr_save			restore users pointer
+	sta pntr
+	lda pntr_save+1
+	sta pntr+1
+	lda data_byte			.a <= data byte
+	rts				return to swap disk enable
+;
+eof_check
+	lda eof_flag
+	beq 10$
+	lda #$40
+	ora status		;merge EOF into status byte  <4.2 fab>
+10$	sta status
+	lda #0
+	sta eof_flag
+	rts
+;
+;
+disk_run_stop_restore
+	jsr restor		do the damn restore
+	jsr install_vectors	install our vectors ( sneaky no ? )
+mactmp	= no_restor_restore-1
+	lda #>mactmp		push return to nmi code less the restore
+	pha
+	lda #<mactmp
+	pha
+;
+	lda interface_page		stack return to swap disk
+	pha
+	lda #<swap_disk-1
+	pha
+	rts				return via swap disk and exit...
+;
+;
+
+	.subttl	"REMOTE DMA ROUTINES"
+;****************************************************************************
+;		REMOTE DMA ROUTINES
+;****************************************************************************
+;
+	ram stack_restore_registers_dma_op
+;
+;	read_users_filename
+;		dmas system filename into ram at remote_filename_buffer
+;
+read_users_filename
+	ldd fnadr		set up cpu address
+	std dma_cpu_addr
+	lda fnlen		set up transfer length
+	bne 1$			( if zero then return )
+	rts
+1$	sta dma_len
+	lda #0
+	sta dma_len+1
+	sta dma_disk_bank	set up disk address 
+	ldi remote_filename_buffer-swapped_code_start
+	std dma_disk_addr
+	.ifndef c64
+	ldx fnbank		x <= bank
+	.endif
+	ldy #dma_banked_write	y <= dma command
+	jmp remote_dma_bank_x	perform remote dma
+;
+;
+;	remote_dma
+;		entry:	dma registers set for transfer
+;			y = controller code for transfer
+;			x = desired bank for transfer
+;	
+remote_dma
+	.ifndef c64
+	ldx ba			stack mmu cfg for dma bank
+	.endif
+remote_dma_bank_x
+	sty stack_restore_registers_dma_op
+	lda interface_page	push call to swap disk ( no speed adjust )
+	pha
+	lda #<swap_disk-1
+	pha
+;
+	.ifndef c64
+;
+	lda #>down_load_area	push a call to downloaded code
+	pha
+	lda #<down_load_area-1
+	pha
+;
+	jsr getcfg		.a <= mmu config
+	pha			save
+	and #%11000000		get high order bits only
+	ora mmurcr		.x <= mmurcr 
+	tax
+	pla			recall mmucr
+;
+	.endif
+;
+	jmp stack_restore_registers	do that restore register thing
+;
+;				call restore dma registers
+;				call downloaded code
+;				call swap_disk
+;				return
+;
+;
+;	stack_restore_registers
+;
+;		call this routine.
+;		when returned, the next return you perform will:
+;			restore the dma registers
+;			restore x,a to value at entry
+;			perform an rts
+;
+;
+;		entry:	routine is jsred too
+;			.x,.a = x,a registers for return after restore reg
+;			dma registers are setup for transfer
+;
+;		exit:	x,a	stacked
+;			dma registers are stacked for restore registers
+;			call to restore registers is stacked
+;			y preserved
+;
+;
+;
+stack_restore_registers
+	pha			stack users .a
+	txa			stack users .x
+	pha
+;
+	lda stack_restore_registers_dma_op	push controller code....
+	.ifdef c64
+	ora #%00010000				execute immediately....
+	.endif
+	pha
+;
+	ldx #2			stack dma registers ( 9 of em.. )
+10$	lda dma,x
+	pha
+	inx
+	cpx #$0b
+	bne 10$
+;
+	lda interface_page	stack a call to restore registers
+	pha
+	lda #<restore_registers-1
+	pha
+;
+	lda interface_page	stack a call to swaap disk ( no speed )
+	pha
+	lda #<swap_disk-1
+	pha
+	lda pntr_save		restore the users pointer
+	sta pntr
+	lda pntr_save+1
+	sta pntr+1
+;
+	clc			return carry clear
+	rts			execute swap disk and restore registters
+;				perform rts
+;
+;
+;
+saving
+	ldi _saving-1
+	jmp remote_call
+luking
+	ldi _luking-1
+;
+remote_call
+	tay			save .a in .y
+	lda interface_page	stack a call to swap disk slow
+	pha
+	lda #<swap_disk_slow-1
+	pha
+	txa			stack a call to routine in x,y
+	pha
+	tya
+	pha
+	jmp disk_direct_return	let this do the work
+;
+
+	.subttl	"FASTOP ROUTINES"
+;****************************************************************************
+;			FASTOP ROUTINES
+;****************************************************************************
+;
+;	.byte <fastop			; fast op code start
+;	.byte <fastop_sa_loc 		; sa location for fastop
+;	.byte <fastop_dmaop_loc		; dma_op code 
+;	.byte <fastop_dma_destination	; low order address of dma_cpu_addr
+;	.byte <fastop_cntr		; counter for fastop cycles
+;	.byte <bsout_fastop_loc		; opcode for bit or jsr routines, bsout
+;	.byte <basin_fastop_loc		; opcode for bit or jsr routines, basin
+;
+;
+	ram fastop_max
+;
+;
+;
+cleanup_fastop_pntr
+	php			save status
+	pha			save .a
+	lda pntr
+	sta pntr_save
+	lda pntr+1
+	sta pntr_save+1
+;
+	lda fastop_max		if	number of fastop bytes <> 0
+	beq 85$
+	txa				save .x
+	pha
+	tya				save .y
+	pha
+	lda interface_page		pntr <= address of interface block
+	sta pntr+1
+	lda #0
+	sta pntr
+;
+	lda #$2c			kill both fastops
+	ldy #<basin_fastop_loc
+	sta (pntr),y
+	ldy #<bsout_fastop_loc
+	sta (pntr),y
+;
+	.ifdef rel_flag
+;
+	lda #$60			kill chkout_swap
+	ldy #<ckout_swap_op
+	sta (pntr),y
+;
+	.endif
+;
+	ldy #<fastop_cntr		.a <= number of bytes transfered
+	sec
+	lda fastop_max
+	sbc (pntr),y
+	jsr 100$			call users cleanup routine
+;
+;	
+80$	pla			recall y
+	tay
+	pla			recall x
+	tax
+	lda #0		fsatop_bytes <= 0
+	sta fastop_max
+85$	pla		recall .a
+	plp		recall status
+	rts		continue with the call
+;
+100$	jmp (cleanup_vector)
+;
+;
+;	return_setup_fastop
+;		swaps disk, and sets up fastop before returning to user
+;		does a rts to user with fastop set up
+;	return_execute_fastop
+;		swaps disk, and executes a fastop before returning to user
+;	
+;		entry:	dma_disk_bank,dma_disk_addr set up
+;			cleanup vector pointed to correct cleanup routine.
+;			a = number of bytes to fastop
+;			c = 0	writeing to disk
+;			c = 1	reading from disk
+;			sa = set up for current channel
+;		exit:
+;			control returned to users routine
+;
+io_fastop
+	std cleanup_vector	set up cleanup vector
+	ldd current_block	set up dma disk address
+	std dma_disk_block
+	lda current_byte
+	sta dma_disk_addr
+	tya			.a <= number of bytes to move
+	bcc return_setup_fastop	if	write, just setup (kludge)
+;				fall through to setup/execute
+;
+return_execute_fastop
+	tax
+	lda interface_page	stack the fake rts to be removed (KLUDGE_MAX)
+	pha			( corrects for pla,pla inside of fastop )
+	lda #<fastop_fake_rts-1
+	pha
+	lda interface_page	stack a rts to fastop itself
+	pha
+	lda #<fastop-1
+	pha
+	txa
+	jmp return_execute_fastop_entry	
+;
+return_setup_fastop	;	stack a return to fast
+	tax
+	lda interface_page
+	pha
+	lda #<fast-1
+	pha
+	txa
+;
+return_execute_fastop_entry	
+	sta fastop_max		save number of bytes
+	lda #0			pntr <= address of interface block
+	sta pntr
+	lda interface_page
+	sta pntr+1
+;
+	ldy #<fastop_dmaop_loc	y <= pointer to dma operation location
+;
+	bcs 10$			if	write
+;
+	lda #dma_fastop_write		(pntr),y <= dma_immdeiate_write
+	sta (pntr),y
+
+;	ldy #$f0			.y <= opcode for BEQ
+;	lda sa				if	sa is not command channel
+;	and #$0f
+;	eor #$0f
+;	beq 5$
+
+	.ifdef	rel_flag
+;
+	ldy #$60			.y <= opcode for RTS
+	lda channel_access		if	relative file access
+	eor #'L
+	bne 7$
+	ldy #$EA				.y <= opcode for NOP
+7$	tya
+	ldy #<ckout_swap_op		write at chkout_swap_op
+	sta (pntr),y
+;
+	.endif
+;
+	ldi $202c			x <= jsr, a <= bit
+	bcc 20$			else
+;
+10$	lda #dma_fastop_read		(pntr),y <= read operation
+	sta (pntr),y
+	ldi $2c20			x <= bit, a <= jsr
+;
+20$	ldy #<basin_fastop_loc	opcode for read <= .a
+	sta (pntr),y
+	ldy #<bsout_fastop_loc	opcode for write <= .x
+	txa
+	sta (pntr),y
+;
+	ldy #<fastop_sa_loc	set fastop sa loc
+	lda sa
+	and #$0f
+	sta (pntr),y
+;
+	ldy #<fastop_cntr	set up the max byte count
+	lda fastop_max
+	sta (pntr),y
+;
+;
+	lda interface_page	set dma host address
+	sta dma_cpu_addr+1
+	lda #<fastop_dma_destination
+	sta dma_cpu_addr
+;
+	lda #0			select no interupts
+	sta dma_ifr
+	lda #$80		fix cpu address
+	sta dma_acr
+;
+	ldi 1			select transfer length of 1 byte
+	std dma_len
+;
+	ldx system_reg_x	setup users a,x,y
+	ldy system_reg_y
+	lda #0			set up stack_restore_registers final opcode
+	sta stack_restore_registers_dma_op
+	lda data_byte
+	jmp stack_restore_registers	stack them restore register guys
+;
+	.ifndef c64
+;
+;
+	.subttl C128 PATCH SPACE
+	brk
+
+close_channel_given_sa_patch 	;close our version of it  <4.3 fab>
+
+	bcs 20$		;status of carry at time of CLOSE call...
+10$	jmp close_channel_given_sa_user	;....c=0 no special processing of CLOSE
+20$	lda sa		;if .c=1 AND sa=15 (command channel)...
+	and #$0f
+	cmp #$0f
+	bne 10$		;...sa<>15
+	rts		;...special- channel assignment removed, skip real CLOSE
+	.endif
+;
+;
+	.subttl	"INTERFACE BLOCK CODE"
+;***********************************************************************
+;
+;	NOTE:
+;		ALL CODE AFTER THIS POINT IS NOT USED DURING
+;		NORMAL DISK OPERATION. ALL THIS CODE IS STRICTLY
+;		FOR INSTALLING THE DISK, AND THAT CODE WHICH IS 
+;		PERMANENTLY DOWNLOADED. ( I.E. disk INTERFACE BLOCK ).
+;
+;***********************************************************************
+;
+	*=*+$100-<*		; align page for swapping
+;
+;***********************************************************************
+;		disk INTERFACE BLOCK CODE
+;***********************************************************************
+;
+continue	.macro %a
+	jmp $FFFC
+	j_%a = *-2
+	.endm
+;
+faref	.macro %op
+	entry fa_tab,*+1
+	%op #$09
+	.endm
+;
+abs_ref	.macro	%op,%ref	; use for all intra page jmps/jsrs
+	entry abs_ref,*+2
+	%op %ref
+	.endm
+;
+;
+install_code
+fastop_cntr		.byte 0		; fast transfer byte counter
+write_byte_rel_flag	.byte 0		; flag cleared by ckinout <4.2 fab>
+;
+;
+rgetin	lda dfltn		; getin
+	faref cmp #$09
+	beq rbasin
+	continue getin
+;
+rbasin	lda dfltn		; basin
+	faref cmp #$09
+	beq basin_fastop_loc
+	continue basin
+;
+basin_fastop_loc 
+	abs_ref bit,fastop_slow
+	sec
+	bcs basinout_system_call
+;
+;
+rbsout	pha
+	lda dflto
+	faref cmp #$09
+	beq 10$
+	pla
+	continue bsout
+10$	pla
+
+bsout_fastop_loc
+	abs_ref bit,fastop_slow
+bsout_no_fastop_continue
+	clc
+basinout_system_call
+	abs_ref jsr,swap_disk_slow
+	jmp disk_io
+;
+;
+rchkin	abs_ref jsr,chkinout
+	bcs 10$
+	continue chkin
+10$	sta dfltn
+	clc
+	rts
+;
+;
+chkinout	;	return c=0 continue, c=1 call disk_version
+	lda #0				;<4.2 fab> rashly assume clrchn called
+	abs_ref sta,write_byte_rel_flag
+	jsr lookup	do lookup
+	tax 		restore
+jltlk_cmp
+	jsr jltlk
+	bne 20$
+	jsr getlfs
+	.ifdef c64
+	lda fa
+	.endif
+	faref cmp #$09
+	beq 90$
+	lda la
+20$	tax
+	clc
+90$	rts
+;
+;
+rckout	abs_ref jsr,chkinout
+	bcs 10$
+	continue ckout
+;
+10$	sta dflto
+	clc
+;
+	.ifdef rel_flag
+ckout_swap_op
+	rts
+	.else
+	rts
+	.endif
+;
+;
+disk_swap_close_call
+	abs_ref jsr,swap_disk_slow
+	jmp disk_close
+;
+;
+	.ifdef c64
+rclose	abs_ref jsr,jltlk_cmp	lookup
+	.else
+rclose	php		save cary for serial buss close
+	abs_ref jsr,jltlk_cmp	lookup
+	.endif
+	bcs disk_swap_close_call
+	.ifndef c64
+	plp			restore serial buss close carry
+	.endif
+	continue close		continue with normal close
+;
+;
+rsave	sec
+	.byte $24
+rload	clc
+	abs_ref jsr,swap_disk_slow
+	jmp disk_load_save
+;
+	.ifdef c64
+rnmi	pha		save dem registers....
+	txa
+	pha
+	tya
+	pha
+	cld		decimal mode...
+	.else
+rnmi	cld		decimal mode...
+	.endif
+;
+	lda #$7f	disable nmis
+	sta d2icr
+	ldy d2icr	if	not 6526 nmi
+	bmi 80$
+	jsr ud60		set up kybd
+	jsr stop		if	stop key
+	beq 90$				uh.. better go get the disk..
+80$	jmp fake_nmi	pretend just a normal rs232 nmi ( normal ? )
+;
+90$	clc
+	.byte $24
+ropen	sec
+	abs_ref jsr,swap_disk_slow
+	jmp disk_open_nmi
+;
+;
+;
+;***********************************************************************
+;			GET_DISK
+;***********************************************************************
+;
+;	
+;	swap table
+;		contains dma register contents for a normal swap.
+;		table must be in reverse order due to perverse method
+;		of saving bytes....
+;
+swap_table
+	.byte 0				acr
+	.byte 0				ifr
+	.dbyte swapped_code_size	len
+	.dbyte 0
+	.byte 0				dma addr
+	.dbyte swapped_code_start	cpu addr
+	.byte dma_immediate_swap	command
+swap_table_end
+;
+;
+;
+;	swap_disk
+;		swaps disk and preserves a,x,y, and carry
+;
+;fa_facmp_swap
+;	lda fa			; hybrid code based on needs of others 
+facmp_swap			; ( kludges to save bytes ) 
+	faref eor #$09
+	bne facmp_rts
+swap_disk_slow
+	abs_ref jsr,slow
+;	
+swap_disk
+	pha			; save x,a registers
+	txa
+	pha
+;
+	ldx #9			; stack register table
+10$	abs_ref lda,<swap_table,x>
+	pha
+	dex
+	bpl 10$
+;
+;
+restore_registers
+	ldx #9
+10$	pla			pull 10 dma registers for setup
+	sta dma+1,x
+	dex
+	bpl 10$
+;
+	pla			restore x,a
+	tax
+	pla
+facmp_rts
+	rts
+;
+
+fastop_slow
+	abs_ref jsr,slow	go slow , kill irqs
+fastop	abs_ref sta,fastop_dma_destination	; write byte in magic spot
+	lda sa			if	sa = fastop_sa
+	and #$0f
+;
+	.byte $c9	cmp #
+fastop_sa_loc 
+	.byte $ff
+;
+	bne fastop_exit
+	abs_ref lda,fastop_cntr		if	cntr <> 0
+	beq fastop_exit
+	abs_ref dec,fastop_cntr dec cntr	cntr--
+	pla			
+	pla					pull off return address
+;
+	.byte $a9	lda #			perform the dma operation
+fastop_dmaop_loc
+	.byte dma_immediate_read
+;
+	sta dma+1
+fastop_exit
+	.byte $a9	; lda #	load the accumilator
+fastop_dma_destination
+	.byte $00
+	clc			return via fast ( clear carry )
+;
+	.ifdef c64
+;
+fast	pha			save .a	( to set status on return )
+	inc d1ddrb		enable the stop routine
+	cli			enable irqs
+	pla			restore .a ( and basin status )
+fastop_fake_rts
+	rts
+;
+slow	pha			save .a
+	sei			kill interupts
+	lda #0			make sure vic is slow
+	sta vicspeed
+	dec d1ddrb		disable the stop routine
+	pla			restore .a and return
+	rts
+;
+	.else
+;
+fast	inc d1ddrb		enable stop routine
+	pha			carry must be preserved
+;
+vicspeed_restore = *+1
+	lda #0			speed variable name
+	cli			enable irqs
+speed_return
+	sta vicspeed		restore vic speed
+	pla			
+fastop_fake_rts
+	rts			return
+;
+slow	pha			save .a
+	sei			kill interupts
+	lda vicspeed		save current speed
+	abs_ref sta,vicspeed_restore
+	dec d1ddrb		disable the stop routine
+	lda #0			go slow vic, and return
+	beq speed_return
+;
+	.endif
+;
+	.ifgt	*-install_code-$100
+	*** error - interface block too large ***
+	.endif
+;
+;
+	.subttl	"INSTALL VECTORS"
+;
+;	for all indirects:
+;		this macro calls is arguement as a macro.
+;		the first arg in all these calls is the indirect symbol
+;
+;
+for_all_indirects .macro %a
+	%a getin
+	%a basin
+	%a bsout
+	%a chkin
+	%a ckout
+	%a open
+	%a close
+;	%a clrch
+;	%a clall
+	%a load
+	%a save
+	%a nmi
+	.endm
+;
+byte_table	.macro %a
+btm	.macro %b
+	.ifdef %a%b
+	.byte <%a%b
+	.else
+	.byte $00
+	.endif
+ 	.endm
+	for_all_indirects btm
+	.endm
+;
+;	table of system indirect vector addresses on page 3
+;
+system_indirect_addrs	byte_table <i>
+;
+;	table of locations to install continue vectors on interface page
+;
+disk_jmp_addrs	byte_table <j_>
+;
+;	table of interface page entry points
+;
+disk_routine_addrs	byte_table <r>
+;
+continue_macro	.macro %a	; effectively reserves space for continue  
+c%a	.word $0000		; vectors ( like load and save might need )
+	.endm
+;
+continue_vectors
+	for_all_indirects continue_macro	; reserve space for continues
+;
+;	number of vectors
+;
+num_vectors	= disk_routine_addrs-disk_jmp_addrs
+;
+;***************************************************************************
+;			INSTALL VECTORS
+;***************************************************************************
+;
+;
+;	the following loop actually installs the driver vectors
+;	if it was hard to write, it should be hard to understand
+;
+install_vectors
+	lda #$ff		fix keyuscan for stop fake out (kludge)
+	sta d1prb
+	lda interface_page	(pntr) points to interface page
+	sta pntr+1
+	lda #0
+	sta pntr
+;
+	ldx #num_vectors-1	x <= number of vectors
+;				do
+30$	ldy system_indirect_addrs,x
+	lda $301,y			stack high order system address
+	pha
+	lda $300,y			stack low order system address
+	pha
+	txa				y <= 2*x
+	asl a
+	tay
+	pla				store low order system address in cont
+	clc				( must be address-1 for use with
+	adc #$ff			stacked RTS operations. )
+	sta continue_vectors,y		
+	pla
+	adc #$ff
+	sta continue_vectors+1,y	store high order system address in cont
+;
+	ldy system_indirect_addrs,x	.a <= low order system indirect 
+	lda $300,y
+	ldy disk_jmp_addrs,x		.y <= continue JMP address
+	beq 33$				if	not zero
+	sta (pntr),y				store low addr to interface page
+;
+	ldy system_indirect_addrs,x	 	.a <= high order system indirect 
+	lda $301,y
+	ldy disk_jmp_addrs,x		 	.y <= continue jmp address
+	iny					store high addr to interface page
+	sta (pntr),y
+;
+33$	ldy system_indirect_addrs,x	set low order system indirects
+	lda disk_routine_addrs,x	
+	sta $300,y
+;
+	lda pntr+1			set high order system indirects
+	sta $301,y
+;
+	dex				x=x-1
+	bpl 30$			while x> 0
+;
+	rts
+;
+;
+
+	.subttl	"DISK INSTALLATION"
+;
+patch_addrs	table abs_ref
+end_patch_addrs
+;
+fa_refs	table fa_tab,.byte
+end_fa_refs
+;***********************************************************************
+;		The great disk god:  INSTALL ( not swapped )
+;***********************************************************************
+;
+; install_on_page
+;
+;	installs the disk interface control block on any page in
+;	the system.
+;		entry:	.a = page
+;
+;
+install	lda #default_unit_number	( install as unit #9 ) 
+	ldx #default_interface_page	( install in sprite buffers buffer )
+install_on_page
+	cld			decimal mode please..
+	phd			save wherefores
+;
+	jsr slow		slow down there for out dmas...
+;
+	ldx #0			clear the ram
+	lda #0
+40$	sta swapped_code_start,x
+	sta swapped_code_start+$100,x
+	sta swapped_code_start+$200,x
+	inx
+	bne 40$
+;
+	jsr sniff_disk_size		; sniff size, set major pointers up
+;
+	pld				recall wherefores
+;
+;
+install_2
+	pha				; save unit number
+	txa				; .a <= page to install on
+;
+	sta interface_page		save page to return too.
+;
+	jsr install_interface_page_a	install the page
+;
+	pla			recall unit number too install as
+	jsr set_unit_number
+;
+	jsr install_vectors	install the interface vectors
+;
+	jsr error_channel_init_set_up	init the error channel
+	jsr init_channels		init all the channels
+;
+;	at this point the code has been copied down and patched, and
+;	all vectors have been approiately installed.
+;
+;	all that remains is to swap out the disk, and
+;	return. This is acheived by calling swap_disk which is
+;	on that user page.
+;
+	lda interface_page	stack a call to fast
+	pha
+	lda #<fast-1
+	pha
+;
+	lda interface_page	stack a call to swap disk 
+	pha
+	lda #<swap_disk-1
+	pha
+;
+	rts		call swap_disk, then call fast then return
+;
+;
+	.subttl	"REINSTALL DISK"
+;
+;	reinstall
+;		assumes disk is not destroyed and not installed
+;		reinstalls disk at default location
+;
+;	reinstall on page
+;		assumes disk is not destroyed and not installed
+;		reinstalls disk at location specified
+;
+;
+reinstall
+	lda #default_unit_number	( install as unit #9 ) 
+	ldx #default_interface_page	( install in sprite buffers buffer )
+reinstall_on_page
+	cld			decimal mode please..
+	phd			save the wherefores
+;					see if we can get back our data
+;
+	jsr slow			; do a big slow ( very important )
+;
+	ldx #110$-100$-1		; get out three data pages back
+10$	lda 100$,x			( I hope they're mine !!! )
+	sta dma+2,x
+	dex
+	bpl 10$
+	lda #dma_immediate_swap
+	sta dma+1
+;
+	pld				recall the wherefores
+	jmp install_2			; do rest of install
+;
+;
+100$	.word swapped_code_start
+	.word 0
+	.byte 0
+	.word $300
+	.byte 0
+	.byte 0
+110$
+;
+;
+	.subttl	"SET UNIT NUMBER "
+;
+set_unit_number			; sets device number for disk.
+	and #%00011111		; mask to something reasonable
+	sta disk_fa		save for future genreations.
+	ldx interface_page	set pntr to point to interface page
+	stx pntr+1
+	ldx #0
+	stx pntr
+;
+	ldx #end_fa_refs-fa_refs-1
+30$	ldy fa_refs,x		fix the interface page fa references..
+	sta (pntr),y
+	dex
+	bpl 30$
+	clc			return happy
+	rts
+;
+;
+	.subttl	"INSTALL INTERFACE PAGE"
+;
+;
+;	install_interface_page_a
+;		entry:	.a	= page for interface page to be located too
+;		exit:	interface page downloaded and patched
+;			if	c128
+;				downloaded code aslow copied down
+;
+;
+install_interface_page_a	; installs interface page on page .a
+	sta pntr+1		point pntr to that page
+	ldy #0
+	sty pntr
+;
+10$	lda install_code,y	copy interface code to specified page
+	sta (pntr),y
+	iny
+	bne 10$
+;
+;				patch all high order intra page references
+;
+	ldx #end_patch_addrs-patch_addrs-1
+	lda pntr+1
+20$	ldy patch_addrs,x
+	sta (pntr),y
+	dex
+	bpl 20$
+;
+	.ifdef c64
+	rts		return
+	.else
+	.local
+;			fall through to down_loaded_code
+;
+	.subttl	"DOWN_LOADED_CODE"
+;***********************************************************************
+;		"DOWN_LOADED_CODE"
+;***********************************************************************
+;
+	ldx #110$-100$-1
+10$	lda 100$,x
+	sta down_load_area,x
+	dex
+	bpl 10$
+;
+	ldx #113$-100$		; patch even this stuff
+	lda pntr+1		
+	sta down_load_area,x
+	rts
+;
+100$
+;	entry:	.y = disk command
+;		.a = desired configuration
+;		.x = desired vic bank configuration
+;
+	ldy mmurcr		y <= current dma bank
+	stx mmurcr		current dma bank <= x 
+	ldx mmucr		x <=  current mmu config
+	sec
+	bcs 105$
+;
+	.byte $20		; jsr
+	.byte <swap_disk_slow	; low_order
+113$	.byte 00		; high order
+;
+	jmp cleanup_user_dma
+;
+105$	sta mmucr		perform dma using mmucfg in .a
+	stx mmucr		restore mmu
+	sty mmurcr		restore vic bank
+	rts
+;
+110$	
+	.endif
+;
+
+	.subttl "sniff_disk_size"
+;***********************************************************************
+;		sniff_disk_size
+;***********************************************************************
+;
+;	sniff_disk_size
+;		assumes that the disk is present and working, and the 
+;		ram is present in an integral number of BANKS.
+;
+;		sets up major disk pointers:
+;			first_block
+;			disk_max
+;			channel_blocks
+;			default_block
+;
+sniff_disk_size
+	ldi 0
+	std default_block	default_block <= 0
+;				mark block with all different numbers
+	ldx #0
+10$	txa
+	eor #$5a		nothing magic here , just "unlikely"
+	sta data_block,x
+	dex
+	bne 10$
+;
+20$	jsr flush_block		flush data page to 256 possible banks
+	inc default_block+1
+	bne 20$
+;
+;
+30$	ldx #0			do
+;
+40$	txa				fill data block with different stuff
+	eor #$2c
+	sta data_block,x
+	dex
+	bne 40$
+;
+	jsr 				flush_block
+	inc default_block+1		point to next bank
+	bmi 80$				exit if > 128 banks
+	jsr 				unflush_block
+;
+	ldx #0				check for original stuff
+50$	txa 
+	eor #$5a
+	cmp data_block,x		if	different
+	bne 80$					break
+	dex
+	bne 50$
+	jmp 30$			loop
+
+;
+;
+80$	ldd default_block	return end of disk +1
+;
+;		 set up major disk pointers based on size
+;
+	std disk_max		mark end of disk
+;
+	ldx #0			set up the major disk pointers
+	lda #>swapped_code_size+1
+	std channel_blocks
+	lda #>swapped_code_size+3
+	std first_block
+	std disk_end
+	lda #>swapped_code_size+10
+	std default_block	default_block must be inconsequential....
+;
+	rts
+;
+	.ifge *-swapped_dos_base-swapped_code_size
+	*** error *** code space exceeded 
+	.endif
+;
+	.ifge curram-code_start
+	*** error *** non-zero page ram use exceeded
+	.endif
+;
+	.end
+

@@ -1,0 +1,225 @@
+	.subttl	16 bit macro definitions
+;
+ram	.macro %a,%b
+	.ifdef %a
+	.messg multiple definitions -> curram
+	.else
+%a	= curram
+	.ifb <%b>
+curram = curram+1
+	.else
+curram = curram+%b
+	.endif
+	.endif
+	.endm
+
+zpage	.macro %a,%b
+	.ifdef %a
+	.messg multiple definitions -> curram
+	.else
+%a	= curzpg
+	.ifb <%b>
+curzpg = curzpg+1
+	.else
+curzpg = curzpg+%b
+	.endif
+	.ifgt curzpg-$100
+	ERROR- too many zero page variables.....
+	.endif
+	.endif
+	.endm
+;
+;
+;	double precision macros
+;
+;
+ldd	.macro	%a
+	lda %a		; x,a <= %a
+	ldx %a+1
+	.endm
+;
+std	.macro %a
+	sta %a		; %a <= x,a
+	stx %a+1
+	.endm
+;
+cpd	.macro %a
+	cpx %a+1	; compare x,a with %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	cmp %a
+	.endm
+;
+;
+cpi	.macro %a
+	cpx #>%a	; compare x,a with #%a
+	bne *+4
+	cmp #<%a
+	.endm
+;
+ldi	.macro %a	
+mactmp	= %a
+	lda #<mactmp	; x,a <= #%a
+	ldx #>mactmp
+	.endm
+;
+;
+incd	.macro %a
+	inc %a		; inc double precision %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	inc %a+1
+	.endm
+;
+decd	.macro %a
+	pha		; dec double precision %a
+	lda %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	dec %a+1
+	dec %a
+	pla
+	.endm
+;
+add	.macro %a
+	clc
+	addc %a
+	.endm
+;
+addc	.macro %a
+	adc %a
+	pha
+	txa
+	adc %a+1
+	tax
+	pla
+	.endm
+;
+addi	.macro %a
+mactmp	= %a
+	clc
+	adc #<mactmp
+	pha
+	txa
+	adc #>mactmp
+	tax
+	pla
+	.endm
+;
+sbd	.macro %a
+	sec
+	sbdc %a
+	.endm
+;
+sbdc	.macro %a
+	sbc %a	
+	pha
+	txa
+	sbc %a+1
+	tax
+	pla
+	.endm
+;
+cmpdr	.macro %a,%b,%r	; double compare %a to %b using .%r
+	ld%r %a+1
+	cp%r %b+1
+	.ifn >%a
+	.ifn >%b
+	bne *+2+3+3
+	.else
+	bne *+2+3+2
+	.endif
+	.else
+	.ifn >%b
+	bne *+2+2+3
+	.else
+	bne *+2+2+2
+	.endif
+	.endif
+	ld%r %a
+	cp%r %b
+	.endm
+;
+cpa 	.macro %a
+	cmp %a
+	.endm
+;
+phd	.macro
+	pha
+	txa
+	pha
+	.endm
+;
+pld	.macro
+	pla
+	tax
+	pla
+	.endm
+;
+adad	.macro %a
+	clc
+	adc %a
+	sta %a
+	.ifn >%a
+	bcc *+5
+	.else
+	bcc *+4
+	.endif
+	inc %a+1
+	.endm
+;
+zchk	.macro %a
+	lda %a
+	ora %a+1
+	.endm
+;
+;
+;	entry name,value
+;		creates a symbol whose name is equal to name_*
+;		where * is a single char rangeing from 0-9,a-z.
+;		the value of the symbol is defined in the second arg.
+;
+;	table	name,directive,modifier
+;	
+;		creates n lines of code where n is the number of times
+;		entry was called.
+;		name is the name of the table symbols used in entry.
+;		directive is the directive for the line ( include the . )
+;		modifier optionally may contain ">" or other chars to
+;		to be immediately prepended to symbol name.
+;
+;
+entry	.macro	%table,%value
+	flag = 0
+	.irpc	%c,0123456789abcdefghijklomp
+	.ife	flag
+	.ifndef %table_%c
+	%table_%c = %value
+	flag = 1
+	.endif
+	.endif
+	.endr
+	.ife flag
+	*** ERROR *** entry macro overflow %table
+	.endif
+	.endm
+;
+table	.macro %table
+	.irpc	%c,0123456789abcdefghijklmnop
+	.ifdef %table_%c
+	.byte <%table_%c
+	.endif
+	.endr
+	.endm
+;
+
+
