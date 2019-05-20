@@ -1,0 +1,106 @@
+	.page
+	.subttl 'lccfmt3.src'      
+;
+;
+;
+;*   format done, now verify it
+;
+;
+;
+        lda  #200       ;  look at 200 syncs
+        sta  trys        
+;
+comp    lda  #0         ;  pointer into headers
+        sta  bufpnt      
+;
+        lda  #>buff0     
+        sta  bufpnt+1    
+;
+        lda  sectr      ;  sector counter
+        sta  sect        
+;
+cmpr10  jsr  sync       ;  find sync
+;
+        ldx  #10         
+        ldy  #0          
+;
+cmpr15  bvc  *          ;  get header byte
+        clv      
+;
+        lda  data2       
+        cmp  (bufpnt),y ;  compare gcr
+;
+        bne  cmpr20     ; error
+;
+        iny      
+        dex      
+        bne  cmpr15     ;  test all bytes
+;
+        clc     	;  update headr pointer
+        lda  bufpnt      
+        adc  #10         
+        sta  bufpnt      
+;
+        jmp  tstdat     ;  now test data
+;
+cmpr20  dec  trys       ;  test if too many errors
+        bne  comp        
+;
+        lda  #notfnd    ;  too many error
+        jmp  fmterr      
+;
+tstdat  jsr  sync       ;  find data sync
+;
+        ldy  #256-topwrt         
+;
+tst05   bvc  *   
+        clv      
+;
+        lda  data2      ;  compare gcr
+        cmp  ovrbuf,y    
+;
+        bne  cmpr20     ;  error
+;
+        iny      
+        bne  tst05      ;  do all ovrbuf
+;
+        ldx  #255-3     ;  now do buffer, dont test off bytes
+;
+tst10   bvc  *   
+        clv      
+;
+        lda  data2       
+        cmp  buff2,y     
+        bne  cmpr20      
+;
+        iny      
+        dex      
+        bne  tst10       
+;
+;
+        dec  sect       ;  more sectors to test?
+        bne  cmpr10     ;  yes
+;
+;
+;  all sectors done ok
+;
+        inc  ftnum      ;  goto next track
+        lda  ftnum       
+        cmp  #36        ;  #tracks max
+        bcs  fmtend      
+;
+        jmp  end        ;  more to do
+;
+;
+fmtend  lda  #$ff       ;  clear ftnum
+        sta  ftnum       
+;
+        lda  #$0        ;  clear gcr buffer flag
+        sta  gcrflg      
+;
+        lda  #1         ;  return ok code
+        jmp  errr        
+;
+;
+;
+;.end

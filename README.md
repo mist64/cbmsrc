@@ -115,14 +115,15 @@ The Commodore 1541/1541C/1541-II DOS V2.6 source (1981). Reconstructed from DOS_
 * DOS_1541C_02 is 251968-02 ([release notes](http://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541C.251968-02.txt))
 * DOS_1541C_03 is 251968-03 (shipped with the 1541-II)
 
-## DOS_1571[CR]
+## DOS_1571{_03|_05|CR}
 
 The Commodore 1571 DOS sources:
 
-* DOS_1571 is DOS 3.0 (1986), updated version (310654-05).
+* DOS_1571_03 is DOS 3.0 (1985), original version (310654-03).
+* DOS_1571_05 is DOS 3.0 (1986), updated version (310654-05).
 * DOS_1571CR is DOS 3.1 (1986) of the cost-reduced 1571 (318047-01).
 
-Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz)
+Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz); the -03 version was reconstructed from 1571/310654_03/serlib.lst in the dump.
 
 ## DOS_1581
 

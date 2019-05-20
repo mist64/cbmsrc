@@ -1,0 +1,120 @@
+        .page  
+	.subttl 'mfmsubr.src'
+
+cmdzer  jmp  dskint     ; reset
+
+	.page
+cmdone  lda  #180	
+	sta  cur_trk
+
+	lda  #0		; side zero
+	sta  wdtrk	; init to trk zero
+	sta  cmd_trk	; find zero
+        jmp  seke
+
+	.page
+cmdtwo  lda  dskcnt	; return status of wp
+        and  #$10
+        rts      
+
+	.page
+cmdthr  sty  cmd_trk
+	stx  cur_trk
+	rts             
+
+	.page
+cmdfor  rts             ; reserved
+
+	.page
+;read address routine
+
+;  0       1      2           3         4    5 + mfmhdr
+;  ^       ^      ^           ^         ^    ^
+; track  side#  sector  sector_length  crc  crc
+
+; track 	=> cur-trk
+; sector size 	=> mfmsiz_hi
+; status  	=> mfmsiz_lo
+; sector size 	=> dkmode
+
+cmdfve	jsr  cmdone	; restore
+	jsr  diskin	; is there a disk in the drive ?
+	bcs  1$
+
+	jsr  cmdfiv	; seek
+	lda  nsectk,x	; get # of sectors
+	sta  cpmsek	; set def.
+	sta  maxsek	; store max sector number....def, ok
+	lda  #1
+	sta  minsek	; let query decide otherwise....def, ok
+	rts
+
+1$	lda  #$0d	; no disk
+	sta  mfmcmd	; error
+	bne  abrsk	; abort
+
+cmdfiv  lda  #0          
+        sta  mfmsiz_lo  ; clear sector size
+        sta  mfmsiz_hi  ; *
+        lda  #$c8       ; read address
+	jsr  strtwd	; start cmd
+
+; store address away
+
+        ldx  #0          
+        ldy  #6          
+	WDTEST		; chk address
+mseek1  lda  wdstat
+	and  #3
+	lsr  a
+        bcc  mrcnf      ; no address mark found
+	beq  mseek1
+
+        lda  wddat      ; get data
+        sta  mfmhdr,x   ; data in .a
+        inx      
+        dey      
+        bne  mseek1      
+
+mrcnf	jsr  waitdn	; wait for not busy
+
+; wd 1770 status returns
+
+; motor wp spin/rec recnofnd crc lstdat  datreq busy
+;   s7  s6    s5       s4     s3   s2      s1    s0
+
+        jsr  cvstat     ; get status
+
+mseek3  lda  mfmhdr     ; read track address
+	asl  a		; * 2
+        sta  cur_trk
+
+        lda  mfmhdr+3   ; get sector size
+consek  and  #3         ; clear remaining
+        tax      
+	lda  sectlo,x    
+        sta  mfmsiz_lo  ; sector size low
+        lda  secthi,x    
+        sta  mfmsiz_hi  ; sector size high
+
+abrsk   lda  dkmode     ; set sector size in
+        and  #%10000000 ; clear all but mode bit
+	ora  mfmcmd	; set status
+	ora  seckzz,x	; shifted sector size
+        sta  dkmode      
+	rts      
+
+; sector size low for mfm 128,256,512,1024 byte sectors
+sectlo   .byte  127,255,255,255          
+
+; sector size high for mfm 128,256,512,1024 byte sectors
+secthi   .byte  1,1,2,4          
+
+; shifted sector size for mfm 128,256,512,1024 byte sectors
+seckzz   .byte  $00,$10,$20,$30
+
+; max sector #'s for mfm 128, 256, 512, 1024 byte sectors
+nsectk	 .byte  26, 16, 9, 5
+
+; ok, checksum-error, sector-not-found, no-address-mark
+mfmer    .byte  1,9,2,3 
