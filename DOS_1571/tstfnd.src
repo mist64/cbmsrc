@@ -128,7 +128,7 @@ its1            	; track:= dirtrk-r0
 
 ;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-			;if @b+.y│ then goto fndsec
+			;if @b{.y} then goto fndsec
 rtch37  lda  (bmpnt),y   
 rtch37a bne  fndsec      
 			;end
@@ -153,7 +153,7 @@ its3
 
 ;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-			;if @b+.y│=0 then goto its1
+			;if @b{.y}=0 then goto its1
 rtch38  lda  (bmpnt),y   
 rtch38a beq  its1        
 fndsec           
@@ -218,7 +218,7 @@ avck
         dey      
 ac10            	; for .x:=7 to 0 do;
         ldx  #7         ; count the bits
-ac20            	; if @b+.y│ & bmask+x│
+ac20            	; if @b{.y} & bmask{x}
 			;  then temp:=temp+1
         lda  (bmpnt),y   
         and  bmask,x     
@@ -230,7 +230,7 @@ ac30            	; end .x
 			;end .y
         dey      
         bne  ac10        
-			;if @b+.y│ <> temp
+			;if @b{.y} <> temp
 			;  then cmder2(direrr);
         lda  (bmpnt),y   
         cmp  temp        

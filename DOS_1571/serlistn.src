@@ -105,22 +105,22 @@ atnlow  jmp  atnsrv
 
 
 ; tstatn()
-; +
+; {
 ;  if(atnmod)
-;  +
+;  {
 ;   if(pb & $80)
-;    + if 1571 then jatns20() else atns20
-;    │
+;    { if 1571 then jatns20() else atns20
+;    }
 ;   else return 
-;  │
+;  }
 ;  else
-;  +
+;  {
 ;   if(pb&$80) return
 ;   else 
-;     + if 1571 then jatnsrv() else atnsrv()
-;     │
-;  │
-; │
+;     { if 1571 then jatnsrv() else atnsrv()
+;     }
+;  }
+; }
 
 
 tstatn  lda  atnmod     ;  test if in atn mode

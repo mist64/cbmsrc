@@ -117,11 +117,11 @@ The Commodore 1541/1541C/1541-II DOS V2.6 source (1981). Reconstructed from DOS_
 
 ## DOS_1571
 
-The Commodore 1571 DOS source (3.0, 1986), updated version (310654-05). Extracted from 1571-source.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
+The Commodore 1571 DOS source (3.0, 1986), updated version (310654-05). Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz).
 
 ## DOS_1581
 
-The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Extracted from 1581-source.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
+The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz).
 
 ## RAMDOS
 

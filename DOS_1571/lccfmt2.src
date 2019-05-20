@@ -154,7 +154,7 @@ crtdat  sta  buff2,x
 ;
         pla     	;   restore block size
         tay     	;  move buffer up 79 bytes
-        dey     	;  for i=n-1 to 0:mem+i+69|:=mem+i|:next
+        dey     	;  for i=n-1 to 0:mem{i+69}:=mem{i}:next
         jsr  movup      ;  move buf0 up 69 bytes
 ;
         jsr  movovr     ;  move ovrbuf up to buffer

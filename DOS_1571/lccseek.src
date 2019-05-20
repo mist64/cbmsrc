@@ -138,8 +138,8 @@ l465    cmp  csect
         beq  tstrdj     ;  must be a read
 ;
         pla      
-        cmp  #wrtmin    ;  +if(csect<4)return;
-        bcc  l470       ;  +if(csect>8)return;
+        cmp  #wrtmin    ;  {if(csect<4)return;
+        bcc  l470       ;  {if(csect>8)return;
 ;
         cmp  #wrtmax     
         bcs  l470        

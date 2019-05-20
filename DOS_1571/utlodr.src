@@ -109,7 +109,7 @@
 ;   outputs to utlodr-none
 ;
 ;********************************
-; boot routine removed, won't work with serial i.f
+; boot routine removed, won't work with serial i|f
 	.page           
 boot2            
         rts     ; exit

@@ -126,8 +126,8 @@ jseak   lda  #90        ; search 90 headers
         beq  16$	; must be a read
 
         pla      
-        cmp  #wrtmin    ; +if(csect<4)return;
-        bcc  11$	; +if(csect>8)return;
+        cmp  #wrtmin    ; {if(csect<4)return;
+        bcc  11$	; {if(csect>8)return;
 
         cmp  #wrtmax     
         bcs  11$

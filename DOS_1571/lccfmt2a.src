@@ -189,7 +189,7 @@ toptst  lda  tsttrk
         jsr  fbtog      ; convert to gcr with no bid char
 			; move buffer up 79 bytes
 
-        ldy  #$ff-69    ; for i=n-1 to 0:mem+i+69|:=mem+i|:next
+        ldy  #$ff-69    ; for i=n-1 to 0:mem{i+69}:=mem{i}:next
 4$	lda  (hdrpnt),y ; move buf0 up 69 bytes
         ldx  #69         
         stx  hdrpnt      
