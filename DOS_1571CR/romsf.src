@@ -1,0 +1,48 @@
+	.page
+	.subttl 'romsf.src'
+
+	*=rom   	; +$300 rom patch area
+cchksm  *=*+1		; <<<<< TO BE DETERMINED
+
+	.byte '(C)1985 COMMODORE ELECTRONICS LTD., ALL RIGHTS RESERVED'
+
+ptch0a	and  #$ff-3
+	ora  tmp
+	sta  dskcnt	
+ptch0b	lda  pcr2	; disable SO
+	and  #$ff-2
+	sta  pcr2
+	rts
+
+	  ; track cutoffs	
+trackn  .byte 41,31,25,18
+	
+worktable ; table of track densities extras for those who address tracks > 35
+	.byte $60,$60,$60,$60,$60,$60,$60,$60,$60,$60
+	.byte $60,$60,$60,$60,$60,$60,$60
+	.byte $40,$40,$40,$40,$40,$40,$40
+	.byte $20,$20,$20,$20,$20,$20
+	.byte $00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00
+
+ptch0c	sta cmd		; save off cmd for DOS
+	pha
+	lda #1		; trk one
+	sta hdrs,x
+	pla
+	rts		; return
+
+ptch0d  sei		; no irq's
+	lda  pcr2
+	ora  #$0e
+	sta  pcr2	; enable SO
+	jsr  jclear	; clear track (val in .x)
+	jsr  kill	; disable write
+	lda  pcr2
+	and  #$ff-$0e
+	sta  pcr2	; disable SO
+	cli
+	rts
+
+	
+*=rom+256        	; c0 patch space

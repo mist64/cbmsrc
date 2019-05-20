@@ -1,0 +1,693 @@
+	.page 
+	.subttl 'varCR.src'
+
+*=0              
+
+jobs     *=*+6          ; job que
+
+; controller job types
+
+	read     =$80    
+	fread    =read+8    
+	write    =$90    
+	wverfy   =$a0    
+	seek     =$b0    
+	secsek   =seek+8         
+	bump     =$c0    
+	jumpc    =$d0    
+	exec     =$e0    
+	frmt     =$f0    
+
+;job returns
+
+	;01 = ok
+	;02 = can't find sector
+	;03 = no sync
+	;04 = not a data block
+	;05 = data block checksum
+	;06 = format error
+	;07 = verify error
+	;08 = write protect error
+	;09 = header block checksum
+	;10 = data extends into next block
+	;11 = disk id mismatch
+
+hdrs     *=*+12         ; job headers
+dskid    *=*+4          ; master copy of disk id
+
+header   *=*+5          ; image of last header
+
+info			; **** 1571 ****
+fmhdpt			; **** 1571 ****
+actjob   *=*+1          ; controller's active job
+wpsw     *=*+2          ; write protect change flag
+lwpt     *=*+2          ; last state of wp switch
+drvst    *=*+2   
+			;$10 = time out state
+			;$20 = motor just running
+			;$40 = stepping
+			;$80 = accelerating
+			;$00 = no drive active
+
+drvtrk   *=*+1		; current track
+	 *=*+1		; slowd flag
+
+mfmhdr			; **** 1571 ****
+stab     *=*+10          
+
+;   pointers
+
+savpnt   *=*+2   
+bufpnt   *=*+2   
+hdrpnt   *=*+2   
+
+gcrpnt   *=*+1   
+
+acltim2			; **** 1571 ****
+gcrerr   *=*+1          ; indicates gcr decode error
+bytcnt   *=*+1   
+
+fastsr			; **** 1571 ****
+bitcnt   *=*+1   
+bid      *=*+1   
+hbid     *=*+1   
+chksum   *=*+1   
+
+tsttrk			; **** 1571 ****
+switch			; **** 1571 ****
+hinib    *=*+1   
+
+cpmit			; **** 1571 ****
+byte     *=*+1   
+drive    *=*+1   
+cdrive   *=*+1   
+jobn     *=*+1   
+tracc    *=*+1   
+nxtjob   *=*+1   
+nxtrk    *=*+1   
+sectr    *=*+1   
+
+mfmsiz_hi		; **** 1571 ****
+work     *=*+1   
+job      *=*+1   
+
+ctl_dat			; **** 1571 ****
+ctrack   *=*+1   
+dbid     *=*+1          ; data block id
+acltim   *=*+1          ; acel time delay
+savsp    *=*+1          ; save stack pointer
+steps    *=*+1          ; steps to desired track
+mretry			; MFM retry counter
+tmp      *=*+1   
+csect    *=*+1   
+nexts    *=*+1   
+nxtbf    *=*+1          ; pointer at next gcr source buffer
+nxtpnt   *=*+1          ; and next gcr byte location in buffer
+gcrflg   *=*+1          ; buffer in gcr image
+ftnum    *=*+1          ; current format track
+btab     *=*+4   
+gtab     *=*+8   
+
+dkmode			; **** 1571 ****
+as       *=*+1          ; # of steps to acel
+
+ctl_cmd			; **** 1571 ****
+af       *=*+1          ; acel. factor
+
+minsek			; **** 1571 ****
+aclstp   *=*+1          ; steps to go
+
+maxsek 			; **** 1571 ****
+rsteps   *=*+1          ; # of run steps
+nxtst    *=*+2		; 1541 pointer
+
+cur_trk			; **** 1571 ****
+minstp   *=*+1          ; min reqired to acel
+
+
+; constants
+
+ovrbuf   =$0100         ; top of stack
+numjob   =6     	; number of jobs
+jmpc     =$50   	; jump command
+bumpc    =$40   	; bump command
+execd    =$60   	; execute command
+bufs     =$0300         ; start of buffers
+buff0    =bufs   
+buff1    =bufs+$100      
+buff2    =bufs+$200      
+tolong   =$2    	; format errors
+tomany   =$3     
+tobig    =$4     
+tosmal   =$5     
+notfnd   =$6     
+skip1    =$24		; bit zp
+skip2    =$2c   	; bit abs
+bit0	 =1
+bit1	 =2
+bit2	 =4
+bit3	 =8
+bit4	 =16
+bit5	 =32
+bit6	 =64
+bit7	 =128
+all	 =255
+toprd    =69    	; top of read overflo buffer on a read
+topwrt   =69    	; top of write overflo buffer on a write
+numsyn   =5   		; gcr byte count for size of sync area
+gap1     =11          	; gap after header to  clear erase in gcr bytes
+gap2     =4 		; gap after block min size
+rdmax    =6   		; sector distance wait
+wrtmin   =4    
+wrtmax   =8   
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+			; *** rom ds 12/2/86 ***, set to old rate for appl'
+tim      =58    	; irq rate for 8 ms @ 1 Mhz
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+tim2	 =64            ; irq rate for 8 ms @ 2 Mhz
+byt_clr  =$1C00
+mscnt    =255
+        .page  
+
+;******************************
+;*  equates
+;******************************
+	
+zp2      =*     	; save zero page for dos
+rom      =$c000         ; first rom address
+
+lrf      =$80   	; last record flag
+dyfile   =$40   	; dirty flag for rr file
+ovrflo   =$20   	; rr print overflow
+nssl     =6     	; # of side-sector links
+ssioff   =4+nssl+nssl   ; offset into ss for data block ptrs
+nssp     =120   	; # of ptrs in ss
+mxchns   =6     	; max # channels in system
+maxsa    =18    	; max sa # +1
+vererr   =7     	; controller verify error
+cr       =$0d   	; carriage return
+bfcnt    =5     	; available  buffer count
+cbptr    =bfcnt+bfcnt   ; command buffer ptr
+errchn   =mxchns-1      ; error channel #
+errsa    =16    	; error channel sa #
+cmdchn   =mxchns-2      ; command channel #
+lxint    =%00001111     ; power up linuse (logical index usage
+blindx   =6     	; bam lindx for floating bams
+cmdsa    =15    	; command channel sa #
+apmode   =2     	; open append mode
+mdmode   =3     	; open modify mode
+rdmode   =0     	; open read mode
+wtmode   =1     	; open write mode
+reltyp   =4     	; open relative type
+dirtyp   =7     	; open direct type
+seqtyp   =1     	; open sequential type
+prgtyp   =2     	; open program type
+usrtyp   =3     	; open user type
+typmsk   =7     	; mask for type bits
+irsa     =17    	; internal read sa #
+iwsa     =18    	; internal write sa #
+dosver   =2     	; dos version
+fm2030   =$42   	; 2030 format version
+fm4040   =$41   	; 4040 format version
+mxfils   =5     	; max # filenames in string
+dirlen   =24    	; directory length used
+nbsiz    =27    	; nambuf text size
+cmdlen   =41    	; length of command buffer
+drvmsk   =1		; drv 0 or 1
+        .page  
+
+;*****************************
+;*      i/o definitions      *
+;*****************************
+;
+unlsn    =$3f   	; ieee unlisten command
+untlk    =$5f   	; ieee untalk command
+notrdy   =$0    	; not ready
+talker   =$80   	; ieee talker flag
+lisner   =1     	; ieee listener flag
+eoiout   =$80   	; talk with eoi
+eoisnd   =$08   	; not(eoi) to send
+eoi      =$08   	; not(eoi) to send
+rdytlk   =$88   	; talk no eoi
+rdylst   =$1    	; ready to listen
+rndrdy   =rdytlk+rdylst ; random chnrdy
+rndeoi   =eoiout+rdylst ; random w/ eoi
+        
+;*******************************************************************
+;i/o registers
+
+; mos 6522-a
+
+        *  =$1800        
+;serial ieee control port
+
+pb       *=*+1          ; serial port
+	                ; bit 0: data in
+			; bit 1: data out
+			; bit 2: clk in
+			; bit 3: clk out
+			; bit 4: atn ack
+			; bit 5: dev jumper
+			; bit 6: dev jumper
+			; bit 7: atn in		
+pa1      *=*+1          
+
+ddrb1    *=*+1          ; serial data dir
+ddra1    *=*+1          ; unused ddra
+t1lc1    *=*+1          ; timer 1 low counter
+t1hc1    *=*+1          ; timer 1 hi counter
+t1ll1    *=*+1          ; timer 1 low latch
+t1hl1    *=*+1          ; timer 1 hi latch
+t2lc1    *=*+1          ; timer 2 low counter
+t2hc1    *=*+1          ; timer 2 hi counter
+sr1      *=*+1          ; shift reg
+acr1     *=*+1          ; aux control reg
+pcr1     *=*+1          
+ifr1     *=*+1          
+ier1     *=*+1          
+pota1    *=*+1          ; bit 0: track 0 sense, 1=trk0
+			; bit 1: fast serial direction, 1=out
+			; bit 2: side select, 1=side 1
+			; bit 3: ------------
+			; bit 4: ------------
+			; bit 5: 1/2 Mhz, 1=2 Mhz
+			; bit 6: atn out
+			; bit 7: byte ready, 0=byte		
+
+;*******************************************************************
+
+; bits for serial handshake
+
+datin    =$1    	; data in line
+datout   =$2    	; data out
+clkin    =$4    	; clock in
+clkout   =$8    	; clock out
+atna     =$10   	; atna ack
+atn      =$80   	; atn in
+
+led0     =8     	; act led
+led1     =0     	; no led
+ledprt   =$1c00    	; on  pb  of  $1c00        
+ledout   =$1c02    	; ddrb  of  $1c00  for  output-led         
+	.page
+;*******************************************************************
+;
+;GENERAL DESCRIPTION by Charles Hauck
+;
+; The 5710 is the center of the 1571 cost reduction effort and it integrates
+; the WD1770, 6526, 64H157 gate array, and CPU clock control circuitry. The
+; 5710 must be controlled by a 6502 CPU and is compatible with the 6500 series
+; peripheral interface. The 5710 MFM section provides bit-level control and
+; relies on a 6502 CPU to create high level sector and track operations from
+; sequences of byte transfers. The 5710 includes only that portion of the 6526
+; required to implement the Commodore serial data bus.
+;
+;1.2 PIN CONFIGURATION
+;
+; This chip will be in a 48 pin package:
+;                               _____________
+;                
+;		1  FCOB		                   FDOB 48
+;  		2  TED			           FCIB 47
+;	        3  PHI0        	                   FDIB 46
+;	 	4  CLK  		           IRQB 45
+;	 	5  CTRLO			 RESETB 44
+;	 	6  CTRLI		  	     NC 43
+;	 	7  PH2	                             NC	42
+;	 	8  D7				 INDEXB 41
+;	 	9  D6	 		            WGB 40
+;	 	10 D5			          WPRTB 39
+;		11 D4			         RPULSE 38
+;		12 VSS	                    	   QOUT	37
+;		13 VDD  		            VDD	36
+; 		14 D3	                  	    VSS	35
+;		15 D2				   CS3B 34
+;		16 D1			           CS2B 33
+;		17 D0		 		   CS1B 32
+;		18 AD15 			    RWB 31
+;		19 AD14 			 OSCOUT 30
+;		20 AD13	 		          XTAL2 29
+;		21 AD12	                	  XTAL1 28
+;		22 AD10		                    AD0 27
+;		23 AD4	                            AD1	26
+;        	24 AD3		                    AD2	25
+;                               _____________
+;
+	.page
+*=$2000          
+;*******************************************
+; ******* I TOLD YOU IT WOULD GO AWAY ******
+;*******************************************
+;2. FUNCTIONAL DESCRIPTION
+;
+;2.1 ADDRESS MAP
+;
+;                                MFM READ/WRITE CONTROLLER
+;
+;  REG  LOC                               BITS
+;
+MFMREG0 *=*+1
+;                       7      6      5      4      3      2      1      0
+; 
+;MFM0   $2000         WBYTE  INDEX  WRITE   GEN    DCRC   AMGEN  WGON   PCE
+;                     (R)    (R)    (RW)    (RW)   (RW)   (RW)   (RW)   (RW)
+
+MFMREG1 *=*+1
+;                       7      6      5      4      3      2      1      0
+;MFM1   $2001         RBYTE  AMFLG  CERR   READ    SMPL   AM2    AM1    AM0
+;                     (R)    (R)    (R)    (RW)    (RW)   (RW)   (RW)   (RW)
+
+MFMREG2 *=*+1
+;                       7      6      5      4      3      2      1      0
+;MFM2   $2002         RMFM7  RMFM6  RMFM5  RMFM4  RMFM3  RMFM2  RMFM1  RMFM0
+;                     (R)    (R)    (R)    (R)    (R)    (R)    (R)    (R) 
+
+;                       7      6      5      4      3      2      1      0
+;                     WMFM7  WMFM6  WMFM5  WMFM4  WMFM3  WMFM2  WMFM1  WMFM0
+;                     (W)    (W)    (W)    (W)    (W)    (W)    (W)    (W) 
+
+MFMREG3 *=*+1
+;                       7      6      5      4      3      2      1      0
+;MFM3   $2003         CLKP7  CLKP6  CLKP5  CLKP4  CLKP3  CLKP2  CLKP1  CLKP0
+;                     (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)
+
+MFMREG4 *=*+1
+;                       7      6      5      4      3      2      1      0
+;MFM4   $2004         DATP7  DATP6  DATP5  DATP4  DATP3  DATP2  DATP1  DATP0
+;                     (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)
+
+MFMREG5 *=*+1
+;                       7      6      5      4      3      2      1      0
+;MFM5   $2005         SEPSEL RMTST  RMA4   RMCLR  ROMD3  ROMD2  ROMD1  ROMD0
+;                     (RW)   (RW)   (RW)   (RW)   (R)    (R)    (R)    (R) 
+	.page
+*=$400c
+;                               SERIAL DATA BUS INTERFACE
+;
+
+sdr *=*+1
+;                       7      6      5      4      3      2      1      0
+;SDR    $400C         SDAT7  SDAT6  SDAT5  SDAT4  SDAT3  SDAT2  SDAT1  SDAT0
+;                     (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)   (RW)
+                       
+icr *=*+1
+;                       7      6      5      4      3      2      1      0
+;ICR    $400D          SCB                         SP
+;                      (W)                         (R)
+
+cra *=*+1
+;                       7      6      5      4      3      2      1      0
+;CRA    $400E                SPM
+;                            (RW)
+;
+;SIGNAL                                  DEFINITION
+;
+;AMFLG       Address mark detection flag. AMFLG is set when an address mark is
+;            detected and reset when MFM register 3 is read. AMFLG can be checked
+;            while polling RBYTE to see if an address mark was detected.
+;
+;CERR        CRC error flag. CRC=1 if the CRC bytes did not check out. CRC=0 if
+;            CRC bytes did check out. CERR is reset by SMPL=0. Read only,
+;            resets to 0.
+;
+;CLKP7-0     Address mark clock detect pattern, MFM register 4. This register is
+;            loaded with the clock detect pattern (e.g. $OA) to define the
+;            address mark to be detected. Read and write, does not reset to a
+;            known state.
+;
+;SMPL        CRC error sample control. SMPL=1 causes the CRC error status to
+;            be sampled at the end of the next byte shifted in. SMPL=0 resets
+;            CERR. Read and write, resets to 0.
+;
+;DATP7-0     Address mark data detect pattern, MFM register 4. This register is
+;            loaded with the data detect pattern (e.g. $OA) to define the
+;            address mark to be detected. Read and write, does not reset to a
+;            known state.
+;
+;RBYTE       Read byte ready flag. If an address mark has been detected, RBYTE
+;            is synchronized with byte transfers off the disk. It is set
+;            whenever a complete byte is shifted in and reset whenever MFM
+;            register 2 is read. If an address mark has not been detected, RBYTE
+;            is in free running mode, being set every 32 usec and reset when
+;            MFM register is read. Read only, does not reset to a known state.
+;
+;READ        READ=0 resets CRC checker inhibits address mark detection. READ=1
+;            activates address mark detection and releases the clear on the CRC
+;            checker. Read and write, resets to 0.
+;
+;RMFM7-0     Decoded MFM input data byte, MFM register 3. If address marks have
+;            been detected and synchronism achieved, this register holds valid
+;            disk read data. RMFM7-0 must be read within 28 usec of RBYTE going
+;            high, otherwise it will be overwritten by the next decoded byte. 
+;            If synchronism isn't present, RMFM7-0 is random data. Read only,
+;            does not reset to a known state.
+;
+;RMTST       ROM test control bit. RMTST=1 synchronously clears the ROM to
+;            location $00 (for test mode only). RMTST=0 releases clear to allow
+;            normal operation. Read and write, resets to 0.
+;
+;ROMA4       ROM A4 address bit override control. ROMA4=1 forces a low on the
+;            ROM A4 address bit (for test mode only). ROMA4=0 allows normal state
+;            machine operation. Read and write, resets to 0.
+;
+;ROMD3-0     ROM state machine tri-stated data outputs. Read in 4 low order bits
+;            of MFM register 6. Used in test mode only, not part of normal
+;            operation.
+;
+;8x8 scratch RAM
+
+ 	*=$4010          
+	*=*+8	; RAM 
+	*=*-8
+am	*=*+2	; address mark
+idam	*=*+2	; id address mark
+dam	*=*+2	; data address mark
+amc     *=*+2	; clk det pattern
+        .page  
+
+;permanent address variables
+
+*=zp2            
+
+vnmi     *=*+2          ; indirect for nmi
+
+cmd_trk			; **** 1571 ****
+nmiflg   *=*+1   
+autofg   *=*+1   
+secinc   *=*+1          ; sector inc for seq
+revcnt   *=*+1          ; error recovery count
+
+bufs     =$300        	; start of data bufs
+fbufs    =bufs        	; format download image
+        
+;*
+;*********************************
+;*
+;*      zero page variables
+;*
+;*********************************
+;*
+usrjmp   *=*+2          ; user jmp table ptr
+bmpnt    *=*+2          ; bit map pointer
+temp     *=*+6          ; temp work space
+ip       *=*+2          ; indirect ptr variable
+lsnadr   *=*+1          ; listen address
+tlkadr   *=*+1          ; talker address
+lsnact   *=*+1          ; active listener flag
+tlkact   *=*+1          ; active talker flag 
+adrsed   *=*+1          ; addressed flag
+atnpnd   *=*+1          ; attention pending flag
+atnmod   *=*+1          ; in atn mode
+prgtrk   *=*+1          ; last prog accessed
+drvnum   *=*+1          ; current drive #
+track    *=*+1          ; current track
+sector   *=*+1          ; current sector
+lindx    *=*+1          ; logical index
+sa       *=*+1          ; secondary address
+orgsa    *=*+1          ; original sa
+data     *=*+1          ; temp data byte
+
+t0       =temp   
+t1       =temp+1         
+t2       =temp+2         
+t3       =temp+3         
+t4       =temp+4         
+r0       *=*+1   
+r1       *=*+1   
+r2       *=*+1   
+r3       *=*+1   
+r4       *=*+1   
+result   *=*+4   
+accum    *=*+5   
+dirbuf   *=*+2   
+
+cmd_sec			; **** 1571 ****
+icmd     *=*+1          ; ieee cmd in
+
+cpmsek			; **** 1571 ****
+mypa     *=*+1          ; my pa flag
+cont     *=*+1          ; bit counter for ser
+;*
+;***********************
+;*
+;*  zero page array
+;*
+;***********************
+;*
+buftab   *=*+cbptr+4    ; buffer byte pointers
+cb=buftab+cbptr          
+buf0     *=*+mxchns+1    
+buf1     *=*+mxchns+1    
+nbkl             
+recl     *=*+mxchns      
+nbkh             
+rech     *=*+mxchns      
+nr       *=*+mxchns      
+rs       *=*+mxchns      
+ss       *=*+mxchns      
+f1ptr    *=*+1          ; file stream 1 pointer
+
+recptr   *=*+1   
+ssnum    *=*+1   
+ssind    *=*+1   
+relptr   *=*+1   
+entsec   *=*+mxfils     ; sector of directory entry
+entind   *=*+mxfils     ; index of directory entry
+fildrv   *=*+mxfils     ; default flag, drive #
+pattyp   *=*+mxfils     ; pattern,replace,closed-flags,type
+filtyp   *=*+mxchns     ; channel file type
+chnrdy   *=*+mxchns     ; channel status
+eoiflg   *=*+1          ; temp eoi
+jobnum   *=*+1          ; current job #
+lrutbl   *=*+mxchns-1   ; least recently used table
+nodrv    *=*+2          ; no drive flag
+
+dskver   *=*+2          ; disk version from 18.0
+zpend=*          
+			; stack area
+
+	 *=$0103+$43	; ****** STACK ******
+
+bam_one	 *=*+105	; **** 1571 vars ****
+dside    *=*+1		; side flag
+mfmcmd   *=*+1		; mfm controller command
+side	 *=*+1		; side flag
+fmtsid	 *=*+1
+vertog   *=*+1
+precomp  *=*+1		; bit 7 precomp, bit 6 verify
+seksiz   *=*+1		; sector size
+swapfg	 *=*+1
+ 	 
+	 *=$01bb	; end of vars start overflow buffer
+
+*=$200           
+cmdbuf   *=*+cmdlen+1    
+cmdnum   *=*+1          ; command #
+lintab   *=*+maxsa+1    ; sa:lindx table
+chndat   *=*+mxchns     ; channel data byte
+lstchr   *=*+mxchns     ; channel last char ptr
+type     *=*+1          ; active file type
+strsiz   *=*+1   
+tempsa   *=*+1          ; temporary sa
+cmd      *=*+1          ; temp job command
+
+lstsec   *=*+1          ; 
+bufuse   *=*+2          ; buffer allocation
+mdirty   *=*+2          ; bam 0 & 1 dirty flags
+
+entfnd   *=*+1          ; dir-entry found flag
+dirlst   *=*+1          ; dir listing flag
+cmdwat   *=*+1          ; command waiting flag
+linuse   *=*+1          ; lindx use word
+lbused   *=*+1          ; last buffer used
+rec      *=*+1   
+trkss    *=*+1   
+secss    *=*+1   
+        .page    
+;*
+;********************************
+;*
+;*  ram array area
+;*
+;********************************
+;*
+lstjob   *=*+bfcnt      ; last job
+dsec     *=*+mxchns     ; sector of directory entry
+dind     *=*+mxchns     ; index of directory entry
+erword   *=*+1          ; error word for recovery
+erled    *=*+1          ; error led mask for flashing
+prgdrv   *=*+1          ; last program drive
+prgsec   *=*+1          ; last program sector
+wlindx   *=*+1          ; write lindx
+
+mfmsiz_lo		; **** 1571 ****
+rlindx   *=*+1          ; read lindx
+nbtemp   *=*+2          ; # blocks temp
+
+cmdsiz   *=*+1          ; command string size
+char     *=*+1          ; char under parser
+limit    *=*+1          ; ptr limit in compar
+f1cnt    *=*+1          ; file stream 1 count
+f2cnt    *=*+1          ; file stream 2 count
+f2ptr    *=*+1          ; file stream 2 pointer
+
+; parser tables
+
+filtbl   *=*+mxfils+1   ; filename pointer
+filtrk   *=*+mxfils     ; 1st link/track
+filsec   *=*+mxfils     ;         /sector
+
+
+; channel tables
+
+patflg   *=*+1          ; pattern presence flag
+image    *=*+1          ; file stream image
+drvcnt   *=*+1          ; number of drv searches
+drvflg   *=*+1          ; drive search flag
+lstdrv   *=*+1          ; last drive w/o error
+found    *=*+1          ; found flag in dir searches
+dirsec   *=*+1          ; directory sector
+delsec   *=*+1          ; sector of 1st avail entry
+delind   *=*+1          ; index  "
+lstbuf   *=*+1          ; =0 if last block
+index    *=*+1          ; current index in buffer
+filcnt   *=*+1          ; counter, file entries
+typflg   *=*+1          ; match by type flag
+mode     *=*+1          ; active file mode (r,w)
+jobrtn   *=*+1          ; job return flag
+eptr     *=*+1          ; ptr for recovery
+toff     *=*+1          ; total track offset
+ubam     *=*+2          ; last bam update ptr
+tbam     *=*+4          ; track # of bam image
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+bam      *=*+16		; bam images
+	 *=*-8		; adjust address
+irqjmp   *=*+2		; indirect irq vector
+mtrcnt	 *=*+1		; motor auto on var
+maxtrk	 *=*+1		; single sided=>36, double sided=>71
+savbm	 *=*+2
+lock	 *=*+1		; mode lock
+channel  *=*+1		; channel for fstload
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+;*
+;*****************************************
+;*
+;*   output buffers
+;*
+;********************************************
+;*
+nambuf   *=*+36         ; directory buffer
+errbuf   *=*+36         ; error msg buffer
+wbam     *=*+1          ; don't-write-bam flag
+ndbl     *=*+2          ; # of disk blocks free
+ndbh     *=*+2
+phase    *=*+2
+
+ramend=*         

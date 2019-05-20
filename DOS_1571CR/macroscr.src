@@ -1,0 +1,37 @@
+	.subttl 'macroscr.src'
+	.page
+
+NODRRD  		.MACRO
+
+	.BYTE $BD,$FF,$00 ; read nodrv,x absolute
+
+			.ENDM
+
+
+NODRWR  		.MACRO
+
+	.BYTE $9D,$FF,$00 ; write nodrv,x absolute
+
+			.ENDM
+
+
+BYTE_READY_RD_DAT 	.MACRO
+			; **************************************
+	bit  MFMREG1	; ******** wait for byte ready *********
+	bpl  *-3	; **************************************
+	
+			; **************************************
+	lda  MFMREG2	; ******** get data from 5710 **********
+			; **************************************
+	 	 	.ENDM	
+
+
+BYTE_READY_WRT 		.MACRO
+			; **************************************
+	bit  MFMREG0	; ******** wait for byte ready *********
+	bpl  *-3	; **************************************
+
+			; **************************************
+	sta  MFMREG2	; ******** give data to 5710 ***********
+			; **************************************
+	      		.ENDM	

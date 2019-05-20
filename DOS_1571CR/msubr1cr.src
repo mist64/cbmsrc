@@ -1,0 +1,416 @@
+        .page
+	.subttl 'msubr1cr.src'
+
+; format track
+
+cmdsev	bit  MFMREG0
+	bvc  cmdsev	; make sure we're not in the middle of index pulse
+99$	bit  MFMREG0
+	bvs  99$	; wait for leading edge of index pulse -----\__/-----
+			;                                           ^start here!
+	bit  precomp
+	bmi  1$		; precomp on ?
+	
+	lda  #bit5+bit3
+	.byte skip2
+1$	lda  #bit5+bit3+bit0
+	sta  MFMREG0	; enable write process and set to data mode
+	lda  MFMREG0
+	ora  #bit1
+	sta  MFMREG0	; enable wrt gate
+	lda  #$4e
+	sta  MFMREG2	; preload
+	bit  switch	; system 34 / iso standard switch
+	bvc  no_ind	; write index ?
+
+	ldx  #80	; system 34
+	lda  #$4e
+2$	BYTE_READY_WRT
+	dex
+	bne  2$
+
+	ldx  #12
+	lda  #0
+3$	BYTE_READY_WRT
+	dex
+	bne  3$
+
+	lda  MFMREG1
+	and  #all-bit2-bit1-bit0
+	ora  idam+1	; get missing clock pattern bit7+001+...
+	sta  MFMREG1	; enable missing clock generation
+
+
+	lda  am+1	; $c2, index am
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	ora  #bit2
+	sta  MFMREG0	; am gen
+
+	ldx  #2
+	lda  am+1	; $c2, index am
+4$	BYTE_READY_WRT
+	dex
+	bne  4$
+
+	lda  #$fc	; index mark
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	and  #all-bit2
+	sta  MFMREG0	; amgen off
+	
+	ldx  #50
+	lda  #$4e
+5$	BYTE_READY_WRT
+	dex
+	bne  5$
+
+	beq  inner	; bra... done...
+
+no_ind	ldx  #60
+	lda  #$4e
+1$	BYTE_READY_WRT
+	dex
+	bne  1$
+
+inner	ldy  #1  	; ss
+
+main7	lda  #0	
+	ldx  #12
+1$	BYTE_READY_WRT
+	dex
+	bne  1$
+
+	lda  am		; $a1, am
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	ora  #bit4+bit2
+	sta  MFMREG0	; set amgen crc generation on
+
+	lda  MFMREG1
+	and  #all-bit2-bit1-bit0
+	ora  idam	; get missing clock pattern bit7+010+...
+	sta  MFMREG1	; enable missing clock generation
+
+	ldx  #2
+	lda  am		; $a1, am
+2$	BYTE_READY_WRT
+	dex
+	bne  2$
+
+
+	lda  dam+1	; $fe, id address mark
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	and  #all-bit2
+	sta  MFMREG0	; disable missing clock generation
+
+	lda  mfmcmd	; give him the track
+	BYTE_READY_WRT
+
+	lda  switch
+	and  #%00010000 ; what side are we on ?
+	bne  3$
+
+	lda  #0
+	.byte skip2
+3$	lda  #1
+	BYTE_READY_WRT
+	
+	lda  cmdbuf+10,y ; sector number actually cmdbuf+11
+	BYTE_READY_WRT
+
+	lda  cmdbuf+5	; sz
+	BYTE_READY_WRT
+
+	BYTE_READY_WRT	; handshake anything
+
+	lda  MFMREG0
+	and  #all-bit3
+	sta  MFMREG0	; set multxplr on for crc gen.
+
+	BYTE_READY_WRT	; *
+
+
+	lda  #$4e
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	ora  #bit3
+	sta  MFMREG0	; set multxplr on for data gen.
+
+	lda  #$4e
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	and  #all-bit4
+	sta  MFMREG0	; set gen off (bug r1 - one byte late)
+
+	ldx  #20
+	lda  #$4e
+4$	BYTE_READY_WRT
+	dex
+	bne  4$
+
+	ldx  #12
+	lda  #0
+5$	BYTE_READY_WRT
+	dex
+	bne  5$
+
+	lda  am		; $a1, am
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	ora  #bit4+bit2
+	sta  MFMREG0	; set amgen & crc generation on
+
+	ldx  #2
+	lda  am		; $a1, am
+6$	BYTE_READY_WRT
+	dex
+	bne  6$
+
+	lda  dam	; $fb, dam
+	BYTE_READY_WRT
+	sty  temp	; save current sector
+
+	lda  MFMREG0
+	and  #all-bit2
+	sta  MFMREG0
+
+	ldy  mfmsiz_hi	; high
+	lda  cmdbuf+10  ; fl
+7$	BYTE_READY_WRT
+	cpx  mfmsiz_lo
+	beq  8$
+
+	inx		; increment
+	jmp  7$
+	
+8$	inx
+	dey
+	bne  7$
+
+	BYTE_READY_WRT	; handshake anything
+
+	lda  MFMREG0
+	and  #all-bit3
+	sta  MFMREG0	; set multxplr on for crc gen.
+
+	BYTE_READY_WRT	; *
+
+	lda  #$4e	; gap 3
+	BYTE_READY_WRT	
+
+	lda  MFMREG0
+	ora  #bit3
+	sta  MFMREG0	; set multxplr on for data gen.
+
+	lda  #$4e	; gap 3
+	BYTE_READY_WRT	
+
+	lda  MFMREG0
+	and  #all-bit4
+	sta  MFMREG0	; set gen off (bug r1 - late one byte)
+
+	ldy  cmdbuf+5	; ss
+	lda  gapmfm,y
+	ldy  temp	; sector restore
+	tax
+	dex
+
+	lda  #$4e	; gap 3
+9$	BYTE_READY_WRT	
+	dex
+	bne  9$
+
+	cpy  cmdbuf+7	; ns
+	beq  10$
+
+	iny		; inc sector
+	jmp  main7
+
+10$	BYTE_READY_WRT	
+	bit  MFMREG0
+	bvc  11$	; write tail gap until leading edge of index pulse
+
+	dey
+	bne  10$
+	dex
+	bne  10$	; safety fuse
+
+11$	lda  MFMREG0
+	and  #all-bit5-bit1
+	sta  MFMREG0	; disable wrt gate & write mode
+	ldy  #2
+	jmp  xms
+
+gapmfm 
+       .byte 7,12,23,44 ; min gap size @2% fast
+numsek  
+       .byte 26,16,9,5  ; # of default sectors
+
+	.page
+; format disk
+
+;  0     1    2    3      4    5    6    7    8   9   10  + cmdbuf
+;  ^     ^    ^    ^      ^    ^    ^    ^    ^   ^    ^
+; "U" + $00 + N +  MD  + CP + SZ + LT + NS + ST + S + FL 
+
+cmdeig  lda  switch	; check abort command switch
+	and  #%00001000
+	beq  1$
+
+	ldx  ctl_dat	; get error
+	stx  mfmcmd	; save for prcmd
+	sec		; wp error usually
+	rts
+
+1$	jsr  clrchn	; close all channels
+	lda  cmdsiz	; setup default parms
+	sec
+	sbc  #4		; less mandatory + 1
+	tay
+	beq  cp00	; mode only, gave cp
+	
+	dey
+	beq  sz00	; md, cp only, gave sz
+
+	lda  #0
+	sta  mfmcmd	; clear status
+
+	lda  cmdbuf+5
+	jsr  consek	; setup sector size
+	
+	dey
+	beq  lt00	; md, cp, sz only, gave lt
+
+	dey
+	beq  ns00	; md, cp, sz, lt only, gave ns
+	
+	dey
+ 	beq  st00       ; md, cp, sz, lt, ns only, gave st
+
+	dey
+	beq  s00        ; md, cp, sz, lt, ns, st only, gave s
+
+	dey
+	beq  fl00	; md, cp, sz, lt, ns, st, ss only, gave fl
+
+	jmp  start8
+
+	.page
+cp00	lda  #0		; default interleave
+	sta  cmdbuf+4	
+
+sz00	lda  #0
+	sta  mfmcmd	; clear status
+
+	lda  #1		; 256 byte sectors
+	sta  cmdbuf+5
+	jsr  consek	; setup block size
+
+lt00	lda  #39	; last track is #39, 40 tracks total
+	sta  cmdbuf+6
+
+ns00	lda  numsek,x	; x=sector size index for # of sectors per track
+	sta  cmdbuf+7
+
+st00	lda  #0		; default track #0 start
+	sta  cmdbuf+8
+
+s00	lda  #0		; default steps from track 00
+	sta  cmdbuf+9
+
+fl00	lda  #$e5	; default block fill
+	sta  cmdbuf+10
+
+	.page
+start8  jsr  go_fmt	; format side zero
+	lda  mfmcmd	; error ?
+	cpx  #2
+	bcs  1$
+
+	lda  switch	; check for double sided opt
+	and  #%00100000
+	beq  1$
+
+	lda  switch	; set single side
+	ora  #%00010000
+	sta  switch
+	jsr  sel_sid	; select h/w
+	jsr  go_fmt	; format side one
+1$	jmp  cmdone	; restore
+
+	.page
+go_fmt	jsr  diskin	; is there a diskette in the unit
+	bcs  c_801	; br, nope...
+
+	jsr  cmdone     ; restore to track one/zero ?
+	lda  cmdbuf+8   ; store logical
+	sta  mfmcmd	; in mfmcmd
+
+	bit  cmdbuf+3	; check table bit
+	bvs  1$		; br, table has been given to us
+
+	jsr  sectcv	; generate sector table
+	bcs  c_801
+
+1$	lda  cmdbuf+9	; offset track 00 by s steps
+	and  #$7f	; clear mode bit
+	beq  c_800
+
+	clc
+	adc  cmd_trk	; add to it	
+	sta  cmd_trk	; physical
+	jsr  seke	; & seek to it
+
+c_800	sei
+	jsr  cmdsev     ; format track
+	jsr  verfmt	; verify format 
+        bcs  c_801      
+
+        lda  mfmcmd	; last track ?
+        cmp  cmdbuf+6   ; lt
+        beq  c_802      
+
+        inc  cmd_trk
+	inc  mfmcmd	; track to write
+
+        jsr  seke       ; goto next track
+        jmp  c_800
+
+c_802   bit  switch
+	bpl c_803	; kill next
+
+	sec
+	lda  cmdbuf+6	; lt
+	sbc  cmdbuf+8	; st
+	cmp  #39	; no more than 40 tracks
+	bcs  c_803
+	
+	inc  cmd_trk	; clear next track
+	jsr  seke
+	ldx  #28
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	jsr  ptch0d	; *** rom ds 01-13-87 ***, no SO
+	nop
+	nop
+	nop		; fill
+;	jsr  jclear	; with gcr 0
+;	jsr  kill	; read mode again
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+c_803	ldx  #0
+	.byte  skip2
+c_801   ldx  #6
+	stx  mfmcmd	; exit
+	jmp  upinst

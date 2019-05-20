@@ -1,0 +1,89 @@
+         .page  
+         .subttl 'lccfmt3a.src'
+
+;*   format done, now verify it
+
+vfmt	lda  #200       ;  look at 200 syncs
+        sta  trys        
+
+1$	lda  #00         
+        sta  fmhdpt     ; start with first sector again
+        lda  sectr      ;  sector counter
+        sta  sect        
+2$	jsr  jsync      ;  find sync
+	ldx  #10         
+        ldy  fmhdpt     ; current header pointer
+
+3$	lda  (hdrpnt),y          
+4$	bit  pota1	;  get header byte
+	bmi  4$
+	
+        cmp  data2       
+        bne  5$		; error
+
+        iny      
+        dex
+        bne  3$		;  test all bytes
+
+        clc     	; update headr pointer
+        lda  fmhdpt      
+        adc  #10         
+        sta  fmhdpt      
+	
+        jmp  6$		;  now test data
+
+5$	dec  trys       ;  test if too many errors
+        bne  1$
+
+        lda  #notfnd    ;  too many error
+        jmp  jfmterr      
+
+6$	jsr  jsync      ;  find data sync
+
+        ldy  #256-topwrt	
+7$	lda  ovrbuf,y    ; ovr buff offset
+8$	bit  pota1
+	bmi  8$
+
+        cmp  data2      ;  compare gcr
+        bne  5$		; error
+
+        iny      
+        bne  7$		;  do all ovrbuf
+
+9$	lda  (bufpnt),y          
+10$	bit  pota1
+	bmi  10$
+
+        cmp  data2       
+        bne  5$
+
+        iny      
+        bne  9$
+
+        dec  sect       ; more sectors to test?
+        bne  2$		; yes
+
+;  all sectors done ok
+
+        inc  ftnum      ;  goto next track
+        lda  ftnum       
+	bit  side 	;  what side are we on ?
+	bmi  13$
+
+        cmp  #36        ;  #tracks max
+	.byte skip2
+13$	cmp  #71
+        bcs  12$
+
+        jmp  jend       ;  more to do
+
+
+12$	lda  #$ff       ;  clear ftnum
+        sta  ftnum       
+
+        lda  #$0        ;  clear gcr buffer flag
+        sta  gcrflg      
+
+        lda  #1         ;  return ok code
+        jmp  jerrr        

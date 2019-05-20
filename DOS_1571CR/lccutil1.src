@@ -1,0 +1,209 @@
+        .page  
+        .subttl 'lccutil1.src'
+
+;  * utility routines
+
+jerrr   ldy  jobn       ; return  job code
+        sta  jobs,y      
+
+        lda  gcrflg     ; test if buffer left gcr
+        beq  1$		; no
+
+        jsr  jwtobin    ; convert back to binary
+
+1$      jsr  trnoff     ; start timeout on drive
+
+        ldx  savsp       
+        txs     	; reset stack pointer
+
+        jmp  jtop       ; back to the top
+
+;   motor and stepper control
+;   irq into controller every 8ms
+
+jend              
+        lda  t1hl2	; set irq timer
+	sta  t1hc2
+
+	lda  dskcnt
+        and  #$10	; wpsw 
+        cmp  lwpt       ; same as last
+        sta  lwpt       ; update 
+        bne  1$
+
+        lda  mtrcnt     ; anything to do?
+        bne  7$		; dec & finish up
+
+        beq  2$		; nothing to do
+
+1$	lda  #$ff        
+        sta  mtrcnt     ; 255*8ms motor on time
+        jsr  moton       
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	jsr  ptch72	; *** rom ds 05/20/86 ***
+	nop
+;       lda  #1          
+;       sta  wpsw        
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+        bne  2$		; bra
+
+7$      dec  mtrcnt     ; dec & return
+        bne  2$
+        lda  drvst       
+        cmp  #$00       ; motor off & no active drive ?
+        bne  2$		; br, do not turn it off something is going on
+
+        jsr  motoff      
+
+2$      lda  phase	; test for phase offset
+        beq  5$
+
+        cmp  #2          
+        bne  3$
+
+        lda  #0          
+        sta  phase
+        beq  5$		; bra
+
+3$	sta  steps       
+        lda  #2          
+        sta  phase
+        jmp  6$
+
+5$	ldx  cdrive     ;  work on active drive only
+        bmi  8$		;  no active drive
+
+        lda  drvst      ;  test if motor on
+        tay      
+        cmp  #$20       ;  test if anything to do
+        bne  9$		;  something here
+
+8$	jmp  10$	;  motor just running
+
+9$	dec  acltim     ;  dec timer
+        bne  11$
+	
+        tya     	;  test if acel
+        bpl  12$
+
+
+        and  #$7f       ;  over, clear acel bit
+        sta  drvst       
+
+12$	and  #$10       ;  test if time out state
+        beq  11$
+
+	dec  acltim2	;  decrement second timer
+	bne  11$	
+
+	jsr  motoff      
+
+        lda  #$ff       ;  no active drive now
+        sta  cdrive      
+
+        lda  #0         ;  drive inactive
+        sta  drvst      ;  clear on bit and timout
+        beq  8$	
+
+11$	tya     	;  test if step needed
+        and  #$40        
+        bne  13$	;  stepping
+
+        jmp  10$
+
+13$	lda  nxtst      ; step or settle
+        bne  18$	; go set
+
+	lda  steps       
+        beq  17$
+
+6$      lda  steps       
+        bpl  14$
+
+	tya
+	pha		; save regs .y
+	ldy  #99	; wait for trk_00
+15$	lda  pota1	; check for trk_00
+	ror  a		; rotate into carry
+	php		; save it
+	lda  pota1	; debounce it
+	ror  a		; => carry
+	ror  a		; => bit 7
+	plp		; restore carry
+	and  #$80	; set/clear sign bit
+	bcc  21$	
+
+	bpl  16$	; carry set(off) & sign clear(on) exit
+
+	bmi  20$	; bra
+
+21$	bmi  16$	; carry clear(on) & sign set(off) exit
+ 
+20$	dey 
+	bne  15$	; wait a while 
+
+	bcs  16$	; br, not track 00 ?
+
+	lda  adrsed	; enable/disable track 00 sense
+	bne  16$	; br, nope...
+
+	lda  dskcnt	; phase 0
+	and  #3
+	bne  16$
+
+	pla
+	tay		; restore .y
+
+	lda  #0
+	sta  steps	; nomore steps
+	jmp  10$
+
+16$	pla
+	tay		; restore .y
+
+	inc  steps      ; keep stepping
+        lda  dskcnt
+        sec      
+        sbc  #1        	; -1 to step out
+        jmp  19$
+
+17$	lda  #2         ;  settle time
+        sta  acltim      
+        sta  nxtst      ; show set status
+        jmp  10$
+
+18$	dec  acltim      
+        bne  10$
+
+        lda  drvst       
+        and  #$ff-$40    
+        sta  drvst       
+
+        lda  #00         
+        sta  nxtst       
+        jmp  10$
+
+14$	dec  steps       
+        lda  dskcnt
+        clc      
+        adc  #01         
+
+19$	and  #3          
+        sta  tmp         
+        lda  dskcnt
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><>
+;       and  #$ff-$03   ; mask out old
+;       ora  tmp         
+;	sta  dskcnt
+	jmp  ptch0a	; *** rom ds 11/7/86 ***, finish up
+	nop		; fill
+
+10$	jmp  ptch0b	; *** rom ds 11/7/86 ***, disable SO
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	rts      

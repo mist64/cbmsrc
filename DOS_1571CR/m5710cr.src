@@ -1,0 +1,154 @@
+        .page  
+	.subttl 'm5710cr.src'
+
+read_hdr
+	lda  #90	; search thru 90 headers
+1$	pha  		; retries
+	jsr  syn_am	; sync up on an address mark
+	pla		; get it back
+	tay		; and save it in .y
+	bcs  2$
+
+	lda  MFMREG2
+	cmp  dam+1	; is it an ID AM ?
+	beq  4$
+
+	dey
+	tya		; put it back in .a
+	bne  1$
+
+2$	ldx  #3		; no address mark
+	.byte skip2
+3$	ldx  #9		; crc error
+	stx  mfmcmd	; save it
+	sec
+	rts
+
+4$	ldx  #0		; trk, side, sector, sector_length, crc, crc
+5$	BYTE_READY_RD_DAT
+	sta  mfmhdr,x
+	inx
+	cpx  #6
+	bcc  5$
+
+	lda  #bit4+bit3
+	sta  MFMREG1	; sample the crc det
+
+	BYTE_READY_RD_DAT
+
+	lda  MFMREG1
+	and  #bit5	; crc error ?
+	bne  3$		
+
+	ldx  #0
+	stx  mfmcmd	; ok
+	clc
+	rts	
+
+
+;******************************************************
+
+
+syn_am  
+	lda  MFMREG5	; alg 0 or 1
+	and  #all-bit7
+	sta  MFMREG5	; force to 0
+	lda  precomp	; bit5 contains alg
+	and  #bit5
+	asl  a
+	asl  a
+	ora  MFMREG5
+	sta  MFMREG5	; set/clr bit7
+        lda  #0
+	sta  MFMREG1	; clear all
+	lda  am		; address mark
+	sta  MFMREG4
+	lda  amc	; clock detect pattern for $a1
+	sta  MFMREG3
+	lda  #bit4	; start crc detector
+	sta  MFMREG1
+	lda  MFMREG2
+	nop
+	nop
+	nop
+	ldx  #0
+	ldy  #50
+1$	bit  MFMREG1	; oh am, oh am where for art dow am
+	bvs  2$
+	
+	dex
+	bne  1$
+	
+	dey  
+	bne  1$
+	
+	sec
+	rts		; no address mark found
+
+2$	ldy  #0
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	lda  MFMREG2
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+3$	BYTE_READY_RD_DAT 
+	iny		
+	bvs  3$
+
+	cpy  #3
+	bne  syn_am
+
+	clc
+	rts	
+
+
+;******************************************************
+
+
+search_hdr
+	lda  #180
+1$	pha
+	jsr  read_hdr	; read a header
+	pla	
+	tay		; save
+	php		; save status
+	
+	lda  mfmhdr+2	; correct sector?
+	cmp  sectr	
+	beq  3$
+	
+	plp
+	dey		; one less
+	tya		; put it back in .a
+	bne  1$
+	
+	ldx  #2		; sector not found
+	stx  mfmcmd
+	sec
+	rts
+
+3$	plp		; carry whatever, .x status
+	rts
+
+
+;******************************************************
+
+
+wait_gap	
+	ldx  #22
+1$	BYTE_READY_RD_DAT
+	dex
+	bne  1$	
+
+	rts
+
+
+;******************************************************

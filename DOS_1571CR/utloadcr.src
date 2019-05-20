@@ -1,0 +1,162 @@
+        .page  
+	.subttl 'utloadcr.src'
+	*=$8fa4	
+;***************************
+;**                       **
+;**     1571  UTILITY     **
+;**                       **
+;** * * * * * * * * * * * **
+;** U0 n M  = mode 	  **
+;** U0 n S  = int. dos    **
+;** U0 n R  = retries     **
+;** U0 n H  = head 0,1    **
+;** U0 n T  = signature   **
+;** U0 n V  = Verify      **
+;** U0 n #  = device 	  **
+;**                       **
+;**     n = ">" ascii     **
+;**                       **
+;***************************
+
+cmdsec  lda  cmdbuf+4
+        sta  secinc      
+	rts      
+
+cmdret  lda  cmdbuf+4
+        sta  revcnt
+	rts      
+
+
+sign	jmp  signature	; finish up there
+
+
+heads	sei		; no irq's
+	lda  pota1
+	and  #$20
+	bne  utlbad	; 1541 only
+
+	lda  cmdbuf+4	; which ?
+	cmp  #'1
+	beq  1$
+
+	cmp  #'0
+	bne  utlbad	; no drive # specified
+
+	lda  pota1	; 1541 mode
+	and  #$ff-$04	; side 0
+	sta  pota1
+	cli
+	bit  switch
+	bpl  2$
+
+	rts
+
+1$	lda  pota1
+	ora  #$04
+	sta  pota1	; side 1
+	cli
+	bit  switch
+	bmi  3$
+
+2$	jmp  initdr
+
+3$	rts
+
+chgutl  ldx  cmdsiz     ; chk cmd size
+        cpx  #4
+	bcc  utlbad     ; br, error no parameters
+
+	lda  cmdbuf+3
+        cmp  #'S        ; sector interleave ?
+        beq  cmdsec      
+
+        cmp  #'R        ; retry
+        beq  cmdret
+
+        cmp  #'T	; test ROM
+        beq  sign
+
+        cmp  #'M	; 1571/1541 Mode
+        beq  modes
+
+        cmp  #'H	; 1541 head change
+        beq  heads
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+;	tay		; save
+;	cpy  #4		; between 4-30
+	jmp  ptch74	; *** rom ds 06/25/86 ***, check for verify 
+
+rtch74			; return
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	bcc  utlbad
+
+	cpy  #31
+	bcs  utlbad
+
+	lda  #$40	; change device #
+	sta  tlkadr	; clear old
+
+	lda  #$20
+	sta  lsnadr	; *
+
+	tya
+	clc
+	adc  tlkadr
+	sta  tlkadr	; new
+	tya
+	clc
+	adc  lsnadr
+	sta  lsnadr	; new
+	rts
+
+utlbad  lda  #badcmd
+	jmp  cmderr
+
+modes	sei		; no irq's
+	lda  cmdbuf+4	; which ?
+	cmp  #'1
+	beq  1$
+
+	cmp  #'0
+	bne  utlbad	; br, bad
+
+	lda  pota1	; 1541 mode
+	and  #$ff-$20	; 1Mhz
+	sta  pota1
+	jsr  jslowd	; wait a while
+	jsr  ptch10	; init
+	lda  lock
+	ora  #$80
+	sta  lock	; auto off
+	cli
+	bit  switch
+	bpl  2$
+
+	rts
+
+1$	lda  pota1	; 1571 mode
+	ora  #$20
+	sta  pota1	; 2 Mhz
+	jsr  jslowd	; wait a bit
+	lda  #<jirq
+	sta  irqjmp	; revector irq
+	lda  #>jirq	
+	sta  irqjmp+1
+	lda  #tim2	; setup timers
+	sta  t1hl2
+	sta  t1hc2	; for 2 Mhz
+	lda  lock
+	and  #$ff-$80
+	sta  lock	; auto on
+	lda  #0
+	sta  nxtst	; used as a pointer in 1541 mode
+	cli
+	bit  switch
+	bmi  3$
+
+2$	jmp  initdr
+
+3$	rts

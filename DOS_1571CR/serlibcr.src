@@ -1,0 +1,135 @@
+	.page 
+	.nam  1571cr DOS v3.0  318047-01  (c)1986 CBM
+
+;*************************************
+; 318047-01 ROM    02/17/87   F.BOWEN
+;*************************************
+
+
+;Fill memory with $FF, then download code.  ROM Checksum = $62A0
+
+
+	*=$8000
+	.byte $02,$44	; ROM Signature  ( OPEN 15,8,15,"U0>T" )
+
+
+	*=$c000
+	.byte $84	; ROM checksum adjustment
+
+
+;*************************************
+;
+; 1571cr DOS 3.0 ROM
+;
+;*************************************
+	.list
+	.include  titlecr
+        .include  com
+	.include  macroscr
+        .include  varcr
+	.include  burstcr
+	.include  seratn1
+	.include  sertalk1
+	.include  serlistn1
+        .include  fastutl
+        .include  mcntrlcr
+        .include  msubrcr
+        .include  msubr1cr
+        .include  msubr2cr
+        .include  utloadcr
+        .include  fastld
+	.include  signature
+        .include  gcrcntrl
+        .include  lccseek1
+        .include  lccread1
+        .include  lccwrt1
+        .include  lccgcrbn1
+        .include  lccutil1
+        .include  lccfmt2a
+        .include  lccfmt3a
+        .include  lccfmt4a
+        .include  irq1541
+        .include  irq1571
+	.include  gcrtables
+        .include  gcrtable1
+        .include  gcrtable3
+        .include  gcrtable6
+        .include  gcrtable8
+	.include  duplct1
+	.include  patchcr
+        .include  m5710cr
+        .include  msubr3cr
+        .include  newvec
+	.page
+	.subttl '1571cr DOS & Controller Routines'
+	.page
+        .include  romsf      
+        .include  leds   
+        .include  parsex         
+        .include  setdrv         
+        .include  lookup         
+        .include  trnsfr         
+        .include  scrtch         
+        .include  duplct         
+        .include  copset         
+        .include  copall         
+        .include  rename         
+        .include  memrw          
+        .include  block          
+        .include  fndrel         
+        .include  tst2cr
+        .include  tst3   
+        .include  tst4   
+        .include  jobssf      
+        .include  addfil         
+        .include  open   
+        .include  close          
+        .include  opnchnl         
+        .include  tstflg         
+        .include  tsutil         
+        .include  ssutil         
+        .include  sstest         
+        .include  getact         
+        .include  rel1   
+        .include  rel2   
+        .include  rel3   
+        .include  rel4   
+        .include  ssend          
+        .include  record         
+        .include  nulbuf         
+        .include  addrel         
+        .include  newss          
+        .include  erproccr         
+        .include  utlodr         
+        .include  seratn        
+        .include  sertalk       
+        .include  serlistn      
+        .include  dskintsf      
+        .include  idlesf      
+        .include  lstdir         
+        .include  verdir         
+        .include  new    
+        .include  map    
+        .include  frets          
+        .include  tstfnd         
+        .include  system         
+        .include  lccio        
+        .include  lccinit       
+        .include  lcccntrl      
+        .include  lccseek       
+        .include  lccread       
+        .include  lccwrt        
+        .include  lccbingcr     
+        .include  lccgcrbin     
+        .include  lccconhdr     
+        .include  lccutil       
+        .include  lccend
+        .include  lccfmt1       
+        .include  lccfmt2       
+        .include  lccfmt3       
+        .include  lccfmt4       
+        .include  irq    
+        .include  romtblsf      
+        .include  vector         
+        .include  notescr
+	.end

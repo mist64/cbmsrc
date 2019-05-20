@@ -1,0 +1,284 @@
+        .page  
+	.subttl 'msubr2cr.src'
+
+;  mfm read
+
+cmdnin  lda  switch
+	and  #%00100000
+	bne  10$
+
+	lda  revcnt
+	asl  a
+	sta  mretry
+1$	jsr  set_hdr	; setup for read
+	jsr  search_hdr	; search for a particular header
+	bcs  8$		
+
+	jsr  syn_am	; sync up on an address mark
+	bcs  6$
+
+	ldy  #0
+	ldx  mfmsiz_hi	; get sector size
+2$	BYTE_READY_RD_DAT
+
+3$      sta  (bufpnt),y ; put it in the buffer
+        cpy  mfmsiz_lo	; done buffer
+        beq  4$		; next
+
+        iny      
+        bne  2$		; bra
+
+4$	iny		; y=0
+	dex      
+        beq  5$		; go thru pages
+
+        inc  bufpnt+1   ; next buffer
+        jmp  2$
+
+5$	BYTE_READY_RD_DAT
+	BYTE_READY_RD_DAT
+
+	lda  #bit4+bit3
+	sta  MFMREG1	; sample crc detector
+
+	BYTE_READY_RD_DAT
+
+	lda  MFMREG1
+	and  #bit5
+	beq  7$	
+	
+	ldx  #5		; crc error
+	.byte skip2
+6$	ldx  #3
+	dec  mretry
+	bne  1$
+
+	.byte skip2
+7$	ldx  #0
+8$	jsr  upinst     ; update controller status
+	cpx  #2         ; error ?
+	bcc  9$
+
+        bit  switch
+	bvs  9$		; ignore error ?
+
+	jmp  finbad	; send it and abort
+
+9$	jsr  hskrd	; send status
+
+	lda  switch
+	bmi  13$	; buffer transfer ?
+
+10$	jsr  set_hdr	; setup the header
+11$	lda  (bufpnt),y ; get data from buffer
+	sta  ctl_dat	
+	jsr  hskrd	; handshake data to host
+
+        cpy  mfmsiz_lo	; done buffer ?
+        beq  12$	; next
+
+        iny      
+        bne  11$
+
+12$	iny		; y=0
+	dex      
+        beq  13$
+
+        inc  bufpnt+1   ; next buffer
+        jmp  11$
+
+13$	dec  cmdbuf+5	; any more sectors ?
+	beq  14$
+
+	jsr  sectnx     ; next sector rap ?
+	jmp  cmdnin	; continue...
+
+14$	jmp  chcsee     ; next track
+
+	.page
+; mfm write
+
+cmdten  
+	jsr  set_hdr 	; setup header
+	lda  switch
+	bmi  5$		; buffer transfer ?
+
+1$	lda  pb		; debounce
+	eor  #clkout	; toggle clock
+	bit  icr	; clear pending
+	sta  pb		; doit
+
+2$	lda  pb	
+	bpl  3$		; atn ?
+
+	jsr  tstatn	; service if appropiate
+
+3$	lda  icr
+	and  #8
+	beq  2$		; wait for byte ready
+
+	lda  sdr	; get data
+	sta  (bufpnt),y
+	cpy  mfmsiz_lo
+	beq  4$
+
+	iny		
+	bne  1$
+
+4$	iny		; y=0
+	dex
+	beq  5$
+	
+	inc  bufpnt+1   ; next buffer
+	jmp  1$
+
+5$	lda  switch
+	and  #%00100000
+	beq  6$		
+
+	jmp  17$	; buffer op
+
+6$	lda  switch
+	and  #%00001000 ; check internal switch
+	beq  7$
+
+	ldx  ctl_dat
+	jmp  fail
+
+7$	jsr  set_hdr	; setup for read
+	jsr  search_hdr	; search for header
+	bcc  8$		
+
+	jmp  15$	; error
+
+8$	jsr  wait_gap	; wait out header gap
+	bit  precomp	; precomp on
+	bmi  9$
+	
+	lda  #bit5+bit3
+	.byte skip2
+9$	lda  #bit5+bit3+bit0
+	sta  MFMREG0	; enable write process and set to data mode
+	
+	lda  #0
+	sta  MFMREG2	; preload
+
+	lda  MFMREG0
+	ora  #bit1
+	sta  MFMREG0	; enable wrt gate
+
+	ldx  #12
+10$	lda  #0		; 12 zeros
+	BYTE_READY_WRT
+	dex
+	bne  10$
+
+	lda  am		; $a1, am
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	ora  #bit4+bit2
+	sta  MFMREG0	; set crc generation on & amgen
+
+	lda  MFMREG1
+	and  #all-bit2-bit1-bit0
+	ora  idam   	; get missing clock pattern bit7+010+...
+	sta  MFMREG1	; enable missing clock generation
+
+	ldx  #2
+	lda  am		; $a1, am
+11$	BYTE_READY_WRT
+	dex
+	bne  11$
+
+	lda  dam	; $fb, dam
+	BYTE_READY_WRT
+
+	lda  MFMREG0
+	and  #all-bit2
+	sta  MFMREG0	; disable missing clock gen
+	ldy  #0
+	ldx  mfmsiz_hi	; get sector size
+12$	lda  (bufpnt),y
+	BYTE_READY_WRT
+	cpy  mfmsiz_lo
+	beq  13$
+
+	iny
+	bne  12$
+
+13$	iny		; y=0
+	dex
+	beq  14$
+	
+	inc  bufpnt+1	; next page...
+	jmp  12$
+
+14$	BYTE_READY_WRT	; handshake anything
+	
+	lda  MFMREG0
+	and  #all-bit3
+	sta  MFMREG0	; set multxplr on for crc gen.
+
+	BYTE_READY_WRT	; handshake anything
+
+	BYTE_READY_WRT	; off byte
+
+	BYTE_READY_WRT	; off byte
+
+	lda  MFMREG0
+	and  #all-bit4
+	sta  MFMREG0	; disable gen 
+
+	BYTE_READY_WRT	; off byte
+
+	lda  MFMREG0
+	and  #all-bit5-bit4-bit1
+	sta  MFMREG0	; disable gen ,disable wrt gate & write mode
+
+	ldy  #2
+	jsr  xms	; delay a bit after write
+
+	ldx  #0		; ok
+	bit  precomp	; verify?
+	bvs  16$	
+
+	jsr  cmdele	; verify it
+	.byte skip2
+15$	ldx  #7		; verify error
+16$	stx  mfmcmd	; save status
+	jsr  spout
+	jsr  upinst
+	jsr  hskrd	; send it
+	jsr  burst	; wait for clk high
+	jsr  spinp	; input
+
+	bit  switch	; abort on error ?
+	bvs  17$
+
+	cpx  #2		; error ?
+	bcs  19$
+
+17$	dec  cmdbuf+5	; more sectors
+	beq  18$
+
+	jsr  sectnx	; next sector
+	jmp  cmdten
+
+18$	jmp  chcsee
+
+19$	rts
+
+
+set_hdr	lda  #3
+	sta  bufpnt+1	; buffer #0
+	ldy  #0         ; even page
+	sty  bufpnt
+        lda  cmdbuf+3   ; get track address
+        sta  cmd_trk	; setup track 
+        lda  cmdbuf+4   ; get sector address
+        sta  sectr	; setup sector 
+	eor  #$ff
+	sta  mfmhdr+2	; somemp'n else
+	ldx  mfmsiz_hi	; get sector size
+	rts

@@ -1,0 +1,34 @@
+	.page 
+	.subttl 'titlecr.src'
+;*************************************
+; 1571CR DOS 3.1
+;*************************************
+; FILL MEMORY WITH $FF
+; DOWNLOAD CODE
+;
+; *=$8000
+; .byte $??,$??	; Signature 
+; *=$c000
+; .byte $??	; ROM checksum	
+;
+;*************************************
+;
+; Changes for 1571 DOS 3.1 from 1571 DOS 3.0
+;
+; "title" to "titlecr"
+; "wd1770" to "macroscr"
+; "var" to "varcr"
+; "burst" to "burstcr"
+; "mfmcntrl" to "mcntrlcr"
+; "mfmsubr" to "msubrcr"
+; "mfmsubr1" to "msubr1cr"
+; "mfmsubr2" to "msubr2cr"
+; "mfmsubr3" to "msubr3cr"
+; "utload" to "utloadcr"
+; "patch" to "patchcr"
+; "erproc" to "erproccr"
+; "tst2" to "tst2cr"
+;
+;  Add "m5710cr"
+;
+;*************************************

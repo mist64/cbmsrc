@@ -1,0 +1,156 @@
+        .page  
+	.subttl 'msubr3cr.src'
+
+; mfm verify for write operation
+
+cmdele  lda  revcnt
+	asl  a
+	sta  mretry
+cmd_11  jsr  set_hdr	; setup header
+	jsr  search_hdr ; search for a particular header
+	bcs  6$
+
+	jsr  syn_am	; sync up on an address mark
+	bcs  6$	
+
+	ldy  #0
+	ldx  mfmsiz_hi
+1$	BYTE_READY_RD_DAT
+
+2$      cmp  (bufpnt),y ; put it in the buffer
+        bne  6$		; flag error
+
+	cpy  mfmsiz_lo	; done buffer
+        beq  3$		; next
+
+        iny      
+        bne  1$
+
+3$	iny		; y=0
+	dex      
+4$	beq  5$
+
+        inc  bufpnt+1   ; next buffer
+        jmp  1$
+
+5$	BYTE_READY_RD_DAT
+	BYTE_READY_RD_DAT
+
+	lda  #bit4+bit3
+	sta  MFMREG1
+	
+	BYTE_READY_RD_DAT
+
+	lda  MFMREG1
+	and  #bit5
+	beq  7$
+
+	ldx  #5
+	.byte skip2
+6$	ldx  #7		
+	dec  mretry
+	bne  cmd_11
+
+	.byte skip2
+7$	ldx  #0
+	stx  mfmcmd
+	rts
+	.page
+; verify sector to fill byte
+; track and sector must be setup previous
+
+cmdtwv  lda  revcnt
+	asl  a
+	sta  mretry
+cmd_12  jsr  search_hdr ; search for a particular header
+	bcs  4$
+
+	jsr  syn_am	; sync up on an address mark
+	bcs  4$
+	
+	ldy  #0
+	ldx  mfmsiz_hi
+1$	BYTE_READY_RD_DAT
+
+	cmp  cmdbuf+10  ; same as fill byte ?
+	bne  4$		; br, on error
+
+	cpy  mfmsiz_lo	; done buffer
+        beq  2$		; next
+
+        iny      
+        bne  1$		; bra
+
+2$	iny		; y=0
+	dex      
+	beq  3$
+
+        inc  bufpnt+1   ; next buffer
+        jmp  1$
+
+3$	BYTE_READY_RD_DAT
+	BYTE_READY_RD_DAT
+
+	lda  #bit4+bit3
+	sta  MFMREG1
+
+	BYTE_READY_RD_DAT
+	
+	lda  MFMREG1
+	and  #bit5
+	beq  5$
+
+	ldx  #5
+	.byte skip2
+4$	ldx  #7
+	dec  mretry
+	bne  cmd_12
+
+	.byte skip2
+5$	ldx  #0
+	stx  mfmcmd
+	rts
+
+	.page
+cmdthi  php
+	sei
+	jsr  cmdone	; track zero start
+
+	bit  switch	; seek to n-track ?
+	bpl  1$
+
+	lda  cmdbuf+3
+	sta  cmd_trk	; goto this track
+	jsr  seke
+
+1$	lda  #0
+	sta  cpmsek	; clear # of sectors
+
+	jsr  cmdfiv	; read address
+	ldx  mfmcmd	; check status
+	cpx  #2
+	bcs  3$
+
+	lda  mfmhdr+2
+	sta  cmd_sec	; this is where we stop
+
+2$	jsr  cmdfiv	; read address
+	lda  mfmhdr+2	; get next sector
+	ldy  cpmsek
+	sta  cmdbuf+11,y 
+	inc  cpmsek	; inc sector count
+	cpy  #31	; went too far ?
+	bcs  3$
+
+	cmp  cmd_sec	; done yet ?
+	bne  2$		; wait for rap...
+
+	lda  mfmhdr	; get track
+	sta  cmd_trk	; save for later
+
+	ldx #0
+	.byte skip2
+3$	ldx #2
+	stx  mfmcmd
+	plp
+	rts
