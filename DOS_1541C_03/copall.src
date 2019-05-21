@@ -1,0 +1,105 @@
+	.page
+	.subttl  copall
+
+; set up subroutine
+
+pups1   lda  #0          
+        sta  rec         
+        sta  drvcnt      
+        sta  filtrk      
+        sta  filtrk+1    
+        lda  fildrv+1   ; get drive number
+        and  #1         ; only
+        sta  drvnum      
+        ora  #1          
+        sta  delsec     ; nonzero
+        lda  filtbl+1   ; fn1=fn2
+        sta  filtbl      
+        rts      
+
+
+	.page   'copy  all'     
+;
+; copy disk to disk routines
+;
+;cpydtd  lda  filtbl+1   ; save in temp
+;        sta  temp        
+;        ldy  #40        ; 40 char buffer
+;        ldx  cmdsiz     ; prep to move
+;        sty  cmdsiz     ; end of filename2
+;movlp1  dey      
+;        dex      
+;        lda  cmdbuf,x   ; mov fn lifo
+;        sta  cmdbuf,y    
+;        cpx  temp       ; actual f2 val
+;        bne  movlp1      
+;        sty  filtbl+1   ; pointer to f2
+;movlp2  jsr  optsch      
+;        jsr  pups1      ; setup first pass
+;        jsr  ffst       ; first match
+;        bpl  fixit      ; entry found?
+;        bmi  endit      ; no
+;
+;exlp0   pla             ; pull needed vars
+;        sta  dirsec      
+;        pla      
+;        sta  filtbl+1    
+;        pla      
+;        sta  lstbuf      
+;        pla      
+;        sta  filcnt      
+;        pla      
+;        sta  index       
+;        pla      
+;        sta  found       
+;        pla      
+;        sta  delind      
+;        pla      
+;        sta  drvflg      
+;;
+;exlp1   jsr  pups1      ; set up vars
+;        jsr  ffre       ; next match
+;        bpl  fixit      ; found one?
+;endit   jmp  endcmd     ; no! so bye
+;;
+;fixit   lda  drvflg     ; push needed vars
+;        pha      
+;        lda  delind      
+;        pha      
+;        lda  found       
+;        pha      
+;        lda  index       
+;        pha      
+;        lda  filcnt      
+;        pha      
+;        lda  lstbuf      
+;        pha      
+;        lda  filtbl+1    
+;        pha      
+;        lda  dirsec      
+;        pha      
+;;
+;exlp2   jsr  trfnme     ; transfer name
+;        lda  #1         ; fake out lookup
+;        sta  f1cnt       
+;        sta  f2cnt       
+;        jsr  lookup      
+;        lda  #1          
+;        sta  f1cnt       
+;        lda  #2         ; real
+;        sta  f2cnt       
+;        jsr  cy         ; copy it
+;        jmp  exlp0      ; next one folks
+;;
+;; transfer name (dirbuf) to cmdbuf
+;;
+;trfnme  ldy  #3         ; both indexes
+;        sty  filtbl     ; begining of filename1
+;trf0    lda  (dirbuf),y ; move it
+;        sta  cmdbuf,y    
+;        iny      
+;        cpy  #19        ; all 16 chars passed?
+;        bne  trf0        
+;        rts      
+
+;	.end

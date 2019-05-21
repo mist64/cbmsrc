@@ -1,0 +1,172 @@
+	.page   'lcc.fmt4'      
+;
+;
+;
+synclr  lda  pcr2       ;  write entire track with sync
+        and  #$ff-$e0    
+        ora  #$c0        
+        sta  pcr2        
+;
+        lda  #$ff       ;  output mode ddr
+        sta  ddra2       
+;
+        sta  data2      ;  sync char
+;
+        ldx  #$28       ;  $28*256 bytes
+        ldy  #0          
+;
+syc10   bvc  *   
+        clv      
+;
+        dey      
+        bne  syc10       
+;
+        dex      
+        bne  syc10       
+;
+        rts     ;  leave write on
+;
+;
+;
+wrtnum  ldx  num        ;  write out num bytes
+        ldy  num+1       
+;
+wrtn10  bvc  *   
+        clv      
+;
+        dex      
+        bne  wrtn10      
+;
+        dey      
+        bpl  wrtn10      
+;
+        rts      
+;
+;
+;
+fmterr  dec  cnt        ;  test for retry
+        beq  fmte10      
+;
+        jmp  end         
+;
+fmte10           
+;
+        ldy  #$ff        
+        sty  ftnum      ;  clear format
+;
+        iny      
+        sty  gcrflg      
+;
+        jmp  errr        
+;
+;
+;
+movup   lda  buff0,y    ;   move up 69 bytes
+        sta  buff0+69,y         ;  move from top down
+        dey      
+        bne  movup       
+;
+        lda  buff0      ;  do last byte
+        sta  buff0+69    
+        rts      
+;
+;
+;
+;
+movovr  ldy  #68        ;  move ovrbuf into (buffer)
+;
+movo10  lda  ovrbuf+256-topwrt,y         
+        sta  (bufpnt),y          
+;
+        dey      
+        bpl  movo10      
+;
+        rts      
+;
+;
+;
+kill    lda  pcr2       ;  disable write
+        ora  #$e0        
+        sta  pcr2        
+        lda  #$00       ;  make port input now
+        sta  ddra2       
+;
+        rts      
+;
+;
+;
+clear   lda  pcr2       ;  enable write
+        and  #$ff-$e0    
+        ora  #$c0        
+        sta  pcr2        
+;
+        lda  #$ff       ;  make port an output
+        sta  ddra2       
+;
+        lda  #$55       ;  write a 1f pattern
+        sta  data2       
+;
+        ldx  #$28	;  $28*256 chars
+        ldy  #00         
+cler10  bvc  *   
+        clv      
+        dey      
+        bne  cler10      
+;
+        dex      
+        bne  cler10      
+;
+        rts      
+;
+;*****************************
+;*
+;*
+;*     fbtog
+;*     format binary to gcr conversion
+;*
+;*     converts buffer to gcr with out hbid
+;*
+;***************************
+;
+fbtog   lda  #0         ;  point at buffer
+        sta  bufpnt      
+        sta  savpnt      
+        sta  bytcnt      
+;
+        lda  #256-topwrt        ;  put gcr in ovrflow buffer
+        sta  gcrpnt      
+;
+        lda  bufpnt+1   ;  save buffer pointer
+        sta  savpnt+1    
+;
+        lda  #>ovrbuf    
+        sta  bufpnt+1   ;  store in overbuf
+;
+fbg10   ldy  bytcnt     ;  get pointer
+;
+        lda  (savpnt),y          
+        sta  btab        
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+1      
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+2      
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+3      
+        iny      
+        beq  fbg15      ;  test if done
+;
+        sty  bytcnt     ;  save pointer
+;
+        jsr  put4bg     ;  convert and store
+;
+        jmp  fbg10       
+;
+fbg15   jmp  put4bg     ;  done, return
+;
+;.end

@@ -1,0 +1,77 @@
+	.subttl  disclaimer
+;		;*********************************************
+;		;                                            *
+;		;     COMMODORE BUSINESS MACHINES, INC.      *
+;		;                                            *
+;		;*********************************************
+
+;		;*********************************************
+;		;                                            *
+;		;   Disk Operating System  and  controller   *
+;		;   routines for the following CBM models:   *
+;		;                                            *
+;		;          1541    serial disk drive*        *
+;		;          1541-II serial disk drive*        *
+;		;                                            *
+;		;    *with single sa390 compatable drive     *
+;		;                                            *
+;		;    Copyright (C) 1982,1985,1987 by CBM     *
+;		;            All Rights Reserved             *
+;		;                                            *
+;		;*********************************************
+
+;		;*********************************************
+;		;   This software is furnished for use in    *
+;		;   the systems described above only.        *
+;		;                                            *
+;		;   Copies thereof may not be provided or    *
+;		;   made  available  for use on any other    *
+;		;   system.                                  *
+;		;                                            *
+;		;   The  information  in this document is    *
+;		;   unpublished, confidential, and  trade    *
+;		;   secret property of Commodore Business    *
+;		;   Machines, Inc. Any use, reproduction,    *
+;		;   or  disclosure  of  this  information    *
+;		;   without the prior  written permission    *
+;		;   of  Commodore is strictly prohibited.    *
+;		;                                            *
+;		;   This  material  is  subject to change    *
+;		;   without notice.  No responsibility is    *
+;		;   assumed for its reliablity.              *
+;		;*********************************************
+
+
+;		23 July 1987	Fred Bowen
+
+	.page
+	.subttl  history
+
+; 09/10/'84 add '0' track sensor (rom05-bc) h.a
+;
+;**************************************************************************
+; 11/20/86   Greg Berlin (GCB)
+;
+;	All mods I made are initialed with 'GCB'.
+;
+;	Fixes for the following:
+;
+; 	I. Compatability problems
+;       	a. rom05 changed interrupt rate from 15 to 8 msecs.
+;		   Physically, this is fine, but some software packages
+;		   used that rate for other timing.  Consequently, some
+;                  incompatabilities arose.  So, change the IRQ rate
+;                  back to 15 msec as it was originally.
+;	     	b. 1541B board has troubles accessing tracks beyond 35.
+;                  1541B board has a new data seperator, which allowed
+;		   the problem to surface.  However, an inconsistency
+;		   always existed.  If the controller is asked to access
+;                  a track beyond 35 it picks the wrong bit cell density
+;		   because the track number table (trknum) only listed
+;                  up to track 35.
+;	II. SAVE @filename bug fix.
+;	III. Realtive File fixes
+;       IV. Serial bus (device not present) fix.
+;***************************************************************************
+
+;	.end

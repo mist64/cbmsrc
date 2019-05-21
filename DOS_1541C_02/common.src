@@ -1,0 +1,77 @@
+;**********************************************
+;*                                            *
+;*   commodore business machines software     *
+;*                                            *
+;**********************************************
+;
+;**********************************************
+;*                                            *
+;*   disk operating system and                *
+;*   controller routines                      *
+;*   for the following cbm models:            *
+;*     1541 serial disk                       *
+;*     with single sa390 compatable drive     *
+;*   copyright (c) 1982 by                    *
+;*   commodore business machines (cbm)        *
+;*                                            *
+;**********************************************
+
+; ****listing date 18 jan 1984 ****
+
+;**********************************************
+;*   this software is furnished for use in    *
+;*  the single drive floppy disk unit only.   *
+;*                                            *
+;*   copies thereof may not be provided or    *
+;*  made available for use on any other       *
+;*  system.                                   *
+;*                                            *
+;*   the information in this document is      *
+;*  subject to change without notice.         *
+;*                                            *
+;*   no responsibility is assumed for         *
+;*  reliability of this software. rsr         *
+;*                                            *
+;**********************************************
+        .page  
+; common area defines
+
+*=0              
+jobs     *=*+6          ;  job que
+hdrs     *=*+12         ;  job headers
+dskid    *=*+4          ; master copy of disk id
+header   *=*+5          ; image of last header
+actjob   *=*+1          ; controller's active job
+wpsw     *=*+2          ; write protect change flag
+lwpt     *=*+2          ; last state of wp switch
+;
+;
+;       .end
+; rsr
+; 09/10/'84 add '0' track sensor (rom05-bc) h.a
+;
+;***************************************************************************
+; 11/20/86   Greg Berlin (GCB)
+;
+;	All mods I made are initialed with 'GCB'.
+;
+;	Fixes for the following:
+;
+; 	I. Compatability problems
+;       	a. rom05 changed interrupt rate from 15 to 8 msecs.
+;		   Physically, this is fine, but some software packages
+;		   used that rate for other timing.  Consequently, some
+;                  incompatabilities arose.  So, change the IRQ rate
+;                  back to 15 msec as it was originally.
+;	     	b. 1541B board has troubles accessing tracks beyond 35.
+;                  1541B board has a new data seperator, which allowed
+;		   the problem to surface.  However, an inconsistency
+;		   always existed.  If the controller is asked to access
+;                  a track beyond 35 it picks the wrong bit cell density
+;		   because the track number table (trknum) only listed
+;                  up to track 35.
+;	II. SAVE @filename bug fix.
+;	III. Realtive File fixes
+;       IV. Serial bus (device not present) fix.
+;****************************************************************************
+

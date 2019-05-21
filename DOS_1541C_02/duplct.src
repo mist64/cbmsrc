@@ -1,0 +1,33 @@
+        .page  'duplicate'       
+; duplicate disk
+
+duplct           
+        lda  #badcmd     
+        jmp  cmderr      
+
+; transfer format code to buffer 0
+;  & start controller formatting
+format           
+        lda  #$4c        
+        sta  bufs+$300   
+        lda  #<formt     
+        sta  bufs+$301   
+        lda  #>formt     
+        sta  bufs+$302   
+;
+        lda  #3          
+        jsr  seth        
+        lda  drvnum      
+        ora  #exec       
+        sta  jobs+3      
+fmt105  lda  jobs+3      
+        bmi  fmt105      
+        cmp  #2          
+        bcc  fmt110      
+        lda  #3          
+        ldx  #0          
+        jmp  error       
+fmt110  rts      
+;
+;
+;.end

@@ -1,0 +1,311 @@
+	.page
+	.subttl  utlodr
+
+;********************************
+;*utlodr-utility loader used to
+; load user programs or system
+; utilities from disk and
+; execute them.
+;
+; this loader is designed to be
+; incorporated into the 1540 dos
+; system (serial bus interface).
+;
+; hardware reqired :
+;  connect data and clock line to
+;  ground. (2-4-5 on connector)
+;
+;********************************
+;*on entry-
+; only requirement is that the
+; filename of the file to be
+; loaded be the first specified
+; name in cmdbuf (the command
+; buffer).
+;
+; registers: ignored
+;
+;*on exit-
+; if the file existed on disk and
+; could be found, and no checksum
+; errors were encountered while
+; loading it, it is now loaded
+; into memory, ready to execute.
+;
+; registers: all destroyed
+;
+; execution of the loaded program
+; is started at the first byte
+; loaded.
+;
+; cmdbuf contains the parameter
+; string for the freshly loaded
+; utility or user program.
+;
+;********************************
+	.page
+;********************************
+;
+;*first writing-
+; 25-jan-80
+; by ron stephens
+;
+;--------------------------------
+;
+;*revision list-
+; 28-feb-80  s. patterson - add parser interface
+; 09-apr-81 rsr - change for serial bus
+;
+;********************************
+	.page
+;********************************
+;
+;*routines external to this
+; module that are used:
+;
+; lookup-
+;   function-finds first name
+;   specified in cmdbuf in the
+;   disk directory on the specified
+;   drive.
+;
+;   inputs from utlodr-none
+;   outputs to utlodr-none
+;
+; chkin-
+;   function-checks if name was
+;   found by lookup. error if not
+;   found. exits to 8050 error
+;   routine.
+;
+;   inputs from utlodr-none
+;   outputs to utlodr-none
+;
+; gibyte-
+;   function-fetches next byte
+;   from open file. also sets
+;   eoiflg zero if end of file
+;   condition detected.
+;
+;   inputs from utlodr-none
+;   outputs to utlodr-variable 'data' contains
+;   the data byte.
+;
+; opntyp-
+;   function-opens file previously
+;   "looked up" by lookup above.
+;   calls error routine if
+;   type doesn't match that specified
+;
+;   inputs from utlodr-.a=file type
+;   (5 in our case)
+;   outputs to utlodr-none
+;
+; cmder2-
+;   function-places error message
+;   specified into error buffer.
+;
+;   inputs from utlodr-.a=error number
+;   outputs to utlodr-none
+;
+;********************************
+; boot routine removed, won't work with serial i|f
+	.page
+boot2
+	rts     ; exit
+;
+;***rom -05 fix 8/18/83
+
+boot		; power-on diag sense loader
+
+;lda pb ;get port data
+;tax ;save for later
+;and #clkin ;check for clk to gnd
+;beq boot2 ;no...exit
+;txa
+;and #datin ;check for data to gnd
+;beq boot2 ;no...exit
+;cli ;so backgnd will run!
+;
+;boot clip must be on
+
+boot3
+
+;lda pb
+;and #clkin+datin
+;bne boot3 ;wait untill removed?
+;
+;inc f2cnt ;set # files
+;inc cmdsiz ;set # of chars
+;lda #'*
+;sta cmdbuf ;set filename for any match
+;jmp boot4
+
+;---------rom -05 fix 8/18/83---------------
+
+	.byte	$ea,$ea,$ea			;jmp  tstatn	; *ds rom 09/03/85*
+	.byte   $ea,$ea,$ea,$ea,$ea
+	.byte   $ea,$ea,$ea,$ea,$ea,$ea,$ea,$ea
+	.byte   $ea,$ea,$ea,$ea,$ea,$ea,$ea,$ea
+	.byte   $ea,$ea,$ea,$ea,$ea,$ea,$ea,$ea
+	.byte   $ea,$ea,$60
+
+;--------------------------------------------
+
+
+;*entry point
+
+utlodr
+	lda  #$8d
+	jsr  parse
+
+boot4
+	jsr  killp      ; kill protect
+	lda  f2cnt
+	pha     	; save file count for utility
+	lda  #1
+	sta  f2cnt
+	lda  #$ff       ; init firstbyte flag
+	sta  r0		; r0 is flag
+
+	jsr  lookup     ; locate filename on disk
+
+	lda  filtrk     ; check if found. err if not
+	bne  utld00
+	lda  #nocfil
+	jsr  cmderr
+utld00
+	pla
+	sta  f2cnt      ; restore file count
+
+	lda  filtrk     ; init trk, sctr for open
+	sta  track
+	lda  filsec
+	sta  sector
+
+	lda  #usrtyp    ; open system type file( 5 )
+	jsr  opntyp     ; open
+
+;********************************
+
+;*file record fetch loop
+
+utld10  lda  #$00       ; init checksum
+	sta  r1		; calc. chksum resides in r1
+
+	jsr  gtabyt     ; fetch load address lo
+	sta  r2
+	jsr  addsum     ; add into checksum
+
+	jsr  gtabyt     ; fetch load address hi
+	sta  r3
+	jsr  addsum
+
+	lda  r0		; is this the firstbyte address?
+	beq  utld20     ; br if not
+	lda  r2		; sav away this addr. in2 stack
+	pha     	; lo first
+	lda  r3
+	pha     	; hi next
+	lda  #$00       ; clear flag
+	sta  r0		; firstbyte flag
+
+utld20  jsr  gtabyt     ; fetch data byte count
+	sta  r4		; save in r4
+	jsr  addsum     ; add into checksum
+
+;********************************
+
+;*byte store loop
+
+utld30  jsr  gtabyt     ; fetch data byt
+	ldy  #$00       ; init index
+	sta  (r2),y     ; store byte at desired address
+	jsr  addsum     ; add into checksum
+
+	lda  r2		; pointer:=pointer+1
+	clc
+	adc  #$01
+	sta  r2
+	bcc  utld35
+	inc  r3		; add in carry
+
+utld35  dec  r4		; update byte counter
+	bne  utld30     ; if nonzero, continue
+
+;*end of byte store loop
+
+;********************************
+
+	jsr  gibyte     ; get a byte without check for eoi
+	lda  data
+	cmp  r1		; last byte fetched was chksum
+	beq  utld50     ; if same...everything ok
+	jsr  gethdr
+	lda  #norec     ; show record overflow
+	jsr  cmder2     ; and leave to error exit
+
+utld50  lda  eoiflg     ; check for end of file
+	bne  utld10     ; if nonzero, not done
+
+;*end of record load loop
+
+;********************************
+
+	pla     	; xfer cntrl to 1st byte addr.
+	sta  r3
+	pla
+	sta  r2
+	jmp  (r2)
+
+	.page
+;********************************
+;
+;*local routines used by utlodr
+
+
+;********************************
+;
+;*gtabyt-fetches a byte from the
+;	file open on the internal
+;	channel. checks if this
+;	was the last byte in the
+;	file. error if it was.
+;	show a 'pter' (premature
+;	termination error).
+;
+;********************************
+
+;*entry point
+
+gtabyt  jsr  gibyte     ; fetch a byte to data loc
+	lda  eoiflg     ; check if eof exists
+	bne  gtabye     ; ok if nonzero
+	jsr  gethdr
+	lda  #recovf    ; record size error
+	jsr  cmder2     ; call 8050 error routine
+
+gtabye  lda  data
+	rts
+
+;********************************
+;
+;*addsum-adds up checksum into
+;	location r1. algorithm:
+;	newsum:=oldsum+newbyte+
+;	carry
+;
+; inputs: expects newbyte in .a
+; outputs: r1=newsum, .a destroyed
+;
+;********************************
+
+;*entry point
+
+addsum  clc
+	adc  r1		; .a=.a+r1
+	adc  #$00       ; .a=.a+carry
+	sta  r1		; save new checksum
+	rts
+
+;       .end

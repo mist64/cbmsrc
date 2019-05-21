@@ -1,0 +1,115 @@
+	.page
+	.subttl  idlesf
+
+; idle loop, waiting for something to do
+
+idle	cli		;release all bus lines
+	lda  pb
+	and  #$e5       ;clock, data, atna high
+	sta  pb
+
+	lda  cmdwat     ;test for pending command
+	beq  idl1       ;no command waiting
+	lda  #0
+	sta  cmdwat
+	sta  nmiflg     ;clear debounce
+	jsr  parsxq     ;parse and xeq command
+idl1    cli     	;test for drive running or openfile
+	lda  atnpnd
+	beq  idl01
+
+;##### GCB 11/20/86 serial bus bug.  Clear 6522 int flag. #################
+
+;	jmp  atnsrv     ;service atn irq
+
+	jmp  ptch16
+
+;##########################################################################
+
+idl01	cli
+	lda  #14
+	sta  temp+3
+	lda  #0		;if file open, turn on act led
+	sta  temp
+	sta  temp+1
+idl2    ldx  temp+3     ;look thru lintab
+	lda  lintab,x   ;for active file
+	cmp  #$ff
+	beq  idl3
+	and  #$3f
+	sta  lindx
+	jsr  getact
+	tax
+	lda  lstjob,x   ;determine which drv it is on
+	and  #1
+	tax
+	inc  temp,x
+idl3    dec  temp+3     ;set flag indicating drv
+	bpl  idl2       ;has file open
+	ldy  #bfcnt-1   ;look thru job que for
+idl4    lda  jobs,y     ;for jobs still running
+	bpl  idl5
+	and  #1
+	tax
+	inc  temp,x     ;set flag indicating drive
+idl5    dey     	;is active
+	bpl  idl4
+
+	sei		;don't allow irq when reading ledprt ******************
+	lda  ledprt
+	and  #$ff-led0
+	pha
+	lda  drvnum
+	sta  r0
+	lda  #0
+	sta  drvnum
+	lda  temp
+	beq  idl7
+	lda  wpsw
+	beq  idl6
+	jsr  cldchn
+
+idl6	pla		;turn on led if drive flag
+	ora  #led0      ;if not 0
+	pha
+
+idl7	inc  drvnum
+	lda  temp+1
+	beq  idl9
+	lda  wpsw+1
+	beq  idl8
+	jsr  cldchn
+
+idl8	pla
+	ora  #led1
+	pha
+
+idl9	lda  r0
+	sta  drvnum
+	pla
+	ldx  erword
+	beq  idl12      ;no error flashing
+
+	lda  ledprt     ;use current leds
+	cpx  #$80
+	bne  idl10      ;not ist time
+	jmp  idl11
+
+idl10	ldx  timer1
+	bmi  idl12      ;still timing
+
+	ldx  #$a0       ;count 8 msec
+	stx  timer1
+
+idl11	dec  erword     ;count units of 8 msec
+	bne  idl12      ;keep counting
+
+	eor  erled      ;toggle led
+	ldx  #16	;count 16 units
+	stx  erword
+
+idl12	sta  ledprt     ;set leds
+	jmp  idl1       ;back to top of lop
+
+
+;	.end

@@ -1,0 +1,139 @@
+	.page   'lcc.read'      
+;
+;
+;
+;
+;
+;   *read
+;
+;    read in track,sector specified
+;    in header
+;
+;
+reed    cmp  #0         ;  test if read job
+        beq  read01     ;  go test if write
+        jmp  wright      
+;
+read01  jsr  dstrt      ;  find header and start reading data
+;
+read11  bvc  *          ;  wait for byte
+        clv      
+;
+        lda  data2      ;  store away data
+        sta  (bufpnt),y         ;  in data buffer
+        iny      
+        bne  read11      
+;
+        ldy  #255-toprd         ;  store rest in overflow buffer
+;
+read20  bvc  *   
+        clv      
+;
+        lda  data2       
+        sta  ovrbuf,y    
+        iny      
+        bne  read20      
+;
+        jsr  gcrbin     ;  convert buffer to binary
+;
+        lda  bid        ;  test if its a data block
+        cmp  dbid        
+        beq  read28      
+;
+        lda  #4         ;  not a data block
+        jmp  errr        
+;
+read28  jsr  chkblk     ;  calc checksum
+;
+        cmp  chksum      
+        beq  read40      
+;
+        lda  #5         ;  data block checksum error
+	.byte    skip2   
+;
+read40  lda  #1         ;  read data block ok
+        jmp  errr        
+;
+;
+;
+dstrt   jsr  srch       ;  find header
+        jmp  sync       ;  and then data block sync
+;
+;
+srch    lda  drive      ;  create header image
+        asl  a   
+        tax      
+;
+        lda  dskid,x    ;  get master id for the drive
+        sta  header      
+        lda  dskid+1,x   
+        sta  header+1    
+;
+        ldy  #0         ;  get track,sector
+        lda  (hdrpnt),y          
+        sta  header+2    
+        iny      
+        lda  (hdrpnt),y          
+        sta  header+3    
+;
+        lda  #0          
+;create header checksum
+        eor  header      
+        eor  header+1    
+        eor  header+2    
+        eor  header+3    
+;
+        sta  header+4   ;  store the checksum
+;
+        jsr  conhdr     ;  convert header to gcr
+;
+        ldx  #90        ;  search 90 sync chars
+;
+srch20  jsr  sync       ;  find sync
+;
+        ldy  #0         ;  test 8 gcr bytes
+;
+srch25  bvc  *   
+        clv     ;  wait for byte
+;
+        lda  data2       
+        cmp  stab,y     ;  test if the same
+        bne  srch30     ;  nope
+;
+        iny      
+        cpy  #8          
+        bne  srch25      
+;
+        rts      
+;
+;
+srch30  dex     ; try again
+        bne  srch20      
+;
+        lda  #2         ;  cant find this header
+err     jmp  errr        
+;
+;
+;
+;
+sync             
+;
+        lda  #$80+80    ;  wait 20 ms for sync max
+        sta  timer1      
+;
+        lda  #3         ;  error code for no sync
+;
+sync10  bit  timer1     ;  test for time out
+        bpl  err         
+        bit  dskcnt     ;  test for sync
+        bmi  sync10      
+;
+;
+        lda  data2      ;  reset pa latch
+        clv      
+        ldy  #0         ;  clear pointer
+        rts      
+;
+;
+;
+;.end

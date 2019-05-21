@@ -1,0 +1,98 @@
+	.page
+	.subttl  romsf  1541-II
+
+	* = rom
+
+cchksm   .byte  $97	;always (for compatibility)
+adjsm	 .byte  $e0	;checksum adjustment for $C000-$DFFF area (#251968-03 FAB)
+
+;--------------------------------------------------------------
+;  copyright notice for legal types  FAB  07/22/87
+
+	.byte 'COPYRIGHT (C)1982,1985,1987 COMMODORE ELECTRONICS, LTD.',$0d
+	.byte 'ALL RIGHTS RESERVED',$0d
+
+;############################################################################
+;#########################   $C000  PATCH  AREA   ###########################
+;############################################################################
+
+jclear  lda  pcr2      	;enable write
+	and  #$ff-$e0
+	ora  #$c0
+	sta  pcr2
+
+	lda  #$ff      	;make port an output
+	sta  ddra2
+
+	lda  #$55      	;write a 1f pattern
+	sta  data2
+
+	ldx  #$03	;3*256 chars  (was 40*256 chars)
+	ldy  #00
+1$	bvc  *
+	clv
+	dey
+	bne  1$
+
+	dex
+	bne  1$
+
+	rts
+
+;------------------------------------------------------
+;   	patch 25  GCB 11/20/86 block read fix
+;		  FAB 07/22/87 fix the fix- change rndget to rnget2
+
+ptch25	ldy lindx
+	jmp rnget2
+
+
+;------------------------------------------------------
+;	patch 26  GCB 11/20/86 write to stack area bug
+
+ptch26	sta nbkl,x	;didn't we just do this??
+	sta nbkh,x
+	lda #0
+	sta lstchr,x
+	rts
+
+
+;------------------------------------------------------
+;	patch27  GCB 11/20/86 set decimal mode without disablind IRQ's
+
+ptch27	php
+	sei
+	lda #0
+	sed
+1$	cpx #0
+	beq 2$
+
+	clc
+	adc #1
+	dex
+	jmp 1$
+
+2$	plp
+	jmp hex5
+
+
+;-------------------------------------------------------
+;	ptch28  GCB 11/20/86 disk full bug
+
+ptch28	cmp #3
+	bcs 1$
+
+	lda #dskful
+	jsr errmsg
+
+1$	lda #1
+	rts
+
+
+;--------------------------------------------------------------
+;############################################################################
+
+
+	* = $C100
+
+;     .end

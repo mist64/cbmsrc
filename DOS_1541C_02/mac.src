@@ -1,0 +1,8 @@
+	.page
+nodrrd	.macro
+	.byte $bd,$ff,$00
+	.endm
+nodrwr	.macro
+	.byte $9d,$ff,$00
+	.endm
+

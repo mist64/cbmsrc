@@ -1,0 +1,220 @@
+	.page   'lcc.fmt1'      
+;
+fmtvar   =$620          ;  put format vars in jump buffer
+cnt      =  fmtvar       
+num      =  fmtvar+1     
+trys     =  fmtvar+3     
+tral     =  fmtvar+4     
+dtrck=   fmtvar+6        
+remdr=   fmtvar+7        
+sect     =  fmtvar+8     
+;
+;
+;
+;*  format routine for lcc
+;*
+;*
+;*
+;
+;
+;
+code             
+formt   lda  ftnum      ;  test if formatting begun
+        bpl  l213       ;  yes
+;
+        ldx  drive      ;  no,start up by bumping
+        lda  #$60       ;  status=stepping
+        sta  drvst,x     
+;
+        lda  #1         ;  drive track =1
+        sta  drvtrk,x    
+        sta  ftnum      ;  start on track 1
+;
+        lda  #256-92    ;  bump back 45 steps
+        sta  steps       
+;
+        lda  dskcnt     ; set phase a
+        and  #$ff-$03    
+        sta  dskcnt      
+;
+;
+        lda  #10        ;  10 errors allowed
+        sta  cnt         
+;
+        lda  #<4000     ;  first guess at track size
+        sta  num         
+        lda  #>4000      
+        sta  num+1       
+;
+        jmp  end        ;  back to controller
+;
+;
+;
+l213    ldy  #0         ;  test if on right track number
+        cmp  (hdrpnt),y          
+        beq  l214        
+;
+        sta  (hdrpnt),y         ;  goto right track
+        jmp  end         
+;
+;
+l214    lda  dskcnt     ;  test for write protect
+        and  #$10        
+        bne  topp       ;  its ok
+;
+        lda  #8         ;  write protect error
+        jmp  fmterr      
+;
+topp    jsr  synclr     ;  erase track with sync
+;
+        jsr  wrtnum     ;  write out num syncs
+;
+        lda  #$55       ;  write out num non sync
+        sta  data2       
+;
+        jsr  wrtnum      
+;
+        jsr  kill       ;  kill write
+;
+        jsr  sync       ;  find sync
+;
+        lda  #$40       ;  set timer mode
+        ora  acr1        
+        sta  acr1        
+;
+        lda  #100-2     ;  set up 100us timer
+        sta  t1ll1      ;  cont mode timer
+        lda  #0          
+        sta  t1hl1      ;  hi latch
+        sta  t1hc1      ;  get attention of '22
+;
+;
+;
+        ldy  #0         ;  time the sync and nonsync segments
+        ldx  #0          
+;
+fwait   bit  dskcnt     ;  wait for sync
+        bmi  fwait       
+;
+fwait2  bit  dskcnt     ;  wait for no sync
+        bpl  fwait2      
+;
+f000    lda  t1lc1      ;  reset ifr
+;
+f001    bit  dskcnt     ;  time nonsync area
+        bpl  f005       ;  time until sync found
+;
+        lda  ifr1       ;  test for time out
+        asl  a   
+        bpl  f001       ;  not yet
+;
+        inx     ;  .x is lsb
+        bne  f000        
+        iny     ;  .y is msb
+        bne  f000        
+;
+        lda  #tolong    ;  cant find sync
+        jmp  fmterr      
+;
+f005    stx  t2         ;  save time
+        sty  t2+1        
+;
+        ldx  #0         ;  time sync area
+        ldy  #0          
+;
+f006    lda  t1lc1      ;  reset ifr
+;
+f007    bit  dskcnt     ;  test for  no sync
+        bmi  f009        
+;
+        lda  ifr1       ;  test for time out
+        asl  a   
+        bpl  f007        
+;
+        inx     ;  count up another 100us
+        bne  f006        
+        iny     ;  msb
+        bne  f006        
+;
+        lda  #tolong    ;  cant be this long
+        jmp  fmterr      
+;
+;
+;* now calc the difference between
+;* sync and nonsync and adjust
+;* num accordingly
+;
+f009    sec     ;  t1-t2
+        txa      
+        sbc  t2          
+        tax      
+        sta  t1          
+;
+        tya      
+        sbc  t2+1        
+        tay      
+        sta  t1+1        
+;
+        bpl  f013       ;  get abs(t1-t2)
+;
+        eor  #$ff       ;  make +
+        tay      
+        txa      
+        eor  #$ff        
+        tax      
+        inx      
+        bne  f013        
+        iny      
+;
+f013    tya     ;  test if abs(t1-t2)<4, that is close enough
+        bne  f014       ;  msb must be 0
+;
+        cpx  #4         ;  test lsb < 4
+        bcc  count      ;  its there
+;
+f014    asl  t1         ;  num=num+(diff/2)
+        rol  t1+1        
+;
+        clc      
+        lda  t1          
+        adc  num         
+        sta  num         
+;
+        lda  t1+1        
+        adc  num+1       
+        sta  num+1       
+;
+        jmp  topp       ;  try again sam
+;
+;
+count   ldx  #0         ;  now count #bytes in data segment
+        ldy  #0          
+        clv      
+;
+cnt10   lda  dskcnt     ;  test for sync
+        bpl  cnt20      ;  found sync
+        bvc  cnt10      ;  test if byte time
+;
+        clv     ;  yes, count it
+        inx      
+        bne  cnt10      ;  keep counting
+        iny      
+        bne  cnt10      ;  to many ?
+;
+        lda  #tomany    ;  tomany counts
+        jmp  fmterr      
+;
+cnt20   txa     ;  #bytes=count*2
+        asl  a   
+        sta  tral+1      
+;
+        tya      
+        rol  a   
+        sta  tral        
+;
+        lda  #$ff-$40   ;  clear cont mode
+        and  acr1        
+        sta  acr1        
+;
+;
+;.end

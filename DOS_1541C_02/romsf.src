@@ -1,0 +1,91 @@
+*=rom           
+cchksm   .byte  $97
+adjsm	 .byte  $46
+;
+jclear  lda  pcr2       ;  enable write
+        and  #$ff-$e0    
+        ora  #$c0        
+        sta  pcr2        
+;
+        lda  #$ff       ;  make port an output
+        sta  ddra2       
+;
+        lda  #$55       ;  write a 1f pattern
+        sta  data2       
+;
+        ldx  #$03	;  $03*256 chars
+        ldy  #00         
+1$	bvc  *   
+        clv      
+        dey      
+        bne  1$
+;
+        dex      
+        bne  1$
+;
+        rts      
+;
+;
+;############################################################################
+;#########################   $00C0  PATCH  AREA   ###########################
+;############################################################################
+;
+freec0		; $C0 patch area
+
+;------------------------------------------------------
+;     	patch 25  GCB 11/20/86 block read fix
+ptch25	ldy lindx
+	jmp rndget
+;------------------------------------------------------
+;	patch 26  GCB 11/20/86 write to stack area bug
+ptch26	sta nbkl,x	;didn't we just do this??
+	sta nbkh,x
+	lda #0
+	sta lstchr,x
+	rts
+;------------------------------------------------------
+;	patch27  GCB 11/20/86 set decimal mode without disablind IRQ's
+ptch27	php
+	sei
+	lda #0
+	sed
+1$	cpx #0
+	beq 2$
+
+	clc
+	adc #1
+	dex
+	jmp 1$
+
+2$	plp
+	jmp hex5
+;-------------------------------------------------------
+;	ptch28  GCB 11/20/86 disk full bug
+ptch28	cmp #3
+	bcs 1$
+
+	lda #dskful
+	jsr errmsg
+
+1$	lda #1
+	rts
+;--------------------------------------------------------------
+; 	new track table to allow controller to access 40 tracks correctly
+fourty_trk_num
+	.byte  $29,$1f,$19,$12
+
+;--------------------------------------------------------------
+;	add copyright notice for legal types
+
+	.byte 'COPYRIGHT (C)1985 COMMODORE ELECTRONICS, LTD.',$0d
+	.byte 'ALL RIGHTS RESERVED',$0d
+
+;--------------------------------------------------------------
+;
+;############################################################################
+;
+;
+   *=$C100	
+
+;       .end
+

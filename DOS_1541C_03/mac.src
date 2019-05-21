@@ -1,0 +1,12 @@
+	.page
+	.subttl  assembler macro definitions
+
+nodrrd	.macro
+	.byte $bd,$ff,$00	;LDA $00FF,X
+	.endm
+
+nodrwr	.macro
+	.byte $9d,$ff,$00	;STA $00FF,X
+	.endm
+
+;	.end

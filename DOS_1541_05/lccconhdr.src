@@ -1,0 +1,57 @@
+	.page   'lcc.conhdr'    
+;
+;
+;
+;    *conhdr
+;
+;    convert header
+;    into gcr search image
+;    and place in stab
+;
+;   image contains :
+;
+;   00 id id tr sc cs hbid
+;
+;
+conhdr  lda  bufpnt+1   ; save buffer pointer
+        sta  savpnt+1    
+;
+        lda  #>stab      
+        sta  bufpnt+1    
+;
+        lda  #<stab      
+        sta  gcrpnt      
+;
+        lda  hbid        
+        sta  btab        
+;
+        lda  header+4    
+        sta  btab+1      
+;
+        lda  header+3    
+        sta  btab+2      
+;
+        lda  header+2    
+        sta  btab+3      
+;
+        jsr  put4bg      
+;
+        lda  header+1    
+        sta  btab        
+;
+        lda  header      
+        sta  btab+1      
+;
+        lda  #0          
+        sta  btab+2      
+        sta  btab+3      
+;
+        jsr  put4bg      
+;
+        lda  savpnt+1   ; restore buffer pointer
+        sta  bufpnt+1    
+;
+        rts      
+;
+;
+;.end

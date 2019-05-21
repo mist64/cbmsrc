@@ -1,0 +1,8 @@
+
+
+*=rom           
+cchksm   .byte  $97
+freec0   *=$C100	;  $c0 patch space
+
+
+;       .end
