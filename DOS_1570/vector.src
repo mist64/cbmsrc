@@ -1,0 +1,222 @@
+        .page  
+        .subttl 'vector.src'
+
+echksm  .byte  $ff	; << to be defined <<
+nmi     jmp  (vnmi)      
+;
+;---------------------------------------------------
+;
+pea7a   sta  ledprt     ; patch for power-on errors
+        sta  ledout     ; turn ddrb to output
+        jmp  rea7d      ; return to led blink code
+;
+;---------------------------------------------------
+; patch area for 1541 disk with slow serial receive
+;
+slowd   txa     	; only affect .a
+        ldx  #5         ; insert 40us of delay with this routine
+slowe   dex      
+        bne  slowe       
+        tax      
+        rts      
+;
+;---------------------------------------------------
+;
+clkdat  jsr  clklow     ; new clock low and...
+        jmp  dathi      ; data hi for patch area
+;
+;---------------------------------------------------
+;
+nnmi    lda  cmdbuf+2   ; new nmi routine check for
+        cmp  #'-'        
+        beq  nnmi10     ; if ui- then no delay
+        sec      
+        sbc  #'+'        
+        bne  nmi        ; if not ui+ then must be a real ui command
+nnmi10  sta  drvtrk+1    
+        rts      
+;
+;
+;---------------------------------------------------
+;      patch 5   *rom-05 8/18/83*
+;
+;clock line hi on pwr on
+;
+patch5  stx  ddra1      ; set direction
+        lda  #$02       ; set clock high
+
+	jmp  ptch22	; setup port a
+;       sta  pb          
+
+ptch22r lda  #$1a       ; set ddra reg b
+        sta  ddrb1       
+        jmp  dkit10     ; return
+;
+;
+;---------------------------------------------------
+;      patch 6   *rom ds 8/18/83*
+;
+;fix eoi timing to wait all devices
+;
+;
+patch6  lda  pb         ; test data line
+        and  #$01       ; every one rdy ?
+        bne  patch6      
+        lda  #$01       ; wait 255 usec
+        sta  t1hc1      ; set timer
+        jmp  acp00      ; return
+;
+;
+;---------------------------------------------------
+;     patch 7   *** rom ds 03/15/85 ***
+;
+;
+patch7  lda  #$ff       ; clear format flags
+        sta  ftnum      ; 
+
+	lda  pota1	; 1/2 Mhz ?
+	and  #$20
+	bne  1$
+
+	lda  #36
+	.byte skip2
+1$	lda  #71
+	nop
+	nop
+	nop		; *** rom ds 05/15/86 ***
+;	sta  maxtrk	
+	jmp  ptch28	; ***rom ds 02/01/85***
+;       jmp  format     ; transfer format to ram
+
+;
+;
+;----------------------------------------------------
+;
+;     patch 9   *rom ds 09/12/84*
+;
+patch9  tya     	
+        pha     	
+1$	ldy  #100       ; timer (100*16us=1.6ms)
+2$	lda  pota1      ; check photo
+	ror  a		; set/clear carry
+	php		; save status
+	lda  pota1
+	ror  a		; => carry 
+	ror  a		; => bit 7
+	plp		; get carry
+	and  #$80	; set/clear sign bit
+	bcc  5$	
+
+	bpl  4$		; carry set(off) & sign(on) exit
+
+	bmi  6$		; bra
+
+5$	bmi  4$		; carry clear(on) & sign(off) exit
+
+6$	dey     	
+        bne  2$		; wait
+
+3$	bcs  4$		; no, not yet
+
+        lda  dskcnt     ; yes, check motor phase
+        and  #$03       ; phase a ?
+        bne  4$		; no, not yet
+
+	lda  adrsed	; chk micro-stepping flag
+	bne  4$
+
+        pla    
+        tay     
+        lda  #$00       ; yes, clear # of steps
+        sta  steps      ; 
+        jmp  end33      ; go back to end
+
+4$	pla     	
+        tay     	
+
+        inc  steps      ; update # of steps
+
+        ldx  dskcnt     ; update motor phase
+        dex     	; 
+        jmp  pppppp     ; return to main
+;
+;
+;----------------------------------------------------
+;
+;     patch 10  *rom ds 01/22/85*
+;
+ptch10  jsr  cntint     ; controller init.
+
+	lda  #5
+	sta  cpmit	; set interleave for CP/M
+	lda  #<irq
+	sta  irqjmp
+	lda  #>irq
+	sta  irqjmp+1	; vector 1541
+
+	lda  #36
+	nop
+	nop
+	nop		; *** rom ds 05/15/86 ***
+;	sta  maxtrk	; set maximum track+1
+
+        clc		; set job header
+	jmp  set_side	; side zero
+;
+;
+;----------------------------------------------------
+;     patch 11  *rom ds 01/21/85*
+;
+ptch11  sta  nodrv      ; clr nodrv
+	jmp  setlds	; set leds
+;
+;
+;----------------------------------------------------
+;     patch 12  *rom ds 01/21/85*
+;
+ptch12  sta  adrsed	; set micro-stepping flag
+	jmp  hedoff	; move head now
+;
+;
+;----------------------------------------------------
+;     patch 13  *rom ds 01/21/85*
+;
+ptch13	jsr  hedoff     ; restore head
+	lda  #$00
+	sta  adrsed	; clear micro-stepping flag
+	rts
+;
+;
+;----------------------------------------------------
+;     patch 14  
+;
+; ////// POST NO BILLS ///////
+;
+;----------------------------------------------------
+;     patch 15  *rom ds 01/21/85*
+;
+ptch15	ldy  lindx	
+	jmp  rndget
+;
+;
+;----------------------------------------------------
+;
+;default table for user command
+;
+*=       $ffe6   
+	.word    format          
+	.word    trnoff          
+ublock  .word    ublkrd   
+	.word    ublkwt          
+
+	.word    $0500          ; links to buffer #2
+	.word    $0503   
+	.word    $0506   
+	.word    $0509   
+	.word    $050c   
+	.word    $050f   
+*=       $fffa   
+	.word    nnmi   	; goto new nmi routine
+	.word    dskint          
+	.word    sysirq          
+	.subttl 'The End ...'

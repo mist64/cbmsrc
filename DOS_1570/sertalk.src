@@ -1,0 +1,133 @@
+	.page  
+	.subttl 'ser.talk'      
+talk    sei     	;  find if open channel
+        jsr  fndrch      
+        bcs  notlk      ;  no one home
+
+talk1   ldx  lindx       
+        lda  chnrdy,x    
+        bmi  tlk05       
+
+notlk   rts      
+
+;  code added to correct verify error
+tlk05   jsr  tstatn     ; test for atn
+        jsr  debnc       
+
+;check for clock gone (must be 80us+ from jmp talk1)
+
+        and  #datin      
+        php      
+        jsr  clkhi      ; set clock line hi
+        plp     	; see if verify error...
+        beq  tlk02      ; yes...data line low, eoi !!!!
+
+talk2   jsr  tstatn     ;  test atn gone
+        jsr  debnc      ;  test data line now low
+        and  #datin      
+        bne  talk2      ;  did not respond
+
+
+        ldx  lindx      ;  prepare to send eoi if needed
+        lda  chnrdy,x    
+        and  #eoi        
+        bne  noeoi      ;  no eoi
+
+tlk02   jsr  tstatn      
+        jsr  debnc      ;  send an eoi
+        and  #datin     ;  test if data line is low
+        bne  tlk02      ;  yes, wait till hi
+
+tlk03   jsr  tstatn      
+        jsr  debnc      ;  wait for data line to go low
+        and  #datin      
+        beq  tlk03       
+
+noeoi   jsr  clklow     ;  set clock low
+        jsr  tstatn      
+        jsr  debnc      ;  wait for data  line hi
+        and  #datin      
+        bne  noeoi       
+
+        lda  #8         ;  set up bit counter
+        sta  cont        
+
+isr01   jsr  debnc      ;  let port settle
+
+        and  #datin      
+; test that data line is now high before we send
+        bne  frmerx      
+
+isr02   ldx  lindx      ;  get byte to send
+        lda  chndat,x    
+        ror  a   
+        sta  chndat,x    
+
+        bcs  isrhi      ;  send a 1
+
+        jsr  datlow     ;  send a 0
+        bne  isrclk     ;  and clock it
+
+isrhi   jsr  dathi       
+
+isrclk  jsr  clkhi      ;  rising edge clock
+
+        lda  drvtrk+1   ; check speed flag
+        bne  isr03      ; no slow down
+
+        jsr  slowd      ;  slow down
+isr03   jsr  clkdat     ;  pull clock low and release data
+
+        dec  cont       ;  more bits?
+        bne  isr01      ;  yes
+
+isr04   jsr  tstatn      
+        jsr  debnc       
+        and  #datin      
+        beq  isr04       
+
+        cli     	;  get next byte to send
+        jsr  get         
+        sei      
+
+        jmp  talk1      ;  keep on talkin
+
+frmerx  jmp  frmerr      
+
+
+dathi   lda  pb         ;  set data out hi
+        and  #$ff-datout         
+        sta  pb          
+        rts      
+
+
+
+datlow  lda  pb          
+        ora  #datout     
+        sta  pb          
+        rts      
+
+
+
+clklow  lda  pb          
+        ora  #clkout     
+        sta  pb          
+        rts      
+
+
+
+clkhi   lda  pb          
+        and  #$ff-clkout         
+        sta  pb          
+        rts      
+
+
+
+debnc   lda  pb          
+        cmp  pb          
+        bne  debnc       
+        rts      
+
+; additions after code sent to japan.
+; rsr 3/30/81 add verify error correction
+; rsr 3/31/81 change ordering to detect verify error

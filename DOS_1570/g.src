@@ -1,0 +1,195 @@
+teas *=$7714
+	.if *-*-<*
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$10
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$14
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$18
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$1c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$20
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$24
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$28
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$2c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$30
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$34
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$38
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$3c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$40
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$44
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$48
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$4c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$50
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$54
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$58
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$5c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$60
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$64
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$68
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$6c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$70
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$74
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$78
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$7c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$80
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$84
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$88
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$8c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$90
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$94
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$98
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$9c
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$a0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$a4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$a8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$ac
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$b0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$b4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$b8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$bc
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$c0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$c4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$c8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$cc
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$d0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$d4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$d8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$dc
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$e0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$e4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$e8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$ec
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$f0
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$f4
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$f8
+	nop		; fill address error
+	.endif
+	.if *-*-<*-$fc
+	nop		; fill address error
+	.endif
+	lda $0000
+	.end

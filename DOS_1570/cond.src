@@ -1,0 +1,207 @@
+	.ife *-*-<*
+	nop		; fill address error
+	.endif
+	.ife *-*-<*+$13
+	nop		; fill address error
+	.endif
+.end
+*=$9003
+test
+	lda #4
+	shit=test->test
+	.ife shit-3
+	nop		; fill address error
+	.endif
+	.ife *->*-$7
+	nop		; fill address error
+	.endif
+	.ife *->*-$b
+	nop		; fill address error
+	.endif
+	.ife *->*-$f
+	nop		; fill address error
+	.endif
+	.ife *->*-$13
+	nop		; fill address error
+	.endif
+	.ife *->*-$17
+	nop		; fill address error
+	.endif
+	.ife *->*-$1b
+	nop		; fill address error
+	.endif
+	.ife *->*-$f
+	nop		; fill address error
+	.endif
+	.ife *->*-$23
+	nop		; fill address error
+	.endif
+	.ife *->*-$27
+	nop		; fill address error
+	.endif
+	.ife *->*-$2b
+	nop		; fill address error
+	.endif
+	.ife *->*-$2f
+	nop		; fill address error
+	.endif
+	.ife *->*-$33
+	nop		; fill address error
+	.endif
+	.ife *->*-$37
+	nop		; fill address error
+	.endif
+	.ife *->*-$3b
+	nop		; fill address error
+	.endif
+	.ife *->*-$3f
+	nop		; fill address error
+	.endif
+	.ife *->*-$43
+	nop		; fill address error
+	.endif
+	.ife *->*-$47
+	nop		; fill address error
+	.endif
+	.ife *->*-$4b
+	nop		; fill address error
+	.endif
+	.ife *->*-$4f
+	nop		; fill address error
+	.endif
+	.ife *->*-$53
+	nop		; fill address error
+	.endif
+	.ife *->*-$57
+	nop		; fill address error
+	.endif
+	.ife *->*-$5b
+	nop		; fill address error
+	.endif
+	.ife *->*-$5f
+	nop		; fill address error
+	.endif
+	.ife *->*-$63
+	nop		; fill address error
+	.endif
+	.ife *->*-$67
+	nop		; fill address error
+	.endif
+	.ife *->*-$6b
+	nop		; fill address error
+	.endif
+	.ife *->*-$6f
+	nop		; fill address error
+	.endif
+	.ife *->*-$73
+	nop		; fill address error
+	.endif
+	.ife *->*-$77
+	nop		; fill address error
+	.endif
+	.ife *->*-$7b
+	nop		; fill address error
+	.endif
+	.ife *->*-$7f
+	nop		; fill address error
+	.endif
+	.ife *->*-$83
+	nop		; fill address error
+	.endif
+	.ife *->*-$87
+	nop		; fill address error
+	.endif
+	.ife *->*-$8b
+	nop		; fill address error
+	.endif
+	.ife *->*-$8f
+	nop		; fill address error
+	.endif
+	.ife *->*-$93
+	nop		; fill address error
+	.endif
+	.ife *->*-$97
+	nop		; fill address error
+	.endif
+	.ife *->*-$9b
+	nop		; fill address error
+	.endif
+	.ife *->*-$9f
+	nop		; fill address error
+	.endif
+	.ife *->*-$a3
+	nop		; fill address error
+	.endif
+	.ife *->*-$a7
+	nop		; fill address error
+	.endif
+	.ife *->*-$ab
+	nop		; fill address error
+	.endif
+	.ife *->*-$af
+	nop		; fill address error
+	.endif
+	.ife *->*-$b3
+	nop		; fill address error
+	.endif
+	.ife *->*-$b7
+	nop		; fill address error
+	.endif
+	.ife *->*-$bb
+	nop		; fill address error
+	.endif
+	.ife *->*-$bf
+	nop		; fill address error
+	.endif
+	.ife *->*-$c3
+	nop		; fill address error
+	.endif
+	.ife *->*-$c7
+	nop		; fill address error
+	.endif
+	.ife *->*-$cb
+	nop		; fill address error
+	.endif
+	.ife *->*-$cf
+	nop		; fill address error
+	.endif
+	.ife *->*-$d3
+	nop		; fill address error
+	.endif
+	.ife *->*-$d7
+	nop		; fill address error
+	.endif
+	.ife *->*-$db
+	nop		; fill address error
+	.endif
+	.ife *->*-$df
+	nop		; fill address error
+	.endif
+	.ife *->*-$e3
+	nop		; fill address error
+	.endif
+	.ife *->*-$e7
+	nop		; fill address error
+	.endif
+	.ife *->*-$eb
+	nop		; fill address error
+	.endif
+	.ife *->*-$ef
+	nop		; fill address error
+	.endif
+	.ife *->*-$f3
+	nop		; fill address error
+	.endif
+	.ife *->*-$f7
+	nop		; fill address error
+	.endif
+	.ife *->*-$fb
+	nop		; fill address error
+	.endif
+	.ife *->*-$ff
+	nop		; fill address error
+	.endif
+	.endif	
+
+	lda #4
+	.end

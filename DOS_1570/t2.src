@@ -1,0 +1,9 @@
+bit0	  = 1
+bit1	  = 2
+bit2	  = 4
+bit3	  = 8
+bit4	  = 16
+bit5	  = 32
+bit6	  = 64
+bit7	  = 128
+all	  = 255

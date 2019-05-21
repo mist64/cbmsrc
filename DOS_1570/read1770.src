@@ -1,0 +1,199 @@
+	.subttl 'read1770.src'
+	.page
+; this fixes some problems w/ the wd-1770 ph 00-02
+read_wd .macro arg1
+	.ife <*
+	nop		; fill address error
+	.else
+	.ife <*-$4
+	nop		; fill address error
+	.else
+	.ife <*-$8
+	nop		; fill address error
+	.else
+	.ife <*-$c
+	nop		; fill address error
+	.else
+	.ife <*-$13
+	nop		; fill address error
+	.else
+	.ife <*-$14
+	nop		; fill address error
+	.else
+	.ife <*-$18
+	nop		; fill address error
+	.else
+	.ife <*-$1c
+	nop		; fill address error
+	.else
+	.ife <*-$23
+	nop		; fill address error
+	.else
+	.ife <*-$24
+	nop		; fill address error
+	.else
+	.ife <*-$28
+	nop		; fill address error
+	.else
+	.ife <*-$2c
+	nop		; fill address error
+	.else
+	.ife <*-$33
+	nop		; fill address error
+	.else
+	.ife <*-$34
+	nop		; fill address error
+	.else
+	.ife <*-$38
+	nop		; fill address error
+	.else
+	.ife <*-$3c
+	nop		; fill address error
+	.else
+	.ife <*-$43
+	nop		; fill address error
+	.else
+	.ife <*-$44
+	nop		; fill address error
+	.else
+	.ife <*-$48
+	nop		; fill address error
+	.else
+	.ife <*-$4c
+	nop		; fill address error
+	.else
+	.ife <*-$53
+	nop		; fill address error
+	.else
+	.ife <*-$54
+	nop		; fill address error
+	.else
+	.ife <*-$58
+	nop		; fill address error
+	.else
+	.ife <*-$5c
+	nop		; fill address error
+	.else
+	.ife <*-$63
+	nop		; fill address error
+	.else
+	.ife <*-$64
+	nop		; fill address error
+	.else
+	.ife <*-$68
+	nop		; fill address error
+	.else
+	.ife <*-$6c
+	nop		; fill address error
+	.else
+	.ife <*-$73
+	nop		; fill address error
+	.else
+	.ife <*-$74
+	nop		; fill address error
+	.else
+	.ife <*-$78
+	nop		; fill address error
+	.else
+	.ife <*-$7c
+	nop		; fill address error
+	.else
+	.ife <*-$83
+	nop		; fill address error
+	.else
+	.ife <*-$84
+	nop		; fill address error
+	.else
+	.ife <*-$88
+	nop		; fill address error
+	.else
+	.ife <*-$8c
+	nop		; fill address error
+	.else
+	.ife <*-$93
+	nop		; fill address error
+	.else
+	.ife <*-$94
+	nop		; fill address error
+	.else
+	.ife <*-$98
+	nop		; fill address error
+	.else
+	.ife <*-$9c
+	nop		; fill address error
+	.else
+	.ife <*-$a3
+	nop		; fill address error
+	.else
+	.ife <*-$a4
+	nop		; fill address error
+	.else
+	.ife <*-$a8
+	nop		; fill address error
+	.else
+	.ife <*-$ac
+	nop		; fill address error
+	.else
+	.ife <*-$b3
+	nop		; fill address error
+	.else
+	.ife <*-$b4
+	nop		; fill address error
+	.else
+	.ife <*-$b8
+	nop		; fill address error
+	.else
+	.ife <*-$bc
+	nop		; fill address error
+	.else
+	.ife <*-$c3
+	nop		; fill address error
+	.else
+	.ife <*-$c4
+	nop		; fill address error
+	.else
+	.ife <*-$c8
+	nop		; fill address error
+	.else
+	.ife <*-$cc
+	nop		; fill address error
+	.else
+	.ife <*-$d3
+	nop		; fill address error
+	.else
+	.ife <*-$d4
+	nop		; fill address error
+	.else
+	.ife <*-$d8
+	nop		; fill address error
+	.else
+	.ife <*-$dc
+	nop		; fill address error
+	.else
+	.ife <*-$e3
+	nop		; fill address error
+	.else
+	.ife <*-$e4
+	nop		; fill address error
+	.else
+	.ife <*-$e8
+	nop		; fill address error
+	.else
+	.ife <*-$ec
+	nop		; fill address error
+	.else
+	.ife <*-$f3
+	nop		; fill address error
+	.else
+	.ife <*-$f4
+	nop		; fill address error
+	.else
+	.ife <*-$f8
+	nop		; fill address error
+	.else
+	.ife <*-$fc
+	nop		; fill address error
+	.else
+	.endif	
+	arg1 wdstat     ; read status reg
+	.endm

@@ -1,0 +1,28 @@
+	
+  *=$C050
+HELLO   STA  $18
+	CMP  #36
+	PHP
+	LDA  $1801
+	AND  #4		; BIT 2
+	ASL  A		;     3
+	ASL  A		;     4
+	ASL  A		;     5
+	ASL  A		;     6
+	ASL  A		;     7
+	PLP
+	AND  #$80
+	BCC  16$	; SIDE ZERO
+
+	BPL  44$	; 1/0
+
+	BMI  17$	; 1/1
+
+16$	BMI  44$	; 0/1
+
+17$     INY
+	RTS
+	
+44$     INY
+	RTS
+	.END

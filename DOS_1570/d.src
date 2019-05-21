@@ -1,0 +1,62 @@
+	.page
+	.subttl 'duplct1.src'
+
+;  controller format disk
+
+jformat lda  #3          
+        jsr  seth        
+        ldx  #3         ; job #3
+	lda  #0
+	sta  fmtsid	; side zero first
+        lda  #$f0       ; format cmd
+        sta  tsttrk     ; init speed var
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcs  1$		; br, error
+
+;read track one sector zero
+
+        lda  #1         ; track 1
+        sta  hdrs+6     ; *
+        lda  #0         ; sector 0
+        sta  hdrs+7     ; *
+        lda  #$80       ; read
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcs  1$		; br, ok...
+
+	lda  #1
+	sta  fmtsid	; side one second
+        lda  #$f0       ; format cmd
+        sta  tsttrk     ; init speed var
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcs  1$		; br, error
+
+;read track thirty-six sector zero
+
+        lda  #36        ; track 36
+        sta  hdrs+6     ; *
+        lda  #0         ; sector 0
+        sta  hdrs+7     ; *
+        lda  #$80       ; read
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcc  3$		; br, ok...
+
+1$	pha		; save .a
+	lda  fastsr	; return from error ?
+	bmi  2$
+
+	pla             ; restore .a
+        ldx  #0         ; set for offset for buffer to det. trk & sect.
+        jmp  jerror     ; show error
+
+2$	pla		; restore stack
+	lda  jobs,x	; retrieve status
+	
+3$	rts             ; good return

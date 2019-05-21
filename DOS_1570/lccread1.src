@@ -1,0 +1,238 @@
+        .page  
+	.subttl 'lccread1.src'
+
+;=============================================================
+;=     8    =     8     =     8     =     8     =     8      =
+;=============================================================
+;   (5) (3  + 2)  (5) (1+  4)   (4  +1) (5)  (2 +  3)   (5)
+;    a      b      c    d           e    f      g        h
+;=============================================================
+
+;    read in track,sector specified
+;    in header
+
+	*=*+256-<*	;  even page
+
+jdstrt  jsr  jsrch      ;  find header
+        jmp  jsync      ;  and then data block sync
+
+jread   cmp  #0         ;  test if read job
+        beq  jread01    ;  go test if write
+        jmp  jwright      
+
+jread01 jsr  jdstrt     ;  find header and start reading data
+			; sync routine sets y to 0
+
+1$	bit  pota1	;  4
+	bmi  1$		;  3 + 2
+
+        lda  data2      ;  4
+        tax     	;  2   reg x = xxxxx000
+        lda  gcrtb1,x   ;  4   nibble a
+        sta  btab	;  3
+        txa		;  2
+        and  #%00000111 ;  2
+        sta  btab+1	;  3   extract 3 bits nibble b
+
+2$	bit  pota1	;  4
+	bmi  2$		;  3 + 2
+
+        lda  data2      ;  4
+        sta  btab+2	;  3
+        and  #%11000000 ;  2   extract 2 bits nibble b
+        ora  btab+1	;  3
+        tax     	;  2   reg x = xx000xxx
+        lda  gcrtba,x   ;  4   nibble b
+        ora  btab	;  3
+        pha             ;  3
+        jmp  5$		;  3   
+
+;********************************************************************
+
+3$	bit  pota1	;  4
+	bmi  3$		;  3 + 2
+
+        lda  data2      ;  4
+        tax     	;  2   reg x = xxxxx000
+        lda  gcrtb1,x   ;  4   nibble a
+        sta  btab	;  3
+	txa		;  2
+        and  #%00000111 ;  2
+        sta  btab+1	;  3   extract 3 bits nibble b
+
+4$	bit  pota1	;  4
+	bmi  4$		;  3 + 2
+
+	lda  data2      ;  4
+        sta  btab+2	;  3
+        and  #%11000000 ;  2
+        ora  btab+1	;  3
+        tax             ;  2   reg x = xx000xxx
+        lda  gcrtba,x   ;  4   nibble b
+        ora  btab	;  3
+        sta  (bufpnt),y ;  6
+        iny     	;  2
+        beq  6$		;  2
+
+5$	lda  btab+2	;  3
+        tax     	;  2   reg x = 00xxxxx0
+        lda  gcrtb2,x   ;  4   nibble c
+        sta  btab	;  3
+	txa		;  2
+        and  #%00000001 ;  2
+        sta  btab+2	;  3   extract 1 bits nibble d
+
+7$	bit  pota1	;  4
+	bmi  7$		;  3 + 2
+
+        lda  data2      ;  4
+        sta  btab+3	;  3
+        and  #%11110000 ;  2
+        ora  btab+2	;  3
+        tax     	;  2   reg x = xxxx000x
+        lda  gcrtbd,x   ;  4   nibble d
+        ora  btab	;  3
+        sta  (bufpnt),y ;  6
+        iny     	;  2
+        lda  btab+3	;  3
+        and  #%00001111 ;  2
+        sta  btab+3	;  3   extract 4 bits nibble e
+
+8$	bit  pota1	;  4
+	bmi  8$		;  3 + 2
+
+        lda  data2      ;  4
+        sta  chksum	;  3
+        and  #%10000000 ;  2
+        ora  btab+3	;  3
+        tax     	;  2   reg x = x000xxxx
+        lda  gcrtbe,x   ;  4   nibble e
+        sta  btab	;  3
+        lda  chksum	;  3
+        tax     	;  2   reg x = 0xxxxx00
+        lda  gcrtb3,x   ;  4   nibble f
+        ora  btab	;  3
+        sta  (bufpnt),y ;  6
+        iny     	;  2
+	txa		;  2
+        and  #%00000011 ;  2
+        sta  chksum	;  3   extract 2 bits nibble g
+
+9$	bit  pota1	;  4
+	bmi  9$		;  3 + 2
+
+        lda  data2      ;  4
+        sta  btab+1	;  3
+        and  #%11100000 ;  2
+        ora  chksum	;  3
+        tax     	;  2   reg x = xxx000xx
+        lda  gcrtbg,x   ;  4   nibble g
+        sta  btab	;  3
+        lda  btab+1	;  3
+        tax     	;  2   reg x = 000xxxxx
+        lda  gcrtb4,x   ;  4   nibble h
+        ora  btab	;  3
+        sta  (bufpnt),y ;  6
+        iny     	;  2
+        jmp  3$		;  4
+
+;*******************************************************************
+
+6$	lda  btab+2	;  3
+        tax     	;  2   reg x = 00xxxxx0
+        lda  gcrtb2,x   ;  4   nibble c
+        sta  btab	;  3
+	txa		;  2
+        and  #%00000001 ;  2
+        sta  btab+2	;  3
+
+10$	bit  pota1	;  4
+	bmi  10$	;  3 + 2
+
+        lda  data2      ;  4
+        and  #%11110000 ;  2
+        ora  btab+2	;  3
+        tax     	;  2   reg x = xxxx000x
+        lda  gcrtbd,x   ;  4   nibble d
+        ora  btab	;  3
+        sta  btab+1	;  3   store off cs byte
+
+        pla     	; retrieve first byte off of disk
+        cmp  dbid       ; see if it is a 7
+        bne  12$	; br, nope
+
+
+	jsr  chkblk     ; calc checksum
+        cmp  btab+1
+        beq  11$
+
+        lda  #5         ; data block checksum error
+        .byte    skip2   
+12$	lda  #4          
+        .byte    skip2   
+
+11$	lda  #1         ; read data block ok
+        jmp  jerrr        
+
+
+jsrch   lda  dskid      ; get master id for the drive
+        sta  header      
+        lda  dskid+1     
+        sta  header+1    
+	
+        ldy  #0         ; get track,sectr
+        lda  (hdrpnt),y          
+        sta  header+2    
+        iny      
+        lda  (hdrpnt),y          
+        sta  header+3    
+
+        lda  #0          
+        eor  header      
+        eor  header+1    
+        eor  header+2    
+        eor  header+3    
+        sta  header+4   ; store the checksum
+        jsr  conhdr     ; convert header to gcr
+
+        lda  #90        ; search 90 sync chars
+        sta  tmp         
+1$	jsr  jsync      ; find sync
+
+2$	lda  stab,y     ; what it should be
+3$	bit  pota1
+	bmi  3$
+
+        cmp  data2      ; is it the same .cmp absolute
+        bne  4$		; nope
+
+        iny      
+        cpy  #8          
+        bne  2$
+
+        rts      
+
+4$	dec  tmp        ; try again
+        bne  1$
+
+        lda  #2         ; cant find this header
+	jmp  jerrr        
+
+
+jsync   ldx  #15
+	ldy  #0		; s/w timers ok
+1$	bit  dskcnt	; sync a synch ?
+	bpl   2$
+
+	dey
+	bne  1$
+	
+	dex
+	bne  1$
+
+	lda  #3
+	jmp  jerrr	; sync error
+	
+2$	lda  data2	; clear pa latch
+	ldy  #0         ; clear pointer
+        rts      

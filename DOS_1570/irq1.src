@@ -1,0 +1,45 @@
+        .page  
+	.subttl 'irq1571.src'
+
+jirq	pha     	; save .a,.x,.y
+        txa      
+        pha      
+        tya      
+        pha      
+
+        lda  ifr1	; chk for fast byte
+irq_71	and  #4
+	beq  1$
+
+	bit  sr1	; clr interrupt control bit
+        lda  fastsr      
+        ora  #$40       ; set byte in flag
+        sta  fastsr      
+
+1$	lda  ifr1	; test for atn
+	and  #2
+	beq  2$
+
+	lda  pa1	; clear irq (ca1)
+        lda  #1         ; handle atn request
+        sta  atnpnd     ; flag atn is pending
+
+2$	tsx     	; check break flag
+        lda  $0104,x    ; check processor status
+        and  #$10        
+        beq  3$
+
+        jsr  jlcc       ; forced irq do controller job
+
+3$	lda  ifr2	; test if timer
+	asl  a
+	bpl  4$
+
+        jsr  jlcc       ; goto controller
+
+4$	pla     	; restore .y,.x,.a
+        tay      
+        pla      
+        tax      
+        pla      
+        rti      

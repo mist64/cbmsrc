@@ -1,0 +1,309 @@
+        .page  
+	.subttl 'fastld.src'
+
+fstload jsr  spout	; output
+	jsr  set_fil	; setup filename for parser
+	bcs  9$
+
+        jsr  autoi	; init mechanism
+	lda  nodrv	; chk status
+	bne  9$		; no drive status
+
+	lda  fastsr	; set error recovery flag on
+	ora  #$81	; & eoi flag
+	sta  fastsr	
+	jsr  findbuf	; check for buffer availabilty
+
+	lda  cmdbuf
+	cmp  #'*	; load last ?
+	bne  7$
+	
+	lda  prgtrk	; any file ?
+	beq  7$
+
+	pha		; save track
+	lda  prgsec
+	sta  filsec	; update
+	pla
+	jmp  1$
+
+7$	lda  #0          
+	tay
+	tax		; clear .a, .x, .y
+        sta  lstdrv     ; init drive number
+	sta  filtbl	; set up for file name parser
+        jsr  onedrv     ; select drive
+	lda  f2cnt
+	pha	
+	lda  #1
+	sta  f2cnt
+	lda  #$ff
+	sta  r0		; set flag
+	jsr  lookup	; locate file
+	pla		 
+	sta  f2cnt	; restore var
+	lda  fastsr
+	and  #$7f	; clr error recovery flag
+	sta  fastsr
+	bit  switch	; seq flag set ?
+	bmi  8$
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+; 	lda  pattyp	; is it a program file ?
+;	cmp  #2
+	jsr  ptch56	; *** rom ds 07/15/85 ***
+	nop		; fill
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	bne  6$		; not prg
+
+8$      lda  filtrk     ; check if found. err if not
+        bne  1$		; br, file found
+
+6$    	ldx  #%00000010	; file not found
+	.byte skip2
+9$	ldx  #%00001111	; no drive
+        jmp  sys_err	
+
+1$      sta  prgtrk	; save for next
+	pha		; save track
+	jsr  set_buf	; setup buffer allocation
+	pla		; get track
+	ldx  channel	; get channel offset
+	sta  hdrs,x	; setup track
+        lda  filsec     ; & sector
+	sta  prgsec	; for next time
+        sta  hdrs+1,x
+
+	lda  #read	; read job
+	sta  cmdbuf+2	; save read cmd
+	sta  ctl_cmd	
+
+2$	cli		; let controller run
+	ldx  jobnum	; get job #
+	lda  ctl_cmd	; get cmd
+	sta  jobs,x	; send cmd
+	jsr  stbctr	; whack the controller in the head
+	cpx  #2		; error ?
+	bcc  5$
+	
+	jmp  ctr_err
+
+5$	sei
+	ldy  #0
+	lda  (dirbuf),y	; check status
+	beq  end_of_file	
+
+	lda  fastsr	; clear flag
+	and  #$fe
+	sta  fastsr
+
+	jsr  handsk	; handshake error to the host
+
+	ldy  #2
+3$	lda  (dirbuf),y
+	tax		; save data in .x
+	jsr  handsk	; handshake it to the host
+	iny
+	bne  3$
+
+	ldx  channel	; jobnum * 2
+	lda  (dirbuf),y ; .y = 0
+	cmp  hdrs,x	; same as previous track ?
+	beq  4$
+
+	ldy  #read
+	.byte skip2
+4$	ldy  #fread	; fast read
+	sty  ctl_cmd	; command to seek then read
+	sta  hdrs,x	; next track
+	ldy  #1		; sector entry
+	lda  (dirbuf),y	
+	sta  hdrs+1,x	; next sector	
+	jmp  2$
+
+
+end_of_file
+	ldx  #$1f	; eof
+	jsr  handsk	; handshake it to the host
+
+	lda  #1
+	bit  fastsr	; first time through ?
+	beq  1$	        ; br, nope
+
+	tay		; .y = 1
+	lda  (dirbuf),y	; number of bytes
+	sec
+	sbc  #3
+	sta  ctl_dat	; save it
+	tax		; send it
+	jsr  handsk	; handshake it to the host
+
+	iny		; next
+	lda  (dirbuf),y	; address low
+	tax
+	jsr  handsk	; handshake it to the host
+
+	iny
+	lda  (dirbuf),y	; address high
+	tax
+	jsr  handsk	; handshake it to the host
+	ldy  #4		; skip addresses
+	bne  3$		; bra
+
+1$      ldy  #1
+	lda  (dirbuf),y	; number of bytes
+	tax
+	dex
+	stx  ctl_dat	; save here
+	jsr  handsk	; handshake it to the host
+
+	ldy  #2		; start at data
+3$	lda  (dirbuf),y
+	tax
+	jsr  handsk	; handshake it to the host
+	iny
+	dec  ctl_dat	; use it as a temp
+	bne  3$
+
+	lda  #0
+	sta  sa
+	jsr  close	; close channel	(faux)
+	jmp  endcmd
+;
+;
+;
+; *************************
+; ***** ERROR HANDLER *****
+; *************************
+
+ctr_err sei		; no irq's
+	stx  ctl_dat	; save status here
+	jsr  handsk	; handshake it to the host
+	lda  #0
+	sta  sa
+	jsr  close	; close channel (faux)
+	ldx  jobnum
+	lda  ctl_dat	; get error
+	jmp  error	; error out.....	
+
+sys_err sei
+	stx  ctl_dat	; save error
+	ldx  #2		; file not found 
+	jsr  handsk	; give it to him
+	lda  #0
+	sta  sa
+	jsr  close	; close channel (faux)
+	lda  ctl_dat	; get error back
+	cmp  #2
+	beq  1$
+
+	lda  #nodriv	; no active drive
+	.byte skip2
+1$	lda  #flntfd	; file not found
+	jmp  cmderr	; never more...
+;
+;
+;
+; *************************************
+; ***** FIND INTERNAL READ BUFFER *****
+; *************************************
+
+findbuf lda  #0
+	sta  sa		; psydo-load 
+	lda  #1		; 1 buffer
+	jsr  getrch	; find a read channel
+	tax
+	lda  bufind,x	; get buffer
+	sta  dirbuf+1	; set it up indirect
+	rts	
+;
+;
+;
+; **************************************
+; ***** SETUP INTERNAL READ BUFFER *****
+; **************************************
+
+set_buf lda  dirbuf+1	; index to determine job
+	sec
+	sbc  #3
+	sta  jobnum	; save in jobnum
+	asl  a
+	sta  channel	; save channel off
+	lda  #0
+	sta  dirbuf	; even page boundary
+	rts
+;
+;
+;
+; *************************************
+; ***** FAST LOAD FILENAME PARSER *****
+; *************************************
+
+set_fil ldy  #3		; default .y
+	lda  cmdsiz	; delete burst load command
+	sec
+	sbc  #3
+	sta  cmdsiz	; new command size
+
+	lda  cmdbuf+4   ; drv # given ?
+	cmp  #':
+	bne  1$
+
+	lda  cmdbuf+3
+	tax		; save 
+	and  #'0
+	cmp  #'0        ; 0:file ?
+	bne  1$
+
+	cpx  #'1	; chk for error
+	beq  4$			
+
+1$	lda  cmdbuf+3   ; drv # given ?
+	cmp  #':
+	bne  2$
+
+	dec  cmdsiz
+	iny
+
+2$	ldx  #0		; start at cmdbuf+0
+3$      lda  cmdbuf,y	; extract file-name
+	sta  cmdbuf,x
+	iny
+	inx
+	cpx  cmdsiz	; done ?
+	bne  3$		; delete cmd from buffer
+
+	clc
+	.byte skip1
+4$	sec		; error
+	rts
+
+
+
+handsk			; .x contains data
+1$	lda  pb		; debounce
+        cmp  pb
+        bne  1$
+
+	and  #$ff	; set/clr neg flag
+        bmi  3$		; br, attn low 
+
+        eor  fastsr     ; wait for state chg
+        and  #4          
+        beq  1$
+
+        stx  sdr	; send it
+        lda  fastsr      
+        eor  #4         ; change state of clk
+        sta  fastsr      
+
+        lda  #8
+2$	bit  icr	; wait transmission time
+        beq  2$
+
+        rts      
+
+3$	jmp  ptch30	; bye-bye the host wants us

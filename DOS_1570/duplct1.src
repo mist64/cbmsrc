@@ -1,0 +1,73 @@
+	.page
+	.subttl 'duplct1.src'
+
+;  controller format disk
+
+jformat lda  #71	
+	nop
+	nop
+	nop		; *** rom ds 05/15/86 ***
+	lda  #3          
+        jsr  seth        
+        ldx  #3         ; job #3
+	lda  #0
+	sta  fmtsid	; side zero first
+        lda  #$f0       ; format cmd
+        sta  tsttrk     ; init speed var
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcs  1$		; br, error
+
+;read track one sector zero
+
+	ldy  #3		; retries
+4$      lda  #1         ; track 1
+        sta  hdrs+6     ; *
+        lda  #0         ; sector 0
+        sta  hdrs+7     ; *
+        lda  #$80       ; read
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcc  5$		; br, ok...
+	
+	dey
+	bpl  4$		; try 3 times
+	bcs  1$		; bra
+
+5$	rts		; no need to format side 1 * sl 8/23/85 *
+	nop
+	sta  fmtsid	; side one second
+        lda  #$f0       ; format cmd
+        sta  tsttrk     ; init speed var
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcs  1$		; br, error
+
+;read track thirty-six sector zero
+
+	ldy  #3		; retries
+6$      lda  #36        ; track 36
+        sta  hdrs+6     ; *
+        lda  #0         ; sector 0
+        sta  hdrs+7     ; *
+        lda  #$80       ; read
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+	bcs  3$		; br, bad
+
+	rts		; ok
+	
+3$	dey
+	bpl  6$		; keep trying
+
+1$      ldx  #0         ; set for offset for buffer to det. trk & sect.
+	bit  jobrtn	; return on error ?
+	stx  jobrtn	; clr
+	bpl  7$
+
+	rts		; back to caller
+7$	jmp  error

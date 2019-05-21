@@ -1,0 +1,42 @@
+;*********************************
+;* sstst: test ssnum & ssind for *
+;*        residence & range.     *
+;*   vars:  ssnum,ssind,dirbuf   *
+;*                               *
+;*   flags: .n rng  .v res  er   *
+;*           0  ok   0 yes  er0  *
+;*           0 maybe 1 no   er1  *
+;*           1 no    0 yes  er2  *
+;*           1 no    1 no   er3  *
+;*********************************
+;
+sstest           
+        jsr  ssset      ; set pointer & ss #
+        cmp  ssnum       
+        bne  st20       ; not this ss
+;
+        ldy  ssind       
+        lda  (dirbuf),y          
+        beq  st10        
+        bit  er0        ; ok, resident
+        rts      
+st10             
+        bit  er2        ; out of range, res
+        rts      
+st20             
+        lda  ssnum       
+        cmp  #nssl       
+        bcs  st30        
+        asl  a   
+        tay      
+        lda  #4          
+        sta  dirbuf      
+        lda  (dirbuf),y          
+        bne  st40        
+st30             
+        bit  er3        ; way out of range
+        rts      
+st40             
+        bit  er1        ; not res, range???
+        rts      
+;.end

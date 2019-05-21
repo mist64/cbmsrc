@@ -1,0 +1,6 @@
+teas *=$77fb
+	.if *-*-<*
+	nop		; fill address error
+	.endif
+	lda $0000
+	.end

@@ -1,0 +1,182 @@
+        .page  
+	.subttl 'seratn1.src'
+
+jatnsrv sei      
+        lda  #0         ; clear pending flag
+        sta  atnpnd      
+        sta  lsnact     ; clear address flags
+        sta  tlkact      
+        ldx  #topwrt    ; reset stack
+        txs      
+	jsr  spinp	
+
+        lda  #$80       ; set atn mode flag for acpt routine
+        sta  eoiflg     ; reset eoi flag to non-eoi state
+        sta  atnmod      
+
+        jsr  clkhi       
+        jsr  datlow     ; set data line low as response
+
+        lda  pb		; set atn ack to release data line
+        ora  #atna
+	sta  pb
+
+1$	lda  pb		; test atn still here
+        bpl  a2		; gone !
+
+        and  #clkin     ; clock still low
+        bne  1$
+
+a3	jsr  jacptr+3   ; get a command byte
+
+	cmp  #unlsn      
+        bne  a4
+
+	lda  fastsr	; clr fast host flag
+	and  #$ff-$40
+	sta  fastsr
+	lda  #0
+	sta  lsnact	
+        beq  a6		; jmp
+
+a4	cmp  #untlk      
+        bne  a5
+
+	lda  fastsr	; clr fast host flag
+	and  #$ff-$40
+	sta  fastsr
+        lda  #0          
+        sta  tlkact     ; untalk now
+
+a6	jmp  a9		; jmp
+
+a5	cmp  tlkadr     ; our talk address?
+        bne  a7		; nope
+
+        lda  #1         ; yes
+        sta  tlkact     ; set active talker flag
+        lda  #0          
+        sta  lsnact     ; unlisten
+        beq  a8		; jump
+
+a7	cmp  lsnadr     ; our listen address?
+        bne  a10	; nope
+
+        lda  #1         ; yes
+        sta  lsnact      
+        lda  #0          
+        sta  tlkact      
+        beq  a8		; jump
+
+a10	tax     	; test if sa
+        and  #$60        
+        cmp  #$60       ; sa = $60 + n
+        bne  a11	; did not get a valid command
+
+        txa     	; a sa for me
+        sta  orgsa       
+        and  #$0f       ; strip junk
+        sta  sa          
+
+        lda  orgsa      ; test if close
+        and  #$f0        
+        cmp  #$e0        
+        bne  a9		; no
+
+        cli      
+        jsr  close      ; close the file
+        sei      
+
+;warning:::close doesn't return in time for a9	
+
+a8	bit  pb		; test atn still here
+        bmi  a3
+
+;atn gone , do what we where told to do
+
+a2	lda  #0         ; clear atn mode
+        sta  atnmod      
+
+        lda  pb		; atn gone, release atn ack
+        and  #$ff-atna   
+	sta  pb
+
+        lda  lsnact     ; listen ?
+        beq  a12
+
+        bit  fastsr     ; fast ?
+        bvc  a14
+
+        jsr  reqfst     ; fast request
+a14	jsr  jlisten      
+        jmp  xidle       
+
+a12	lda  tlkact     ; talk?
+        beq  a13
+
+        jsr  dathi      ; release data line
+        jsr  clklow      
+
+        jsr  jslowd     ; slow down for plus4 series
+        jsr  jtalk        
+        jsr  jslowd     ; slow down for plus4 series
+a13	jmp  jilerr     ; release all lines and go to idle
+
+;fix so (device not present) errors reported
+
+a11	lda  #$10	; kill all 
+	sta  pb
+
+a9	bit  pb
+        bpl  a2		; exit out same way after atn done
+
+        bmi  a9		; bra
+
+reqfst  jsr  tstatn     ; does the host want us ?
+        jsr  debnc       
+        and  #clkin      
+        bne  reqfst     ; wait for clk hi
+
+        jsr  spout      ; output
+
+        lda  #0          
+        sta  sdr	; send zero
+
+slowb   lda  #8
+1$	bit  icr
+        beq  1$
+
+spinp   php		; save uP status
+	sei
+	lda  cra	; turn 6526 in
+        and  #%10111111 ; serial port input
+        sta  cra
+        lda  pota1	; turn drvr in
+        and  #%11111101
+	sta  pota1
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	lda  #$88	; *** rom ds 11/05/85 beta2 ***, sp irq
+;	lda  #$84
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	sta  icr	; enable irq from serial port
+	bit  icr	; clear pending
+	plp
+	rts      
+
+spout   php		; save uP status
+	sei
+	lda  pota1
+        ora  #%00000010	; turn drvr out
+        sta  pota1
+	lda  cra	; turn 6526 out
+        ora  #%01000000
+        sta  cra
+	lda  #8
+	sta  icr	; disable irq from serial port
+	bit  icr	; clr pending	
+	plp
+        rts      

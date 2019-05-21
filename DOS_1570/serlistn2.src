@@ -1,0 +1,116 @@
+        .page  
+        .subttl 'serlistn1.src'
+
+jacptr  bit  icr	; clear pending
+        lda  #8         ; set byte bit count
+        sta  cont        
+
+1$	jsr  tstatn      
+        jsr  debnc       
+        and  #clkin      
+        bne  1$
+
+        jsr  dathi      ; make data line hi
+
+	lda  #1
+2$	bit  pb		; wait for data high
+	bne  2$
+
+	sta  t1hc1	; wait for 256 uS
+	
+3$	jsr  tstatn      
+	lda  ifr1
+	and  #$40	; time out ?
+	bne  4$
+
+        jsr  debnc      ; test clock low
+        and  #clkin      
+        beq  3$		; no
+        bne  5$		; yes
+
+4$	jsr  datlow     ; set data line low as response
+
+        ldx  #24        ; delay for talker turnaround
+6$	dex      
+        bne  6$
+
+        jsr  dathi      ; set data line hi
+
+7$	jsr  tstatn      
+        jsr  debnc      ; wait for low clock
+        and  #clkin      
+        beq  7$
+
+        lda  #0         ; set eoi received
+        sta  eoiflg      
+
+5$
+8$	lda  pb		; wait for clock high
+        eor  #01        ; complement datain
+;**********  fast routines  **********
+        tax     	; save .a
+        lda  icr
+        and  #8		; fast byte ?
+        beq  11$
+
+        lda  sdr	; get data
+        sta  data       ; keep
+        jmp  10$	; finish up
+;**********    end fast     **********
+11$	txa     	; restore .a
+        lsr  a          ; shift into carry
+        and  #$02       ; clkin/2
+        bne  8$
+
+        ror  data        
+
+9$	jsr  tstatn      
+        jsr  debnc       
+        and  #clkin     ; wait for clock low
+        beq  9$
+
+        dec  cont       ; more to do?
+        bne  8$
+
+10$	jsr  datlow     ; set data line low
+        lda  data        
+        rts      
+
+jlisten sei      
+
+        jsr  fndwch     ; test if active write channel
+        bcs  1$
+
+        lda  chnrdy,x    
+        ror  a   
+        bcs  2$
+
+1$	lda  orgsa      ; test if open
+        and  #$f0        
+        cmp  #$f0        
+        beq  2$		; its an open
+
+        jmp  jilerr     ; not active channel
+
+2$	jsr  jacptr     ; get a byte
+
+        cli      
+        jsr  put        ; put(data,eoiflg,sa)
+
+        jmp  jlisten    ; and keep on listen
+
+
+jfrmerr           
+	lda  #0		; *** rom ds -06 *** / clr fastsr after serial bus error
+	sta  fastsr	
+jilerr            
+        lda  #0		; release all bus lines
+        sta  pb		; in atnmod
+xidle	
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+;	jsr  spinp
+	jsr  ptch57	; *** rom ds 08/01/85 ***, test for input & execute
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+	jmp  idle	; go idle it

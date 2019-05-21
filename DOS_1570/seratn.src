@@ -1,0 +1,132 @@
+	.page  
+	.subttl 'ser.atn'       
+
+atnirq  lda  pa1        ;  clear irq (ca1)
+        lda  #1          
+        sta  atnpnd      
+        rts      
+
+atnsrv  sei      
+
+        lda  #0         ;  clear pending flag
+        sta  atnpnd      
+        sta  lsnact     ;  clear address flags
+        sta  tlkact      
+
+        ldx  #topwrt    ;  reset stack
+        txs      
+
+        lda  #$80       ;  set atn mode flag for acpt routine
+        sta  eoiflg     ; reset eoi flag to non-eoi state
+        sta  atnmod      
+
+        jsr  clkhi       
+        jsr  datlow     ;  set data line low as response
+
+        lda  pb          
+; set atn ack to get hardware control of data line
+        ora  #atna       
+        sta  pb          
+
+atns15  lda  pb         ;  test atn still here
+        bpl  atns20     ;  gone !
+        and  #clkin     ;  clock still low
+        bne  atns15      
+
+
+atn30   jsr  acptr      ;  get a command byte
+
+        cmp  #unlsn      
+        bne  atn35       
+
+        lda  #0         ;  general unlisten command
+        sta  lsnact      
+        beq  atn122     ;  jmp
+
+atn35   cmp  #untlk      
+        bne  atn40       
+
+        lda  #0          
+        sta  tlkact     ;  untalk now
+        beq  atn122     ;  jmp
+
+atn40   cmp  tlkadr     ;  our talk address?
+        bne  atn45      ;  nope
+
+        lda  #1         ;  yes
+        sta  tlkact     ;  set active talker flag
+        lda  #0          
+        sta  lsnact     ;  unlisten
+        beq  atn95      ; jump
+
+atn45   cmp  lsnadr     ;  out listen address?
+        bne  atn50      ;  nope
+
+        lda  #1         ;  yes
+        sta  lsnact      
+        lda  #0          
+        sta  tlkact      
+        beq  atn95      ; jump
+
+atn50   tax     	;  test if sa
+        and  #$60        
+        cmp  #$60       ;  sa = $60 + n
+        bne  atn120     ; did not get a valid command
+
+
+        txa     	;  a sa for me
+        sta  orgsa       
+        and  #$0f       ;  strip junk
+        sta  sa          
+
+        lda  orgsa      ;  test if close
+        and  #$f0        
+        cmp  #$e0        
+        bne  atn122     ;  no
+
+        cli      
+        jsr  close      ;  close the file
+        sei      
+
+; warning:::close doesn't return in time for atn122:::
+
+atn95   bit  pb         ;  test atn still here
+        bmi  atn30       
+
+
+; atn gone , do what we where told to do
+
+
+atns20  lda  #0         ;  clear atn mode
+        sta  atnmod      
+
+        lda  pb         ;  atn gone , release atn ack
+        and  #$ff-atna   
+        sta  pb          
+
+        lda  lsnact     ;  listen ?
+        beq  atn100      
+
+        jsr  listen      
+        jmp  xidle        
+
+atn100  lda  tlkact     ;  talk?
+        beq  atn110      
+
+        jsr  dathi      ;  release data line
+        jsr  clklow     ;  pull clock low
+
+        jsr  talk        
+atn110  jmp  ilerr      ;  release all lines and go to xidle
+
+; fix so (device not present) errors reported
+
+atn120  lda  #$10       ; kill all but atnak
+        sta  pb          
+atn122  bit  pb          
+        bpl  atns20     ; exit out same way after atn done
+        bmi  atn122     ; jmp
+
+; rsr 12/8/80 fix inverted logic
+; rsr 12/16/80 fix bad logic
+; rsr 12/31/80 fix eoiflg and logic

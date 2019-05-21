@@ -1,0 +1,873 @@
+	.page  
+	.subttl 'fstutl.src'
+
+;  BURST COMMAND INSTRUCTION SET
+;
+;NOTE: PREFIX = Ascii "U0"
+;           X = Don't Care.
+;          
+;         CMD 1    N = %TEBS000x       : Burst read cmd.
+;
+;                   PREFIX+N+TT+SS+NN+NT
+;
+;	switch:	       T ............ Transfer data = 0
+;		       E ............ Ignore Error = 1 
+;                      B ............ Buffer Transfer Only = 1
+;		       S ............ Side Select (MFM Only).
+;		       x ............ Drive number.
+;
+;	 input:        TT ............ Destination track.
+;                      SS ............ Destination sector.
+;                      NN ............ Number of sectors to be read.
+;                      NT ... opt .... Next track address.
+;
+;          output: Status byte + Data (Burst).
+;
+;
+;         
+;	
+;
+;
+;
+;
+;
+;
+;
+;
+;	CMD 2    N = %TEBS001x       : Burst write cmd.
+;
+;                   PREFIX+N+TT+SS+NN+NT
+;
+;	switch:	       T ............ Transfer data = 0
+;		       E ............ Ignore Error = 1 
+;                      B ............ Buffer Transfer Only = 1
+;		       S ............ Side Select (MFM Only).
+;		       x ............ Drive number.
+;
+;	 input:	       TT ............ Destination track number.
+;                      SS ............ Destination sector.
+;                      NN ............ Number of sectors to be
+;                                      written.
+;                      NT ... opt .... Next track address.
+;                      Data (Burst).
+;
+;         output:     Status byte (burst).
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 3    N = %XXXS010x       : Inquire diskette type.
+;
+;                    PREFIX+N
+;
+;	 input:     x ............  Drive Number.
+;	            S ............  Side Select (MFM Only).
+;	
+;	output: Status byte (burst).
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 4    N = %PIDS011x       : Format diskette
+;
+;                    PREFIX+N+MD+CP+SZ+LT+NS+ST+S+FL ( MFM )
+;                    PREFIX+N+MD+ID1+ID2 (GCR)
+;
+;	switch:	       P ............ Partial Format = 0
+;		       I ............ Index Mark written + Preamble, I = 1
+;		       S ............ Side, 1=side 1 & 0 = side 0
+;		       D ............ Double Sided Select, 1=double sided
+;				      (MFM Only).
+;
+; 	 input:       MD ............ %MTLLLLLL
+;		       M ............ Mode M=1(MFM), M=0(GCR)
+;		  ***  T ............ Sector Table Download, T=1
+;	         LLLLLLL ............ Logical Sector Number.
+;
+;                      x ............ Drive Number.
+;
+;           ** MFM (a-f)
+;		    a) CP ... opt .... CP/M Interleave (Def 6)
+;                   b) SZ ... opt .... Sector size.
+;                                 %00000000 = 128
+;                                 %00000001 = 256 Default.
+;                                 %00000010 = 512
+;                                 %00000011 = 1024
+;
+;                   c) LT ... opt .... Last track number (Def 39).
+;                   d) NS ... opt .... Number of sectors per track.
+;                                    (Default depends on sector size)
+;
+;                   e) ST ... opt .... Starting track (Def 0) logical.
+;                   f) S  ... opt .... Starting Offset (Def 0) physical.
+;                   g) FL ... opt .... Fill Byte (Def $e5).
+;
+;              GCR
+;                  a) ID1 ............ Identification byte low.
+;                  b) ID2 ............ Identification byte high.
+;          output: NONE.
+;
+;
+;         ** With the P bit set the format will end at LT and 
+;	     track LT+1 will be cleared (MFM only).
+;
+;	 *** With the T bit set a sector Table may be downloaded
+;	     following a complete parameter list.
+;	     i.e. PREFIX+N+MD+CP+SZ+LT+NS+ST+S+FL + SECTOR_TABLE
+;	     This is necessary for example KAYPRO Disk Format.	
+;
+;
+;
+;
+;
+;
+;         CMD 5    N = %WXX0100x       : Sector interleave CP/M.
+;
+;                    PREFIX+N+IT
+;
+;	switch:  T ............ Transfer data = 0
+;
+;	 input:  W ................ Write = 0
+;                x ................ Drive Number.
+;               IT ................ Interleave.
+;
+;         output: With the W bit cleared CP/M interleave is sent
+;	         as a burst byte.
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 6    N = %FXS0101x       : Query disk format.
+;
+;                    PREFIX+N+STP
+;
+;
+;          switch: F ................. Force Flag for STP below, F = 1
+;		   S ................. Side Select (MFM Only).
+;
+;           input: x ................. Drive Number.
+;	         STP .... opt ........ Physical steps from track zero.
+;
+;          output: * Status Byte 
+;		  ** Status Byte on the below data bytes.
+;		     Number of sectors.
+;		     Logical Track.
+;		     Minimum sector number.
+;		     Maximum sector number.
+;		     CP/M Interleave.
+;	          		  
+;*  If an error occurs or mode is GCR then no futher bytes will be sent.
+;** If an error occurs then no futher bytes will be sent.
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 7    N = %WXX0110x       : Inquire Status.
+;
+;                    PREFIX+N+S
+;
+;          switch: T ................. Transfer data = 0
+;
+;           input: x ................. Drive Number.
+;		   W ................. Write = 0
+;		   S ................. With W bit set S is new status.
+;
+;          output: With the W bit cleared status is sent
+;                  as a burst byte.
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 8    N = %XXX0111x       : Backup Disk (2-drive only)
+;
+;                    PREFIX+N+MD
+;
+;           input: To be determined.
+;          output: To be determined.
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 9   N = %XXX11110       : Chgutl utility
+;
+;                    PREFIX+N+P+Q
+;
+;           input: P ................. Command Parameter
+;
+;		 'S'................. Dos Sector Interleave (GCR)
+;				      Q=(0-255), def 6
+;			              "U0>" + CHR$(INT)
+;
+;		 'R'................. DOS Retries
+;				      Q=(1-127), def 5
+;			              "U0>" + CHR$(RET)
+;
+;		 'T'................. Signature Analysis ROM.
+;			              Failure 4 blinks from Activity
+;				      LED.
+;			              "U0>T"
+;
+;		 'M'................. Mode Change Utility.
+;			              "U0>1" = 1571, "U0>0" = 1541
+;
+;            switch: No diskette init change ">" to hold commodore 
+;					key and type the letter"V"
+;
+;
+;
+;		 'H'................. Head Change Utility.
+;			              "U0>1" = Side 1, "U0>0" = Side 0
+;
+;            switch: No diskette init change ">" to hold commodore 
+;					key and type the letter"V"
+;
+;
+;
+;
+;	       Q=(8-15 Decimal)...... Device Number Change.	             
+;			              "U0>" + CHR$(DEV)
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;
+;         CMD 10   N = %PXX11111       : Burst load utility
+;
+;                    PREFIX+N+FILENAME
+;
+;          switch: P ............ If this bit is set than the file type
+;				  may be a sequential file.
+;
+;           input: FILENAME ................. ASCII FILE NAME
+;         
+;          output: 254 data bytes per sector.
+;
+;          status: 0000000X .......... Ok.
+;     		 * 00000010 .......... File not found.
+;	           00011111 .......... EOI (END OF FILE)
+;		   (Followed by number of bytes to follow)
+;		  
+;	         * Controller status in the range (3-15) should 
+;		   be considered an error.
+;
+;
+;
+;
+;
+;
+;
+;
+;  BREAK DOWN OF STATUS BYTE  (Burst Commands 1-8)
+;
+;                  MD DN I1 I2 D1 D2 D3 D4
+;
+;                      MD ............ Mode: 1 = MFM, 0 = GCR.
+;                      DN ............ Drive Number.
+;                      I1, I2 ........ Sector Size.
+;                             a) 00 = 128 bytes
+;                             b) 01 = 256 bytes
+;                             c) 10 = 512 bytes
+;                             d) 11 = 1024 bytes
+
+;                      D1-D4 ........ Controller Status
+;
+;                  GCR
+;
+;                      000x = Ok.
+;                      0010 = Sector not found.
+;                      0011 = No Sync.
+;                      0100 = Data block not found.
+;                      0101 = Data block checksum.
+;                      0110 = Format error.
+;                      0111 = Verify error.
+;                      1000 = Write protect error.
+;                      1001 = Header block checksum.
+;                      1010 = Data extends into next
+;                             block.
+;                      1011 = Disk ID mismatch/Disk change.
+;                      1100 = Unused.
+;                      1101 = Unused.
+;                      1110 = Syntax.
+;                      1111 = No Drive present.
+;         
+;
+;
+;                  MFM
+;
+;                      000x = Ok.
+;                      0010 = Sector not found.
+;                      0011 = No address mark.
+;                      0100 = Unused.
+;                      0101 = Data CRC error.
+;                      0110 = Format error.
+;                      0111 = Verify error.
+;                      1000 = Write protect error.
+;                      1001 = Header CRC error.
+;                      1010 = Unused.
+;                      1011 = Disk change.
+;                      1100 = Unused.
+;                      1101 = Unused.
+;                      1110 = Syntax.
+;                      1111 = No Drive present.
+	.page
+; (1) fast read 
+
+; 0   1    2     3      4    5        6   +  (cmdbuf)
+; ^   ^    ^     ^      ^    ^        ^  
+; U   0    N    trk   sec   #sec   nexttrack(optional)
+        
+
+fstrd   sta  cmd	; save command for dos
+	sta  ctl_cmd	; save command for stbctt
+	
+        bit  lock	; channel open ?
+        bvs  frd_00	
+
+	ldx  #%00001011 ; no channel
+	.byte skip2
+ndkrd	ldx  #%01001111 ; no drive
+
+fail	jsr  upinst     ; update dkmode
+	jsr  statqy	; wait for state handshake
+final	cpx  #2
+	bcs  exbad
+
+	rts
+
+exbad   txa             ; retrieve status
+	and  #15	; bits 0-3 only
+	ldx  #0         ; jobnum
+        jmp  error      ; controller error entry
+  
+
+frd_00	jsr  spout       
+
+	bit  dkmode     ; gcr or mfm ?
+        bpl  rdgcr
+
+
+; 	MFM READ 
+
+	lda  #9         ; read cmd
+        jmp prcmd       
+
+rdgcr	jsr  autoi      ; check for auto init
+
+frd_01	cli             ; let controller run
+	lda  switch	; check for B
+	and  #%00100000
+	bne  bfonly
+
+        lda  cmdbuf+3   ; get track
+        sta  hdrs        
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1      
+        ldx  #0         ; job #0
+        lda  ctl_cmd    ; read ($80) or fread ($88)
+        sta  jobs,x      
+	jsr  stbctt     ; hit controller hard
+
+        sei      	; disable irqs
+	jsr  upinst	; update controller status
+
+	bit  switch	; check E
+	bvs  igerr	
+
+        cpx  #2         ; error
+        bcs  fail
+
+igerr   jsr  hskrd      ; handshake on state of clkin
+
+	lda  switch	; check B
+	bmi  notran
+
+bfonly  ldy  #0         ; even page
+frd_02	lda  $0300,y    ; get data
+        sta  ctl_dat    ; setup data
+        jsr  hskrd      ; handshake on state
+        iny      
+        bne  frd_02
+
+notran	dec  cmdbuf+5   ; any more sectors ?
+        beq  exrd        
+
+        jsr  sektr      ; next sector
+        jmp  frd_01	; more to do
+
+exrd    cli
+        jmp  chksee     ; next track ?
+
+	.page
+; (2) fast write 
+
+; 0   1    2     3      4    5        6   +  (cmdbuf)
+; ^   ^    ^     ^      ^    ^        ^  
+; U   0    N    trk   sec   #sec   nexttrack(optional)
+
+fstwrt  sta  cmd        ; save command for dos
+        bit  lock	; channel open ?
+        bvs  fwrt_0	
+
+	ldx  #%00001011	; no channel
+	.byte  skip2
+ndkwrt	ldx  #%01001111	; no drv 1
+	stx  ctl_dat	; save status
+	lda  switch	; set internal switch
+        ora  #%00001000
+	sta  switch
+
+fwrt_0  bit  dkmode     ; gcr or mfm ?
+        bpl  wrtgcr
+
+
+;	MFM WRITE
+
+	lda  #10
+	jmp  prcmd	
+
+wrtgcr	jsr  autoi      ; chk for autoi
+	
+	lda  switch	; transmision required
+	bmi  notrx
+
+fwrt_1	sei             ; no irqs
+	ldy  #0         ; even page
+fwrt_2  lda  pb		; debounce
+        eor  #clkout    ; toggle state of clock
+	bit  icr	; clear pending
+        sta  pb
+fwrt_3	jsr  tstatn     ; chk for atn
+fwrt_4	lda  pb
+        bmi  fwrt_3	; attn low ?
+
+        lda  icr	; wait for byte
+        and  #8
+        beq  fwrt_4	; chk for attn low only
+
+        lda  sdr	; get data
+        sta  $0300,y    ; put away data
+        iny      
+        bne  fwrt_2	; more ?
+
+	jsr  clkhi	; release clock
+notrx   cli             ; let controller run
+	lda  switch	; check for buffer transfer only
+	and  #%00100000
+	bne  nowrt
+
+	lda  switch	; check internal
+	and  #%00001000
+	beq  notrx0	; br, ok...
+
+	ldx  ctl_dat	; get error
+	jmp  fail	; abort
+
+notrx0  lda  cmdbuf+3   ; get track
+        sta  hdrs        
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1      
+        ldx  #0         ; job #0
+	lda  ctl_cmd	; get write job
+        sta  jobs,x      
+        jsr  stbctt     ; wack controller in the head
+
+        sei             ; no irqs ok !
+        jsr  spout      ; go output
+	jsr  upinst	; update status
+        jsr  hskrd	; send it
+	jsr  burst	; wait for reverse
+	jsr  spinp
+        cli             ; irqs ok now
+        
+	bit  switch	; check error abort switch
+	bvs  nowrt
+
+        cpx  #2         ; error on job ?
+        bcs  fwrt_5	; abort ?
+
+nowrt   dec  cmdbuf+5   ; more sectors ?
+        beq  fwrt_6
+
+        jsr  sektr      ; increment sector
+        jmp  fwrt_1
+
+fwrt_5	jmp  exbad
+
+fwrt_6  cli		; done
+	jmp  chksee	; next track ?
+
+	.page
+; (3) fast seek
+
+; 0   1    2    
+; ^   ^    ^   
+; U   0    N   
+
+fstsek  lda  cmdbuf+2	; check drive number
+	and  #1
+        bne  3$		; drive 1 - error
+
+	lda  #5		; read address cmd
+	jsr  prcmd	; give it to controller
+	
+	ldx  mfmcmd	; get status
+	cpx  #2		; ok ?
+	bcc  2$
+
+	ldx  #0
+	stx  dkmode 	; force gcr,drv0,ok
+	lda  #seek	; seek
+	sta  cmd	; give command to dos
+	sta  jobs,x	; give job to controller
+	jsr  stbctt	; bang the controller
+	.byte  skip2	; return status
+3$	ldx  #%01001111 ; no drv 1
+2$	jmp  fail	; update status
+
+	.page
+; (4) burst format mfm/gcr
+
+; 0   1    2    3	4
+; ^   ^    ^    ^       ^
+; U   0    N    ID     ID
+
+fstfmt  lda  cmdbuf+2   ; check drive number
+	and  #1
+	bne  1$
+
+	lda  cmdbuf+3	; format gcr or mfm ?
+	bpl  2$
+
+
+;       FORMAT IN MFM
+
+	lda  #8		; format disk in mfm
+	jmp  prcmd
+
+2$	lda  #0
+	sta  dkmode     ; force GCR,DRV0
+	sta  nodrv	; drive ok
+	lda  cmdbuf+4
+	sta  dskid	; low id
+	lda  cmdbuf+5
+	sta  dskid+1	; high id
+	
+	jsr  clrchn	; close all channels
+	lda  #1
+	sta  track	; track one
+
+        jsr  ptch28	; format now
+
+	tax		; save error
+	ldx  #%01001111
+	.byte skip2
+	jsr  upinst	; update status
+	jmp  final	; finish up ...
+	
+	.page
+; (5) SOFT INTERLEAVE
+
+; 0   1    2     3 
+; ^   ^    ^     ^    
+; U   0    N    INT
+
+cpmint  sei
+	bit  switch	; read ?
+	bpl  1$		; br, write
+
+	jsr  spout  	; serial port output
+	lda  cpmit	; get current interleave
+	sta  ctl_dat	; send it
+	jmp  hskrd
+
+1$	ldx  cmdsiz      
+        cpx  #4
+        bcs  2$
+
+	ldx  #%00001110 ; syntax
+	jsr  upinst	; update dkmode
+
+        lda  #badcmd     
+        jmp  cmderr      
+
+2$	lda  cmdbuf+3
+	sta  cpmit      ; save
+        rts      
+	.page
+; (6) query disk format
+
+; 0   1    2    3
+; ^   ^    ^    ^
+; U   0    N   STP (opt)
+
+; status / status / cpmsek / logical_track / min_sector / max_sector / hardint
+; mfm/gcr   mfm      mfm          mfm           mfm          mfm        mfm
+
+querdk  jsr  fstsek	; check disk format
+	bit  dkmode	; mfm or gcr ?
+	bpl  2$
+	
+	lda  #13
+	jsr  prcmd	; generate sector table
+
+	ldx  mfmcmd	; status ok ?
+	cpx  #2
+	bcs  1$
+
+	jsr  maxmin	; determine low/high sector
+	jsr  fn_int	; determine interleave
+	txa		; hard interleave 
+	pha		; save it
+
+1$	sei		; no irq's
+	jsr  spout	; serial port output
+	lda  dkmode	; get status and send it
+	sta  ctl_dat
+	jsr  hskrd	; transmit status
+
+	ldx  mfmcmd	; was status ok ?
+	cpx  #2
+	bcs  2$
+
+	lda  cpmsek	; get number of sectors
+	sta  ctl_dat	
+	jsr  hskrd	; send it
+
+	lda  cmd_trk	; get logical track number
+	sta  ctl_dat
+	jsr  hskrd	; send track
+
+	lda  minsek
+	sta  ctl_dat	; send min.
+	jsr  hskrd	; wait for handshake
+
+	lda  maxsek	; send max.
+	sta  ctl_dat
+	jsr  hskrd	; wait for handshake
+
+	pla		; get interleave
+	sta  ctl_dat	; send interleave
+	jsr  hskrd	; wait for handshake
+
+2$	rts	
+
+	.page
+; (7) query/init status
+
+; 0   1    2     3      
+; ^   ^    ^     ^
+; U   0    N   STAT
+
+
+inqst   bit  switch	; read/write op ?
+	bpl  wrstat
+
+statqy  sei 		; disable irqs
+	jsr  spout      ; serial port out
+	lda  dkmode 	; get status
+	sta  ctl_dat	
+	jsr  hskrd	; 6526 will send it	
+
+	lda  #0
+	sta  erword
+	
+exchnl  jsr  spinp	; serial port input
+exchn2	cli
+	rts
+
+wrstat	lda  cmdbuf+3	; new value
+	sta  dkmode	
+	rts
+
+	.page
+; (8) backup disk
+
+; 0   1    2     3      
+; ^   ^    ^     ^      
+; U   0    N    DEST.DRV
+
+duplc1  ldx  #%00001110
+	jsr  upinst	; update dkmode
+	
+	lda  #badcmd
+	jmp  cmderr
+
+	.page
+;       subroutines
+
+;******************************************************
+	
+chksee  lda  cmdsiz     ; chk for next track
+        cmp  #7          
+        bcc  1$
+
+	ldy  hdrs	; where are we ?
+	dey		; one less
+	tya
+	asl  a		; *2
+	sta  cur_trk
+        ldy  cmdbuf+6   ; get next track
+        sty  hdrs       ; give track to controller
+	dey
+	sty  cmd_trk	; update track
+	jmp  seke	
+
+1$	rts      
+
+;******************************************************
+
+upinst  stx  ctl_dat
+	lda  dkmode     ; update main status w/ controller status
+        and  #%11110000 ; clear old controller status
+        ora  ctl_dat    ; or in controller status
+        sta  dkmode     ; updated
+	sta  ctl_dat
+	rts
+
+;******************************************************
+
+hskrd   jsr  tstatn     ; test for atn
+
+1$	lda  pb		; debounce
+        cmp  pb
+        bne  1$
+
+        bmi  hskrd      ; attn low ?
+
+        eor  fastsr     ; wait for state chg
+        and  #4          
+        beq  1$
+
+hsksnd  lda  ctl_dat    ; retrieve data
+        sta  sdr	; send it
+        lda  fastsr      
+        eor  #4         ; change state of clk
+        sta  fastsr      
+        lda  #8
+1$	bit  icr	; wait transmission time
+        beq  1$
+
+        rts      
+
+;******************************************************
+
+sektr   ldx  cmdbuf+3   ; get track
+	lda  num_sec-1,x
+	tax
+	dex
+        stx  ctl_dat    ; save
+	clc
+        lda  cmdbuf+4   ; get sector
+        adc  cpmit      ; add interleave
+        cmp  ctl_dat    ; less than maxsec ?
+        bcc  gtsec       
+        sbc  ctl_dat    ; rap around
+        beq  oksec      ; special case on max
+        sec      
+        sbc  #1         ; less one
+	.byte skip2
+oksec   lda  ctl_dat      
+gtsec   sta  cmdbuf+4   ; new sector
+        lda  #fread     ; exread job
+        sta  ctl_cmd      
+        rts      
+
+;******************************************************
+
+stbctt  php
+	cli
+	jsr  stbctl     ; strobe controller
+        cmp  #2         ; was there an error ?
+        bcc  1$		; br, nope
+
+	ldx  #0
+	stx  jobnum	; set job #
+	lda  cmdbuf+2	; get command
+	sta  ctl_cmd	; reset command
+	sta  cmd	; set for dos
+	sta  lstjob,x	; set last job
+	sta  jobs	; give it to the controller
+	jsr  stbctl	; wait for it
+	jsr  watjob	; let dos clean it up
+        lda  jobs       ; get error return
+	cmp  #2		; set/clr carry
+1$	plp
+	tax     	; return status in .x
+	bcc  2$
+
+        lda  cmdbuf+3    
+        sta  track      ; give track
+        lda  cmdbuf+4    
+        sta  sector     ; give sector
+	jmp  3$		; update DOS
+
+2$	lda  #0
+	sta  jobrtn	; clr job return flag
+
+3$	txa		; restore .a
+        rts      
+
+;******************************************************
+
+burst	jsr  tstatn     ; test for atn
+1$	lda  pb		; debounce
+        cmp  pb
+        bne  1$		; same ?
+
+        bmi  burst	; attn low ?
+
+        eor  fastsr     ; wait for state chg
+        and  #4          
+        beq  1$
+	
+	lda  fastsr
+	eor  #4
+	sta  fastsr     ; state change
+	rts
+
+;******************************************************

@@ -1,0 +1,136 @@
+        .page
+        .subttl	'sertalk1.src'
+
+jtalk   sei     	; find if open channel
+        jsr  fndrch      
+        bcs  1$		; no one home
+
+2$	ldx  lindx       
+        lda  chnrdy,x    
+        bmi  3$
+
+1$	rts      
+
+;  code added to correct verify error
+
+3$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        php      
+        jsr  clkhi      ; set clk hi
+        plp     	; see if verify error...
+        beq  4$		; br,  yes...data line hi, eoi !!!!
+
+5$	jsr  tstatn     ; test for atn
+        jsr  debnc       
+        and  #datin      
+        bne  5$		; wait for data high
+
+        ldx  lindx      ; prepare to send eoi if needed
+        lda  chnrdy,x    
+        and  #eoi        
+        bne  7$		; no eoi
+
+4$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin     ; test if data line is low
+        bne  4$		; yes, wait till hi
+
+6$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        beq  6$	
+
+7$	jsr  clklow     ; set clock low
+        jsr  tstatn     ; chk atn line
+        jsr  debnc      ; debounce
+        and  #datin      
+        bne  7$	
+
+; ****************  fast routines  *****************
+
+        bit  fastsr     ; fast or slow ?
+        bvc  10$
+
+        lda  pota1
+        ora  #%00000010	; turn drvr out
+	sta  pota1
+
+        lda  cra	; turn 6526 out
+        ora  #%01000000 ; go output mode
+        sta  cra
+	bit  icr	; clear pending	
+        ldx  lindx       
+        lda  chndat,x   ; get data
+        sta  sdr	; send it
+8$	lda  icr	; wait for byte ready
+        and  #8		; chk sr bit          
+        beq  8$
+        lda  cra
+        and  #%10111111 ; release the data bus
+        sta  cra	; must go input
+        lda  pota1
+        and  #%11111101 ; turn drvr in
+        sta  pota1
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	lda  #$88	; *** rom ds 11/05/85 beta2 ***, sp irq
+;	lda  #$84
+
+;<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+
+	sta  icr	; enable irq
+        bne  9$		; wait for data accepted
+
+; ****************    end fast     *****************
+
+10$	
+        lda  #8         ; set up bit counter
+        sta  cont        
+
+11$
+        jsr  debnc      ; let port settle
+
+        and  #datin     ; test that data line is now high before we send
+        bne  16$
+
+12$	ldx  lindx      ; get byte to send
+        lda  chndat,x    
+        ror  a   
+        sta  chndat,x    
+
+        bcs  13$	; send a 1
+
+        jsr  datlow     ; send a 0
+        bne  14$	; and clock it
+
+13$	jsr  dathi       
+14$	jsr  jslower    ; wait a bit for t-s ( 2 mhz )
+        lda  drvtrk+1    
+        bne  17$	; *** rom ds 04/22/86 ***
+
+        jsr  jslowd     ; delay 40 us ( host dma )
+17$	jsr  clkhi      ; rising edge clock
+        jsr  jslower    ; increase t-v ( 2 mhz )
+        lda  drvtrk+1   ; check speed flag
+        bne  15$
+
+        jsr  jslowd     ; delay 40 us ( host dma )
+15$	jsr  clkdat     ; pull clock low and release data
+
+        dec  cont       ; more bits?
+        bne  11$	; yes
+
+9$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        beq  9$		; wait for data low
+
+        cli     	; let the controller run
+        jsr  get        ; get the next byte
+        sei     	; sorry sync protocol
+
+        jmp  2$		; keep on talkin
+
+16$	jmp  jfrmerr      

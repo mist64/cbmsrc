@@ -1,0 +1,243 @@
+	.page 
+	.subttl 'gcrcntrl.src'
+
+;    *contrl
+;    main controller loop
+;    scans job que for jobs
+;    finds job on current track
+;    if it exists
+
+jlcc    tsx             ; save current stack pointer
+        stx  savsp      ; *
+	
+	bit  t1lc2	; reset irq flag
+	lda  pcr2	; enable SO
+	ora  #$0e
+	sta  pcr2
+
+jtop    ldy  #numjob-1  ; pointer into job que
+2$	lda  jobs,y     ; find a job (msb set)
+        bmi  3$		; branch if there is a job
+        dey      
+        bpl  2$
+
+	jmp  jend         
+
+3$      cmp  #fread	; fast read cmd
+        bne  1$
+
+        jmp  jread01    ; same track read job
+
+1$      cmp  #jumpc	; jump cmd ?
+	bne  15$
+
+	jmp  exdo
+
+15$	and  #drvmsk    ; get drive #
+	beq  5$	
+	
+	sty  jobn
+	lda  #15
+	jmp  jerrr	; bad drv
+
+5$      tax      
+        cmp  cdrive     ; test if current drive
+        beq  7$	
+
+        sta  cdrive      
+        jsr  turnon     ; turn drive on
+        jmp  jend       ; go clean up
+
+7$	lda  drvst      ; test if motor up to speed
+        bmi  8$
+
+        asl  a          ; test if stepping
+        bpl  9$		; not stepping
+
+8$	jmp  jend         
+
+9$	lda  #$20       ; status=running
+        sta  drvst       
+
+	ldy  #numjob-1   
+        sty  jobn        
+
+10$	jsr  jsetjb       
+        bmi  11$
+
+12$	dec  jobn        
+        bpl  10$
+
+        ldy  nxtjob      
+        jsr  jsetjb1      
+
+        lda  nxtrk       
+        sta  steps       
+        asl  steps      ; steps*2
+
+        lda  #$60       ; set status=stepping
+        sta  drvst       
+
+        lda  (hdrpnt),y ; get dest track #
+        sta  drvtrk      
+	jmp  jend         
+
+11$	and  #drvmsk    ; test if same drive
+        cmp  cdrive      
+        bne  12$	; test if current drive
+
+        lda  drvtrk      
+        beq  13$	; uninit. track #
+
+	lda  drvtrk	; we are here
+	cmp  #36	; destination
+	php		; save status
+        lda  (hdrpnt),y ; destination
+	cmp  #36
+	ror  a		; rotate to sign bit
+	plp		; retrieve carry
+	and  #$80	; retrieve sign
+	bcc  16$	; br, we are on side 0
+
+	bmi  17$	; br, we are on side 1 & our dest is side 1
+
+; a change ...
+
+        lda  drvtrk	; we are on side 1 & and our dest is side 0
+	sbc  #35	; so decrement where we are
+        sta  drvtrk
+	jmp  17$
+
+16$	bpl  17$	; br, we are on side 0 & our dest is side 0
+
+; a change ...
+
+	lda  drvtrk	; we are on side 0 & our dest is side 1
+	adc  #35
+ 	sta  drvtrk
+17$	sec
+        lda  (hdrpnt),y          
+        sbc  drvtrk      
+        beq  13$	; on track
+
+        sta  nxtrk       
+        lda  jobn       ; save job# and dist to track
+        sta  nxtjob      
+
+        jmp  12$
+
+
+13$	ldx  #4         ; set track and sector
+	lda  (hdrpnt),y          
+        sta  tracc       
+	cmp  #36	; second side ?
+	tay		; save track
+	jsr  set_side	; adjust h/w and set appropiate flag
+	tya		; restore track
+	bcc  14$
+
+	sbc  #35	; track 36 is track 1 physically
+			
+14$	tax
+	lda  worktbl-1,x 
+        sta  sectr	; select density
+
+        lda  dskcnt
+        and  #$9f       ; clear density bits
+        ora  sectr
+        sta  dskcnt	; set density bits
+
+        lda  num_sec-1,x    
+        sta  sectr      ; get # of sector
+
+        lda  job        ; yes, go do the job
+        cmp  #bump-$80  ; test for bump
+        beq  jbmp         
+
+	cmp  #execd
+	beq  exdo
+
+        cmp  #frmt-$80  ; is it a format code
+        beq  jfmt         
+
+        jmp  jseak      ; do a sector seek
+
+jfmt    jmp  jformt     ; do the format
+
+exdo    lda  jobn
+	clc
+	adc  #>bufs
+	sta  bufpnt+1
+	lda  #0
+	sta  bufpnt
+	jmp  (bufpnt)
+
+jbmp              
+        lda  #$60       ; set status=stepping
+        sta  drvst       
+        lda  dskcnt
+        and  #$ff-$03   ; set phase a
+        sta  dskcnt
+
+        lda  #256-92    ; step back 45 traks
+        sta  steps       
+	lda  side 	; what side are we on ?
+	bmi  1$
+
+	lda  #$01	; drvtrk now 1
+	.byte skip2
+1$	lda  #36	; drvtrk now 36
+        sta  drvtrk      
+	lda  #1
+        jmp  jerrr        
+
+jsetjb  ldy  jobn        
+jsetjb1 lda  jobs,y      
+        pha      
+        bpl  1$		; no job here
+
+        and  #$78        
+        sta  job         
+        tya      
+        asl  a   
+        adc  #<hdrs     ; hdrpnt,trk,sec for job
+        sta  hdrpnt      
+        lda  #>hdrs      
+        sta  hdrpnt+1    
+        tya             ; point at buffer
+        clc      
+        adc  #>bufs      
+        sta  bufpnt+1    
+
+1$	ldy  #0          
+        sty  bufpnt      
+        pla      
+        rts      
+
+
+set_side 
+	bcs  1$
+	lda  #0	
+	.byte  skip2
+1$	lda  #$84
+	sta  side
+	lda  pota1
+	and  #$ff-4
+	ora  side
+	sta  pota1
+	rts
+
+	
+worktbl ; table of track densities
+	.byte $60,$60,$60,$60,$60,$60,$60,$60,$60,$60
+	.byte $60,$60,$60,$60,$60,$60,$60
+	.byte $40,$40,$40,$40,$40,$40,$40
+	.byte $20,$20,$20,$20,$20,$20
+	.byte $00,$00,$00,$00,$00
+
+num_sec ; number of sectors per track
+	.byte 21,21,21,21,21,21,21,21,21,21
+	.byte 21,21,21,21,21,21,21
+	.byte 19,19,19,19,19,19,19
+	.byte 18,18,18,18,18,18
+	.byte 17,17,17,17,17
