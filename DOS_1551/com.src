@@ -1,0 +1,47 @@
+;**********************************************
+;*                                            *
+;*   commodore business machines software     *
+;*                                            *
+;**********************************************
+;*                                            *
+;*    4         88888888        1             *
+;*    4  4      8      8      1 1             *
+;*    4  4      88888888        1             *
+;*    4444444   8      8        1             *
+;*       4      8      8        1             *
+;*       4      88888888     1111111          *
+;*                                            *
+;*                                            *
+;**********************************************
+;*                                            *
+;*   disk operating system and controller     *
+;*   routines.                                *
+;*                                            *
+;*   copyright (c) 1984 by                    *
+;*   commodore business machines (cbm)  ds    *
+;*                                            *
+;**********************************************
+;
+;     01/23/84  :: 01/23/84 ::: 01/23/84
+;
+;**********************************************
+;*   this software is furnished for use in    *
+;*  the double/single tedisk floppy disk unit.*
+;*                                            *
+;*   copies thereof may not be provided or    *
+;*  made available for use on any other       *
+;*  system.                                   *
+;*                                            *
+;*   the information in this document is      *
+;*  subject to change without notice.         *
+;*                                            *
+;*   no responsibility is assumed for         *
+;*  reliability of this software.             *
+;*                                            *
+;**********************************************
+        .page  'dos  version  011684'    
+;
+;
+;
+;       .end
+;

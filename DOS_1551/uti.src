@@ -1,0 +1,45 @@
+; 08/18/83 ds
+;
+;  * utiliy routines
+;
+;
+errr    ldy  jobn       ;  return  job code
+        sta  jobs,y      
+;
+        lda  gcrflg     ;  test if buffer left gcr
+        beq  errr10     ;  no
+;
+        jsr  wtobin     ;  convert back to binary
+;
+errr10           
+        jsr  trnof      ;  start timeout on drive
+;
+        ldx  savsp       
+        txs     ;  reset stack pointer
+;
+        jmp  top        ;  back to the top
+;
+;
+;
+turnon  lda  #$a0       ;  turn on drive
+        sta  drvst      ;  drvst=acel and on
+        lda  dskcnt     ;  turn motor on and select drive
+        ora  #$04       ;  turn motor on
+        sta  dskcnt      
+;
+        lda  #167       ;  delay  1 sec
+        sta  acltim      
+;
+        rts      
+;
+;
+;
+trnof            
+        lda  drvst      ; status=timeout
+        ora  #$10        
+        sta  drvst       
+;
+        lda  #255       ;  255*6ms time out
+        sta  acltim      
+;
+        rts      

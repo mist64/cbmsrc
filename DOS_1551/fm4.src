@@ -1,0 +1,101 @@
+;01/20/84 ds
+;
+;
+;
+fmterr  dec  cnt        ;  test for retry
+        beq  fmte10      
+;
+        jmp  end         
+;
+fmte10  ldy  #$ff        
+        sty  ftnum      ;  clear format
+;
+        iny      
+        sty  gcrflg      
+;
+        jmp  errr        
+;
+kill    lda  portc      ;  disable write
+        ora  #$10       ;  read mode=1
+        sta  portc       
+        lda  #$00       ;  make port input now
+        sta  ddra2       
+        rts      
+;
+
+; this subroutine will be called with x*255 for amount of chars written
+;
+clear   lda  portc      ;  enable write
+        and  #$ff-$10   ;  wr mode=0
+        sta  portc       
+;
+        lda  #$ff       ;  make port an output
+        sta  ddra2       
+;
+        lda  #$55       ;  write a 1f pattern
+        sta  data2       
+;
+        ldy  #00         
+cler10  bit  dskcnt      
+        bpl  cler10      
+        bit  bytclr      
+        dey      
+        bne  cler10      
+;
+        dex     ;  dex amount * 255
+        bne  cler10      
+;
+        rts      
+;
+;*****************************
+;*
+;*
+;*     fbtog
+;*     format binary to gcr conversion
+;*
+;*     converts buffer to gcr with out hbid
+;*
+;***************************
+;
+fbtog   lda  #0         ;  point at buffer
+        sta  bufpnt+1    
+        sta  savpnt      
+        sta  bytcnt      
+;
+        lda  #$bb       ;  put gcr in ovrflow buffer
+        sta  gcrpnt      
+;      sta gcrpnt
+        lda  #$60        
+        sta  bufpnt      
+;
+        clc      
+        lda  #>bufs      
+        sta  savpnt+1    
+;
+fbg10   ldy  bytcnt     ;  get pointer
+;
+        lda  (savpnt),y          
+        sta  btab        
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+1      
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+2      
+        iny      
+;
+        lda  (savpnt),y          
+        sta  btab+3      
+        iny      
+        beq  fbg15      ;  test if done
+;
+        sty  bytcnt     ;  save pointer
+;
+        jsr  put4bg     ;  convert and store
+;
+        jmp  fbg10       
+;
+fbg15   jmp  put4bg     ;  done, return
+fncsm    .byte  $81      

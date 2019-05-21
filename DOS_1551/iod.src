@@ -1,0 +1,19 @@
+;*****************************
+;*      i/o definitions      *
+;*****************************
+;
+notrdy   =$0    ;  not ready
+talker   =$80   ;  ieee talker flag
+lisner   =1     ;  ieee listener flag
+eoiout   =$80   ;  talk with eoi
+eoisnd   =$08   ;  not(eoi) to send
+eoi      =$08   ;  not(eoi) to send
+rdytlk   =$88   ;  talk no eoi
+rdylst   =$1    ;  ready to listen
+rndrdy   =rdytlk+rdylst         ;  random chnrdy
+rndeoi   =eoiout+rdylst         ;  random w/ eoi
+        
+; controler communications flags
+;
+led0     =1     ;  ctlrl bit flag led0 on
+led1     =2     ;  ctlrl bit flag led1 on

@@ -1,0 +1,17 @@
+;11/28/83 ds
+;
+; set up subroutine
+;
+pups1   lda  #0          
+        sta  rec         
+        sta  drvcnt      
+        sta  filtrk      
+        sta  filtrk+1    
+        lda  fildrv+1   ; get drive number
+        and  #1         ; only
+        sta  drvnum      
+        ora  #1          
+        sta  delsec     ; nonzero
+        lda  filtbl+1   ; fn1=fn2
+        sta  filtbl      
+        rts      

@@ -1,0 +1,56 @@
+;08/22/84 ds
+;********************************
+;**  change device number util.**
+;**  & sector increment util.  **
+;********************************
+;
+chgdnm           
+        ldx  cmdsiz     ; check for drive number after command
+        dex      
+        beq  chgtgl     ; if none then toggle what you have
+        lda  cmdbuf+1    
+        tay     ; save
+        cmp  #'R        ; is it "r" if so then goto cmd section
+        beq  cmdsec      
+        cmp  #'S        ; is it "s" if so then goto cmd section
+        beq  cmdsec      
+        cmp  #'9        ; is it "9"
+        beq  donine      
+        cmp  #'8        ; * * * "8"
+        bne  chgerr      
+doeght           
+        ldx  #$08        
+        bne  donchg      
+chgtgl  lda  tedrv      ; toggle what you have
+        cmp  #$08        
+        beq  donine      
+        bne  doeght      
+chgerr           
+        lda  #badcmd    ; invalid drive number or syntax
+        jmp  cmderr      
+donine           
+        ldx  #$09        
+donchg           
+        stx  tedrv       
+        txa      
+adjdrv  asl  a   
+        asl  a          ; shft into bit 2
+        and  #%00000100          
+        eor  #%00000100         ; $fef0 = 1, $fec0 = 0
+        sta  tdstat      
+        lda  portc       
+        and  #%11111011         ; clear bit 2
+        ora  tdstat     ; or in dev#
+        sta  portc       
+        rts      
+;
+cmdsec  dex      
+        beq  chgerr     ; br, error
+        ldx  #$01       ; just in case
+        lda  cmdbuf+2   ; retrieve
+        cpy  #'R        ; br, retry w/ x=1
+        beq  rtyok       
+        dex     ; x=0
+rtyok   sta  secinc,x   ; change sector interleave or retry
+        rts      
+;       .end

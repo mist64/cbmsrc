@@ -1,0 +1,138 @@
+;08/22/84 ds
+;
+;   motor and stepper control
+;
+;   irq into controller every 6ms
+end              
+        lda  dskcnt      
+        and  #%00010000         ; wpsw => 0001 0000
+        cmp  lwpt       ; same as last
+        sta  lwpt       ; update
+        bne  end000      
+        lda  mtrcnt     ; anything to do?
+        bne  end100     ; dec & finish up
+        beq  end002     ; nothing to do
+end000  lda  #$ff        
+        sta  mtrcnt     ; 255*8ms motor on time
+        lda  dskcnt      
+        ora  #$04        
+        sta  dskcnt     ; turn on motor
+        lda  #1          
+        sta  wpsw        
+        bne  end002     ; bra
+;
+end100           
+        dec  mtrcnt     ; dec & return
+        bne  end002      
+        lda  drvst       
+        cmp  #$00       ; motor off & no active drive ?
+        bne  end002     ; br, do not turn it off something is going on
+        lda  dskcnt      
+        and  #$ff-$04    
+        sta  dskcnt     ; turn off motor
+end002           
+        lda  fase       ; test for phase offset
+        beq  end40       
+;
+        cmp  #2          
+        bne  end004      
+;
+        lda  #0          
+        sta  fase        
+        beq  end40       
+;
+end004  sta  steps       
+        lda  #2          
+        sta  fase        
+        jmp  dostep      
+;
+end40   ldx  cdrive     ;  work on active drive only
+        bmi  end33x     ;  no active drive
+;
+        lda  drvst      ;  test if motor on
+        tay      
+        cmp  #$20       ;  test if anything to do
+        bne  end10      ;  something here
+;
+end33x  jmp  end33      ;  motor just running
+;
+end10   dec  acltim     ;  dec timer
+        bne  end30       
+;
+        tya     ;  test if acel
+        bpl  end20       
+;
+;
+        and  #$7f       ;  over, clear acel bit
+        sta  drvst       
+;
+end20   and  #$10       ;  test if time out state
+        beq  end30       
+        lda  dskcnt      
+        and  #$ff-$04   ;  turnoff motor
+        sta  dskcnt      
+;
+        lda  #$ff       ;  no active drive now
+        sta  cdrive      
+;
+        lda  #0         ;  drive inactive
+        sta  drvst      ;  clear on bit and timout
+        beq  end33x      
+;
+end30   tya     ;  test if step needed
+        and  #$40        
+        bne  end30x     ;  stepping
+;
+        jmp  end33       
+;
+;
+end30x  lda  nxtst      ; step or settle
+        bne  setle      ; go set
+short   lda  steps       
+        beq  doset       
+dostep           
+        lda  steps       
+        bpl  stpin       
+;
+stpout  inc  steps       
+        lda  dskcnt      
+        sec      
+        sbc  #01        ; -1 to step out
+        jmp  stp         
+;
+;
+doset   lda  #2         ;  settle time
+        sta  acltim      
+        sta  nxtst      ; show set status
+        jmp  end33       
+;
+setle   dec  acltim      
+        bne  end33       
+;
+        lda  drvst       
+        and  #$ff-$40    
+        sta  drvst       
+;
+        lda  #00         
+        sta  nxtst       
+        jmp  end33       
+;
+stpin   dec  steps       
+        lda  dskcnt      
+        clc      
+        adc  #01         
+;
+stp     and  #3          
+        sta  tmp         
+        lda  dskcnt      
+        and  #$ff-$03   ;  mask out old
+        ora  tmp         
+        sta  dskcnt      
+;
+end33            
+        pla      
+        tay      
+        pla      
+        tax      
+        pla      
+        rti      

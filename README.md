@@ -115,6 +115,10 @@ The Commodore 1541/1541C/1541-II DOS V2.6 source (1981). Reconstructed from DOS_
 * DOS_1541C_02 is 251968-02 ([release notes](http://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541C.251968-02.txt))
 * DOS_1541C_03 is 251968-03 (shipped with the 1541-II)
 
+## DOS_1551
+
+The Commodore 1551 DOS 2.6 TDISK source (1984), 318008-01. Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz)
+
 ## DOS_1570
 
 The Commodore 1570 DOS 3.0 source (1985), 315090-01. Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz)

@@ -1,0 +1,81 @@
+;08/22/84 ds
+;
+;
+;     initialization of driver ports
+;      & i/o.
+;
+cntint  lda  #%01101111         ; data direction b
+        sta  ddrb2       
+        and  #$68       ; turn motor off,set phase a, led off
+        sta  dskcnt      
+;
+;
+        ldx  #%00010100         ; rd,off,a,off,rdy,low,dev8 
+
+        stx  portc      ; set overflow disab
+        ldx  #%00011111         ; data direction c
+        stx  ddrc2      ; all output exclude bit 7,6
+;
+        lda  portc      ; get dev #
+        and  #$20        
+        bne  isnin       
+        lda  #$08       ; dev #8
+	.byte    $2c     
+isnin   lda  #$09        
+        sta  tedrv      ; set dev #
+        jsr  adjdrv     ; adjust pla on tedisk connector
+;
+init1   lda  #$ff       ; no current drive
+        sta  cdrive      
+        sta  ftnum      ; init format flag
+;
+        lda  #01         
+cnti15  sta  wpsw       ; init write prot sw
+        sta  wpsw+1      
+;
+        lda  #00         
+        sta  nxtst      ; show next state as stepping
+;
+        ldy  #18        ; 6 + 6 * 2 clear job que
+        lda  #01         
+cnti20  sta  jobs,y      
+        dey      
+        bpl  cnti20      
+;
+;
+        .page    
+;
+;*********************************************************
+;*************      setup ted interface      *************
+;*********************************************************
+;6523a
+;tedioa 8-bit   -    bidirectional port for cmds & data
+;               -    (default input)
+;
+;dskcnt bits0,6 -    n/a  controller
+;       bit 7   -    ted rdy ack (input)
+;
+;portc  bit 0,1 -    status (output)
+;                     --------------------------
+;                     00 = ok
+;                     01 = timeout write
+;                     10 = timeout read
+;                     11 = end or identify (eoi)
+;                     --------------------------
+;
+;       bit 3   -    disk rdy ack (output)
+;
+;*********************************************************
+;
+        lda  #0          
+        sta  drva2      ; cmd channel all inputs
+        lda  portc      ; *
+        ora  #8          
+        and  #$fc        
+        sta  portc      ; clear status bits & set rdy high
+        and  #$f7       ; toggle rdy on powerup
+        sta  portc      ; rdy low
+        ora  #8          
+        sta  portc      ; leave rdy high
+        cli      
+        rts      

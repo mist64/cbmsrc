@@ -1,0 +1,32 @@
+;**********************************************
+;*                                            *
+;*   commodore business machines software     *
+;*                                            *
+;**********************************************
+;
+;**********************************************
+;*                                            *
+;*   disk controller routines                 *
+;*   copyright (c) 1984 by                    *
+;*   commodore business machines (cbm)        *
+;*   ds                                       *
+;*                                            *
+;**********************************************
+;
+;
+;
+;**********************************************
+;*   this software is furnished for use in    *
+;*   ted disk unit only.                      *
+;*                                            *
+;*   copies thereof may not be provided or    *
+;*   made available for use on any other      *
+;*   system.                                  *
+;*                                            *
+;*   the information in this document is      *
+;*   subject to change without notice.        *
+;*                                            *
+;*   no responsibility is assumed for         *
+;*   reliability of this software.            *
+;*                                     ds     *
+;**********************************************

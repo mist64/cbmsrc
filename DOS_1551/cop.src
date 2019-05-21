@@ -1,0 +1,35 @@
+;11/28/83 ds
+;
+; dskcpy check for type
+; and parses special case
+;
+dskcpy           
+        lda  #$e0       ; kill bam buffer
+        sta  bufuse      
+        jsr  clnbam     ; clr tbam
+        jsr  bam2x      ; get bam lindx in .x
+        lda  #$ff        
+        sta  buf0,x     ; mark bam out-of-memory
+        lda  #$0f        
+        sta  linuse     ; free all lindxs
+        jsr  prscln     ; find ":"
+        bne  dx0000      
+        jmp  duplct     ; bad command error, cx=x not allowed
+;
+dx0000  jsr  tc30       ; normal parse
+dx0005  jsr  alldrs     ; put drv's in filtbl
+        lda  image      ; get parse image
+        and  #%01010101         ; val for patt copy
+        bne  dx0020     ; must be concat or normal
+        ldx  filtbl     ; chk for *
+        lda  cmdbuf,x    
+        cmp  #'*         
+        bne  dx0020      
+;
+dx0010  lda  #badsyn    ; syntax error
+        jmp  cmderr      
+dx0020  lda  image      ; chk for normal
+        and  #%11011001          
+        bne  dx0010      
+        jmp  copy        
+;       .end

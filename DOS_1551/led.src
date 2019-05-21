@@ -1,0 +1,10 @@
+; 08/22/84 ds
+erroff  lda  #0          
+        sta  erword      
+        beq  errbra      
+;
+;   set led in (drvnum) flashing
+;
+erron   lda  #errs      ; <******************* single drv **************
+errbra  sta  joberr      
+        rts      

@@ -1,0 +1,39 @@
+; put"@0:~lcc.i/o"
+        .page  '~lcc.i/o'        
+; 08/22/84 ds
+;
+;     defs for controller
+;
+;
+;
+;   (c) commodore business machines (cbm)
+;
+;   mos 6523a
+;   controller address to 6523a =>  $4000
+h1       =  *    
+;
+;*******************************************************************
+        *  =diskio       
+tedioa   *=*+1          ;  port a
+; ted to disk interface port
+;
+data2    *=*+1          ;  port b
+; gcr data
+;
+portc    *=*+1          ;  port c
+; bit 0: status low            out
+; bit 1: status high           out
+; bit 2: device change port    out
+; bit 3: handshake line        out
+; bit 4: mode read =1          out
+; bit 5: device jumper, dev8=0  in
+; bit 6: sync                   in
+; bit 7: handshake line         in
+;
+drva2    *=*+1          ; data direction control port a
+;
+ddra2    *=*+1          ; data direction control port b
+ddrc2    *=*+1          ; data direction control port c
+;
+        *  =  h1         
+;       .end

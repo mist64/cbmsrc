@@ -1,0 +1,321 @@
+;08/22/84 ds
+spdchk  lda  #5          
+        sta  fterrs     ; retry
+;
+;clear at least 6522 bytes written (trk1*1.08%)
+chksft  ldx  #28         
+        jsr  clear      ; clear whole disk & more
+;
+        ldx  #20        ; 20*255 bytes of sync
+        ldy  #0         ; 5100/6153  write 82% sync
+        lda  #$ff       ; write syncs
+        sta  data2       
+writs1  bit  dskcnt      
+        bpl  writs1      
+        bit  bytclr      
+        dey      
+        bne  writs1      
+        dex      
+        bne  writs1      
+        jsr  kill       ; go read mode
+;
+getsyn  ldy  #mscnt      
+getsy1  ldx  #mscnt      
+getsy2  lda  portc      ; try to find sync
+        and  #$40        
+        beq  gotsyn     ; br, got synchonization
+        dex      
+        bne  getsy2      
+        dey      
+        bne  getsy1      
+ertryf  dec  fterrs      
+        bne  chksft     ; br, try again
+;
+        lda  #2          
+        jmp  fmte10     ; error
+;
+gotsyn  ldy  #0         ; init timery
+        ldx  #0         ; init timerx
+gotsnk  lda  portc      ; wait for sync to go away
+        and  #$40        
+        beq  gotsnk      
+;
+gotit   lda  portc      ; count time till next sync
+        iny     ; lsb not used
+        bne  goti1       
+        inx     ; msb
+goti1   and  #$40        
+        bne  gotit      ; br, still no sync
+        stx  timerx     ; save msb
+        sty  timery     ; save lsb
+        lda  #0          
+        sta  tsttrk      
+;
+;*********************************************************
+;*  ---  lookup gap2 in table ---                        *
+;*  timerx :  21 / 22 / 23 / 24 / 25 / 26 / 27 / 28 / 29 *
+;*  gap2   :  02 / 02 / 04 / 06 / 08 / 08 / 0b / 13 / 16 *
+;*           fast ............... ~ .............. slow  *
+;*********************************************************
+        ldx  #gp2cmd-1   
+gotbl   lda  gaptbl,x   ; lookup timing gap
+        cmp  timerx     ; same as msb?
+        beq  okgap       
+        dex      
+        bpl  gotbl       
+        bmi  ertryf     ; error
+;
+okgap   lda  gp2tbl,x   ; look it up
+        sta  savgap      
+        rts      
+;
+formt            
+        lda  ftnum      ; test if formating done
+        bpl  l213       ; yes
+;
+        lda  #$60       ; status = stepping
+        sta  drvst       
+        lda  #01         
+        sta  drvtrk     ; track 1
+        sta  ftnum      ; track count =1
+        lda  #256-92    ; step back 45 tracks
+        sta  steps       
+        lda  dskcnt     ; phase a
+        and  #$ff-03     
+        sta  dskcnt      
+;
+        lda  #10         
+        sta  cnt        ; init error count
+        jmp  end        ; go back to controler
+;
+l213    ldy  #00         
+        lda  (hdrpnt),y          
+        cmp  ftnum       
+        beq  l214        
+;
+        lda  ftnum       
+        sta  (hdrpnt),y          
+        jmp  end         
+l214             
+        lda  dskcnt     ; check wps
+        and  #16         
+        bne  toptst     ; ok
+        lda  #8          
+        jmp  fmterr     ; wp error
+;
+toptst  lda  tsttrk      
+        bpl  topp        
+        jsr  spdchk      
+;
+topp    lda  savgap      
+        sta  dtrck       
+;  create header images
+        clc      
+        lda  #>bufs      
+        sta  hdrpnt+1    
+        lda  #00         
+        sta  hdrpnt     ; point hdr point to buf0
+        sta  sect        
+;
+        ldy  #0          
+mak10            
+        lda  #hbid      ; hbid cs s t id id 0f 0f
+        sta  (hdrpnt),y          
+        iny      
+        lda  #00        ; check sum is zero for now
+        sta  (hdrpnt),y          
+        iny      
+;
+        lda  sect       ; store sector #
+        sta  (hdrpnt),y          
+        iny      
+;
+        lda  ftnum      ; store track #
+        sta  (hdrpnt),y          
+        iny      
+;
+        lda  dskid+1    ; store id low
+        sta  (hdrpnt),y          
+        iny      
+;
+        lda  dskid      ; store id hi
+        sta  (hdrpnt),y          
+        iny      
+;
+        lda  #$0f       ; store gap1 bytes
+        sta  (hdrpnt),y          
+        iny      
+        sta  (hdrpnt),y          
+        iny      
+;
+        tya     ; save this point
+        pha      
+        ldx  #07         
+        lda  #00         
+        sta  chksum     ; zero checksum
+mak20   dey      
+        lda  (hdrpnt),y          
+        eor  chksum      
+        sta  chksum      
+        dex      
+        bne  mak20       
+        sta  (hdrpnt),y         ; store checksum
+        pla      
+        tay     ; restore pointer
+;
+        inc  sect       ; goto next sector
+;
+        lda  sect       ; test if done yet
+        cmp  sectr       
+        bcc  mak10      ; more to do
+;
+        jsr  fbtog      ; convert to gcr with no bid char
+;move buffer up 79 bytes
+        ldy  #$ff-69    ; for i=n-1 to 0:mem{i+69}:=mem{i}:next
+movup   lda  (hdrpnt),y         ; move buf0 up 69 bytes
+        ldx  #69         
+        stx  hdrpnt      
+        sta  (hdrpnt),y          
+        ldx  #00         
+        stx  hdrpnt      
+        dey      
+        cpy  #$ff        
+        bne  movup       
+        ldy  #68        ; #bytes to move
+movovr  lda  ovroff,y    
+        sta  (hdrpnt),y          
+        dey      
+        bpl  movovr      
+;   create data block of zero
+;
+        clc      
+        lda  #>bufs      
+        adc  #02         
+        sta  bufpnt+1   ; point to buf2
+        lda  #00         
+        tay     ; init offset
+crtdat  sta  (bufpnt),y          
+        iny      
+        bne  crtdat      
+;   convert data block to gcr
+;   write image
+;   leave it in ovrbuf and buffer
+;
+;
+        jsr  chkblk     ; get block checksum
+        jsr  bingcr      
+;
+;   start the format now
+;   write out sync header gap1
+;   data block
+;
+        lda  #0         ; init counter
+        sta  fmhdpt      
+;
+        ldx  #3         ; clear 12% of disk
+        jsr  clear      ; clear disk
+;
+wrtsyn  lda  #$ff       ; write sync
+        sta  data2       
+;
+        ldy  #numsyn    ; write 4 gcr sync
+;
+wrts10  bit  dskcnt      
+        bpl  wrts10      
+        bit  bytclr      
+;
+        dey      
+        bne  wrts10      
+;
+        lda  #10        ; write out header
+        sta  fmhdp2      
+        ldy  fmhdpt      
+;
+wrts20  bit  dskcnt      
+        bpl  wrts20      
+        bit  bytclr      
+;
+        lda  (hdrpnt),y         ; get header data
+        sta  data2       
+;
+        iny      
+        dec  fmhdp2      
+        bne  wrts20      
+;
+;
+; * write out gap1
+;
+        ldy  #gap1-2    ; write 9 gcr bytes
+;
+wrts30  bit  dskcnt      
+        bpl  wrts30      
+        bit  bytclr      
+;
+        lda  #$55        
+        sta  data2       
+;
+        dey      
+        bne  wrts30      
+;
+; * write out data block
+;
+        lda  #$ff       ; write data block sync
+        ldy  #numsyn     
+;
+dbsync  bit  dskcnt      
+        bpl  dbsync      
+        bit  bytclr      
+        sta  data2       
+        dey      
+        bne  dbsync      
+;
+        ldy  #$bb       ; write out ovrbuf
+wrts40  bit  dskcnt      
+        bpl  wrts40      
+        bit  bytclr      
+        lda  ovrflw,y    
+        sta  data2       
+;
+        iny      
+        bne  wrts40      
+wrts50  bit  dskcnt      
+        bpl  wrts50      
+        bit  bytclr      
+;
+        lda  (bufpnt),y          
+        sta  data2       
+;
+        iny      
+        bne  wrts50      
+;
+        lda  #$55       ; write gap2(dtrck)
+        ldy  dtrck       
+;
+wgp2    bit  dskcnt      
+        bpl  wgp2        
+        bit  bytclr      
+;
+        sta  data2       
+        dey      
+        bne  wgp2        
+;
+;
+        lda  fmhdpt     ; advance header pointer
+        clc      
+        adc  #10         
+        sta  fmhdpt      
+;
+;  done writing sector
+;
+        dec  sect       ; go to next on
+        beq  wrts51     ; br, no more to do
+        jmp  wrtsyn      
+;
+wrts51  bit  dskcnt     ; wait for last one to write
+        bpl  wrts51      
+        bit  bytclr      
+;
+wrts52  bit  dskcnt     ; wait for last one to write
+        bpl  wrts52      
+        bit  bytclr      
+        jsr  kill       ; goto read mode

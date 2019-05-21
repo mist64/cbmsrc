@@ -1,0 +1,128 @@
+;11/28/83 ds
+;***********************************
+;*
+;*     routine: nxtrec
+;*
+;*
+;*
+;*
+;*
+;***********************************
+nxtrec           
+        lda  #ovrflo     
+        jsr  clrflg      
+;
+        lda  #lrf        
+        jsr  tstflg      
+        bne  nxtr40      
+;
+        ldx  lindx       
+        inc  recl,x     ;  goto next record #
+        bne  nxtr15      
+        inc  rech,x      
+;
+nxtr15           
+        ldx  lindx       
+        lda  nr,x        
+        beq  nxtr45     ; there is a nr
+;
+        jsr  getpnt     ;  get pointer
+        ldx  lindx      ; test if same buffer
+        cmp  nr,x        
+        bcc  nxtr20     ;  yes, bt<nr
+;
+        jsr  nrbuf      ;  no,next buffer
+;
+nxtr20  ldx  lindx       
+        lda  nr,x        
+        jsr  setpnt     ; advance to next rec
+        lda  (buftab,x)         ; read 1st dat byte
+;
+        sta  data       ; save for read channel
+        lda  #ovrflo     
+        jsr  clrflg     ;  clear
+; the overflow flag
+        jsr  addnr      ; advance nr
+nxout            
+        pha      
+        bcc  nxtr30     ; no block boundary
+;
+        lda  #0          
+        jsr  drdbyt     ; check track link
+        bne  nxtr30     ; not last block
+;
+        pla      
+        cmp  #2          
+        beq  nxtr50      
+nxtr45           
+        lda  #lrf        
+        jsr  setflg      
+nxtr40           
+        jsr  getpre      
+        lda  buftab,x    
+        sta  lstchr,y    
+        lda  #cr         
+        sta  data        
+        rts      
+;
+nxtr50           
+        jsr  nxtr35      
+        ldx  lindx       
+        lda  #0          
+        sta  nr,x        
+        rts      
+nxtr30           
+        pla      
+nxtr35           
+        ldx  lindx       
+;*
+        sta  nr,x        
+        jmp  setlst      
+;*
+;*
+;**********************************
+;*
+;*
+;*  nrbuf
+;*
+;*
+;********************************
+;*
+;*
+nrbuf           ; read trk,sec link
+        jsr  setdrn      
+        jsr  rdlnk       
+;
+;
+        jsr  gaflgs     ;  test if dirty
+        bvc  nrbu50     ; clean, dont write out
+;
+        jsr  wrtout     ; dirty, write out
+        jsr  dblbuf     ; toggle active buffer
+;
+        lda  #2          
+        jsr  setpnt      
+        jsr  tstwrt     ; test if lstjob is wrt
+        bne  nrbu20     ; not a write,buffer ok
+;
+        jsr  rdab       ; read in needed buffer
+        jmp  watjob     ; wait around till done
+;
+nrbu50  jsr  dblbuf     ; toggle act buf
+        jsr  tstwrt     ; was lstjob a wrt?
+        bne  nrbu70     ; not a write
+;
+        jsr  rdab       ; read in needed buffer
+        jsr  watjob     ; wait till done
+;
+nrbu70          ; read trk,sec link
+        jsr  rdlnk      ;  to do a read ahead
+;
+        lda  track      ; test if last buffer
+        beq  nrbu20     ; yes,no dbl buff todo
+;
+        jsr  dblbuf     ; start read job on the
+        jsr  rdab       ; inactive buffer
+        jsr  dblbuf      
+;
+nrbu20  rts      

@@ -1,0 +1,49 @@
+;12/13/83 ds
+
+; idle loop, waiting for something to do
+;
+idle    inc  ledflg      
+        bne  didle       
+        jsr  idlled     ; update leds
+didle   lda  tedioa     ; any ieee stuff to do?
+        bpl  idle3      ; no skip next
+;
+        jsr  tstatn     ; yes. go do it
+;
+idle3            
+        lda  cmdwat     ; command waiting?
+        beq  idle       ; no keep looping
+;
+        lda  #0         ; yes, reset flag
+        sta  cmdwat      
+;
+        jsr  parsxq     ; parse and execute
+;
+        jmp  idle       ; then continue to loop
+; handle led error routine
+; & close any open files if wpsw is toggled
+;
+idlled           
+        lda  #14         
+        sta  opnled+1    
+        lda  #0          
+        sta  opnled      
+idl2    ldx  opnled+1    
+        lda  lintab,x   ; chk for open files
+        cmp  #$ff        
+        beq  idl3       ; br, not open
+        inc  opnled      
+idl3    dec  opnled+1    
+        bpl  idl2        
+        lda  opnled     ; chk wpsw on open files only
+        beq  idl4        
+        lda  wpsw       ; chk write prot for toggle
+        beq  idl4       ; br, ok
+        jsr  cldchn     ; close any open files
+idl4    ldx  erword     ; any errors
+        beq  idl12      ; br, ok
+        jmp  erron       
+;
+idl12   lda  opnled      
+        sta  bthdrv      
+        rts      

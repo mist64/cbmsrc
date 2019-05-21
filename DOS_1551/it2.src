@@ -1,0 +1,64 @@
+;  08/22/84  ds
+;
+        *  =  $c000      
+;
+	.byte    $be    ;  chksum
+author  .byte  'DAVID G SIRACUSA CBM COPYRIGHT 84'         
+;*****************************************************
+;   p o r t    c o n f i g u r a t i o n    c m d s
+;-----------------------------------------------------
+;    process           cmd     data
+;-----------------------------------------------------
+;    listen            $81     $20
+;    unlisten          $81     $3f
+;    talk              $81     $40
+;    untalk            $81     $5f
+;=====================================================
+;    retrieve s.a.     $82     s.a.
+;    output to drive   $83     data
+;    output from drive $84     data
+;    invalid       $80,$85 ... $8f
+;
+;*****************************************************
+;
+tstatn=*         
+        lda  tedioa     ; load again
+        cmp  tedioa     ; debounce the hell out of it !
+        beq  tstok      ; br, ok
+        jmp  idle       ; nope invalid cmd
+tstok   and  #$0f       ; 16 cmds
+        asl  a          ; acc*2
+        tay      
+        lda  fnctbl-2,y         ; function table of
+        sta  t0         ; jump addresses
+        lda  fnctbl-1,y          
+        sta  t1          
+        lda  portc       
+        and  #$f7        
+        sta  portc      ; drop rdy low to tell ted we got it
+        jmp  (t0)        
+;
+;
+        .word    invld  ; invalid cmd
+;
+fnctbl  .word    list   ; state chg cmd
+	.word    tksa   ; talk secondary address
+	.word    ciout  ; accept a byte
+	.word    acptr  ; send host a byte
+;
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+	.word    invld  ; invalid cmd
+;
+invld   lda  portc       
+        ora  #8          
+        sta  portc      ; restore rdy
+        jmp  idle       ; return to idle

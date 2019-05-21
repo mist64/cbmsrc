@@ -1,0 +1,40 @@
+        .page  'dos.var'         
+; 09/02/83 ds
+;
+;
+;
+c3po2    *=*+1          ; extra byte buffered flag
+bsour2   *=*+1          ; extra byte buffered
+xspsv    *=*+1          ; stack pointer save area
+tlkact   *=*+1          ; active talker flag
+lsnact   *=*+1          ; active listen flag
+;
+;
+;  for par interface stuff
+;
+;
+dskver   *=*+2          ; disk version
+;
+;
+;  constants
+;
+jmpc     =$50   ;  jump command
+bumpc    =$40   ;  bump command
+execd    =$60   ;  execute command
+bufs     =$0300         ;  start of buffers
+tolong   =$2    ;  format errors
+tomany   =$3     
+tobig    =$4     
+tosmal   =$5     
+notfnd   =$6     
+skip2    =$2c   ;  bit abs
+topwrt   =255   ;  top of stack
+gap2     =  4   ;  gap after data block min size
+rdmax    =  6   ;  sector distance wait
+wrtmin   =  9    
+disbf    =  $80          
+wrtmax   =  12   
+tim      =58    ; irq rate for 15ms
+;
+;
+;       .end

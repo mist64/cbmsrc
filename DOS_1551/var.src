@@ -1,0 +1,156 @@
+; put"@0:~var.var"
+        .page  '~var.var'        
+;08/22/84 ds
+*=0000           
+ddrb2    *=*+1          ; data direction register
+dskcnt   *=*+1          ; control lines etc.
+;bit 0: step 0a          out
+;bit 1: step 0b          out
+;bit 2: motor on = 1     out
+;bit 3: act led on = 0   out
+;bit 4: write prot sense  in
+;bit 5: dens. 4-3.25 us  out
+;bit 6: dens. inc .25 us out
+;bit 7: byte latch        in
+;
+;
+jobs     *=*+6          ; job que
+hdrs     *=*+12         ; job hdrs
+dskid    *=*+4          ; mstr copy dskid
+header   *=*+5          ; img lst hdr
+job      *=*+1          ; cntlr active job
+;
+savpnt   *=*+2   
+hdrpnt   *=*+2          ; pointer to trk+sec for job
+;**             **
+wpsw     *=*+2          ; write protect change flag
+lwpt     *=*+2          ; last state of wp switch
+jumpr1   *=*+1          ; dev # hardwire jumper
+bufpnt   *=*+2          ; buffer pointer
+;**             **
+drvtrk   *=*+2          ; track drive on * 2
+drvst    *=*+2          ; drive status
+;
+;
+;$10 = time out state
+;$20 = motor just running
+;$40 = stepping
+;$80 = accelerating
+;$00 = no drive active
+;
+;
+gcrpnt   *=*+1          ; gcr pointer
+bytcnt   *=*+1          ; gcr count
+bid      *=*+1          ; block id
+chksum   *=*+1          ; check sum
+cdrive   *=*+1          ; current drive
+drviof   *=*+1          ; current drive i/o offset
+jobn     *=*+1          ; job #
+nxtjob   *=*+1          ; next job
+nxtrk    *=*+1          ; next track
+nxtbf    *=*+1          ; next gcr buffer
+nxtpnt   *=*+1          ; next gcr byte loc in buf
+work     *=*+1          ; density-
+acltim   *=*+1          ; acel time delay
+savsp    *=*+1          ; save stack pointer
+steps    *=*+1          ; steps to desired track
+tmp      *=*+1          ; #seeks-step phase temp
+csect    *=*+1          ; current sector in seek
+nexts    *=*+1          ; next sector up in seek
+gcrflg   *=*+1          ; buffer in gcr image
+ftnum    *=*+1          ; current format track
+btab     *=*+4   
+gtab     *=*+8   
+nxtst    *=*+1   
+dtrck            
+remdr    *=*+1          ; time for fmt
+fmhdpt   *=*+1          ; format header pointer
+fmhdp2   *=*+1          ; format header pointer
+cnt      *=*+1          ; count for fmt
+trys     *=*+1          ; # trys fmt
+sect     *=*+1   
+phase            
+fase     *=*+1          ; phase for motor
+errcnt   *=*+1          ; count for error flash
+;
+;*****************************************************
+;*            /--------------------------/           *
+;*            / zero page variables      /           *
+;*            /--------------------------/           *
+;*            / lower page1 gcr overflow /           *
+;*            / upper page 1 stack.      /           *
+;*            /--------------------------/           *
+;*            / page2 dos variables.     /           *
+;*            /--------------------------/           *
+;*            / sector data buffer #1    /           *
+;*            /--------------------------/           *
+;*            / sector data buffer #2    /           *
+;*            /--------------------------/           *
+;*            / sector data buffer #3    /           *
+;*            /--------------------------/           *
+;*            / sector data buffer #4    /           *
+;*            /--------------------------/           *
+;*            / sector data buffer #5    /           *
+;*            /--------------------------/           *
+;*****************************************************
+;
+tracc    *=*+1          ; track
+sectr    *=*+1          ; sector
+;
+tedio    =$0000          
+diskio   =$4000         ; start of disk i/o ports
+mirror   =$8000         ; dev # chk location
+bytclr   =$4000         ; byte ready clear port
+bufs     =$0300         ; buffer #0
+buff1    =$0400         ; buffer #1
+fm4040   =$41   ; 4040 format code
+mscnt    =$ff   ; ms delay count
+fm2031   =$42   ; 2031 format code
+numjob   =6     ; number of jobs
+pntdef   =$0002         ; default start of buffers
+devdef   =$08   ; default device #
+stabof   =$0111         ; stab offset from dospnt
+ovroff   =$011b         ; overflow buffer offset from dospnt
+ovrflw   =  ovroff-$bb   
+tolong   =$2    ; format errors
+tomany   =$3     
+tobig    =$4     
+tosmal   =$5     
+notfnd   =$6     
+skip2    =$2c   ; bit abs
+numsyn   =  5   ; gcr byte count for size of sync area
+gap1     =  11          ; gap after header to  clear erase in gcr bytes
+gap2     =  4   ; gap after data block min size
+rdmax    =  6   ; sector distance wait
+wrtmin   =  9    
+wrtmax   =  12   
+tim      =  58          ; irq rate for 6ms
+drvmsk   =  01          ; mask for drive in job
+hbid     =  08          ; header block id
+dbid     =  07          ; data block id
+;
+;job request #'s
+read     =$80    
+write    =$90    
+wverfy   =$a0    
+seek     =$b0    
+secsek   =seek+8         
+bump     =$c0    
+jumpc    =$d0    
+errs     =$e0    
+frmt     =$f0    
+;
+;
+;job returns
+;01 = ok
+;02 = can't find sector
+;03 = no sync
+;04 = not a data block
+;05 = data block checksum
+;06 = byte decode error/format error
+;07 = verify error
+;08 = write protect error
+;09 = header block checksum
+;10 = data extends into next block
+;11 = disk id mismatch
+;       .end

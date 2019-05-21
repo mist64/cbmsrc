@@ -1,0 +1,241 @@
+        .page  '~lcc.read'       
+;01/12/84 ds
+;=============================================================
+;=     8    =     8     =     8     =     8     =     8      =
+;=============================================================
+;   (5) (3  + 2)  (5) (1+  4)   (4  +1) (5)  (2 +  3)   (5)
+;    a      b      c    d           e    f      g        h
+;=============================================================
+;   *read
+;
+;    read in track,sector specified
+;    in header
+;
+reed    cmp  #0         ;  test if read job
+        beq  read01     ;  go test if write
+        jmp  wright      
+;
+read01  jsr  dstrt      ;  find header and start reading data
+; sync routine sets y to 0
+;
+rdd00   bit  dskcnt     ;  3   <=  wait for byte #   1 1 1 1
+        bpl  rdd00      ;  2
+        lda  data2      ;  4
+        sta  gtemp1     ;  3
+        and  #%11111000         ;  2
+        tax     ;  2   reg x = xxxxx000
+        lda  gcrtba,x   ;  4   nibble a
+        sta  gtemp      ;  3
+        lda  gtemp1     ;  3
+        and  #%00000111         ;  2
+        sta  gtemp1     ;  3   extract 3 bits nibble b
+rdd01   bit  dskcnt     ;  3   <=  wait for byte #   2 2 2 2
+        bpl  rdd01      ;  2
+        lda  data2      ;  4
+        sta  gtemp2     ;  3
+        and  #%11000000         ;  2   extract 2 bits nibble b
+        ora  gtemp1     ;  3
+        tax     ;  2   reg x = xx000xxx
+        lda  gcrtba,x   ;  4   nibble b
+        ora  gtemp      ;  3
+        pha     ;  3
+        bne  gcrhd      ;  3   bra , should take this branch
+        beq  gcrhd      ;  3   bra , also
+;
+;********************************************************************
+;
+read11  bit  dskcnt     ;  3   <=  wait for byte #   1 1 1 1
+        bpl  read11     ;  2
+        lda  data2      ;  4
+        sta  gtemp1     ;  3
+        and  #%11111000         ;  2
+        tax     ;  2   reg x = xxxxx000
+        lda  gcrtba,x   ;  4   nibble a
+        sta  gtemp      ;  3
+        lda  gtemp1     ;  3
+        and  #%00000111         ;  2
+        sta  gtemp1     ;  3   extract 3 bits nibble b
+rdd12   bit  dskcnt     ;  3   <=  wait for byte #   2 2 2 2
+        bpl  rdd12      ;  2
+        lda  data2      ;  4
+        sta  gtemp2     ;  3
+        and  #%11000000         ;  2
+        ora  gtemp1     ;  3
+        tax     ;  2   reg x = xx000xxx
+        lda  gcrtba,x   ;  4   nibble b
+        ora  gtemp      ;  3
+        sta  (bufpnt),y         ;  6
+        iny     ;  2
+        beq  fincsb     ;  2
+;
+gcrhd   lda  gtemp2     ;  3
+        and  #%00111110         ;  2
+        tax     ;  2   reg x = 00xxxxx0
+        lda  gcrtba,x   ;  4   nibble c
+        sta  gtemp      ;  3
+        lda  gtemp2     ;  3
+        and  #%00000001         ;  2
+        sta  gtemp2     ;  3   extract 1 bits nibble d
+rdd13   bit  dskcnt     ;  3   <=  wait for byte #   3 3 3 3
+        bpl  rdd13      ;  2
+        lda  data2      ;  4
+        sta  gtemp3     ;  3
+        and  #%11110000         ;  2
+        ora  gtemp2     ;  3
+        tax     ;  2   reg x = xxxx000x
+        lda  gcrtbd,x   ;  4   nibble d
+        ora  gtemp      ;  3
+        sta  (bufpnt),y         ;  6
+        iny     ;  2
+        lda  gtemp3     ;  3
+        and  #%00001111         ;  2
+        sta  gtemp3     ;  3   extract 4 bits nibble e
+rdd14   bit  dskcnt     ;  3   <=  wait for byte #   4 4 4 4
+        bpl  rdd14      ;  2
+        lda  data2      ;  4
+        sta  gtemp4     ;  3
+        and  #%10000000         ;  2
+        ora  gtemp3     ;  3
+        tax     ;  2   reg x = x000xxxx
+        lda  gcrtbe,x   ;  4   nibble e
+        sta  gtemp      ;  3
+        lda  gtemp4     ;  3
+        and  #%01111100         ;  2
+        tax     ;  2   reg x = 0xxxxx00
+        lda  gcrtbf,x   ;  4   nibble f
+        ora  gtemp      ;  3
+        sta  (bufpnt),y         ;  6
+        iny     ;  2
+        lda  gtemp4     ;  3
+        and  #%00000011         ;  2
+        sta  gtemp4     ;  3   extract 2 bits nibble g
+rdd15   bit  dskcnt     ;  3   <=  wait for byte #   5 5 5 5
+        bpl  rdd15      ;  2
+        lda  data2      ;  4
+        sta  gtemp1     ;  3
+        and  #%11100000         ;  2
+        ora  gtemp4     ;  3
+        tax     ;  2   reg x = xxx000xx
+        lda  gcrtbg,x   ;  4   nibble g
+        sta  gtemp      ;  3
+        lda  gtemp1     ;  3
+        and  #%00011111         ;  3
+        tax     ;  2   reg x = 000xxxxx
+        lda  gcrtbh,x   ;  4   nibble h
+        ora  gtemp      ;  3
+        sta  (bufpnt),y         ;  6
+        iny     ;  2
+        jmp  read11     ;  4
+;
+;*******************************************************************
+;
+fincsb  lda  gtemp2     ;  3
+        and  #%00111110         ;  2
+        tax     ;  2   reg x = 00xxxxx0
+        lda  gcrtba,x   ;  4   nibble c
+        sta  gtemp      ;  3
+        lda  gtemp2     ;  3
+        and  #%00000001         ;  2
+        sta  gtemp2     ;  3
+rdd18   bit  dskcnt     ;  3   <=  wait for byte #   3 3 3 3
+        bpl  rdd18      ;  2
+        lda  data2      ;  4
+        and  #%11110000         ;  2
+        ora  gtemp2     ;  3
+        tax     ;  2   reg x = xxxx000x
+        lda  gcrtbd,x   ;  4   nibble d
+        ora  gtemp      ;  3
+        sta  gtemp1     ;  3   store off cs byte
+;
+        pla     ;  retrieve first byte off of disk
+        cmp  #dbid      ;  see if it is a 7
+        bne  notblk     ;  br, nope
+;
+;
+read28  jsr  chkblk     ;  calc checksum
+        cmp  gtemp1      
+        beq  read40      
+;
+        lda  #5         ;  data block checksum error
+	.byte    skip2   
+notblk  lda  #4          
+	.byte    skip2   
+;
+read40  lda  #1         ;  read data block ok
+        jmp  errr        
+;
+;
+;
+dstrt   jsr  srch       ;  find header
+        jmp  sync       ;  and then data block sync
+;
+;
+srch             
+        lda  dskid      ;  get master id for the drive
+        sta  header      
+        lda  dskid+1     
+        sta  header+1    
+;
+        ldy  #0         ;  get track,sectr
+        lda  (hdrpnt),y          
+        sta  header+2    
+        iny      
+        lda  (hdrpnt),y          
+        sta  header+3    
+;
+        lda  #0          
+;create header checksum
+        eor  header      
+        eor  header+1    
+        eor  header+2    
+        eor  header+3    
+;
+        sta  header+4   ;  store the checksum
+;
+        jsr  conhdr     ;  convert header to gcr
+;
+        lda  #90        ;  search 90 sync chars
+        sta  tmp         
+srch20  jsr  sync       ;  find sync
+;
+srch25  lda  stabof,y   ; what it should be
+srch26  bit  dskcnt      
+        bpl  srch26      
+;
+        cmp  data2      ; is it the same .cmp absolute
+        bne  srch30     ;  nope
+;
+        iny      
+        cpy  #8          
+        bne  srch25      
+;
+        rts      
+;
+;
+srch30  dec  tmp        ; try again
+        bne  srch20      
+;
+        lda  #2         ;  cant find this header
+	.byte    $2c    ;  skip2
+synerr  lda  #03        ;  sync error
+err     jmp  errr        
+;
+sync    ldy  #$12       ; load outside loop
+;
+delout  ldx  #mscnt      
+dly1    lda  portc      ;  sync a synch?
+        and  #%01000000          
+        beq  gtsnk       
+        dex     ;  waste time
+arnd    bne  dly1        
+;
+        dey      
+        bne  delout      
+        jmp  synerr     ; timeout
+;
+;
+;
+gtsnk   lda  data2       
+        bit  bytclr     ;  clear byte ready
+        ldy  #0         ;  clear pointer
+        rts      

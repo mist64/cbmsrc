@@ -1,0 +1,30 @@
+;09/14/83 ds
+;
+trnoff  cli     ; let controler do that
+        rts      
+;
+;
+rmchk=*          
+;
+;
+;default table for user command
+;
+*=       $ffe6   
+	.word    format          
+	.word    trnoff          
+ublock  .word    ublkrd   
+	.word    ublkwt          
+
+	.word    $0500          ; links to buffer #2
+	.word    $0503   
+	.word    $0506   
+	.word    $0509   
+	.word    $050c   
+	.word    $050f   
+;
+*=       $fffa   
+	.word    dskit1         ; reinit vector
+	.word    dskint         ; reset vector
+	.word    sysirq         ; interupt req vector
+;
+*=rmchk          

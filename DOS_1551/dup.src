@@ -1,0 +1,48 @@
+;08/22/84 ds
+; duplicate disk
+
+duplct  lda  #badcmd     
+        jmp  cmderr     ;  single drv
+;
+; format routine
+;
+;  have controller format disk
+;
+format  lda  #3          
+        jsr  seth        
+        ldx  #3          
+;
+        lda  #$f0       ; format cmd
+        sta  tsttrk     ; init speed var
+        sta  fmtsav     ; save cmd
+;
+        jsr  stbfmt     ; give it to the controller
+;
+;read track one sector zero
+;
+        lda  #1         ; track 1
+        sta  hdrs+6     ; *
+        lda  #0         ; sector 0
+        sta  hdrs+7     ; *
+        lda  #$80       ; read
+        sta  fmtsav      
+        jmp  stbfmt     ; sector read on track 1, sector 0
+;
+stbfmt  ldy  #3         ; 3 retries
+fmtstb  lda  fmtsav     ; get cmd
+        sta  jobs,x     ; give job to controller
+        jsr  stbctl     ; wake him up
+        cmp  #2         ; error?
+        bcc  okfmt       
+        lda  #$ff        
+        sta  ftnum      ; reset cntrl track
+        sta  tsttrk      
+        dey      
+        bne  fmtstb      
+;
+        ldx  #0         ; set for offset for buffer to det. trk & sect.
+        jmp  error      ; show error
+;
+okfmt   rts     ; good return
+;
+;       .end

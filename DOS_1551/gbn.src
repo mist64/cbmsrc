@@ -1,0 +1,195 @@
+;01/18/84 ds
+;
+mask1=$f8        
+mask2=$07        
+mask2x=$c0       
+mask3=$3e        
+mask4=$01        
+mask4x=$f0       
+mask5=$0f        
+mask5x=$80       
+mask6=$7c        
+mask7=$03        
+mask7x=$e0       
+mask8=$1f        
+;
+;
+;
+;
+;
+; fast gcr to binary conversion
+;
+;
+get4gb  ldy  gcrpnt      
+;
+        lda  (bufpnt),y          
+        tax      
+        and  #mask1      
+        sta  gtab       ;  hi nibble
+;
+        txa      
+        and  #mask2      
+        sta  gtab+1      
+;
+        iny     ;  next byte
+        bne  xx05       ;  test for next buffer
+        lda  nxtbf       
+        sta  bufpnt+1    
+        ldy  nxtpnt      
+;
+xx05    lda  (bufpnt),y          
+        tax      
+        and  #mask2x     
+        ora  gtab+1      
+        sta  gtab+1      
+;
+        txa      
+        and  #mask3      
+        sta  gtab+2      
+;
+        txa      
+        and  #mask4      
+        sta  gtab+3      
+;
+        iny     ;  next
+;
+        lda  (bufpnt),y          
+        tax      
+        and  #mask4x     
+        ora  gtab+3      
+        sta  gtab+3      
+;
+        txa      
+        and  #mask5      
+        sta  gtab+4      
+;
+        iny     ;  next byte
+;
+        lda  (bufpnt),y          
+        tax      
+        and  #mask5x     
+        ora  gtab+4      
+        sta  gtab+4      
+;
+        txa      
+        and  #mask6      
+        sta  gtab+5      
+;
+        txa      
+        and  #mask7      
+        sta  gtab+6      
+;
+        iny      
+; test for overflow during write to binary conversion
+        bne  xx06        
+        lda  nxtbf       
+        sta  bufpnt+1    
+        ldy  nxtpnt      
+        sty  bufpnt      
+;
+xx06    lda  (bufpnt),y          
+        tax      
+        and  #mask7x     
+        ora  gtab+6      
+        sta  gtab+6      
+;
+        txa      
+        and  #mask8      
+        sta  gtab+7      
+        iny      
+;
+        sty  gcrpnt      
+;
+;
+        ldx  gtab        
+        lda  gcrtba,x    
+        ldx  gtab+1      
+        ora  gcrtba,x    
+        sta  btab        
+;
+        ldx  gtab+2      
+        lda  gcrtba,x    
+        ldx  gtab+3      
+        ora  gcrtbd,x    
+        sta  btab+1      
+;
+        ldx  gtab+4      
+        lda  gcrtbe,x    
+        ldx  gtab+5      
+        ora  gcrtbf,x    
+        sta  btab+2      
+;
+        ldx  gtab+6      
+        lda  gcrtbg,x    
+        ldx  gtab+7      
+        ora  gcrtbh,x    
+        sta  btab+3      
+;
+        rts      
+;
+;
+;
+;
+;
+gcrbin  lda  #0         ;  setup pointers
+        sta  gcrpnt      
+        sta  savpnt      
+        sta  bytcnt      
+;
+        lda  #>ovroff   ; point to overflow first
+        sta  nxtbf       
+;
+        lda  #$1b       ; overflow offset
+        sta  nxtpnt      
+;
+        lda  bufpnt+1    
+        sta  savpnt+1    
+;
+        jsr  get4gb      
+;
+        lda  btab        
+        sta  bid        ;  get header id
+;
+        ldy  bytcnt      
+        lda  btab+1      
+        sta  (savpnt),y          
+        iny      
+;
+        lda  btab+2      
+        sta  (savpnt),y          
+        iny      
+;
+        lda  btab+3      
+        sta  (savpnt),y          
+        iny      
+;
+gcrb10  sty  bytcnt      
+;
+        jsr  get4gb      
+;
+        ldy  bytcnt      
+;
+        lda  btab        
+        sta  (savpnt),y          
+        iny      
+        beq  gcrb20     ;  test if done yet
+;
+        lda  btab+1      
+        sta  (savpnt),y          
+        iny      
+;
+        lda  btab+2      
+        sta  (savpnt),y          
+        iny      
+;
+        lda  btab+3      
+        sta  (savpnt),y          
+        iny      
+;
+        bne  gcrb10     ;  jmp
+;
+gcrb20           
+        lda  savpnt+1   ; restore buffer pointer
+        sta  bufpnt+1    
+;
+        rts      

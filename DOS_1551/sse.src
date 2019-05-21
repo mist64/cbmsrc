@@ -1,0 +1,45 @@
+;*********************************
+;* ssend: position ss & buftab   *
+;*        to end of last record. *
+;*   vars:                       *
+;*********************************
+;
+ssend            
+        jsr  ssset       
+        sta  ssnum       
+        lda  #4          
+        sta  dirbuf      
+        ldy  #ssioff-6   
+        bne  se20        
+se10             
+        dey      
+        dey      
+        bmi  break       
+se20             
+        lda  (dirbuf),y         ; look for last ss #
+        beq  se10       ; t=0: not yet
+        tya      
+        lsr  a   
+        cmp  ssnum      ; check ss #
+        beq  se30       ; this is last ss
+;
+        sta  ssnum       
+        ldx  lindx       
+        lda  ss,x        
+        jsr  ibrd       ; read last ss
+se30             
+        ldy  #0         ; set ssind
+        sty  dirbuf      
+        lda  (dirbuf),y         ; debug
+        bne  break       
+        iny      
+        lda  (dirbuf),y          
+        tay     ; back up to track
+        dey      
+        sty  ssind       
+        tya      
+        jmp  setssp      
+;
+break            
+        lda  #$67        
+        jsr  cmder2      

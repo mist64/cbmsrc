@@ -1,0 +1,237 @@
+        .page  'dos.traps'       
+;02/13/84 ds
+;*******************************************
+;             state change cmds
+;*******************************************
+;
+list    lda  portc      ; wait for ted to set dav
+        bmi  list        
+        lda  tedioa     ; ret state chg
+        pha     ; primary addr
+        lda  c3po2      ; xtra byte to send
+        bpl  list3      ; nope send this one
+        lda  #0         ; clear flags
+        sta  eoiflg      
+        lda  bsour2     ; get xtra byte
+        jsr  ciout      ; send it out
+        lda  #0          
+        sta  c3po2       
+;
+list3   pla     ; trap for primary address
+        tsx      
+        stx  xspsv      ; *
+        ldx  #0         ; prep for clear later
+        sta  icmd       ; save primary address
+        tay      
+        and  #$60       ; leave type bits only
+        cmp  #$40       ; chk if talk type
+        beq  dcde60     ; br if talk
+        cmp  #$20       ; chk if listen
+        beq  dcde20     ; br if listen type
+        ldy  #0          
+        ldx  #3         ; 
+        stx  temp       ; blink four times interface failure
+        sei     ; set interrupts off leds blink better!
+        jmp  powerr     ; should never get here,if it does tough luck!
+;
+dcde60  stx  tlkact     ; clear
+        tya     ; get full addr again
+        cmp  #$5f       ; untalk?
+        beq  dcde30     ; yes
+        sta  tlkact     ; set nz
+        stx  lsnact     ; clear listen
+dcde50           
+        lda  #32        ; set defaults
+        sta  sa         ; *
+        sta  orgsa      ; *
+        jmp  ieeok1     ; ok
+;
+dcde30           
+        lda  #0         ; not selected
+        beq  ieedon     ; ok
+;
+dcde20           
+        tya     ; get full addr
+        cmp  #$3f       ; chk if unlisten
+        bne  dcde40     ; br if not
+        lda  #$ff        
+        sta  eoiflg     ; last byte
+        ldx  #0         ; continue
+        stx  lsnact     ; reset listen
+        beq  dcde30     ; bra
+dcde40           
+        sta  lsnact     ; set listen
+        stx  tlkact     ; reset talk
+        jmp  dcde50     ; go set defaults
+        .page    
+;****************************************
+;
+;     process secondary address
+;     input: tedioa = secondary address
+;
+;****************************************
+;
+secnd            
+tksa    lda  portc      ; wait for ted to drop dav
+        bmi  tksa        
+        tsx     ; save sp
+        stx  xspsv      ; *
+        lda  tedioa     ; retrieve s.a.
+        sta  orgsa      ; save secondary addr
+        tay     ; *
+        and  #$0f       ; *
+        sta  sa         ; *
+        tya     ; chk if close request
+        and  #$f0       ; *
+        cmp  #$e0       ; *
+        bne  *+5        ; br if not close
+        jsr  close      ; close the channel
+        lda  #$00        
+        beq  ieedon     ; ok
+;
+        .page    
+;***************************************
+;
+;      character output from ted
+;
+;      on entrance: tedioa= data
+;      on exit:     portc = status
+;
+;***************************************
+;
+ciout   lda  portc      ; wait for ted to drop dav
+        bmi  ciout       
+        tsx     ; save sp
+        stx  xspsv      ; *
+        lda  tedioa     ; get data
+        pha      
+        lda  c3po2       
+        bpl  ciout2      
+        lda  bsour2      
+        sta  data       ; save the data byte
+        jsr  fndwch     ; find open write chnl
+        bcs  lsn15      ; br if not open
+        lda  chnrdy,x   ; chk if open
+        ror  a   
+        bcs  lsn30      ; br if open
+lsn15            
+        lda  orgsa      ; chk if req for open
+        and  #$f0       ; *
+        cmp  #$f0       ; *
+        beq  lsn30      ; br if open
+        lda  sa         ; chk if save
+        cmp  #1         ; *
+        beq  ieeok0     ; br if save (no error)
+        pla      
+        lda  #2         ; set time out on output
+        bne  ieedon     ; bra
+;
+lsn30            
+        jsr  put        ; put the byte away
+ciout2  lda  c3po2       
+        ora  #disbf      
+        sta  c3po2       
+;
+ieeok0  pla      
+        sta  bsour2      
+ieeok1  lda  #0          
+ieedon  and  #3         ; mask status bits
+        ora  #8         ; set ack high
+        sta  tdstat     ; status
+        lda  portc       
+        ora  tdstat      
+        sta  portc      ; mask in status bits
+iee333  lda  portc      ; wait for rdy to go high
+        bpl  iee333      
+        and  #$fc        
+        sta  portc      ; clear status
+        rts      
+        .page    
+;******************************************
+;
+;       input a character to ted
+;
+;       return tedioa = output, portc = status
+;
+;
+;******************************************
+;
+acptr   lda  portc      ; wait for dav to go low
+        bmi  acptr       
+        lda  #$ff       ; set data/dir output
+        sta  drva2      ; data direction out
+        tsx     ; save sp
+        stx  xspsv      ; *
+        lda  sa         ; find a read channel
+        cmp  #maxsa+1    
+        bcc  acpfnd      
+        and  #$f         
+acpfnd  cmp  #cmdsa      
+        bne  acpfd1      
+        lda  #errsa      
+acpfd1  tax      
+        sec      
+        lda  lintab,x    
+        bmi  acpfd2      
+        and  #$f         
+        sta  lindx       
+        tax      
+        clc      
+acpfd2  bcs  notlk      ; br if not open
+        ldx  lindx      ; get fcb number
+        lda  chnrdy,x    
+        bmi  tlk05       
+notlk            
+        lda  #$0d       ; stuff cr
+        sta  tedioa     ; stuff cr
+        lda  #10        ; timeout read, set rdy ack high
+        sta  tdstat      
+        bne  acpdon     ; (bra)
+;
+tlk05            
+        lda  chndat,x   ; data
+        sta  tedioa     ; give him the data
+        lda  chnrdy,x    
+        and  #eoi        
+        eor  #eoi        
+        asl  a          ; shift left three
+        asl  a          ; *
+        asl  a          ; *
+        pha      
+        jsr  get        ; get next
+        pla     ; status
+        cmp  #$40       ; is it eoi
+        bne  tlkok      ; is it eoi
+        lda  #3         ; load eoi into status
+tlkok   ora  #8         ; mask ack rdy high
+        sta  tdstat      
+;
+acpdon  lda  portc       
+        and  #$fc       ; clear status bits
+        ora  tdstat     ; set if req'd
+        sta  portc      ; update status
+acpdn0  lda  portc      ; wait for rdy to go high
+        bpl  acpdn0      
+        ldx  #0          
+        stx  drva2      ; set data/dir input
+        and  #$f7        
+        sta  portc      ; set rdy low
+acpdn1  lda  portc      ; wait for ack rdy to go low
+        bmi  acpdn1      
+        ora  #8         ; *
+        and  #$fc        
+        sta  portc      ; set rdy high
+        rts      
+;
+xflsh            
+        ldx  #$0d       ; stuff cr
+        stx  tedioa     ; *
+        lda  #10        ; timeout read
+        sta  tdstat      
+        bne  acpdon     ; (bra)
+;
+ilerr            
+        lda  #1         ; timeout write
+        jmp  ieedon     ; *
+;
+;       .end

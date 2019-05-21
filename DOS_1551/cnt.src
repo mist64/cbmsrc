@@ -1,0 +1,215 @@
+;08/22/84 ds
+;
+;
+;    *contrl
+;
+;    main controller loop
+;
+;    scans job que for jobs
+;
+;   finds job on current track
+;   if it exists
+;
+sysirq  pha      
+        txa      
+        pha      
+        tya      
+        pha      
+        tsx     ; save current stack pointer
+        stx  savsp      ; *
+;
+top     ldy  #numjob-1          ; pointer into job que
+;
+;
+cont10           
+        lda  jobs,y     ; find a job (msb set)
+        bmi  cont30     ; branch if there is a job
+        dey      
+        bpl  cont10      
+;
+        lda  joberr     ; are we to blink?
+        bne  cont22     ; br, we are
+;
+;   check for open files
+;
+cont11  lda  dskcnt     ; load in port
+        ora  #8         ; set mask to turn off led(x)
+        ldy  bthdrv     ; check to see if drv#(x) has an open file
+        beq  cont21     ; br, it does not
+        and  #$f7       ; else mask led#(x) on
+cont21  sta  dskcnt      
+        jmp  cont25     ; 
+;
+;   blink appropriate led
+;
+cont22           
+        dec  errcnt      
+        bpl  cont25      
+        lda  #30        ; 30*6ms blink rate
+        sta  errcnt      
+        lda  dskcnt      
+        eor  #$08        
+        sta  dskcnt      
+;
+cont25  jmp  end         
+;
+cont30           
+        and  #drvmsk    ;  get drive #
+        tax      
+        cmp  cdrive     ;  test if current drive
+        beq  cont40      
+;
+        sta  cdrive      
+        and  #01         
+        sta  drviof     ; drive i/o offset 0 or 1
+        ror  a   
+        ror  a   
+        ror  a          ; into msb's
+        sta  work        
+        lda  portc      ; set in portc
+        and  #%00111111         ; mask
+        ora  work       ; set bits
+        sta  portc       
+        jsr  turnon     ; turn drive on
+        jmp  end        ;  go clean up
+;
+;
+cont40  lda  drvst      ;  test if motor up to speed
+        bmi  cont50      
+;
+        asl  a          ;  test if stepping
+        bpl  que        ;  not stepping
+;
+cont50  jmp  end         
+;
+;
+que     lda  #$20       ;  status=running
+        sta  drvst       
+;
+        lda  dskcnt     ;  turn on activity led
+        and  #$f7        
+        sta  dskcnt      
+que9    ldy  #numjob-1   
+        sty  jobn        
+;
+que10   jsr  setjb       
+        bmi  que20       
+;
+que05   dec  jobn        
+        bpl  que10       
+;
+;
+        ldy  nxtjob      
+        jsr  setjb1      
+;
+        lda  nxtrk       
+        sta  steps       
+        asl  steps      ;  steps*2
+;
+        lda  #$60       ;  set status=stepping
+        sta  drvst       
+;
+;
+;
+        lda  (hdrpnt),y         ;  get dest track #
+        sta  drvtrk      
+fin     jmp  end         
+;
+;
+que20   and  #drvmsk    ;  test if same drive
+        cmp  cdrive      
+        bne  que05      ;  test if current drive
+;
+        lda  drvtrk      
+        beq  gotu       ;  uninit. track #
+;
+        sec     ;  calc distance to track
+        lda  (hdrpnt),y          
+        sbc  drvtrk      
+        beq  gotu       ;  on track
+;
+        sta  nxtrk       
+        lda  jobn       ;  save job# and dist to track
+        sta  nxtjob      
+;
+        jmp  que05       
+;
+;
+;
+;
+gotu    ldx  #4         ;  set track and sectr
+        lda  (hdrpnt),y          
+        sta  tracc       
+;
+gotu10  cmp  trknum-1,x          
+;
+        dex      
+        bcs  gotu10      
+;
+        lda  numsec,x    
+        sta  sectr       
+;
+        txa     ;  set density
+        asl  a   
+        asl  a   
+        asl  a   
+        asl  a   
+        asl  a          ; to high order
+        sta  work        
+;
+        lda  dskcnt      
+        and  #$9f       ;  clear density bits
+        ora  work        
+        sta  dskcnt     ; set density bits
+;
+;
+        lda  job        ;  yes, go do the job
+        cmp  #bump-$80          ;  test for bump
+        beq  bmp         
+;
+;
+;
+        cmp  #frmt-$80          ;  is it a format code
+        beq  fmt         
+;
+        jmp  seak       ;  do a sector seek
+fmt     jmp  formt      ;  do the format
+;
+;
+bmp              
+        lda  dskcnt      
+        and  #$ff-$03   ;  set phase a
+        sta  dskcnt      
+        lda  #$60       ;  set status=stepping
+        sta  drvst       
+;
+        lda  #256-92    ;  step back 45 traks
+        sta  steps       
+        lda  #1         ;  drvtrk now 1
+        sta  drvtrk      
+        jmp  errr        
+;
+setjb   ldy  jobn        
+setjb1  lda  jobs,y      
+        pha      
+        bpl  setj10     ;  no job here
+;
+        and  #$78        
+        sta  job         
+        tya      
+        asl  a   
+        adc  #<hdrs     ; hdrpnt,trk,sec for job
+        sta  hdrpnt      
+        lda  #>hdrs      
+        sta  hdrpnt+1    
+        tya     ;  point at buffer
+        clc      
+        adc  #>bufs      
+        sta  bufpnt+1    
+;
+;
+setj10  ldy  #0          
+        sty  bufpnt      
+;
+        pla      
+        rts      
