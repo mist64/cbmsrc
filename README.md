@@ -42,7 +42,7 @@ The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from Bo 
 
 ## KERNAL_VIC_04
 
-The Commodre VIC-20 KERNAL source, unrelease version (901486-04). Extracted from kernal.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
+The Commodore VIC-20 KERNAL source, unrelease version (901486-04). Extracted from kernal.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
 
 ## BASIC_TED, KERNAL_TED_0{4|5}
 
