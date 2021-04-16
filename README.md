@@ -2,6 +2,14 @@
 
 This repository collects original source code of various Commodore Business Machines (CBM) computers converted to a modern encoding (ASCII, LF, indentation).
 
+## BASIC_VIC
+
+The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
+
+## KERNAL_VIC_04
+
+The Commodore VIC-20 KERNAL source, unreleased version (901486-04). Extracted from kernal.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
+
 ## BASIC_C64
 
 The Commodore 64 BASIC source (901226-01). Extracted from c64-basic.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
@@ -42,13 +50,16 @@ The sources have been verified to build the correct -03 KERNAL binary, but no gu
 
 It contains the version byte at $FF80 (3), but it does not contain the "RRBY" signature at $FFF6.
 
-## BASIC_VIC
+## BASIC_C64GS, KERNAL_C64GS
 
-The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
+The Commodore 64GS BASIC and KERNAL (390852-01) source (1990). Source: [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
 
-## KERNAL_VIC_04
-
-The Commodore VIC-20 KERNAL source, unrelease version (901486-04). Extracted from kernal.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
+* BASIC_C64GS: The source has updated comments, and the binary is identical with the regular C64 BASIC, except for:
+	* The BASIC vector table is initialized with a literal $F72E as the main loop address. This causes BASIC to jump to the C64GS power-on message in the KERNAL.
+	* The checksum is hardcoded with $EC.
+* KERNAL_C64GS: The source has updated comments, and contains the following changes:
+	* Tape support has been replaced by the power-on message code.
+	* Memory test has been sped up by only testing one byte per block.
 
 ## BASIC_TED, KERNAL_TED_0{4|5}
 

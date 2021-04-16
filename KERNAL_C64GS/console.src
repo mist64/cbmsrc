@@ -1,0 +1,4885 @@
+	.nam C64 Console KERNEL  (C)1982,1988,1990 CBM
+	.subttl Copyright (C) 1982,1988,1990 Commodore Business Machines, Inc.
+
+;  *********************************************************************** 
+;  *                                //                                   *
+;  *                CCCCCCC        //   666666    444   444              *
+;  *               CCC   CCC      //   666        444   444              *
+;  *              CCC            //   666         444   444              *
+;  *              CCC           //    6666666666  4444444444             *
+;  *              CCC          //     666     666       444              *
+;  *               CCC   CCC  //      666     666       444              *
+;  *                CCCCCCC  //         6666666         444              *
+;  *                        //                                           * 
+;  *                                                                     * 
+;  *   CCCCCC    OOOOOO   NNN    NN  SSSSSSS    OOOOOO   LLL     EEEEEEE * 
+;  *  CCC  CCC  OOO  OOO  NNNN   NN SSS   SSS  OOO  OOO  LLL     EEE     * 
+;  * CCC       OOO    OOO NNNNN  NN SSS       OOO    OOO LLL     EEE     * 
+;  * CCC       OOO    OOO NNN NN NN  SSSSSSS  OOO    OOO LLL     EEEEEE  * 
+;  * CCC       OOO    OOO NNN  NNNN       SSS OOO    OOO LLL     EEE     * 
+;  *  CCC  CCC  OOO  OOO  NNN   NNN SSS   SSS  OOO  OOO  LLL     EEE     * 
+;  *   CCCCCC    OOOOOO   NNN    NN  SSSSSSS    OOOOOO   LLLLLLL EEEEEEE * 
+;  *                                                                     * 
+;  *                                                                     * 
+;  *             E  D  I  T  O  R           K  E  R  N  E  L             * 
+;  *                                                                     * 
+;  *                                                                     * 
+;  *      COPYRIGHT (C)1990  BY   COMMODORE BUSINESS MACHINES, INC.      *
+;  *                                                                     * 
+;  *               A L L    R I G H T S    R E S E R V E D               *
+;  *                                                                     * 
+;  *********************************************************************** 
+  
+;			    Version  900716
+  
+;  ***********************************************************************
+;  *                                                                     * 
+;  *  THIS LISTING CONTAINS CONFIDENTIAL AND PROPRIETARY INFORMATION OF  *
+;  *  CBM, INC.  REPRODUCTION,  DISSEMINATION  OR  DISCLOSURE TO OTHERS  *
+;  *  WITHOUT EXPRESS WRITTEN PERMISSION IS PROHIBITED.  THIS  SOFTWARE  *
+;  *  IS INTENDED FOR USE IN SYSTEMS MANUFACTURED ONLY BY COMMODORE.     *
+;  *                                                                     * 
+;  *       INFORMATION IN THIS LISTING WILL CHANGE WITHOUT NOTICE.       * 
+;  *                                                                     * 
+;  *  NO RESPONSIBILITY IS ASSUMED FOR THE RELIABILITY OF THIS SOFTWARE. * 
+;  *                                                                     * 
+;  ***********************************************************************
+
+
+;.end
+	.page
+;	Adapted from the following C64 Kernel files by Fred Bowen, as used
+;	in C64C ROM (CBM part numbers 901229-03 and 251913-01):
+;
+;	.include disclaim
+;	.include declare
+;	.include editor1
+;;	.include conkat		;Japanese conversion tables
+;	.include editor2
+;	.include editor3
+;	.include serial
+;	.include rs232xmit
+;	.include rs232rcvr
+;	.include rs232io
+;	.include messages
+;	.include channelio
+;	.include openchnl
+;	.include close
+;	.include clall
+;	.include open
+;	.include load
+;	.include save
+;	.include time
+;	.include errors
+;;	.include tapefile	;replaced by Game Console code
+;;	.include tapectlr	;replaced by Game Console code
+;;	.include taperead	;replaced by Game Console code
+;;	.include tapewrite	;replaced by Game Console code
+;	.include init
+;	.include rs232nmi
+;	.include irqfile
+;	.include vectors
+;
+;	The cassette driver code has been removed and replaced by startup
+;	code for the Game Console, pointed to by BASIC's 'imain' vector.
+;	All other Kernel references to cassette code patched to return a
+;	file-not-found or stop-key status.  RAMTAS speeded up by checking
+;	only 1st byte each page.
+;
+;	Last change 900716:  Change banner from 'Console' to 'C64 Games System'
+	.page
+	.subttl DECLARE
+
+	* = $0000
+
+d6510	*=*+1		;6510 data direction register
+r6510	*=*+1		;6510 data register
+
+	* = $0090
+
+status	*=*+1		;I/O operation status byte
+stkey	*=*+1		;stop key flag
+svxt	*=*+1		;cassette temporary
+verck	*=*+1		;load or verify flag
+c3p0	*=*+1		;serial buffered character flag
+bsour	*=*+1		;character buffer for serial
+syno	*=*+1		;cassette sync #
+xsav	*=*+1		;temp for basin
+ldtnd	*=*+1		;index to logical file tables
+dfltn	*=*+1		;default input device #
+dflto	*=*+1		;default output device #
+prty	*=*+1		;cassette parity
+dpsw	*=*+1		;cassette dipole switch
+msgflg	*=*+1		;Kernel message enable flag
+
+ptr1			;cassette error pass1
+t1 	*=*+1		;temporary 1
+
+ptr2			;cassette error pass2
+t2 	*=*+1		;temporary 2
+
+time	*=*+3		;24 hour clock in 1/60th seconds
+
+r2d2			;serial bus usage
+pcntr	*=*+1		;cassette stuff
+
+bsour1	*=*+1		;temp used by serial routine
+
+count			;temp used by serial routine
+cntdn	*=*+1		;cassette sync countdown
+
+bufpt	*=*+1		;cassette buffer pointer
+
+inbit			;rs-232 rcvr input bit storage
+shcnl	*=*+1		;cassette short count
+
+bitci			;rs-232 rcvr bit count in
+rer 	*=*+1		;cassette read error
+
+rinone			;rs-232 rcvr flag for start bit check
+rez 	*=*+1		;cassete reading zeroes
+
+ridata			;rs-232 rcvr byte buffer
+rdflg	*=*+1		;cassette read mode
+
+riprty			;rs-232 rcvr parity storage
+shcnh	*=*+1		;cassette short cnt
+
+sal 	*=*+1		;starting address
+sah 	*=*+1
+eal 	*=*+1		;ending address
+eah 	*=*+1
+
+cmp0	*=*+1
+temp	*=*+1
+tape1	*=*+2		;address of cassette buffer
+
+bitts	*=*+1		;rs-232 trns bit count
+
+nxtbit			;rs-232 trns next bit to be sent
+diff	*=*+1		;cassette
+
+rodata			;rs-232 trns byte buffer
+prp 	*=*+1		;cassette
+
+fnlen	*=*+1		;length of current filename string
+la 	*=*+1		;current file logical addrress
+sa 	*=*+1		;current file secondary address
+fa 	*=*+1		;current file physical device #
+fnadr	*=*+2		;address of current filename string
+
+roprty			;rs-232 trns parity buffer
+ochar	*=*+1		;cassette
+
+fsblk	*=*+1		;cassette read block count
+drive
+mych	*=*+1		;cassette byte being built
+cas1	*=*+1		;cassette manual/controlled switch (updated during IRQ)
+
+tmp0
+track
+stal	*=*+1
+sector
+stah	*=*+1
+
+memuss			;load temps (2 bytes)
+imparm			;primm utility string pointer
+tmp2	*=*+2
+
+
+; variables for screen editor
+
+lstx	*=*+1		;key scan index
+ndx 	*=*+1		;index to keyboard queue
+rvs 	*=*+1		;rvs field on flag
+indx	*=*+1		;current input line   end
+lsxp	*=*+1		;current input column start
+lstp	*=*+1		;current input line   start
+sfdx	*=*+1		;shift mode on print
+blnsw	*=*+1		;cursor blink enable
+blnct	*=*+1		;count to toggle cursor
+gdbln	*=*+1		;character at cursor
+blnon	*=*+1		;on/off blink flag
+crsw	*=*+1		;input vs. get flag
+pnt 	*=*+2		;pointer to current line (text)
+pntr	*=*+1		;current cursor column
+qtsw	*=*+1		;quote switch
+lnmx	*=*+1		;40/80 max position
+tblx	*=*+1		;current cursor line
+data	*=*+1
+insrt	*=*+1		;insert mode flag
+ldtb1	*=*+26		;screen lines high byte table & flags
+user	*=*+2		;pointer to current line (attributes)
+keytab	*=*+2		;keyscan table indirect
+
+
+; rs-232 z-page
+
+ribuf	*=*+2		;rs-232 input buffer pointer
+robuf	*=*+2		;rs-232 output buffer pointer
+
+frekzp	*=*+4		;free Kernel zero page 9/24/80
+flag	= $fb		;b7=0 system, b7=1 basic, b6=1 call	[900516 Console]
+pointer	= $fc		;indirection				[900516 Console]
+
+baszpt	*=*+1		;location $FF used by BASIC
+
+	* = $0100
+
+bad 	*=*+1		;stack
+
+	* = $0200
+
+buf 	*=*+89		;BASIC/monitor buffer
+
+
+; tables for open files
+
+lat 	*=*+10		;logical file numbers
+fat 	*=*+10		;primary device numbers
+sat 	*=*+10		;secondary addresses
+
+
+; system storage
+
+keyd	*=*+10		;IRQ keyboard buffer
+memstr	*=*+2		;start of memory
+memsiz	*=*+2		;top of memory
+timout	*=*+1		;IEEE timeout flag (unused)
+
+
+; screen editor storage
+
+color	*=*+1		;current foreground color
+gdcol	*=*+1		;color at cursor
+hibase	*=*+1		;base location of screen
+xmax	*=*+1		;IRQ key buffer size
+rptflg	*=*+1		;key repeat flag
+kount	*=*+1		;delay between key repeats
+delay	*=*+1		;delay before a key repeats
+shflag	*=*+1		;shift flag byte
+lstshf	*=*+1		;last shift pattern
+keylog	*=*+2		;indirect for keyboard table setup
+mode	*=*+1		;editor modes: LSB=pet/cattacanna, MSB=keybd lock
+autodn	*=*+1		;auto scroll down flag (=0 on, >0 off)
+
+
+; rs-232 storage
+
+m51ctr	*=*+1		;6551 control register
+m51cdr	*=*+1		;6551 command register
+m51ajb	*=*+2		;non-standard (bittime/2-100)
+rsstat	*=*+1		;rs-232 status register
+bitnum	*=*+1		;number of bits to send (fast response)
+baudof	*=*+2		;baud rate full bit time (created by open)
+
+ridbe	*=*+1		;input buffer index to end
+ridbs	*=*+1		;input buffer pointer to start
+rodbs	*=*+1		;output buffer index to start
+rodbe	*=*+1		;output buffer index to end
+
+irqtmp	*=*+2		;holds IRQ during cassette operations
+
+enabl	*=*+1		;rs-232 enables
+
+caston	*=*+1		;TOD sense during cassette operations
+kika26	*=*+1		;temp storage for cassette read routine
+stupid	*=*+1		;temp d1irq indicator for cassette read
+
+lintmp	*=*+1		;temporary for line index
+palnts	*=*+1		;PAL vs. NTSC flag (0=NTSC, >0=PAL)
+
+
+
+	* = $0300	;BASIC indirects (10)
+	* = $0300+20	;Kernel/OS indirects (20)
+
+cinv	*=*+2		;IRQ vector
+cbinv	*=*+2		;BRK vector
+nminv	*=*+2		;NMI vector
+iopen	*=*+2		;   indirects for code
+iclose	*=*+2		;   conforms to Kernel spec 8/19/80
+ichkin	*=*+2
+ickout	*=*+2
+iclrch	*=*+2
+ibasin	*=*+2
+ibsout	*=*+2
+istop	*=*+2
+igetin	*=*+2
+iclall	*=*+2
+usrcmd	*=*+2		;(unused) points to BRK handler
+iload	*=*+2
+isave	*=*+2
+
+	* = $0300+60
+
+tbuffr	*=*+192		;cassette data buffer
+
+	* = $0400
+
+vicscn	*=*+1024	;VIC text screen
+ramloc			;beginning of BASIC program/data storage
+
+	.page
+; I/O devices
+
+vicreg	= $d000
+
+sidreg	= $d400
+
+viccol	= $d800
+
+
+	* = $dc00	;CIA #1 (6526)
+
+colm			;keyboard matrix
+d1pra	*=*+1
+rows			;keyboard matrix
+d1prb	*=*+1
+d1ddra	*=*+1
+d1ddrb	*=*+1
+d1t1l	*=*+1
+d1t1h	*=*+1
+d1t2l	*=*+1
+d1t2h	*=*+1
+d1tod1	*=*+1
+d1tods	*=*+1
+d1todm	*=*+1
+d1todh	*=*+1
+d1sdr	*=*+1
+d1icr	*=*+1
+d1cra	*=*+1
+d1crb	*=*+1
+
+
+	* = $dd00	;CIA #2 (6526)
+
+d2pra	*=*+1
+d2prb	*=*+1
+d2ddra	*=*+1
+d2ddrb	*=*+1
+d2t1l	*=*+1
+d2t1h	*=*+1
+d2t2l	*=*+1
+d2t2h	*=*+1
+d2tod1	*=*+1
+d2tods	*=*+1
+d2todm	*=*+1
+d2todh	*=*+1
+d2sdr	*=*+1
+d2icr	*=*+1
+d2cra	*=*+1
+d2crb	*=*+1
+
+timrb	= $19		;6526 crb enable one-shot tb
+
+	.page
+
+; tape equates
+
+blf	= 1		;basic load file
+bdf	= 2		;basic data file
+plf	= 3		;fixed program type
+bdfh	= 4		;basic data file header
+eot	= 5		;end of tape
+
+sberr	= 4
+lberr	= 8
+sperr	= 16
+ckerr	= 32
+
+bufsz	= 192		;buffer size
+
+
+; screen editor constants
+
+llen	= 40		;single line 40 columns
+nlines	= 25		;25 rows on screen
+cr	= $0d		;carriage return
+
+maxchr	= 80		;maximum number of characters per logical line
+nwrap	= 2		;maximum number of physical lines per logical line
+
+;.end
+;rsr 8/3/80 add & change z-page
+;rsr 8/11/80 add memuss & plf type
+;rsr 8/22/80 add rs-232 routines
+;rsr 8/24/80 add open variables
+;rsr 8/29/80 add baud space move rs232 to z-page
+;rsr 9/2/80 add screen editor vars&con
+;rsr 12/7/81 modify for vic-40
+
+	.page
+	.subttl EDITOR1
+	* = $e500	;start of C64 Kernel
+
+
+iobase	ldx #<d1pra	;return address of 6526 (CIA #1)
+	ldy #>d1pra
+	rts
+
+
+
+scrorg	ldx #llen	;return screen size
+	ldy #nlines
+	rts
+
+
+
+plot	bcs 10$		;read/plot cursor position
+	stx tblx
+	sty pntr
+	jsr stupt
+10$	ldx tblx
+	ldy pntr
+	rts
+
+	.page
+; initialize screen Editor
+
+cint	jsr panic	;restore default I/O channels & initialize VIC
+
+	lda #0		;make sure we're in PET mode, keyboard locks off
+	sta mode
+	sta blnon	;we don't have a good character from the screen yet
+
+	lda #<shflog	;set shift logic indirects
+	sta keylog
+	lda #>shflog
+	sta keylog+1
+
+	lda #10
+	sta xmax	;maximum IRQ keyboard buffer size
+	sta delay	;delay before a key repeats
+
+	lda #14		;initialize text color to lt. blue [901227-03]
+	sta color
+
+	lda #4
+	sta kount	;delay between key repeats
+	lda #12
+	sta blnct	;set cursor blink count
+	sta blnsw	;start cursor blinking
+
+clsr	lda hibase	;build screen lines high byte table, clear wrap flags
+	ora #$80
+	tay
+	lda #0
+	tax
+10$	sty ldtb1,x
+	clc
+	adc #llen
+	bcc 20$
+	iny		;carry (bump high byte)
+20$	inx
+	cpx #nlines+1	;done # of lines?
+	bne 10$		;...no
+
+	lda #$ff	;tag end of line table
+	sta ldtb1,x
+
+	ldx #nlines-1	;clear from the bottom line up
+30$	jsr clrln	;see scroll routines
+	dex
+	bpl 30$
+
+
+
+
+; home function
+
+nxtd	ldy #0
+	sty pntr	;leftmost column
+	sty tblx	;topmost line
+
+; move cursor to (pntr,tblx)
+
+stupt	ldx tblx	;get current line
+	lda pntr	;get current column
+
+fndstr	ldy ldtb1,x	;find begining of line
+	bmi stok	;...found
+	clc
+	adc #llen	;adjust pointer
+	sta pntr
+	dex
+	bpl fndstr	;...wrapped line(s)
+
+stok	jsr setpnt	;set up pnt indirect (901227-03)
+
+	lda #llen-1
+	inx
+fndend	ldy ldtb1,x
+	bmi stdone
+	clc
+	adc #llen
+	inx
+	bpl fndend
+
+stdone	sta lnmx
+	jmp scolor	;make color pointer follow (901227-03)
+
+
+
+; this is a patch for input logic (901227-03)
+;    fixes input"xxxxxxx-40-xxxxx";a$ problem
+
+finput	cpx lsxp	;check if on same line
+	beq 10$		;yes...return to send
+	jmp findst	;check if we wrapped down...
+
+10$	rts
+
+	nop		;placeholder
+
+
+
+; panic NMI entry
+
+vpan	jsr panic	;fix VIC screen
+	jmp nxtd	;home cursor
+
+
+panic	lda #3		;restore default I/O channels
+	sta dflto
+	lda #0
+	sta dfltn
+
+
+; init VIC
+
+initv	ldx #47		;load all VIC registers
+10$	lda tvic-1,x
+	sta vicreg-1,x
+	dex
+	bne 10$
+	rts
+
+	.page
+; remove character from queue
+
+lp2	ldy keyd
+	ldx #0
+lp1	lda keyd+1,x
+	sta keyd,x
+	inx
+	cpx ndx
+	bne lp1
+	dec ndx
+	tya
+	cli
+	clc	;good return
+	rts
+
+;--------------------------------------------------------------------
+;	fetch characters and display them until <cr>
+;--------------------------------------------------------------------
+
+loop4	jsr prt		;print the character in .A
+
+loop3	lda ndx		;wait here for any buffered keystroke
+	sta blnsw	;...keep cursor blinking
+	sta autodn	;...enable auto scroll down
+	beq loop3
+
+	sei		;do the cursor blink thing
+	lda blnon
+	beq lp21	;...branch if cursor not on
+	lda gdbln	;...get saved character
+	ldx gdcol	;...get saved color
+	ldy #0
+	sty blnon	;...flag cursor off
+	jsr dspp	;...display correct data at cursor position
+
+lp21	jsr lp2		;get the key from the IRQ buffer
+	cmp #$83	;RUN key?
+	bne lp22	;...no
+	ldx #9		;...yes: fill buffer with canned message
+	sei
+	stx ndx
+10$	lda runtb-1,x
+	sta keyd-1,x
+	dex
+	bne 10$
+	beq loop3
+
+lp22	cmp #cr		;<CR> key?
+	bne loop4	;...no
+	ldy lnmx
+	sty crsw	;...yes: set flag to pass characters from screen now
+10$	lda (pnt),y	;...find last non-blank character on this line
+	cmp #' '
+	bne 20$		;...got it
+	dey
+	bne 10$		;...keep looking backwards from end of line
+
+20$	iny
+	sty indx	;mark EOL
+	ldy #0
+	sty autodn	;disable auto scroll down
+	sty pntr	;mark beginning
+	sty qtsw	;clear quote mode
+
+	lda lsxp	;line input actually begins on
+	bmi lop5	;...branch if wrapped line
+	ldx tblx
+	jsr finput	;analyze: does input begin & end in same line? column?
+	cpx lsxp
+	bne lop5	;...not same line
+	lda lstp
+	sta pntr	;...begin input here
+	cmp indx
+	bcc lop5	;...from this column.  go pass characters
+	bcs clp2	;...beyond this column.  done input.
+
+
+
+;--------------------------------------------------------------------
+;	input a line until carriage return
+;--------------------------------------------------------------------
+
+loop5	tya		;save current cursor position
+	pha
+	txa
+	pha
+	lda crsw	;where are we getting characters?
+	beq loop3	;...from buffer (input is from keyboard)
+
+
+lop5			;...from screen (input is from screen)
+	ldy pntr
+	lda (pnt),y	;get a screen character
+	sta data
+	and #$3f	;convert from screen codes:
+	asl data
+	bit data
+	bpl 10$		;...branch if not graphic character
+	ora #$80
+10$	bcc 20$		;...branch if not reverse field character
+	ldx qtsw
+	bne 30$
+20$	bvs 30$		;...branch if not shifted character
+	ora #$40
+
+30$	inc pntr
+	jsr qtswc	;toggle quote mode IFF quote character
+	cpy indx
+	bne clp1	;...branch if not on last input line
+
+
+clp2	lda #0		;clear flag, I/O is finished
+	sta crsw
+	lda #cr		;kludge for OPEN4,4:CMD4:LIST problem
+	ldx dfltn
+	cpx #3
+	beq 10$		;...input is from screen
+	ldx dflto
+	cpx #3
+	beq 20$		;...output is to screen
+10$	jsr prt		;force a <cr>
+
+20$	lda #cr		;pass a <cr> as the last character
+
+
+clp1	sta data
+	pla		;restore cursor position (for BASIN)
+	tax
+	pla
+	tay
+
+	lda data	;kludge to translate PI character
+	cmp #$de
+	bne 10$		;...branch if not PI
+	lda #$ff
+
+10$	clc		;always a good return from keyboard or screen
+	rts
+
+
+
+
+
+qtswc 	cmp #$22	;test for quote character
+	bne 10$		;...nope
+	lda qtsw
+	eor #$1		;...yes: toggle quote flag
+	sta qtsw
+	lda #$22
+10$	rts
+
+
+
+;--------------------------------------------------------------------
+;	various entries from PRINT to output a character
+;--------------------------------------------------------------------
+
+nxt33	ora #$40	;make a graphic character
+
+nxt3	ldx rvs		;reverse mode?
+	beq nvs		;...no
+
+nc3	ora #$80	;make a reverse character
+
+nvs	ldx insrt	;in insert mode?
+	beq 10$		;...no
+	dec insrt	;...yes: decrement field count
+
+10$	ldx color	;get current foreground color
+	jsr dspp	;display the character
+	jsr wlogic	;check for wraparound
+
+
+
+
+loop2	pla		;*** PRINT exits here ***
+	tay
+
+	lda insrt	;clear quote mode if quote was hit in insert mode
+	beq 10$
+	lsr qtsw
+
+10$	pla		;restore registers
+	tax
+	pla
+	clc		;good return
+	cli
+	rts
+
+	.page
+wlogic	jsr chkdwn	;maybe we should we increment tblx
+	inc pntr	;bump charcter pointer
+	lda lnmx
+	cmp pntr	;if lnmx is less than pntr
+	bcs wlgrts	;...branch if lnmx>=pntr
+	cmp #maxchr-1	;past max characters
+	beq wlog10	;...branch if so
+	lda autodn	;should we auto scroll down?
+	beq wlog20	;...branch if not
+	jmp bmt1	;...else decide which way to scroll
+
+
+
+wlog20	ldx tblx	;see if we should scroll down
+	cpx #nlines
+	bcc wlog30	;...branch if not
+	jsr scrol	;else do the scroll
+	dec tblx	;and adjust current line#
+	ldx tblx
+
+wlog30	asl ldtb1,x	;wrap the line
+	lsr ldtb1,x
+	inx		;index to next line
+	lda ldtb1,x	;get high order byte of address
+	ora #$80	;make it a non-continuation line
+	sta ldtb1,x	;and put it back
+	dex		;get back to current line
+	lda lnmx	;continue the bytes taken out
+	clc
+	adc #llen
+	sta lnmx
+
+
+
+
+findst	lda ldtb1,x	;is this the first line?
+	bmi 10$		;...branch if so
+	dex		;else backup 1
+	bne findst	;...until we are there
+10$	jmp setpnt	;make sure pointers are right & rts
+
+
+
+
+wlog10	dec tblx
+	jsr nxln
+	lda #0
+	sta pntr	;point to first byte
+wlgrts	rts
+
+	.page
+bkln	ldx tblx
+	bne bkln1
+	stx pntr
+	pla
+	pla
+	bne loop2
+
+bkln1	dex
+	stx tblx
+	jsr stupt
+	ldy lnmx
+	sty pntr
+	rts
+
+
+
+
+;--------------------------------------------------------------------
+;			print routine
+;--------------------------------------------------------------------
+
+prt 	pha
+	sta data	;save copy of character to print
+	txa		;save all registers
+	pha
+	tya
+	pha
+
+	lda #0
+	sta crsw	;flag output to screen
+	ldy pntr	;screen column to print to
+	lda data
+	bpl 10$		;...branch if not shifted character
+	jmp nxtx	;...shifted
+
+10$ 	cmp #cr		;<cr>?
+	bne 20$		;...no
+	jmp nxt1
+
+20$	cmp #' '	;convert to screen codes
+	bcc 50$		;...control character
+	cmp #$60	;lower case?
+	bcc 30$		;...no
+	and #$df	;convert  $60-$7F  to  $40-$5F
+	bne 40$		;...bra
+30$	and #$3f	;convert  $40-$5F  to  $00-$1F
+
+40$	jsr qtswc	;if quote character, toggle quote switch
+	jmp nxt3	;display the character
+
+
+
+50$	ldx insrt	;insert mode set?
+	beq 60$		;...no
+	jmp nc3		;...yes, display it
+
+60$	cmp #$14	;<delete>?
+	bne ntcn1	;...no
+	tya
+	bne bak1up
+	jsr bkln
+	jmp bk2
+
+bak1up	jsr chkbak	;should we dec tblx
+	dey
+	sty pntr
+bk1	jsr scolor	;fix color ptrs
+bk15	iny
+	lda (pnt),y
+	dey
+	sta (pnt),y
+	iny
+	lda (user),y
+	dey
+	sta (user),y
+	iny
+	cpy lnmx
+	bne bk15
+bk2	lda #' '
+	sta (pnt),y
+	lda color
+	sta (user),y
+	bpl jpl3
+
+
+
+ntcn1	ldx qtsw	;in quote mode?
+	beq 10$		;...no
+	jmp nc3		;...yes, display it but don't do it
+
+10$	cmp #$12	;<rvson>?
+	bne 20$
+	sta rvs
+
+20$	cmp #$13	;<home>?
+	bne 30$
+	jsr nxtd
+
+30$	cmp #$1d	;<crsrrt>?
+	bne ncx2
+	iny
+	jsr chkdwn
+	sty pntr
+	dey
+	cpy lnmx
+	bcc ncz2
+	dec tblx
+	jsr nxln
+	ldy #0
+jpl4	sty pntr
+ncz2	jmp loop2
+
+
+ncx2	cmp #$11	;<crsrdn>?
+	bne colr1
+	clc
+	tya
+	adc #llen
+	tay
+	inc tblx
+	cmp lnmx
+	bcc jpl4
+	beq jpl4
+	dec tblx
+curs10	sbc #llen
+	bcc gotdwn
+	sta pntr
+	bne curs10
+gotdwn	jsr nxln
+jpl3	jmp loop2
+
+colr1	jsr chkcol	;check for a color
+	jmp lower	;was jmp loop2
+
+
+
+; shifted keys
+
+nxtx 	and #$7f
+	cmp #$7f	;PI?
+	bne 10$
+	lda #$5e
+
+10$	cmp #$20	;function key?
+	bcc 20$
+	jmp nxt33
+
+20$	cmp #cr		;<cr>?
+	bne 30$
+	jmp nxt1
+
+30$	ldx qtsw	;quote mode?
+	bne 90$
+	cmp #$14	;insert mode?
+	bne 80$
+
+	ldy lnmx
+	lda (pnt),y
+	cmp #' '
+	bne 40$
+	cpy pntr
+	bne 50$
+40$	cpy #maxchr-1
+	beq 70$		;exit if line too long
+	jsr newlin	;scroll down 1
+50$	ldy lnmx
+	jsr scolor
+60$	dey
+	lda (pnt),y
+	iny
+	sta (pnt),y
+	dey
+	lda (user),y
+	iny
+	sta (user),y
+	dey
+	cpy pntr
+	bne 60$
+
+	lda #$20
+	sta (pnt),y
+	lda color
+	sta (user),y
+	inc insrt
+70$	jmp loop2
+
+80$	ldx insrt
+	beq 100$
+90$	ora #$40
+	jmp nc3
+
+100$	cmp #$11	;<crsrup>?
+	bne 120$
+	ldx tblx
+	beq jpl2
+	dec tblx
+	lda pntr
+	sec
+	sbc #llen
+	bcc 110$
+	sta pntr
+	bpl jpl2
+
+110$	jsr stupt	;up a line
+	bne jpl2
+
+120$	cmp #$12	;<rvsoff>?
+	bne 130$
+	lda #0
+	sta rvs
+
+130$	cmp #$1d	;<crsrlf>?
+	bne 150$
+	tya
+	beq 140$
+	jsr chkbak
+	dey
+	sty pntr
+	jmp loop2
+
+140$	jsr bkln
+	jmp loop2
+
+150$	cmp #$13	;<clr>?
+	bne sccl
+	jsr clsr
+
+
+
+jpl2	jmp loop2
+
+
+
+sccl 	ora #$80	;make it upper case
+	jsr chkcol	;try for color
+	jmp upper	;was jmp loop2
+
+
+
+nxln	lsr lsxp
+	ldx tblx
+10$	inx
+	cpx #nlines	;off bottom?
+	bne 20$		;no...
+	jsr scrol	;yes...scroll
+20$	lda ldtb1,x	;double line?
+	bpl 10$		;yes...scroll again
+	stx tblx
+	jmp stupt
+
+
+
+nxt1 	ldx #0		;clear all modes
+	stx insrt
+	stx rvs
+	stx qtsw
+	stx pntr
+	jsr nxln
+	jmp loop2
+
+
+
+; check for a decrement tblx
+
+chkbak	ldx #nwrap
+	lda #0
+10$	cmp pntr
+	beq 20$
+	clc
+	adc #llen
+	dex
+	bne 10$
+	rts
+
+20$	dec tblx	;back
+	rts
+
+
+; check for increment tblx
+
+chkdwn	ldx #nwrap
+	lda #llen-1
+10$	cmp pntr
+	beq 20$
+	clc
+	adc #llen
+	dex
+	bne 10$
+	rts
+
+20$	ldx tblx	;down line
+	cpx #nlines
+	beq 30$
+	inc tblx
+30$	rts
+
+
+
+chkcol 	ldx #15		;there are 16 colors (0-15)
+10$	cmp coltab,x
+	beq 20$
+	dex
+	bpl 10$
+	rts
+
+20$ 	stx color	;change the color
+	rts
+
+
+
+coltab		;blk,wht,red,cyn,pur,grn,blu,yel
+	.byte	 $90,$05,$1c,$9f,$9c,$1e,$1f,$9e
+	.byte	 $81,$95,$96,$97,$98,$99,$9a,$9b
+
+;.end
+; rsr modify for vic-40 system
+; rsr 12/31/81 add 8 more colors
+
+	.page
+	.subttl EDITOR2
+; screen scroll routine
+
+scrol	lda sal
+	pha
+	lda sah
+	pha
+	lda eal
+	pha
+	lda eah
+	pha
+
+;
+;  s c r o l l   u p
+;
+
+scro0	ldx #$ff
+	dec tblx
+	dec lsxp
+	dec lintmp
+10$	inx		;goto next line
+	jsr setpnt	;point to 'to' line
+	cpx #nlines-1	;done?
+	bcs 20$		;...branch if so
+
+	lda ldtb2+1,x	;setup from pntr
+	sta sal
+	lda ldtb1+1,x
+	jsr scrlin	;scroll this line up1
+	bmi 10$
+
+20$	jsr clrln
+
+	ldx #0		;scroll hi byte pointers
+30$	lda ldtb1,x
+	and #$7f
+	ldy ldtb1+1,x
+	bpl 40$
+	ora #$80
+40$	sta ldtb1,x
+	inx
+	cpx #nlines-1
+	bne 30$
+
+	lda ldtb1+nlines-1
+	ora #$80
+	sta ldtb1+nlines-1
+	lda ldtb1	;double line?
+	bpl scro0	;yes...scroll again
+
+	inc tblx
+	inc lintmp
+	lda #$7f	;check for control key
+	sta colm	;drop line 2 on port b
+	lda rows
+	cmp #%11111011	;slow scroll key? <ctrl>
+	php		;save status
+	lda #$7f	;restore port B for stop key check
+	sta colm
+	plp
+	bne 60$		;...branch if not slow scroll
+
+	ldy #0
+50$	nop		;delay
+	dex
+	bne 50$
+	dey
+	bne 50$
+	sty ndx		;clear key queue buffer
+
+60$	ldx tblx
+
+
+pulind	pla		;restore old indirects
+	sta eah
+	pla
+	sta eal
+	pla
+	sta sah
+	pla
+	sta sal
+	rts
+
+	.page
+newlin	ldx tblx
+bmt1	inx
+	lda ldtb1,x	;find last display line of this line
+	bpl bmt1	;table end mark=>$ff will abort...also
+
+	stx lintmp	;found it
+
+; generate a new line
+
+	cpx #nlines-1	;is one line from bottom?
+	beq 10$		;...yes: just clear last
+	bcc 10$		;...<nlines: insert line
+	jsr scrol	;scroll everything
+	ldx lintmp
+	dex
+	dec tblx
+	jmp wlog30
+
+10$	lda sal
+	pha
+	lda sah
+	pha
+	lda eal
+	pha
+	lda eah
+	pha
+
+	ldx #nlines
+20$	dex
+	jsr setpnt	;set up to addr
+	cpx lintmp
+	bcc 30$
+	beq 30$		;branch if finished
+	lda ldtb2-1,x	;set from addr
+	sta sal
+	lda ldtb1-1,x
+	jsr scrlin	;scroll this line down
+	bmi 20$
+
+30$	jsr clrln
+
+	ldx #nlines-2
+40$	cpx lintmp	;done?
+	bcc 60$		;...branch if so
+	lda ldtb1+1,x
+	and #$7f
+	ldy ldtb1,x	;was it continued
+	bpl 50$		;...branch if so
+	ora #$80
+50$	sta ldtb1+1,x
+	dex
+	bne 40$
+
+60$	ldx lintmp
+	jsr wlog30
+
+	jmp pulind	;restore old indirects and return
+
+
+
+; scroll line from sal to pnt and colors from eal to user
+
+scrlin 	and #$03	;clear any garbage stuff
+	ora hibase	;put in hi order bits
+	sta sal+1
+	jsr tofrom	;color to & from addrs
+
+	ldy #llen-1
+10$	lda (sal),y
+	sta (pnt),y
+	lda (eal),y
+	sta (user),y
+	dey
+	bpl 10$
+	rts
+
+; do color to and from addresses from character to and from adrs
+
+tofrom 	jsr scolor
+	lda sal		;character from
+	sta eal		;make color from
+	lda sal+1
+	and #$03
+	ora #>viccol
+	sta eal+1
+	rts
+
+
+; set up pnt and y from .x
+
+setpnt	lda ldtb2,x
+	sta pnt
+	lda ldtb1,x
+	and #$03
+	ora hibase
+	sta pnt+1
+	rts
+
+
+; clear the line pointed to by .x
+
+clrln	ldy #llen-1
+	jsr setpnt
+	jsr scolor
+10$	jsr cpatch	;reversed order from 901227-02
+	lda #$20	;store a space
+	sta (pnt),y	;to display
+	dey
+	bpl 10$
+	rts
+
+	nop		;placeholder
+
+
+
+; put a character on the screen
+
+dspp	tay		;save char
+	lda #2
+	sta blnct	;blink cursor
+	jsr scolor	;set color ptr
+	tya		;restore color
+
+dspp2	ldy pntr	;get column
+	sta (pnt),y	;char to screen
+	txa
+	sta (user),y	;color to screen
+	rts
+
+
+
+scolor	lda pnt		;generate color ptr
+	sta user
+	lda pnt+1
+	and #$03
+	ora #>viccol	;vic color ram
+	sta user+1
+	rts
+
+	.page
+;----------------------------------------------------------------------
+;				I R Q
+;----------------------------------------------------------------------
+
+key	jsr $ffea	;update jiffy clock
+	lda blnsw	;blinking crsr?
+	bne 20$		;...no
+	dec blnct	;time to blink?
+	bne 20$		;...no
+	lda #20		;reset blink counter
+
+	sta blnct	;<repdo>
+	ldy pntr	;cursor position
+	lsr blnon	;carry set if original char
+	ldx gdcol	;get char original color
+	lda (pnt),y	;get character
+	bcs 10$		;...branch if not needed
+
+	inc blnon	;set to 1
+	sta gdbln	;save original char
+	jsr scolor
+	lda (user),y	;get original color
+	sta gdcol	;save it
+	ldx color	;blink in this color
+	lda gdbln	;with original character
+
+10$	eor #$80	;blink it
+	jsr dspp2	;display it
+
+20$	lda r6510	;get cassette switches
+	and #$10	;is switch down?
+	beq 30$		;...branch if so
+
+	ldy #0
+	sty cas1	;cassette off switch
+
+	lda r6510
+	ora #$20
+	bne 40$		;...branch if motor is off
+
+30$	lda cas1
+	bne 50$
+
+	lda r6510
+	and #%00011111	;turn motor on
+40$	sta r6510
+
+50$	jsr scnkey	;scan keyboard
+
+
+
+kprend	lda d1icr	;clear interupt flags
+	pla		;restore registers
+	tay
+	pla
+	tax
+	pla
+	rti		;exit from IRQ routines
+
+	.page
+;----------------------------------------------------------------------
+;		K E Y B O A R D    S C A N
+;----------------------------------------------------------------------
+
+scnkey	lda #0
+	sta shflag
+	ldy #64		;last key index
+	sty sfdx	;null key found
+	sta colm	;raise all lines
+	ldx rows	;check for a key down
+	cpx #$ff	;no keys down?
+	beq scnout	;...branch if none
+
+	tay		;.a=0
+	lda #<mode1
+	sta keytab
+	lda #>mode1
+	sta keytab+1
+	lda #%11111110	;start with 1st column
+	sta colm
+
+10$	ldx #8		;8 row keyboard
+	pha		;save column output info
+20$	lda rows
+	cmp rows	;debounce keyboard
+	bne 20$
+
+30$	lsr a		;look for key down
+	bcs 60$		;...none
+	pha
+	lda (keytab),y	;get char code
+	cmp #$05
+	bcs 40$		;...if not special key go on
+	cmp #$03	;could it be a stop key?
+	beq 40$		;...branch if so
+	ora shflag
+	sta shflag	;put shift bit in flag byte
+	bpl 50$
+
+40$	sty sfdx	;save key number
+50$	pla
+
+60$	iny
+	cpy #65
+	bcs 70$		;...branch if finished
+	dex
+	bne 30$
+	sec
+	pla		;reload column info
+	rol a
+	sta colm	;next column on keyboard
+	bne 10$		;...always branch
+
+
+70$	pla		;dump column output...all done
+	jmp (keylog)	;evaluate shift functions
+
+
+rekey	ldy sfdx	;get key index
+	lda (keytab),y	;get char code
+	tax		;save the char
+	cpy lstx	;same as prev char index?
+	beq 10$		;...yes
+	ldy #16		;...no - reset delay before repeat
+	sty delay
+	bne ckit2	;...always
+
+10$	and #$7f	;unshift it
+	bit rptflg	;check for repeat disable
+	bmi rpt20	;...yes
+	bvs scnrts
+
+	cmp #$7f	;no keys?
+scnout	beq ckit2	;   yes - get out
+	cmp #$14	;<delete> key?
+	beq rpt20	;   yes
+	cmp #$20	;<space> key?
+	beq rpt20	;   yes
+	cmp #$1d	;<crsr> left/right?
+	beq rpt20	;   yes
+	cmp #$11	;<crsr> up/down?
+	bne scnrts	;   no - exit
+
+rpt20	ldy delay	;time to repeat?
+	beq rpt40	;...yes
+	dec delay
+	bne scnrts
+
+rpt40	dec kount	;time for next repeat?
+	bne scnrts	;...no
+	ldy #4		;...yes - reset counter
+	sty kount
+	ldy ndx		;no repeat if queue full
+	dey
+	bpl scnrts
+
+
+ckit2	ldy sfdx	;get index of key
+	sty lstx	;save this index to key found
+	ldy shflag	;update shift status
+	sty lstshf
+	cpx #$ff	;a null key or no key?
+	beq scnrts	;...branch if so
+	txa		;need x as index so...
+	ldx ndx		;get # of chars in key queue
+	cpx xmax	;IRQ buffer full?
+	bcs scnrts	;...yes - no more insert
+
+	sta keyd,x	;<putque> put raw data here
+	inx
+	stx ndx		;update key queue count
+
+
+scnrts	lda #$7f	;setup pb7 for stop key sense
+	sta colm
+	rts
+
+	.page
+; shift logic
+
+shflog	lda shflag
+	cmp #$03	;commodore shift combination?
+	bne 10$		;...branch if not
+	cmp lstshf	;did I do this already?
+	beq scnrts	;...branch if so
+	lda mode
+	bmi 20$		;...don't shift if it's minus
+
+	lda vicreg+24	;<switch>
+	eor #%00000010	;turn on other case
+	sta vicreg+24	;point the VIC there
+	jmp 20$
+
+10$	asl a
+	cmp #$08	;was it a control key?
+	bcc 15$		;...branch if not
+	lda #6		;else use table #4
+
+15$	tax		;<nctrl>
+	lda keycod,x
+	sta keytab
+	lda keycod+1,x
+	sta keytab+1
+
+20$	jmp rekey
+
+;.end
+; rsr 12/08/81 modify for vic-40
+; rsr 2/18/82 modify for 6526 input pad sense
+; rsr 3/11/82 fix keyboard debounce, repair file
+; rsr 3/11/82 modify for commodore 64
+
+	.page
+	.subttl EDITOR3
+; keyboard tables
+
+keycod		 	;keyboard mode 'dispatch'
+	.word  mode1
+	.word  mode2
+	.word  mode3
+	.word  contrl	;control keys
+
+mode1						;normal keys
+	.byte  $14,$0d,$1d,$88,$85,$86,$87,$11	;del rtn rt  f7  f1  f3  f5  dn
+	.byte  $33,$57,$41,$34,$5a,$53,$45,$01	; 3   w   a   4   z   s   e  shf
+	.byte  $35,$52,$44,$36,$43,$46,$54,$58	; 5   r   d   6   c   f   t   x
+	.byte  $37,$59,$47,$38,$42,$48,$55,$56	; 7   y   g   8   b   h   u   v
+	.byte  $39,$49,$4a,$30,$4d,$4b,$4f,$4e	; 9   i   j   0   m   k   o   n
+	.byte  $2b,$50,$4c,$2d,$2e,$3a,$40,$2c	; +   p   l   -   .   :   @   ,
+	.byte  $5c,$2a,$3b,$13,$01,$3d,$5e,$2f	;ib.  *   ;  hom shf  =   ^   /
+	.byte  $31,$5f,$04,$32,$20,$02,$51,$03	; 1  <-- ctl  2  spc  C=  q stop
+	.byte  $ff				;end of table null
+	.page
+mode2						;shifted keys (right keycap graphics)
+	.byte  $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;ins RET lft f8  f2  f4  f6  up	
+	.byte  $23,$d7,$c1,$24,$da,$d3,$c5,$01	; #   W   A   $   Z   S   E  shf
+	.byte  $25,$d2,$c4,$26,$c3,$c6,$d4,$d8	; %   R   D   &   C   F   T   X
+	.byte  $27,$d9,$c7,$28,$c2,$c8,$d5,$d6	; '   Y   G   (   B   H   U   V
+	.byte  $29,$c9,$ca,$30,$cd,$cb,$cf,$ce	; )   I   J   0   M   K   O   N
+	.byte  $db,$d0,$cc,$dd,$3e,$5b,$ba,$3c	;+gr  P   L  -gr  >   [  @gr  <
+	.byte  $a9,$c0,$5d,$93,$01,$3d,$de,$3f	;lbg *gr  ]  clr shf  =  pi   ?
+	.byte  $21,$5f,$04,$22,$a0,$02,$d1,$83	; !  <-- ctl  "  SPC  C=  Q  run
+	.byte  $ff				;end of table null
+	.page
+mode3						;C= keys (left keycap grahpics)
+	.byte  $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;ins RET lft f8  f2  f4  f6  up
+	.byte  $96,$b3,$b0,$97,$ad,$ae,$b1,$01	;red  W   A  cyn  Z   S   E  shf
+	.byte  $98,$b2,$ac,$99,$bc,$bb,$a3,$bd	;pur  R   D  grn  C   F   T   X
+	.byte  $9a,$b7,$a5,$9b,$bf,$b4,$b8,$be	;blu  Y   G  yel  B   H   U   V
+	.byte  $29,$a2,$b5,$30,$a7,$a1,$b9,$aa	; )   I   J   0   M   K   O   N
+	.byte  $a6,$af,$b6,$dc,$3e,$5b,$a4,$3c	;+gr  P   L  -gr  >   [  @gr  <
+	.byte  $a8,$df,$5d,$93,$01,$3d,$de,$3f	;lbg *gr  ]  clr shf  =  pi   ?
+	.byte  $81,$5f,$04,$95,$a0,$02,$ab,$83	;blk <-- ctl wht SPC  C=  Q  run
+	.byte  $ff				;end of table null
+
+	.page
+lower	cmp #$0e	;select lower case?
+	bne upper	;...branch if not
+	lda vicreg+24	;else set VIC to point to lower case
+	ora #%00000010
+	bne ulset	;...bra
+
+upper	cmp #$8e	;select upper case?
+	bne lock	;...branch if not
+	lda vicreg+24	;else set VIC to upper/PET set
+	and #%11111101
+
+ulset	sta vicreg+24
+outhre	jmp loop2
+
+
+lock	cmp #8		;lock character set?
+	bne unlock	;...branch if not
+	lda #$80	;else set lock switch on
+	ora mode	;don't hurt anything - just in case
+	bmi lexit	;...bra
+
+unlock	cmp #9		;unlock the character set?
+	bne outhre	;...branch if not
+	lda #$7f	;clear the lock switch
+	and mode	;don't hurt anything
+lexit	sta mode
+	jmp loop2	;get out
+
+	.page
+contrl						;control keys
+	.byte  $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff	;
+	.byte  $1c,$17,$01,$9f,$1a,$13,$05,$ff	;red /w  /a  cyn /z  /s  /e
+	.byte  $9c,$12,$04,$1e,$03,$06,$14,$18	;pur /r  /d  grn /c  /f  /t  /x
+	.byte  $1f,$19,$07,$9e,$02,$08,$15,$16	;blu /y  /g  yel /b  /h  /u  /v
+	.byte  $12,$09,$0a,$92,$0d,$0b,$0f,$0e	;rvs /i  /j  off /m  /k  /o  /n
+	.byte  $ff,$10,$0c,$ff,$ff,$1b,$00,$ff	;    /p  /l          /[  /@
+	.byte  $1c,$ff,$1d,$ff,$ff,$1f,$1e,$ff	;/lb     /]          /=  /pi
+	.byte  $90,$06,$ff,$05,$ff,$ff,$11,$ff	;blk /<-     wht         /q
+	.byte  $ff				;end of table null
+
+tvic
+	.byte  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0	;sprites    0-16
+	.byte  $9b,55,0,0,0,$08,0,$14,$0f,0,0,0,0,0,0	;registers 17-31 rc=311
+	.byte  14,6,1,2,3,4,0,1,2,3,4,5,6,7		;registers 32-46
+
+runtb	.byte  'LOAD',$D,'RUN',$D
+
+	.page
+linz0	= vicscn		;screen line equates
+linz1	= linz0+llen
+linz2	= linz1+llen
+linz3	= linz2+llen
+linz4	= linz3+llen
+linz5	= linz4+llen
+linz6	= linz5+llen
+linz7	= linz6+llen
+linz8	= linz7+llen
+linz9	= linz8+llen
+linz10	= linz9+llen
+linz11	= linz10+llen
+linz12	= linz11+llen
+linz13	= linz12+llen
+linz14	= linz13+llen
+linz15	= linz14+llen
+linz16	= linz15+llen
+linz17	= linz16+llen
+linz18	= linz17+llen
+linz19	= linz18+llen
+linz20	= linz19+llen
+linz21	= linz20+llen
+linz22	= linz21+llen
+linz23	= linz22+llen
+linz24	= linz23+llen
+
+ldtb2	.byte  <linz0		;screen lines low byte table
+	.byte  <linz1
+	.byte  <linz2
+	.byte  <linz3
+	.byte  <linz4
+	.byte  <linz5
+	.byte  <linz6
+	.byte  <linz7
+	.byte  <linz8
+	.byte  <linz9
+	.byte  <linz10
+	.byte  <linz11
+	.byte  <linz12
+	.byte  <linz13
+	.byte  <linz14
+	.byte  <linz15
+	.byte  <linz16
+	.byte  <linz17
+	.byte  <linz18
+	.byte  <linz19
+	.byte  <linz20
+	.byte  <linz21
+	.byte  <linz22
+	.byte  <linz23
+	.byte  <linz24
+
+;.end
+; rsr 12/08/81 modify for vic-40 keyscan <== hi bob!
+; rsr 2/17/81 modify for the stinking 6526r2 chip
+; rsr 3/11/82 modify for commodore 64
+; rsr 3/28/82 modify for new pla
+; rsr 6/22/82 add 311 pla raster compare
+
+	.page
+	.subttl SERIAL
+
+; command serial bus device to talk
+
+talk	ora #$40	;make a talk address
+	.byte $2c	;skip two bytes
+
+
+; command serial bus device to listen
+
+listn 	ora #$20	;make a listen address
+	jsr rsp232	;protect self from rs232 NMIs
+list1	pha
+
+	bit c3p0	;character left in buf?
+	bpl 10$		;no...
+
+; send buffered character
+
+	sec		;set eoi flag
+	ror r2d2
+	jsr isour	;send last character
+	lsr c3p0	;buffer clear flag
+	lsr r2d2	;clear eoi flag
+
+
+10$	pla		;talk/listen address
+	sta bsour
+	sei
+	jsr datahi
+	cmp #$3f	;clkhi only on unlisten
+	bne 20$
+	jsr clkhi
+
+20$	lda d2pra	;assert attention
+	ora #$08
+	sta d2pra
+
+
+
+isoura	sei
+	jsr clklo	;set clock line low
+	jsr datahi
+	jsr w1ms	;delay 1 ms
+
+
+isour	sei		;no IRQs allowed
+	jsr datahi	;make sure data is released
+	jsr debpia	;data should be low
+	bcs nodev
+	jsr clkhi	;clock line high
+	bit r2d2	;EOI flag test
+	bpl 30$
+
+; do the EOI
+
+10$	jsr debpia	;wait for data to go high
+	bcc 10$
+
+20$	jsr debpia	;wait for data to go low
+	bcs 20$
+
+30$	jsr debpia	;wait for data high <noeoi>
+	bcc 30$
+	jsr clklo	;set clock low
+
+; set to send data
+
+	lda #$08	;count 8 bits
+	sta count
+
+40$	lda d2pra	;debounce the bus
+	cmp d2pra
+	bne 40$
+	asl a		;set the flags
+	bcc frmerr	;data must be hi
+
+	ror bsour	;next bit into carry
+	bcs 50$
+	jsr datalo
+	bne 60$
+
+50$	jsr datahi
+60$	jsr clkhi	;clock hi
+	nop
+	nop
+	nop
+	nop
+	lda d2pra
+	and #$ff-$20	;data high
+	ora #$10	;clock low
+	sta d2pra
+	dec count
+	bne 40$
+	lda #$04	;set timer for 1ms
+	sta d1t2h
+	lda #timrb	;trigger timer
+	sta d1crb
+	lda d1icr	;clear the timer flags<<<<<<<<<<<<<
+
+70$	lda d1icr
+	and #$02
+	bne frmerr
+	jsr debpia
+	bcs 70$
+	cli		;let IRQs continue
+	rts
+
+
+nodev	lda #$80	;device not present error
+	.byte  $2c
+
+
+frmerr	lda #$03	;framing error
+
+
+csberr	jsr udst	;commodore serial bus error entry
+	cli		;IRQs were off...turn on
+	clc		;make sure no Kernel error returned
+	bcc dlabye	;turn ATN off, release all lines
+
+
+
+; send secondary address after listen
+
+secnd	sta bsour	;buffer character
+	jsr isoura	;send it
+
+
+; release attention after listen
+
+scatn	lda d2pra
+	and #$ff-$08
+	sta d2pra	;release attention
+	rts
+
+
+; talk second address
+
+tksa	sta bsour	;buffer character
+	jsr isoura	;send second addr
+
+
+tkatn			;shift over to listener
+	sei		;no IRQs here
+	jsr datalo	;data line low
+	jsr scatn
+	jsr clkhi	;clock line high
+10$	jsr debpia	;wait for clock to go low
+	bmi 10$
+	cli		;IRQs okay now
+	rts
+
+
+; buffered output to serial bus
+
+ciout	bit c3p0	;buffered char?
+	bmi 10$		;yes...send last
+
+	sec		;no...
+	ror c3p0	;set buffered char flag
+	bne 20$		;branch always
+
+10$	pha		;save current char
+	jsr isour	;send last char
+	pla		;restore current char
+20$	sta bsour	;buffer current char
+	clc		;carry-good exit
+	rts
+
+
+; send untalk command on serial bus
+
+untlk	sei
+	jsr clklo
+	lda d2pra	;pull ATN
+	ora #$08
+	sta d2pra
+	lda #$5f	;untalk command
+	.byte $2c	;skip two bytes
+
+
+
+; send unlisten command on serial bus
+
+unlsn	lda #$3f	;unlisten command
+	jsr list1	;send it
+
+
+
+; release all lines
+
+dlabye	jsr scatn	;always release ATN
+
+dladlh	txa		;delay then release clock and data
+	ldx #10		;delay approx 60 us
+10$	dex
+	bne 10$
+	tax
+	jsr clkhi
+	jmp datahi
+
+
+
+; input a byte from serial bus
+
+acptr	sei		;no IRQ allowed
+	lda #$00	;set EOI/error flag
+	sta count
+	jsr clkhi	;make sure clock line is released
+1$	jsr debpia	;wait for clock high
+	bpl 1$
+
+5$	lda #$01	;set timer 2 for 256us
+	sta d1t2h
+	lda #timrb
+	sta d1crb
+	jsr datahi	;data line high (makes timing more like VIC-20)
+	lda d1icr	;clear the timer flags<<<<<<<<<<<<
+10$	lda d1icr
+	and #$02	;check the timer
+	bne 20$		;ran out.....
+	jsr debpia	;check the clock line
+	bmi 10$		;no not yet
+	bpl 40$		;yes.....
+
+20$	lda count	;check for error (twice thru timeouts)
+	beq 30$
+	lda #2
+	jmp csberr	; st = 2 read timeout
+
+; timer ran out do an EOI thing
+
+30$	jsr datalo	;data line low
+	jsr clkhi	;delay and then set datahi (fix for 40us c64)
+	lda #$40
+	jsr udst	;or an EOI bit into status
+	inc count	;go around again for error check on EOI
+	bne 5$
+
+; do the byte transfer
+
+40$	lda #08		;set up counter
+	sta count
+
+50$	lda d2pra	;wait for clock high
+	cmp d2pra	;debounce
+	bne 50$
+	asl a		;shift data into carry
+	bpl 50$		;clock still low...
+	ror bsour1	;rotate data in
+
+60$	lda d2pra	;wait for clock low
+	cmp d2pra	;debounce
+	bne 60$
+	asl a
+	bmi 60$
+	dec count
+	bne 50$		;more bits.....
+
+; ...exit...
+
+	jsr datalo	;data low
+	bit status	;check for EOI
+	bvc 70$		;none...
+
+	jsr dladlh	;delay then set data high
+
+70$	lda bsour1
+	cli		;IRQ is ok
+	clc		;good exit
+	rts
+
+
+
+clkhi	lda d2pra 	;set clock line high (inverted)
+	and #%11101111
+	sta d2pra
+	rts
+
+
+
+clklo	lda d2pra	;set clock line low (inverted)
+	ora #%00010000
+	sta d2pra
+	rts
+
+
+
+datahi	lda d2pra	;set data line high (inverted)
+	and #%11011111
+	sta d2pra
+	rts
+
+
+
+datalo	lda d2pra	;set data line low (inverted)
+	ora #%00100000
+	sta d2pra
+	rts
+
+
+
+debpia	lda d2pra	;debounce the CIA
+	cmp d2pra
+	bne debpia
+	asl a		;shift the data bit into the carry...
+	rts		;...and the clock into neg flag
+
+
+
+w1ms  			;delay 1ms using loop
+	txa		;save .x
+	ldx #200-16	;1000us-(1000/500*8=#40us holds)
+10$	dex		;5us loop
+	bne 10$
+	tax		;restore .x
+	rts
+
+;.end
+;written 8/11/80 bob fairbairn
+;test serial0.6 8/12/80 rjf
+;change i/o structure 8/21/80 rjf
+;more i/o changes 8/24/80 rjf
+;final release into Kernel 8/26/80 rjf
+;some clean up 9/8/80 rsr
+;add irq protect on isour and tkatn 9/22/80 rsr
+;fix untalk 10/7/80 rsr
+;modify for vic-40 i/o system 12/08/81 rsr
+;add sei to (untlk,isoura,list2) 12/14/81 rsr
+;modify for 6526 flags fix errs 12/31/81 rsr
+;modify for commodore 64 i/o 3/11/82 rsr
+;change acptr eoi for better response 3/28/82 rsr
+;change wait 1 ms routine for less code 4/8/82 rsr
+
+	.page
+	.subttl RS232TRANS
+; rstrab  - entry for nmi continue routine
+; rstbgn  - entry for start transmitter
+;
+; variables used:
+;   bitts  - # of bits to be sent (<>0 not done)
+;   nxtbit - byte contains next bit to be sent
+;   roprty - byte contains parity bit calculated
+;   rodata - stores data byte currently being transmitted
+;   rodbs  - output buffer index start
+;   rodbe  - output buffer index end  (if rodbs=rodbe then buffer empty)
+;   robuf  - indirect pointer to data buffer
+;   rsstat - rs-232 status byte
+;
+;   xxx us - normal bit path
+;   xxx us - worst case parity bit path
+;   xxx us - stop bit path
+;   xxx us - start bit path
+
+rstrab	lda bitts	;check for place in byte...
+	beq rstbgn	;...done, =0 start next
+	bmi rst050	;...doing stop bits
+
+	lsr rodata	;shift data into carry
+	ldx #0		;prepare for a zero
+	bcc 10$		;yes...a zero
+	dex		;no...make an $ff
+10$	txa		;ready to send
+
+	eor roprty	;calc into parity
+	sta roprty
+
+	dec bitts	;bit count down
+	beq rst010	;want a parity instead
+
+
+
+rstext	txa		;calc bit whole to send
+	and #$04	;goes out d2pa2
+	sta nxtbit
+	rts
+
+	.page
+; calculate parity.   nxtbit =0 upon entry
+
+rst010	lda #$20	;check 6551 reg bits
+	bit m51cdr
+	beq rspno	;...no parity, send a stop
+	bmi rst040	;...not real parity
+	bvs rst030	;...even parity
+
+	lda roprty	;calc odd parity
+	bne rspext	;correct guess
+
+rswext	dex		;wrong guess...its a one
+
+rspext	dec bitts	;one stop bit always
+	lda m51ctr	;check # of stop bits
+	bpl rstext	;...one
+	dec bitts	;...two
+	bne rstext	;jump
+
+rspno			;line to send cannot be pb0
+	inc bitts	;counts as one stop bit
+	bne rswext	;...jump to flip to one
+
+rst030	lda roprty	;even parity
+	beq rspext	;...correct guess...exit
+	bne rswext	;...wrong...flip and exit
+
+rst040	bvs rspext	;...wanted space
+	bvc rswext	;...wanted mark
+
+
+
+; stop bits
+
+rst050	inc bitts	;stop bit count towards zero
+	ldx #$ff	;send stop bit
+	bne rstext	;...jump to exit
+
+	.page
+; rstbgn - entry to start byte transmission
+
+rstbgn	lda m51cdr	;check for 3/x line
+	lsr a
+	bcc rst060	;3 line...no check
+	bit d2prb	;check for...
+	bpl dsrerr	;...dsr error
+	bvc ctserr	;...cts error
+
+; set up to send next byte
+
+rst060	lda #0
+	sta roprty	;zero parity
+	sta nxtbit	;send start bit
+	ldx bitnum	;get # of bits
+	stx bitts	;bitts=#of bitts+1
+
+	ldy rodbs	;check buffer pointers
+	cpy rodbe
+	beq rsodne	;all done...
+
+	lda (robuf),y	;get data...
+	sta rodata	;...into byte buffer
+	inc rodbs	;move pointer to next
+	rts
+
+
+; set errors
+
+dsrerr	lda #$40	;dsr gone error
+	.byte $2c
+
+ctserr	lda #$10	;cts gone error
+	ora rsstat
+	sta rsstat
+
+; errors turn off T1
+
+rsodne	lda #$01	;kill T1 NMI
+
+; entry to turn off an enabled NMI...
+
+oenabl	sta d2icr	;toss bad/old NMI
+	eor enabl	;flip enable
+	ora #$80	;enable good NMIs
+	sta enabl
+	sta d2icr
+	rts
+
+
+; bitcnt - cal # of bits to be sent.  returns #of bits+1
+
+bitcnt	ldx #9		;calc word length
+	lda #$20
+	bit m51ctr
+	beq 10$
+	dex		;bit 5 high is a 7 or 5
+10$	bvc 20$
+	dex		;bit 6 high is a 6 or 5
+	dex
+20$	rts
+
+;.end
+; rsr 8/24/80 correct some mistakes
+; rsr 8/27/80 change bitnum base to #bits+1
+; rsr 12/11/81 modify for vic-40
+; rsr 3/11/82 fix enables for bad/old nmi's
+
+	.page
+	.subttl RS232RCVR
+; rsrcvr - nmi routine to collect data into bytes
+;
+; variables used:
+;   inbit  - input bit value
+;   bitci  - bit count in
+;   rinone - flag for start bit check <>0 start bit
+;   ridata - byte input buffer
+;   riprty - holds byte input parity
+;   ribuf  - indirect pointer to data buffer
+;   ridbs  - input buffer pointer to start
+;   ridbe  - input buffer index to end (if ridbe=ridbs then input buffer empty)
+
+rsrcvr	ldx rinone	;check for start bit
+	bne rsrtrt	;was start bit
+
+	dec bitci	;check where we are in input...
+	beq rsr030	;have a full byte
+	bmi rsr020	;getting stop bits
+
+; calc parity
+
+	lda inbit	;get data up
+	eor riprty	;calc new parity
+	sta riprty
+
+; shift data bit in
+
+	lsr inbit	;in bit pos 0
+	ror ridata	;c into data
+
+rsrext	rts		;exit
+
+	.page
+; have stop bit, so store in buffer
+
+rsr018	dec bitci	;no parity, dec so check works
+rsr020	lda inbit	;get data...
+	beq rsr060	;...zero, an error?
+
+	lda m51ctr	;check for correct # of stop bits
+	asl a		;carry tell how may stop bits
+	lda #01
+	adc bitci
+	bne rsrext	;no..exit
+
+; rsrabl - enable to recieve a byte
+
+rsrabl	lda #$90	;enable flag for next byte
+	sta d2icr	;toss bad/old NMI
+	ora enabl	;mark in enable register
+	sta enabl	;re-enabled by jmp oenabl
+	sta rinone	;flag for start bit
+
+	lda #$02	;disable T2
+	jmp oenabl	;flip-off enabl
+
+
+; reciever start bit check
+
+rsrtrt	lda inbit	;check if space
+	bne rsrabl	;bad...try again
+	jmp prtyp	;go to parity patch 901227-03
+
+
+; put data in buffer (at parity time)
+
+rsr030	ldy ridbe	;get end
+	iny
+	cpy ridbs	;have we passed start?
+	beq recerr	;yes...error
+
+	sty ridbe	;move ridbe foward
+	dey
+
+	lda ridata	;get byte buffer up
+	ldx bitnum	;shift until full byte
+10$	cpx #9		;always 8 bits
+	beq 20$
+	lsr a		;fill with zeros
+	inx
+	bne 10$
+
+20$	sta (ribuf),y	;data to page buffer
+
+; parity checking
+
+	lda #$20	;check 6551 command register
+	bit m51cdr
+	beq rsr018	;no parity bit so stop bit
+	bmi rsrext	;no parity check
+
+; check calc parity
+
+	lda inbit
+	eor riprty	;put in with parity
+	beq 30$		;even parity
+	bvs rsrext	;odd...okay so exit
+	.byte $2c	;skip two
+
+30$	bvc rsrext	;even...okay so exit
+
+
+; errors reported
+
+	lda #1		;parity error
+	.byte $2c
+
+recerr	lda #$4		;reciever overrun
+	.byte $2c
+
+breake	lda #$80	;break detected
+	.byte $2c
+
+framee	lda #$02	;frame error
+	ora rsstat
+	sta rsstat
+	jmp rsrabl	;bad exit so hang ##????????##
+
+; check for errors
+
+rsr060	lda ridata	;expecting stop...
+	bne framee	;frame error
+	beq breake	;could be a break
+
+;.end
+; rsr - 8/21/80 add mods
+; rsr - 8/24/80 fix errors
+; rsr - 8/27/80 fix major errors
+; rsr - 8/30/80 fix t2 adjust
+; rsr - 12/11/81 modify for vic-40 i/o
+; rsr - 3/11/82 fix for bad/old nmi's
+
+	.page
+	.subttl RS232IO
+; output a file over usr port using rs232
+
+cko232	sta dflto	;set default out
+	lda m51cdr	;check for 3/x line
+	lsr a
+	bcc cko100	;3line...no turn around
+
+; turn around logic.   check for DSR and RTS
+
+	lda #$02	;bit RTS is on
+	bit d2prb
+	bpl ckdsrx	;no DSR...error
+	bne cko100	;RTS...outputing or full duplex
+
+10$	lda enabl	;check for active input.  RTS will be low if currently inputting
+	and #$02	;look at ier for T2
+	bne 10$		;hang until input done
+
+20$	bit d2prb	;wait for CTS to be off as spec reqs
+	bvs 20$
+
+	lda d2prb	;turn on RTS
+	ora #$02
+	sta d2prb
+
+30$	bit d2prb	;wait for CTS to go on
+	bvs cko100	;done...
+	bmi 30$		;we still have DSR
+
+
+
+ckdsrx	lda #$40	;a data set ready error
+	sta rsstat	;major error....will require reopen
+
+cko100	clc		;no error
+	rts
+
+	.page
+; bso232 - output a char rs232.   data passed in T1 from bsout
+
+; hang loop for buffer full
+
+bsobad	jsr bso100	;keep trying to start system...
+
+
+bso232	ldy rodbe	;buffer handler
+	iny
+	cpy rodbs	;check for buffer full
+	beq bsobad	;hang if so...trying to restart
+	sty rodbe	;indicate new start
+	dey
+	lda t1		;get data...
+	sta (robuf),y	;store data
+
+; set up if necessary to output
+
+bso100	lda enabl	;check for a T1 NMI enable
+	lsr a		;bit 0
+	bcs 10$		;running....so exit
+
+; set up T1 NMIs
+
+	lda #$10	;turn off timer to prevent false start...
+	sta d2cra
+	lda baudof	;set up timer1
+	sta d2t1l
+	lda baudof+1
+	sta d2t1h
+	lda #$81
+	jsr oenabl
+	jsr rstbgn	;set up to send (will stop on CTS or DSR error)
+	lda #$11	;turn on timer
+	sta d2cra
+10$	rts
+
+	.page
+; input a file over user port using rs232
+
+cki232	sta dfltn	;set default input
+
+	lda m51cdr	;check for 3/x line
+	lsr a
+	bcc 40$		;3 line...no handshake
+
+	and #$08	;full/half check (byte shifted above)
+	beq 40$		;full...no handshake
+
+; turn around logic.  check if DSR and not RTS
+
+	lda #$02	;bit RTS is on
+	bit d2prb
+	bpl ckdsrx	;no DSR...error
+	beq 50$		;RTS low...in correct mode
+
+10$	lda enabl	;wait for active output to be done
+	lsr a		;check T1 (bit 0)
+	bcs 10$
+
+	lda d2prb	;turn off RTS
+	and #$ff-02
+	sta d2prb
+
+20$	lda d2prb	;wait for DCD to go high (in spec)
+	and #$04
+	beq 20$
+
+30$	lda #$90	;enable flag for rs232 input
+	clc		;no error
+	jmp oenabl	;flag in enabl
+
+; if not 3 line half then see if we need to turn on flag
+
+40$	lda enabl	;check for flag or T2 active
+	and #$12
+	beq 30$		;no need to turn on
+
+50$	clc		;no error
+	rts
+
+	.page
+; bsi232 - input a char rs232
+;
+; buffer handler
+
+bsi232	lda rsstat	;get status up to change...
+	ldy ridbs	;get last byte address
+	cpy ridbe	;see if buffer empty
+	beq 10$		;return a null if no char
+
+	and #$ff-$08	;clear buffer empty status
+	sta rsstat
+	lda (ribuf),y	;get last char
+	inc ridbs	;inc to next pos
+	rts		;receiver always runs
+
+
+10$	ora #$08	;set buffer empty status
+	sta rsstat
+	lda #$0		;return a null
+	rts
+
+
+
+; rsp232 - protect serial/cassette from rs232 NMIs
+
+rsp232	pha		;save .a
+	lda enabl	;does rs232 have any enables?
+	beq 20$		;no...
+
+10$	lda enabl	;wait until done
+	and #%00000011	;with T1 & T2
+	bne 10$
+
+	lda #%00010000	;disable flag (need to renable in user code)
+	sta d2icr	;turn of enabl
+	lda #0
+	sta enabl	;clear all enabls
+20$	pla		;all done
+	rts
+
+;.end
+; rsr 8/24/80 original code out
+; rsr 8/25/80 original code in
+; rsr 9/22/80 remove parallel refs & fix xline logic
+; rsr 12/11/81 modify for vic-40 i/o
+; rsr 2/15/82 fix some enabl problems
+; rsr 3/31/82 fix flase starts on transmitt
+; rsr 5/12/82 reduce code and fix x-line cts hold-off
+
+	.page
+	.subttl MESSAGES
+ms1	.byte cr,'I/O ERROR ',$a3
+ms5	.byte cr,'SEARCHING',$a0
+ms6	.byte    'FOR',$a0
+ms7	.byte cr,'PRESS PLAY ON TAP',$c5
+ms8	.byte    'PRESS RECORD & PLAY ON TAP',$c5
+ms10	.byte cr,'LOADIN',$c7
+ms11	.byte cr,'SAVING',$a0
+ms21	.byte cr,'VERIFYIN',$c7
+ms17	.byte cr,'FOUND',$a0
+ms18	.byte cr,'OK',$8d
+
+
+; print message to screen only if output enabled
+
+spmsg	bit msgflg	;printing messages?
+	bpl msg10	;no...
+
+msg	lda ms1,y
+	php
+	and #$7f
+	jsr bsout
+	iny
+	plp
+	bpl msg
+
+msg10	clc
+	rts
+
+;.end
+
+	.page
+	.subttl CHANNELIO
+;  ***********************************************
+;  * GETIN -- get a character from open channel  *
+;  *						 *
+;  *      channel is determined by dfltn. 	 *
+;  *						 *
+;  *   the keyboard and rs-232 (dfltn= 0 or 2)   *
+;  *   are serviced here by taking a character   *
+;  *   from the appropriate buffer. if nothing   *
+;  *   is available then = is returned.          *
+;  *						 *
+;  *   all other devices advance to BASIN.	 *
+;  ***********************************************
+
+
+ngetin	lda dfltn	;check device
+	bne 10$		;...not keyboard
+
+	lda ndx		;queue index
+	beq gn20	;...nobody there...exit
+	sei
+	jmp lp2		;go remove a character
+
+10$	cmp #2		;is it rs-232?
+	bne bn10	;no...use basin
+
+gn232	sty xsav	;save .y, used in rs232
+	jsr bsi232
+	ldy xsav	;restore .y
+gn20	clc		;good return
+	rts
+
+	.page
+;  ***********************************************
+;  * BASIN - input a character from open channel *
+;  *						 *
+;  *      channel is determined by dfltn. 	 *
+;  *						 *
+;  *   input from the  keyboard  or  rs-232 is   *
+;  *   different than an get.  input  requires   *
+;  *   buffering an entire line  which is then   *
+;  *   passed to 'basin' a character at a time   *
+;  *   up to the <cr>.				 *
+;  *						 *
+;  *   the device assignments are:		 *
+;  *						 *
+;  *		0 = keyboard			 *
+;  *		1 = cassette			 *
+;  *		2 = rs-232			 *
+;  *		3 = video display		 *
+;  *	     4-31 = serial bus			 *
+;  ***********************************************
+
+nbasin	lda dfltn	;check device
+	bne bn10	;...is not keyboard
+
+
+; input from keyboard
+
+	lda pntr	;save current...
+	sta lstp	;... cursor column
+	lda tblx	;save current...
+	sta lsxp	;... line number
+	jmp loop5	;blink cursor until return
+
+bn10	cmp #3		;is input from screen?
+	bne 20$		;no...
+
+	sta crsw	;fake a carriage return
+	lda lnmx	;say we ended...
+	sta indx	;...up on this line
+	jmp loop5	;pick up characters
+
+20$	bcs bn30	;...branch if device >3 (serial)
+	cmp #2
+	beq bn50	;...branch if rs232
+
+
+
+; input from cassette buffer
+
+	stx xsav
+	jsr jtget
+	bcs jtg37	;stop key/error
+	pha
+	jsr jtget
+	bcs jtg36	;stop key/error
+	bne jtg35	;not an end of file
+	lda #64		;tell user eof
+	jsr udst	;in status
+jtg35	dec bufpt
+	ldx xsav	;.x preserved
+	pla		;character returned
+	rts		;all done (c-clear from jtget)
+
+jtg36	tax		;save error info
+	pla		;toss data
+	txa		;restore error
+jtg37	ldx xsav	;return
+	rts		;error return (c-set from jtget)
+
+; get a character from appropriate cassette buffer
+
+jtget	jsr jtp20	;buffer pointer wrap?
+	bne jtg10	;no...
+	jsr rblk	;yes...read next block
+	bcs bn33	;stop key pressed
+	lda #0
+	sta bufpt	;point to begin
+	beq jtget	;branch always
+
+jtg10	lda (tape1),y	;get char from buf
+	clc		;good return
+	rts
+
+
+
+; input from serial bus
+
+bn30	lda status	;get status from last bus operation
+	beq bn35	;...branch if good
+bn31	lda #cr		;else fake null input
+bn32	clc		;return happy
+bn33	rts
+
+bn35	jmp acptr	;fetch a byte off serial bus & return
+
+
+
+; input from rs232
+
+bn50	jsr gn232	;get info
+	bcs bn33	;error return
+	cmp #0
+	bne bn32	;good data...exit
+	lda rsstat	;check for dsr or dcd error
+	and #$60
+	bne bn31	;an error...exit with c/r
+	beq bn50	;no error...stay in loop
+
+	.page
+;  ***********************************************
+;  * BASOUT - output a character to open channel *
+;  *						 *
+;  *   channel is determined by dflto:		 *
+;  *						 *
+;  *		0 = keyboard <invalid>		 *
+;  *		1 = cassette			 *
+;  *		2 = rs-232			 *
+;  *		3 = video display		 *
+;  *	     4-31 = serial bus			 *
+;  *						 *
+;  ***********************************************
+
+nbsout	pha		;preserve character to output
+	lda dflto	;check device
+	cmp #3		;screen?
+	bne 10$		;...no
+	pla		;...yes: restore data
+	jmp prt		;print to screen
+
+10$	bcc 20$		;...must be device 1 or 2
+	pla		;recall character to output
+	jmp ciout	;send it
+
+20$	lsr a		;carry=0 if rs232, carry=1 if cassette
+	pla		;recall character to output
+
+; print to cassette or rs232
+; casout must be entered with carry set for cassette output!!!
+
+casout	sta t1		;pass data in T1
+	txa		;preserve registers
+	pha
+	tya
+	pha
+	bcc bo50	;...c-clr means dflto=2 (rs232)
+
+	jsr jtp20	;check buffer pointer
+	bne 10$		;...has not reached end
+	jsr wblk	;write full buffer
+	bcs rstor	;...abort on stop key
+
+	lda #bdf	;put buffer type byte
+	ldy #0
+	sta (tape1),y
+	iny		;reset buffer pointer:  make .y=1
+	sty bufpt	;bufpt=1
+
+10$	lda t1
+	sta (tape1),y	;data to buffer
+
+
+; restore .x and .y
+
+rstoa	clc		;good return
+rstor	pla
+	tay
+	pla
+	tax
+
+	lda t1		;get .a for return
+	bcc 10$		;...branch if no error
+	lda #0		;...else report stop error (c-set)
+10$	rts
+
+
+; output to rs232
+
+bo50	jsr bso232	;pass data through variable T1
+	jmp rstoa	;go restore all..always good
+
+;.end
+; rsr 5/12/82 fix bsout for no reg affect but errors
+
+	.page
+	.subttl OPENCHANNEL
+;  ******************************************************
+;  *		CHKIN -- open channel for input		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), write-only files, & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dfltn= device # from table	*
+;  *		 or .c=1 if error			*
+;  *							*
+;  ******************************************************
+
+nchkin	jsr lookup	;clear status & lookup channel information
+	beq 10$		;...found
+	jmp error3	;...not found, report file not open
+
+10$	jsr jz100	;get channel information
+	lda fa		;get device #
+	beq 30$		;...keyboard, we're done
+
+	cmp #3		;could be screen, keyboard, or serial
+	beq 30$		;...screen, we're done
+	bcs 40$		;...serial
+	cmp #2		;could be cassette or rs232
+	bne 20$		;...cassette
+	jmp cki232	;...rs232
+
+20$	ldx sa		;cassette read or write channel?
+	cpx #$60
+	beq 30$		;...read channel: good
+	jmp error6	;...write channel: report error
+
+30$	sta dfltn	;make this the primary input channel
+	clc		;good exit
+	rts
+
+; serial
+
+40$	tax		;save device #
+	jsr talk	;command serial device to talk
+	lda sa		;send secondary address?
+	bpl 50$		;...yes
+	jsr tkatn	;...no, let go
+	jmp 60$		;we're done
+
+50$	jsr tksa	;send secondary address
+
+60$	txa		;recall device #
+	bit status	;check I/O status byte
+	bpl 30$		;...good, we're done
+	jmp error5	;...bad, report device not present
+
+	.page
+;  ******************************************************
+;  *	     CKOUT -- open channel for output		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), read-only files,  & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dflto= device # from table	*
+;  *		 or .c=1 if error			*
+;  *							*
+;  ******************************************************
+
+nckout	jsr lookup	;clear status & lookup channel information
+	beq 10$		;...found
+	jmp error3	;...not found, report file not open
+
+10$	jsr jz100	;get channel information
+	lda fa		;get device #
+	bne 30$
+20$	jmp error7	;...keyboard, report not output file
+
+30$	cmp #3		;could be screen, serial, or cassette
+	beq 50$		;...screen, we're done
+	bcs 60$		;...serial
+	cmp #2		;could be cassette or rs232
+	bne 40$		;...cassette
+	jmp cko232	;...rs232
+
+
+40$	ldx sa		;special tape channel handling
+	cpx #$60	;is command read?
+	beq 20$		;yes...error
+
+
+50$	sta dflto	;make this the primary output channel
+	clc		;good exit
+	rts
+
+; serial
+
+60$	tax		;save device #
+	jsr listn	;command serial device to listen
+	lda sa		;send secondary address?
+	bpl 70$		;...yes
+	jsr scatn	;...no, release lines
+	bne 80$		;...bra
+
+70$	jsr secnd	;send secondary address
+
+80$	txa		;recall device #
+	bit status	;check I/O status byte
+	bpl 50$		;...good, we're done
+	jmp error5	;...bad, report device not present
+
+;.end
+
+	.page
+	.subttl CLOSE
+; ***********************************************
+; *		 CLOSE function			*
+; *						*
+; * closes the  file  whose  la  is in  .a  and	*
+; * updates the logical file tables.		*
+; *						*
+; * the keyboard, screen and any unopened files	*
+; * pass  thru.  serial  files  are  closed  by	*
+; * sending a 'close' cmd if a sa was specified	*
+; * when it was opened.				*
+; *						*
+; ***********************************************
+
+nclose	jsr jltlk	;lookup channel information
+	beq 10$		;...found
+	clc		;...not found, just return happy
+	rts
+
+10$	jsr jz100	;load channel data (la, fa, sa)
+	txa		;save table index
+	pha
+
+	lda fa		;check device number
+	beq 70$		;...keyboard, we're done
+	cmp #3
+	beq 70$		;...screen, we're done
+	bcs 60$		;...serial
+	cmp #2
+	bne 35$		;...cassette
+
+; rs-232 close
+
+	pla		;recall table index
+	jsr 80$		;remove file from tables <jxrmv>
+	jsr cln232	;clean up rs232 for close
+
+			;deallocate rs232 buffers:
+	jsr gettop	;get pointers to top of memory (memsiz)
+	lda ribuf+1	;check input buffer allocation
+	beq 20$		;...not allocated
+	iny		;...add block to free memory
+
+20$	lda robuf+1	;check output buffer allocation
+	beq 30$		;...not allocated
+	iny		;...add block to free memory
+
+30$	lda #0		;deallocate buffers
+	sta ribuf+1
+	sta robuf+1
+	jmp memtcf	;change pointers to top of memory
+
+
+; cassette close
+
+35$	lda sa		;was it a tape read?
+	and #$0f
+	beq 70$		;yes
+
+	jsr zzz		;no...it is write
+	lda #0		;end of file character
+	sec		;need to set carry for casout (else rs232 output!)
+	jsr casout	;put in end of file
+	jsr wblk
+	bcc 36$		;no errors...
+	pla		;clean stack for error
+	lda #0		;break key error
+	rts
+
+36$	lda sa
+	cmp #$62	;write end of tape block?
+	bne 70$		;no...
+
+	lda #eot
+	jsr tapeh	;write end of tape block
+	jmp 70$
+
+
+; serial close
+
+60$	jsr clsei	;unlisten serial device
+
+
+; remove a logical file from table of logical, primary, secondary addresses
+
+70$	pla		;recall table index
+80$	tax		;<jxrmv>
+	dec ldtnd	;decrement end of table pointer
+	cpx ldtnd	;is deleted file at end?
+	beq 90$		;...yes,  we're done
+
+	ldy ldtnd	;delete entry by moving last entry to that position.
+	lda lat,y
+	sta lat,x
+	lda fat,y
+	sta fat,x
+	lda sat,y
+	sta sat,x
+
+90$	clc		;close exit
+	rts
+
+
+
+; lookup logical file data
+
+lookup	lda #0		;clear I/O status byte
+	sta status
+	txa		;preserve .X
+
+jltlk	ldx ldtnd	;get pointer to end of table
+10$	dex
+	bmi jz101	;...end of table, not found
+	cmp lat,x
+	bne 10$
+	rts		;...found
+
+
+
+
+; routine to fetch table entries
+
+jz100	lda lat,x
+	sta la		;logical channel #
+	lda fat,x
+	sta fa		;device #
+	lda sat,x
+	sta sa		;secondary address
+jz101	rts
+
+;.end
+; rsr 5/12/82 - modify for cln232
+
+	.page
+	.subttl CLALL
+;  **********************************************
+;  * 	CLALL -- clear all logical files	*
+;  *						*
+;  *	   > deletes all table entries		*
+;  *	   > clears serial port channels	*
+;  *	   > restores default i/o channels	*
+;  *						*
+;  *	***WARNING: this call DOES NOT CLOSE	*
+;  *		    open files!!!		*
+;  *						*
+;  **********************************************
+
+nclall	lda #0
+	sta ldtnd	;reset table pointer
+
+
+
+
+;  **********************************************
+;  *	     CLRCH -- clear I/O channels	*
+;  *						*
+;  *	 > unlisten or untalk serial devices	*
+;  *	 > restore default I/O channels		*
+;  *						*
+;  **********************************************
+
+nclrch	ldx #3		;perform device specific channel clear operations
+	cpx dflto	;check output channel
+	bcs 10$		;...default
+	jsr unlsn	;...serial: unlisten it
+
+10$	cpx dfltn	;check input channel
+	bcs 20$		;...default
+	jsr untlk	;...serial: untalk it
+
+; restore default I/O channels
+
+20$	stx dflto	;set default output (3=screen)
+	lda #0
+	sta dfltn	;set default input (0=keyboard)
+	rts
+
+;.end
+
+	.page
+	.subttl OPEN
+; ***********************************************
+; *		  OPEN function			*
+; *						*
+; * creates an entry in the logical file tables	*
+; * necessary for Kernel I/O consisting of:	*
+; *						*
+; * 	     la - logical file number		*
+; *	     fa - device number (0-31)		*
+; *	     sa - secondary address (cmd)	*
+; *						*
+; *  > call 'setlfs' first to set these up.	*
+; *  > call 'setnam' first to set up filename.	*
+; *						*
+; ***********************************************
+
+nopen 	ldx la		;check logical file #
+	bne 10$		;...good
+	jmp error6	;...error not input file (C64 reserves LA=0)
+
+10$	jsr lookup	;clear status byte & lookup channel information
+	bne 20$		;...not found (good)
+	jmp error2	;...error: file open
+
+20$	ldx ldtnd	;get pointer to next table entry
+	cpx #10
+	bcc 30$		;...okay, there's room
+	jmp error1	;...error: too many files
+
+30$	inc ldtnd	;increment table pointer
+	lda la
+	sta lat,x	;store logical file #
+	lda sa
+	ora #$60	;make sa a serial command
+	sta sa
+	sta sat,x	;store secondary address
+	lda fa
+	sta fat,x	;store device #
+
+; perform device specific open tasks
+
+	beq op175	;...keyboard, we're done
+	cmp #3
+	beq op175	;...screen, we're done
+	bcc 40$		;...cassette or rs232
+
+	jsr openi	;...serial: open channel
+	bcc op175	;...bra, we're done
+
+40$	cmp #2
+	bne 50$		;...cassette
+	jmp opn232	;...rs232
+
+50$	jsr zzz		;see if tape buffer
+	bcs 55$		;...yes
+	jmp error9	;no...deallocated
+
+55$	lda sa
+	and #$0f	;mask off command
+	bne 200$	;non zero is tape write
+
+; open cassette tape file to read
+
+	jsr cste1	;tell "press play"
+	bcs op180	;stop key pressed
+
+	jsr luking	;tell user "searching"
+
+	lda fnlen
+	beq 70$		;looking for any file
+
+	jsr faf		;looking for named file
+	bcc 71$		;found it!!!
+	beq op180	;stop key pressed
+
+60$	jmp error4	;file not found
+
+70$	jsr fah		;get any old header
+	beq op180	;stop key pressed
+	bcc 71$		;all o.k.
+	bcs 60$		;file not found...
+
+; open cassette tape for write
+
+200$	jsr cste2	;tell "press play and record"
+	bcs op180	;stop key pressed
+	lda #bdfh	;data file header type
+	jsr tapeh	;write it
+
+; finish open for tape read/write
+
+71$	lda #bufsz-1	;assume force read
+	ldy sa
+	cpy #$60	;open for read?
+	beq 72$
+
+	ldy #0		;set pointers for buffering data
+	lda #bdf	;type flag for block
+	sta (tape1),y	;to begin of buffer
+	tya
+
+72$	sta bufpt	;point to data
+op175	clc		;flag good open
+op180	rts		;exit
+
+	.page
+; serial open
+;  routine is called by other Kernel routines which are called directly by os.
+;  kill return address to return to os.
+
+openi	lda sa		;anything to send?
+	bmi op175	;...no secondary address, we're done
+	ldy fnlen
+	beq op175	;...no filename or command, we're done
+
+	lda #0		;clear I/O status byte
+	sta status
+	lda fa		;get physical device #
+	jsr listn	;command device to listen
+	lda sa
+	ora #$f0
+	jsr secnd	;send secondary address
+	lda status	;check status
+	bpl 10$		;...good
+	pla		;kill return address to return to os.
+	pla
+	jmp error5	;...report device not present
+
+10$	lda fnlen	;any filename (command string) to send?
+	beq 30$		;...no
+	ldy #0		;send filename (command)
+20$	lda (fnadr),y
+	jsr ciout	;byte by byte
+	iny
+	cpy fnlen
+	bne 20$
+
+30$	jmp cunlsn	;exit.  unlisten/ clc/ rts
+
+	.page
+; opn232 - open an rs-232 or parallel port file
+;
+; variables initialized:
+;
+;    bitnum - # of bits to be sent calc from m51ctr
+;    baudof - baud rate full
+;    rsstat - rs-232 status reg
+;    m51ctr - 6551 control reg
+;    m51cdr - 6551 command reg
+;    m51ajb - user baud rate (clock/baud/2-100)
+;    enabl  - 6526 NMI enables (1-NMI bit on)
+
+opn232	jsr cln232	;set up rs232, (.y=0 on return)
+	sty rsstat	;clear status
+
+10$	cpy fnlen	;check if at end of command bytes
+	beq 20$		;...yes
+	lda (fnadr),y
+	sta m51ctr,y	;move data to m51regs
+	iny
+	cpy #4		; (maximum of 4 parameters)
+	bne 10$
+
+20$	jsr bitcnt	;calculate # of bits
+	stx bitnum
+	lda m51ctr	;calculate baud rate
+	and #$0f	;user rate or standard?
+	beq 50$		;...user provides rate
+
+; calculate start-test rate
+
+	asl a		;get offset into tables
+	tax
+	lda palnts	;environment PAL or NTSC?
+	bne 30$
+	ldy baudo-1,x	;...NTSC standard
+	lda baudo-2,x
+	jmp 40$
+30$	ldy baudop-1,x	;...PAL standard
+	lda baudop-2,x
+
+40$	sty m51ajb+1	;hold start rate in m51ajb
+	sta m51ajb
+
+50$	lda m51ajb	;calculate baud rate
+	asl a
+	jsr popen	; (go to patch area)
+
+; check for 3/x line response
+
+	lda m51cdr	;bit 0 of m51cdr
+	lsr a
+	bcc 60$		;...3 line
+	lda d2prb	;check for x line proper states
+	asl a
+	bcs 60$		;...good
+	jsr ckdsrx	;...bad
+
+; set up buffer pointers (dbe=dbs) & allocate buffers
+
+60$	lda ridbe
+	sta ridbs
+	lda rodbe
+	sta rodbs
+
+	jsr gettop	;get pointers to top of memory (memsiz)
+	lda ribuf+1	;allocate input buffer
+	bne 70$		;...already allocated
+	dey		;allocate 1 block
+	sty ribuf+1
+	stx ribuf
+
+70$	lda robuf+1	;allocate output buffer
+	bne memtcf	;...already allocated
+	dey		;allocate 1 block
+	sty robuf+1
+	stx robuf
+
+memtcf	sec		;select top of memory change
+	lda #$f0	;???
+	jmp settop	;change top of memory pointer (memsiz) & rts
+
+
+; cln232 - clean up 232 system for open/close
+; set up ddrb and cb2 for rs-232
+
+cln232	lda #$7f	;clear NMIs
+	sta d2icr
+	lda #%00000110	;ddrb
+	sta d2ddrb
+	sta d2prb	;dtr,rts high
+	lda #%00000100	;output high pa2
+	ora d2pra
+	sta d2pra
+	ldy #0
+	sty enabl	;clear enabls
+	rts
+
+;.end
+; rsr 8/25/80 - add rs-232 code
+; rsr 8/26/80 - top of memory handler
+; rsr 8/29/80 - add filename to m51regs
+; rsr 9/02/80 - fix ordering of rs-232 routines
+; rsr 12/11/81 - modify for vic-40 i/o
+; rsr 2/08/82 - clear status in openi
+; rsr 5/12/82 - compact rs232 open/close code
+; rsr 6/22/82 - change rs232 open for univeral
+; rsr 7/06/82 - change jmp ckdsrx to prevent bad buffering
+
+	.page
+	.subttl LOAD
+;  **********************************************
+;  *	   LOAD memory from mass storage	*
+;  *						*
+;  *	 fa:	0= keyboard <invalid>		*
+;  *		1= cassette			*
+;  *		2= screen   <invalid>		*
+;  *		3= rs-232   <invalid>		*
+;  *		4-31= serial			*
+;  *						*
+;  *	 sa:	0= alternate load		*
+;  *		   (x,y= starting addr)		*
+;  *		1= normal load			*
+;  *		   (load starting addr)		*
+;  *						*
+;  *	 .a:	0= load memory			*
+;  *		>0= verify only			*
+;  *						*
+;  *	 ending address returned in x,y		*
+;  **********************************************
+
+loadsp	stx memuss	;save alternate load address (if any)
+	sty memuss+1
+	jmp (iload)
+
+nload	sta verck	;save verify/load flag
+	lda #0
+	sta status	;clear status byte
+
+	lda fa		;check device number
+	bne 20$		;...not keyboard, else
+10$	jmp error9	;...illegal device #
+
+20$	cmp #3
+	beq 10$		;...screen
+	bcc ld100	;...cassette or rs232
+
+; serial load
+
+	ldy fnlen	;filename given?
+	bne 30$		;...yes
+	jmp error8	;...no, report missing file name
+
+30$	ldx sa		;save secondary address
+	jsr luking	;prompt "searching"
+	lda #$60	;special load command
+	sta sa
+	jsr openi	;open the file (send sa & filename)
+	lda fa
+	jsr talk	;establish the channel
+	lda sa
+	jsr tksa	;tell it to load
+
+	jsr acptr	;get first byte (load address low)
+	sta eal
+	lda status	;check I/O status
+	lsr a
+	lsr a
+	bcs ld90	;...error: file not found
+	jsr acptr	;get second byte (load address high)
+	sta eah
+
+	txa		;recall given secondary address (sa)
+	bne 40$		;...use load address from disk
+	lda memuss	;...use load address from user
+	sta eal
+	lda memuss+1
+	sta eah
+40$	jsr loding	;prompt "loading"
+
+50$	lda #$fd	;mask off timeout
+	and status
+	sta status
+	jsr stop	;stop key?
+	bne 60$		;...no
+	jmp break	;...yes: report break error
+
+60$	jsr acptr	;input one byte
+	tax		;save it
+	lda status	;was there a serial I/O timeout?
+	lsr a
+	lsr a
+	bcs 50$		;...yes, try again
+
+	txa		;recall data byte
+	ldy verck	;verify or load operation?
+	beq 70$		;...load
+
+	ldy #0		;verify it
+	cmp (eal),y
+	beq 80$		;...good
+	lda #sperr	;...bad
+	jsr udst	;update status
+	.byte $2c	;skip next store
+
+70$	sta (eal),y	;store it
+
+80$	inc eal		;increment load address
+	bne 90$
+	inc eah
+90$	bit status	;EOI (end of file)?
+	bvc 50$		;...no, input until EOI
+
+	jsr untlk	;close channel
+	jsr clsei	;close the file
+	bcc ld180	;...bra, we're done
+ld90	jmp error4	;...error, file not found
+
+ld100	lsr a		;cassette or rs232?
+	bcs 10$		;...cassette
+	jmp error9	;...rs232, report bad load device
+
+; cassette load
+
+10$	jsr zzz		;set pointers at tape
+	bcs 20$
+	jmp error9	;deallocated...
+
+20$	jsr cste1	;tell user about buttons
+	bcs ld190	;stop key pressed?
+	jsr luking	;tell user searching
+
+112$	lda fnlen	;is there a name?
+	beq 150$	;none...load anything
+	jsr faf  	;find a file on tape
+	bcc 170$	;got it!
+	beq ld190	;stop key pressed
+	bcs ld90	;nope...end of tape
+
+150$	jsr fah		;find any header
+	beq ld190	;stop key pressed
+	bcs ld90	;no header
+
+170$	lda status
+	and #sperr	;must get header right
+	sec
+	bne ld190	;is bad
+
+	cpx #blf	;is it a movable program...
+	beq 178$	;yes
+
+	cpx #plf	;is it a program
+	bne 112$	;no...it's something else
+
+177$	ldy #1		;fixed load...
+	lda (tape1),y	;...the address in the...
+	sta memuss	;...buffer is the start address
+	iny
+	lda (tape1),y
+	sta memuss+1
+	bcs 179$	;jmp ..carry set by cpx's
+
+178$	lda sa		;check for monitor load...
+	bne 177$	;...yes we want fixed type
+
+179$	ldy #3		;tapea - tapesta (carry set by cpx's)
+	lda (tape1),y
+	ldy #1
+	sbc (tape1),y
+	tax		;low to .x
+	ldy #4
+	lda (tape1),y
+	ldy #2
+	sbc (tape1),y
+	tay		;high to .y
+
+	clc		;ea = sta+(tapea-tapesta)
+	txa
+	adc memuss
+	sta eal
+	tya
+	adc memuss+1
+	sta eah
+	lda memuss	;set up starting address
+	sta stal
+	lda memuss+1
+	sta stah
+	jsr loding	;tell user loading
+	jsr trd		;do tape block load
+	.byte $24	;carry from trd
+
+ld180	clc		;good exit
+	ldx eal		;set up end load address
+	ldy eah
+ld190	rts
+
+
+
+
+; subroutine to print to console:  SEARCHING [for name]
+
+luking	lda msgflg	;print output enabled?
+	bpl ld115	;...no
+	ldy #ms5-ms1	;get pointer to "searching" string
+	jsr msg		;print it
+
+	lda fnlen	;filename to print?
+	beq ld115	;...no
+	ldy #ms6-ms1	;get pointer to "for" string
+	jsr msg		;print it
+
+
+; subroutine to output filename
+
+outfn	ldy fnlen	;is there a name?
+	beq ld115	;...no, we're done
+	ldy #0
+10$	lda (fnadr),y
+	jsr bsout	;output filename byte by byte
+	iny
+	cpy fnlen
+	bne 10$
+
+ld115	rts
+
+
+
+
+; subroutine to print:  LOADING/VERIFYING
+
+loding	ldy #ms10-ms1	;get pointer to "loading" string
+	lda verck	;is this a load or verify?
+	beq 10$		;...load
+	ldy #ms21-ms1	;...verify: get pointer to "verifying" string
+10$	jmp spmsg	;print it
+
+;.end
+
+	.page
+	.subttl SAVE
+;  **********************************************
+;  *	     SAVE memory to mass storage	*
+;  *						*
+;  *	  fa:	0= keyboard  <invalid>		*
+;  *		1= cassette			*
+;  *		2= rs-232    <invalid>		*
+;  *		3= screen    <invalid>		*
+;  *		4-31= serial device		*
+;  *						*
+;  *	> .a points to start address		*
+;  *	> x & y point to end address		*
+;  **********************************************
+
+savesp	stx eal		;save ending address
+	sty eah
+	tax		;get starting address
+	lda $00,x
+	sta stal
+	lda $01,x
+	sta stah
+	jmp (isave)
+
+nsave	lda fa		;check device number
+	bne sv20	;...good
+sv10	jmp error9	;...bad  (eg., keyboard)
+
+sv20	cmp #3
+	beq sv10	;...screen
+	bcc sv100	;...cassette or rs232
+
+; serial save
+
+	lda #$61	;form a save command
+	sta sa
+	ldy fnlen	;filename given?
+	bne 30$		;...yes
+	jmp error8	;...no: missing filename error
+
+30$	jsr openi	;open the file
+	jsr saving	;prompt "saving"
+	lda fa
+	jsr listn	;command device to listen
+	lda sa
+	jsr secnd	;send secondary address (save command)
+	ldy #0
+	jsr rd300	;get starting address
+	lda sal
+	jsr ciout	;send start address low
+	lda sah
+	jsr ciout	;send start address high
+
+sv30	jsr cmpste	;compare start to end
+	bcs sv50	;...have reached end
+	lda (sal),y	;get a byte
+	jsr ciout	;output byte
+	jsr stop	;check for stop key
+	bne sv40	;...no stop
+
+
+break	jsr clsei	;stop key pressed: close file
+	lda #0		;break error
+	sec
+	rts
+
+
+sv40	jsr incsal	;increment address
+	bne sv30	;...continue saving until end
+
+sv50	jsr unlsn	;we're done, unlisten device & fall into close routine
+
+	.page
+
+clsei			;close file
+	bit sa
+	bmi clsei2	;...branch if file not properly opened
+	lda fa
+	jsr listn	;get channel
+	lda sa
+	and #$ef	;form 'close' command
+	ora #$e0
+	jsr secnd	;send 'close' command
+
+cunlsn	jsr unlsn	;entry for openi:  close channel
+
+clsei2	clc
+	rts
+
+
+sv100	lsr a		;save to cassette or rs232?
+	bcs 10$		;...cassette
+	jmp error9	;...rs232: bad device #
+
+
+; cassette save
+
+10$	jsr zzz		;get addr of tape
+	bcc sv10	;buffer is deallocated
+	jsr cste2
+	bcs sv115	;stop key pressed
+	jsr saving	;tell user 'saving'
+	ldx #plf	;decide type to save
+	lda sa		;1-plf  0-blf
+	and #01
+	bne 20$
+	ldx #blf
+20$	txa
+	jsr tapeh
+	bcs sv115	;stop key pressed
+	jsr twrt
+	bcs sv115	;stop key pressed
+	lda sa
+	and #2		;write end of tape?
+	beq 30$		;no...
+
+	lda #eot
+	jsr tapeh
+	.byte $24	;skip 1 byte
+
+30$	clc
+sv115	rts
+
+
+; subroutine to output: SAVING [filename]
+
+saving	lda msgflg	;message output enabled?
+	bpl sv115	;...no
+
+	ldy #ms11-ms1	;get pointer to string
+	jsr msg		;print it
+	jmp outfn	;print filename
+
+;.end
+
+	.page
+	.subttl TIME
+; ***************************************************************
+; *	time consists of three functions:			*
+; *								*
+; * (1) udtim - update time registers as time-of-day clock and	*
+; *             decrement timer registers. this routine should	*
+; *		be called by irq handler for correct time.	*
+; * (2) settim- set time.  .y=msd, .x=next significant, .a=lsd	*
+; * (3) rdtim - read time. .y=msd, .x=next significant, .a=lsd	*
+; *								*
+; ***************************************************************
+
+; interrupts are coming from the 6526 timer...
+
+udtim	ldx #0		;pre-load for later
+	inc time+2	;increment the time register
+	bne 10$
+	inc time+1
+	bne 10$
+	inc time
+
+; check for roll-over 23:59:59 and reset the clock to zero if true
+
+10$	sec
+	lda time+2
+	sbc #$01
+	lda time+1
+	sbc #$1a
+	lda time
+	sbc #$4f
+	bcc ud60
+
+	stx time	;time has rolled--zero register
+	stx time+1
+	stx time+2
+
+; set stop key flag
+
+ud60	lda rows	;debounce lines
+	cmp rows
+	bne ud60
+
+	tax		;set flags
+	bmi 20$		;...no stop key: exit (stop key=$7f)
+
+	ldx #%10111101	;scan for a shift key
+	stx colm
+10$	ldx rows	;debounce lines
+	cpx rows
+	bne 10$
+
+	sta colm	;watch out...stop key .a=$7f (same as colm was)
+	inx		;any key down aborts
+	bne 30$		;...leave same as before
+20$	sta stkey	;save for other routines
+30$	rts
+
+
+
+
+
+rdtim	sei		;keep time from changing
+	lda time+2	;get lsd
+	ldx time+1	;get next most significant
+	ldy time	;get msd
+
+
+settim	sei		;keep time from changing
+	sta time+2	;store lsd
+	stx time+1	;store next most significant
+	sty time	;store msd
+	cli
+	rts
+
+;.end
+; rsr 8/21/80 remove crfac change stop
+; rsr 3/29/82 add shit key check for commodore 64
+
+	.page
+	.subttl ERRORS
+; *******************************************************
+; *			stop				*
+; *							*
+; * >check stop key flag and return = if true. if true  *
+; *  then close active channels & flush keyboard queue  *
+; *							*
+; * >note: returns scan from last keyboard row in .a	*
+; *******************************************************
+
+nstop	lda stkey	;value of last row
+	cmp #$7f	;check stop key position
+	bne 10$		;...not down
+	php
+	jsr clrch	;clear I/O channels & restore defaults
+	sta ndx		;flush keyboard queue
+	plp
+10$	rts
+
+
+
+
+; *******************************************************
+; *		   error handler			*
+; *							*
+; *  > prints Kernel error message if display enabled	*
+; *    (bit 6 of msgflg set to enable).			*
+; *  > returns with error # in .a and .c=1		*
+; *******************************************************
+
+error1	lda #1		;too many files
+	.byte $2c
+error2	lda #2		;file open
+	.byte $2c
+error3	lda #3		;file not open
+	.byte $2c
+error4	lda #4		;file not found
+	.byte $2c
+error5	lda #5		;device not present
+	.byte $2c
+error6	lda #6		;not input file
+	.byte $2c
+error7	lda #7		;not output file
+	.byte $2c
+error8	lda #8		;missing file name
+	.byte $2c
+error9	lda #9		;bad device #
+
+error	pha		;push error number on stack
+	jsr clrch	;clear I/O channels & restore defaults
+
+	ldy #ms1-ms1	;get pointer to generic Kernel error message
+	bit msgflg	;are Kernel error messages enabled?
+	bvc 10$		;...no
+
+	jsr msg		;print "CBM I/O ERROR #"
+	pla		;recall error #
+	pha
+	ora #$30	;make error # ascii
+	jsr bsout	;print it
+
+10$	pla		;<erexit> return error #
+	sec		;flag error return
+	rts
+
+;.end
+	.page
+	.subttl  Console powerup screen
+
+; Copyright (C)1990 by Commodore Business Machines, Inc.
+; All Rights Reserved
+;
+; Powerup screen for C64 game console when console is turned on without a
+; cartridge installed.  'Main' wedge.			6/15/90  F.Bowen
+
+
+
+; flag		= $fb		;b7=0 system call, b7=1 user call
+; pointer	= $fc		;indirection
+
+
+
+console_user
+	sec			;User entry: draw empty, titleless window & RTS
+	.byte $24
+
+console_system
+	clc			;Normal entry: draw console window & animate.  no return
+	ror flag
+	php			;save interrupt enables
+	sei			;no interrupts
+	lda #$0b
+	sta $d011		;blank vic
+	lda #$17
+	sta $d018		;vic screen/char address ($400/lowercase)
+
+	ldx #0
+10$	lda #00			;color=black
+	sta $d800,x		;init color nybs
+	sta $d900,x
+	sta $da00,x
+	sta $db00,x
+	lda #$20		;blank character
+	sta $0400,x		;init text
+	sta $0500,x
+	sta $0600,x
+	sta $0700,x
+	inx
+	bne 10$
+
+	lda #<$453		;screen window
+	sta pointer
+	lda #>$453
+	sta pointer+1
+
+	ldx #21			;lines
+20$	ldy #33			;columns
+	lda #$a0		;rvs blank
+30$	sta (pointer),y
+	dey
+	bne 30$
+	clc
+	lda pointer
+	adc #40
+	sta pointer
+	bcc 40$
+	inc pointer+1
+40$	dex
+	bne 20$
+
+	lda #$20		;corners
+	sta $474
+	sta $774
+
+	lda #$0e		;color=lt.blue
+	ldx #32-1		;columns
+50$	sta $d854,x
+	sta $d87c,x
+	sta $d8a4,x
+	sta $db24,x
+	sta $db4c,x
+	dex
+	bpl 50$
+
+	ldx #<$d8cc
+	stx pointer
+	ldx #>$d8cc
+	stx pointer+1
+
+	ldx #15			;rails
+60$	lda #$0e		;color=lt.blue
+	ldy #0
+	sta (pointer),y
+	ldy #31
+	sta (pointer),y
+	clc
+	lda pointer
+	adc #40
+	sta pointer
+	bcc 70$
+	inc pointer+1
+70$	dex
+	bne 60$
+	
+	bit flag		;User call or system?
+	bpl 75$			;	branch if console system
+	lda #$1b
+	sta $d011		;	else unblank vic
+	plp			;	restore interrupt enables
+	rts			;	return to user
+
+
+75$	ldx #0			;banner
+80$	lda text,x
+	beq 90$
+	sta $481,x
+	inx
+	bpl 80$
+
+	ldx #8-1		;sprite pointers
+90$	lda sprite,x
+	sta $7f8,x
+	dex
+	bpl 90$
+
+	ldx #64-1
+100$	lda sprite_data_0,x	;sprites
+	sta $e00,x
+	lda sprite_data_1,x
+	sta $e40,x
+	lda sprite_data_2,x
+	sta $e80,x
+	lda sprite_data_3,x
+	sta $ec0,x
+	lda sprite_data_4,x
+	sta $f00,x
+	lda sprite_data_5,x
+	sta $f40,x
+	lda sprite_data_6,x
+	sta $f80,x
+;	lda sprite_data_7,x
+;	sta $fc0,x
+	dex
+	bpl 100$
+
+	lda #$04
+	sta $d01c		;multicolor sprites
+	lda #$73
+	sta $d01d		;x-expanded sprites
+
+	.page
+; Animate display instructing user to turn power off, insert cartridge,
+; and turn power on.  Loops until cartridge is inserted, preferably after
+; power is switched off.
+
+loop
+	ldx #64-1		;"x"
+5$	lda sprite_data_7,x
+	sta $fc0,x
+	dex
+	bpl 5$
+
+	ldx #16-1		;color & place sprites
+10$	lda sprite_colors,x
+	sta $d01f,x
+	lda sprite_positions,x
+	sta $d000,x
+	dex
+	bpl 10$
+
+	lda #$1b		;unblank vic
+	sta $d011
+
+	lda #$be		;show console, cart, on switch, & x
+	sta $d015		;sprite enables
+	jsr delay_4
+
+	lda #$fc		;flip switch off
+	sta $d015
+	jsr delay_2
+	lda #$bd
+	sta $d015
+	jsr delay_3
+	lda #$3d
+	sta $d015
+	jsr delay_3
+	
+20$	inc $d007		;show the cart being inserted
+	jsr delay_1
+	ldx $d007
+	cpx #124
+	bcc 20$
+	jsr delay_3
+
+	ldx #64-1		;"check"
+30$	lda sprite_data_8,x
+	sta $fc0,x
+	dex
+	bpl 30$
+	lda #5			;make it green
+	sta $d02e
+
+	lda #$7c		;flip switch on
+	sta $d015
+	jsr delay_2
+	lda #$3e
+	sta $d015
+	jsr delay_3
+	lda #$be
+	sta $d015
+	jsr delay_4
+
+	lda #$04		;all off
+	sta $d015
+	jsr delay_3
+
+	jmp loop		;loop forever
+	
+	.page
+delay_4
+	jsr delay_3		;200x
+	jsr delay_3
+	jsr delay_3
+
+delay_3
+	ldy #40			;20x
+	.byte $2c
+
+delay_2
+	ldy #6			;2x
+	.byte $2c
+
+delay_1
+	ldy #2			;1x
+
+10$	jsr vblank
+	dey
+	bne 10$
+
+	jsr a0int		;test for cartridge ROM at $8000
+	beq 20$			;	yes, it's there
+	rts			;	no, continue
+
+20$	jmp ($fffc)		;	user must have inserted cart into a live
+				;	system!  may as well start over.
+
+
+vblank
+	bit $d011		;wait for vertical blank (delay)
+	bmi vblank
+10$	bit $d011
+	bpl 10$
+	rts
+	
+	.page
+;	       C   o   m   m   o   d   o   r   e       C   6   4
+text	.byte $c3,$8f,$8d,$8d,$8f,$84,$8f,$92,$85,$a0,$c3,$b6,$b4
+;	           G   a   m   e   s       S   y   s   t   e   m
+	.byte $a0,$c7,$81,$8d,$85,$93,$a0,$d3,$99,$93,$94,$85,$8d,$00
+
+;	       0   1   2   3   4   5   6   7
+sprite	.byte $38,$39,$3a,$3b,$3c,$3d,$3e,$3f
+
+
+sprite_colors
+	.byte 0,6,6,1,2,3			;bg/spcol,border,bg,bg1,bg2,bg3
+	.byte 6,1				;sprite mc1,mc2
+	.byte 15,15,10,15,15,15,15,2		;sprite colors
+
+sprite_positions
+;	       0x  0y  1x  1y  2x  2y  3x  3y  4x  4y  5x  5y  6x  6y  7x  7y
+	.byte $e0,$7e,$e0,$7e,$43,$43,$94,$64,$90,$82,$60,$82,$e0,$7e,$ac,$a7
+
+sprite_data_0	; off
+	.byte $80,$00,$00,$80,$00,$00,$FF,$C0,$00,$C0,$40,$00,$C0,$40,$00,$C0
+	.byte $40,$00,$C0,$C0,$00,$C1,$80,$00,$C3,$00,$00,$C6,$00,$60,$CC,$00
+	.byte $90,$C8,$00,$90,$C8,$40,$90,$C8,$80,$90,$C9,$F8,$60,$C8,$80,$00
+	.byte $C8,$46,$77,$D8,$09,$44,$F0,$09,$66,$80,$09,$44,$80,$06,$44,$00
+
+sprite_data_1	; on
+	.byte $80,$00,$40,$80,$00,$40,$F0,$00,$40,$D8,$40,$40,$C8,$80,$40,$C9
+	.byte $F8,$40,$C8,$80,$00,$C8,$43,$24,$C8,$04,$B4,$C8,$04,$AC,$C8,$04
+	.byte $A4,$CC,$03,$24,$C6,$00,$00,$C3,$00,$00,$C1,$80,$00,$C0,$80,$00
+	.byte $C0,$80,$00,$C0,$80,$00,$FF,$80,$00,$80,$00,$00,$80,$00,$00,$00
+
+sprite_data_2	; C=
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$01,$54,$00,$05,$54,$00,$05
+	.byte $54,$00,$15,$54,$00,$15,$02,$A8,$14,$02,$A0,$14,$02,$80,$14,$00
+	.byte $00,$14,$03,$C0,$14,$03,$F0,$15,$03,$FC,$15,$54,$00,$05,$54,$00
+	.byte $05,$54,$00,$01,$54,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+sprite_data_3	; cart
+	.byte $1F,$FF,$E0,$30,$00,$A0,$3F,$FF,$A0,$3F,$FF,$A0,$20,$00,$A0,$20
+	.byte $00,$A0,$20,$00,$A0,$3F,$FF,$A0,$3F,$FF,$A0,$3F,$FF,$A0,$3F,$FF
+	.byte $A0,$3F,$FF,$C0,$3F,$FF,$80,$00,$00,$00,$00,$60,$00,$00,$60,$00
+	.byte $00,$60,$00,$03,$6C,$00,$01,$F8,$00,$00,$F0,$00,$00,$60,$00,$00
+
+sprite_data_4	; console rt
+	.byte $00,$00,$00,$00,$00,$00,$BF,$FF,$7C,$BF,$FF,$7D,$7F,$FE,$F9,$60
+	.byte $06,$FB,$DF,$ED,$F3,$80,$1D,$F6,$FF,$FB,$E6,$FF,$FB,$EC,$FF,$F7
+	.byte $CC,$FF,$F7,$D8,$FF,$EF,$98,$FF,$EF,$B0,$FF,$DF,$30,$00,$00,$60
+	.byte $FF,$FF,$60,$FF,$FF,$C0,$FF,$FF,$C0,$00,$00,$00,$00,$00,$00,$00
+
+sprite_data_5	; console lf
+	.byte $00,$00,$00,$00,$00,$00,$03,$FF,$FF,$03,$FF,$FF,$07,$FF,$FF,$07
+	.byte $FF,$FF,$0F,$FF,$FE,$0F,$FF,$FE,$1F,$FF,$FD,$1F,$FF,$FD,$3F,$FF
+	.byte $FB,$3F,$FF,$FB,$7F,$FF,$F7,$7F,$FF,$F7,$FF,$FF,$EF,$80,$00,$00
+	.byte $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$00,$00,$00,$00,$00,$00,$00
+
+sprite_data_6	; halfway on/off
+	.byte $80,$00,$00,$80,$00,$00,$FE,$00,$00,$C1,$00,$00,$C1,$00,$00,$C2
+	.byte $00,$00,$C2,$00,$00,$C4,$00,$00,$C4,$00,$00,$C8,$00,$00,$C8,$00
+	.byte $00,$C8,$00,$00,$C4,$00,$00,$C4,$00,$00,$C2,$00,$00,$C2,$00,$00
+	.byte $C1,$00,$00,$C1,$00,$00,$FE,$00,$00,$80,$00,$00,$80,$00,$00,$00
+
+sprite_data_7	; x
+	.byte $00,$00,$00,$E0,$00,$38,$F0,$00,$78,$78,$00,$F0,$3C,$01,$E0,$1E
+	.byte $03,$C0,$0F,$07,$80,$07,$8F,$00,$03,$DE,$00,$01,$FC,$00,$00,$F8
+	.byte $00,$00,$F8,$00,$01,$FC,$00,$03,$DE,$00,$07,$8F,$00,$0F,$07,$80
+	.byte $1E,$03,$C0,$3C,$01,$E0,$78,$00,$F0,$F0,$00,$78,$E0,$00,$38,$00
+
+sprite_data_8	; check
+	.byte $00,$00,$00,$00,$00,$38,$00,$00,$78,$00,$00,$F0,$00,$01,$E0,$00
+	.byte $03,$C0,$00,$07,$80,$00,$0F,$00,$00,$1E,$00,$00,$3C,$00,$60,$78
+	.byte $00,$E0,$F0,$00,$E1,$E0,$00,$E3,$C0,$00,$E7,$80,$00,$EF,$00,$00
+	.byte $FE,$00,$00,$FC,$00,$00,$F8,$00,$00,$F0,$00,$00,$E0,$00,$00,$00
+
+;.end
+	.page
+	.subttl  Reminants of C64 tape routines
+
+;----------------------------------------------------------------------------
+; The following code fakes out cassette I/O handlers; driver was removed.
+;----------------------------------------------------------------------------
+
+cste1
+cste2
+jtp20
+faf
+fah
+rblk
+wblk
+trd
+twrt
+tapeh
+zzz
+	jmp error5	;Device not Present
+
+	.page
+;----------------------------------------------------------------------------
+; Copyright notice.  Bring lawyers, guns, and money.	(62 bytes).
+;----------------------------------------------------------------------------
+
+	* = $fc00
+
+	.byte 'COPYRIGHT 1990 COMMODORE ELECTRONICS LTD. ALL RIGHTS RESERVED.',0
+
+
+	.page
+;----------------------------------------------------------------------------
+; The following ORIGINs preserve entries for cassette routines used elsewhere.
+;----------------------------------------------------------------------------
+
+	* = $fb8e
+
+rd300	lda stah	;restore starting address...
+	sta sah		;...pointers  (sah & sal)
+	lda stal
+	sta sal
+	rts
+
+
+	* = $fc54
+
+wrtbk	jmp prend	;return from interrupt
+
+
+	* = $fc93
+
+tnif	php		;clean  up  interrupts  and  restore  pia's
+	sei
+	lda vicreg+17	;unlock vic
+	ora #$10	;enable display
+	sta vicreg+17
+	jsr tnof	;turn off motor
+	lda #$7f	;clear interrupts
+	sta d1icr
+	jsr iokeys	;restore keyboard irq from timer1
+
+	lda irqtmp+1	;restore keyboard interrupt vector
+	beq tniq	;no irq (irq vector cannot be z-page)
+	sta cinv+1
+	lda irqtmp
+	sta cinv
+tniq	plp
+	rts
+
+stky	jsr tnif	;go restore system interrupts
+	beq wrtbk  	;came for cassette irq so rti
+
+; bsiv - subroutine to change irq vectors
+;  entrys -	.x = 8 write zeros to tape
+;		.x = 10 write data to tape
+;		.x = 12 restore to keyscan
+;		.x = 14 read data from tape
+
+bsiv	lda bsit-8,x	;move irq vectors, table to indirect
+	sta cinv
+	lda bsit+1-8,x
+	sta cinv+1
+	rts
+
+tnof	lda r6510	;turn off cassette motor
+	ora #$20
+	sta r6510
+	rts
+
+
+
+; compare start and end load/save addresses
+;  (subroutine called by serial load)
+
+cmpste	sec
+	lda sal
+	sbc eal
+	lda sah
+	sbc eah
+	rts
+
+
+; increment address pointer sal
+
+incsal	inc sal
+	bne 10$
+	inc sah
+10$	rts
+
+;.end
+	.page
+	.subttl INIT
+; Start - system reset
+;
+; Will go to (external ROM) at $8000 if locations $8004-$8008 = 'CBM80'
+; Kernel expects:
+;
+;	$8000- .word initialize (hard start)
+;	$8002- .word panic (warm start)
+;
+; else BASIC system used if 'CBM80' not found.
+
+start	ldx #$ff
+	sei		;disable IRQs
+	txs		;initialize stack pointer
+	cld		;do not want decimal mode
+	jsr a0int	;test for cartridge ROM at $8000
+	bne 10$
+	jmp ($8000)	;init as $8000 ROM wants
+
+10$	stx vicreg+22	;set up refresh (.x=<5)
+	jsr ioinit	;go initialize I/O devices
+	jsr ramtas	;go RAM test and set
+	jsr restor	;go set up OS vectors
+
+	jsr pcint	;go initialize screen
+	cli		;interrupts okay now
+	jmp ($a000)	;go to BASIC system
+
+
+
+
+; a0int - test for an $8000 ROM
+; returns z - $8000 in
+
+a0int	ldx #40$-30$	;check for $8000
+10$	lda 30$-1,x
+	cmp $8004-1,x
+	bne 20$		;...no match
+	dex
+	bne 10$		;...loop until done or match
+20$	rts
+
+30$	.byte $c3,$c2,$cd,'80'	; "CBM80"  with MSBs set on "CBM"
+40$
+
+
+
+
+; restor - set Kernel indirects and vectors (system)
+
+restor	ldx #<vectss
+	ldy #>vectss
+	clc
+
+; vector - set Kernel indirect and vectors (user)
+
+vector	stx tmp2
+	sty tmp2+1
+
+	ldy #vectse-vectss-1
+10$	lda cinv,y	;get from storage
+	bcs 20$		;c...want storage to user
+	lda (tmp2),y	;...want user to storage
+20$	sta (tmp2),y	;put in user
+	sta cinv,y	;put in storage
+	dey
+	bpl 10$
+	rts
+
+vectss  .word  key,timb,nnmi
+	.word  nopen,nclose,nchkin
+	.word  nckout,nclrch,nbasin
+	.word  nbsout,nstop,ngetin
+	.word  nclall,timb
+	.word  nload,nsave
+vectse
+
+	.page
+; ramtas - memory size check and set
+
+ramtas	lda #0		;zero low memory
+	tay		;start at $0002
+10$	sta $0002,y	;zero page
+	sta $0200,y	;user buffers and vars
+	sta $0300,y	;system space and user space
+	iny
+	bne 10$
+
+; allocate cassette buffer
+
+	ldx #<tbuffr
+	ldy #>tbuffr
+	stx tape1
+	sty tape1+1
+
+; set top of memory
+
+	tay		;<ramtbt>  .y=0
+	lda #3		;set initial index above system vars
+	sta tmp0+1
+
+20$	inc tmp0+1	;move index thru memory
+30$	lda (tmp0),y	;get present data
+	tax		;save in .x
+	lda #$55	;do a $55,$aa test
+	sta (tmp0),y
+	cmp (tmp0),y
+	bne 40$		;...mismatch, call this the top
+	rol a
+	sta (tmp0),y
+	cmp (tmp0),y
+	bne 40$		;...mismatch, call this the top
+	txa		;restore old data
+	sta (tmp0),y
+	nop		;iny	    speed up by checking 1 byte/block	[900516]
+	bne 20$		;bne 30$
+	beq 20$
+
+40$	tya		;<size> set top of memory
+	tax
+	ldy tmp0+1
+	clc
+	jsr settop
+
+	lda #$08	;set bottom of memory ($0800)
+	sta memstr+1
+	lda #$04	;set screen base ($400)
+	sta hibase
+	rts
+
+
+bsit	.word prend,prend,prend,prend	;Console does not have a cassette port
+;	.word wrtz,wrtn,key,read	;table of indirects for cassette IRQs
+
+	.page
+; ioinit - initialize I/O devices
+
+ioinit	lda #$7f	;kill interrupts
+	sta d1icr
+	sta d2icr
+	sta d1pra	;turn on stop key
+	lda #%00001000	;shut off timers
+	sta d1cra
+	sta d2cra
+	sta d1crb
+	sta d2crb
+
+; set up CIA ports
+
+	ldx #$00
+	stx d1ddrb	;keyboard inputs
+	stx d2ddrb	;user port (no rs-232)
+	stx sidreg+24	;turn off SID volume
+	dex
+	stx d1ddra	;keyboard outputs
+	lda #%00000111	;set serial/va14/15 (clkhi)
+	sta d2pra
+	lda #%00111111	;set serial in/out, va14/15out
+	sta d2ddra
+
+; set up 6510 port         7     6     5     4     3     2     1     0
+			;xxxxx,xxxxx,motor,sense,write,chren,hiram,loram
+	lda #%11100111	;              on   low   low    hi    hi    hi
+	sta r6510
+	lda #%00101111	;  in    in    out   in   out    out   out   out
+	sta d6510
+
+
+
+iokeys	lda palnts	;PAL or NTSC?  set keyboard scan IRQ rate
+	beq 10$
+	lda #<sixtyp	;PAL
+	sta d1t1l
+	lda #>sixtyp
+	jmp 20$
+
+10$	lda #<sixty	;NTSC
+	sta d1t1l
+	lda #>sixty
+20$	sta d1t1h
+	jmp piokey	;patch: enable T1 IRQs & save TOD bit, jmp CLKHI & rts
+
+
+; sixty hertz values for T1 IRQ
+
+
+sixty	= 17045		;NTSC
+sixtyp	= 16421		;PAL
+
+	.page
+setnam	sta fnlen	;set filename pointers
+	stx fnadr
+	sty fnadr+1
+	rts
+
+
+
+
+setlfs	sta la		;set channel vars
+	stx fa
+	sty sa
+	rts
+
+
+
+
+readss	lda fa		;serial/cassette or rs232 status?
+	cmp #2
+	bne readst	;...serial/cassette
+	lda rsstat	;...rs232
+	pha
+	lda #0		;clear rs232 status when read (simulate 6551)
+	sta rsstat
+	pla
+	rts
+
+
+
+setmsg	sta msgflg	;set/clear Kernel message flag
+
+
+
+readst	lda status	;return serial/cassette I/O status byte
+udst	ora status	;update serial/cassette I/O status byte
+	sta status
+	rts
+
+
+
+
+settmo	sta timout	;unused in C64
+	rts
+
+
+
+; read/set top of memory pointer
+;	carry set--read top of memory
+;	carry clear--set top of memory
+
+memtop	bcc settop
+
+gettop	ldx memsiz	;get pointer to top of memory
+	ldy memsiz+1
+
+settop	stx memsiz	;set top of memory pointer
+	sty memsiz+1
+	rts
+
+
+
+
+; read/set bottom of memory pointer
+;	carry set--read bottom of memory
+;	carry clear--set bottom of memory
+
+membot	bcc setbot
+
+	ldx memstr	;get pointer to bottom of memory
+	ldy memstr+1
+
+setbot	stx memstr	;set pointer to bottom of memory
+	sty memstr+1
+	rts
+
+;.end
+; rsr 8/5/80 change io structure
+; rsr 8/15/80 add memory test
+; rsr 8/21/80 change i/o for mod
+; rsr 8/25/80 change i/o for mod2
+; rsr 8/29/80 change ramtest for hardware mistake
+; rsr 9/22/80 change so ram hang rs232 status read
+; rsr 5/12/82 change start1 order to remove disk problem
+; rsr 6/21/82 modify for universal
+
+	.page
+	.subttl RS232NMI
+nmi	sei		;disable IRQs
+	jmp (nminv)
+
+nnmi	pha
+	txa
+	pha
+	tya
+	pha
+
+	lda #$7f	;disable all NMIs
+	sta d2icr
+	ldy d2icr	;check if real NMI		(***preserve .y always***)
+	bmi nnmi20	;...no (rs232 or other)
+
+	jsr a0int	;check if $8000 ROM in
+	bne 10$		;...no
+	jmp ($8002)	;...yes: take its warm start vector
+
+; check for stop key down (STOP/RESTORE)
+
+10$	jsr ud60	;scan
+	jsr stop	;test
+	bne nnmi20	;...no stop key (handle as "other")
+			;...else, re-init everything
+
+
+; BRK instruction or STOP/RESTORE
+
+timb	jsr restor	;re-init system indirects
+	jsr ioinit	;re-init I/O devices
+	jsr cint	;re-init editor
+	jmp ($a002)	;go BASIC warm start
+
+
+
+nnmi20	tya		;restore ICR status
+	and enabl	;show only enables
+	tax		;save in .x for later
+
+; T1 NMI check - transmit a bit?
+
+	and #$01	;check for T1
+	beq 30$		;no...
+
+	lda d2pra
+	and #%11111011	;fix for current I/O
+	ora nxtbit	;load data and...
+	sta d2pra	;...send it
+
+	lda enabl	;restore NMIs
+	sta d2icr	;ready for next...
+
+; because of 6526 ICR structure, handle another NMI as a subroutine
+
+	txa		;test for another NMI
+	and #$12	;test for T2 or flag
+	beq 20$
+	and #$02	;check for T2
+	beq 10$		;must be a flag
+
+	jsr t2nmi	;handle a normal bit in...
+	jmp 20$		;...then continue output
+
+10$	jsr flnmi	;handle a start bit...
+20$	jsr rstrab	;go calc info (code could be in line)
+	jmp nmirti
+
+
+; T2 NMI check - recieve a bit
+
+30$	txa
+	and #$02	;mask to T2
+	beq 40$		;no...
+
+	jsr t2nmi	;handle interrupt
+	jmp nmirti
+
+
+; flag NMI handler - recieve a start bit
+
+40$	txa		;check for edge
+	and #$10	;on flag...
+	beq nmirti	;no...
+
+	jsr flnmi	;start bit routine
+
+
+nmirti	lda enabl	;restore NMIs
+	sta d2icr
+
+
+prend	pla		;restore registers & return from interrupt
+	tay
+	pla
+	tax
+	pla
+	rti
+
+; baudo table contains values for 14.31818E6/14/baud_rate/2 (NTSC)
+
+baudo	.word 10277-cbit	; 50 baud
+	.word 6818-cbit		; 75 baud
+	.word 4649-cbit		; 110 baud
+	.word 3800-cbit		; 134.6 baud
+	.word 3409-cbit		; 150 baud
+	.word 1705-cbit		; 300 baud
+	.word 852-cbit		; 600 baud
+	.word 426-cbit		; 1200 baud
+	.word 284-cbit		; 1800 baud
+	.word 213-cbit		; 2400 baud
+
+; cbit - an adjustment to make next T2 hit near center of the next bit.
+;  (approximately the time to service a cb1 NMI)
+
+cbit	= 100	;cycles
+
+	.page
+; t2nmi - subroutine to handle an rs232 bit input
+
+t2nmi	lda d2prb	;get data in
+	and #$01	;mask off...
+	sta inbit	;...save for later
+
+; update T2 for mid bit check
+;	(worst case <213 cycles to here) (calc 125 cycles+43-66 dead)
+
+	lda d2t2l	;calc new time & clr NMI
+	sbc #22+6
+	adc baudof
+	sta d2t2l
+	lda d2t2h
+	adc baudof+1
+	sta d2t2h
+
+	lda #$11	;enable timer
+	sta d2crb
+
+	lda enabl	;restore NMIs early...
+	sta d2icr
+
+	lda #$ff	;enable count from $ffff
+	sta d2t2l
+	sta d2t2h
+
+	jmp rsrcvr	;go shift in...
+
+
+
+; flnmi - subroutine to handle the start bit timing
+
+flnmi	lda m51ajb	;get half bit rate walue
+	sta d2t2l
+	lda m51ajb+1
+	sta d2t2h
+
+	lda #$11	;enable timer
+	sta d2crb
+
+	lda #$12	;disable flag, enable T2
+	eor enabl
+	sta enabl
+
+	lda #$ff	;preset for count down
+	sta d2t2l
+	sta d2t2h
+
+	ldx bitnum	;get # of bits in
+	stx bitci	;put in rcvrcnt
+	rts
+
+
+; popen - patches open rs232 for universal Kernel
+
+popen	tax		;we're calculating baud rate
+	lda m51ajb+1	; (m51ajb=freq/baud/2-100)
+	rol a
+	tay
+	txa
+	adc #cbit+cbit
+	sta baudof
+	tya
+	adc #0
+	sta baudof+1
+	rts
+
+	nop
+	nop
+
+;.end
+; rsr 8/02/80 - routine for panic
+; rsr 8/08/80 - panic & stop key
+; rsr 8/12/80 - change for a0int a subroutine
+; rsr 8/19/80 - add rs-232 checks
+; rsr 8/21/80 - modify rs-232
+; rsr 8/29/80 - change panic order for jack
+; rsr 8/30/80 - add t2
+; rsr 9/22/80 - add 1800 baud opps!
+; rsr 12/08/81 - modify for vic-40 system
+; rsr 12/11/81 - continue modifications (vic-40)
+; rsr 12/14/81 - modify for 6526 timer adjust
+; rsr 2/09/82 - fix enable for flag nmi
+; rsr 2/16/82 - rewrite for 6526 problems
+; rsr 3/11/82 - change nmi renable, fix restore
+; rsr 3/29/82 - enables are always or'ed with $80
+; rsr 6/21/82 - add open patch
+
+	.page
+	.subttl IRQFILE
+; simirq - simulate an IRQ (for cassette read)
+; enter via JSR SIMIRQ
+
+simirq	php
+	pla		;fix the break flag
+	and #%11101111
+	pha
+
+; check for real IRQ or BRK
+
+puls	pha
+	txa
+	pha
+	tya
+	pha
+	tsx
+	lda $104,x	;get old p status
+	and #%00010000	;BRK flag set?
+	beq 10$		;...no
+	jmp (cbinv)	;...yes:  handle the break
+
+10$	jmp (cinv)	;...IRQ
+
+	.page
+; pcint - add universal to cinit
+
+pcint	jsr cint	;init editor
+
+10$	lda vicreg+18	;check raster compare for zero
+	bne 10$		;if it's zero then check value...
+	lda vicreg+25	;get raster IRQ value
+	and #$01
+	sta palnts	;place in PAL/NTSC flag
+	jmp iokeys	;continue
+
+
+
+; piokey - add universal to iokeys
+
+piokey	lda #$81	;enable t1 irq's
+	sta d1icr
+	lda d1cra
+	and #$80	;save only tod bit
+	ora #%00010001	;enable timer1
+	sta d1cra
+	jmp clklo	;[901227-03]
+
+
+
+
+	* = $e500-20
+
+; baudop table contains values for .985248E6/baud_rate/2-100 (PAL)
+
+
+baudop	.word 9853-cbit		;50 baud
+	.word 6568-cbit		;75 baud
+	.word 4478-cbit		;110 baud
+	.word 3660-cbit		;134.6 baud
+	.word 3284-cbit		;150 baud
+	.word 1642-cbit		;300 baud
+	.word 821-cbit		;600 baud
+	.word 411-cbit		;1200 baud
+	.word 274-cbit		;1800 baud
+	.word 205-cbit		;2400 baud
+
+	.page
+
+	* = $e500-32
+
+; fpatch - tape filename timeout
+
+fpatch	adc #2		;time is (8 to 13 sec of display)
+10$	ldy stkey	;check for key down on last row...
+	iny
+	bne 20$		;...key pressed, exit
+	cmp time+1	;check timer
+	bne 10$		;...wait until timeout or key pressed
+20$	rts
+
+
+
+	* = $e500-38
+
+; cpatch - fix to clear line...modified 901227-03
+;  (prevents white character flash)
+
+cpatch	lda color	;always clear to current foreground color
+	sta (user),y
+	rts
+
+
+
+	* = $e500-45
+
+; prtyp - rs232 parity patch...added 901227-03
+
+prtyp	sta rinone	;good receiver start...disable flag
+	lda #1		;set parity to 1 always
+	sta riprty
+	rts
+
+;.end
+
+	.page
+	.subttl VECTORS
+	* = $ff80
+
+	.byte 3		;release number of C64 Kernel [901229-03]
+
+ 	jmp pcint
+ 	jmp ioinit
+ 	jmp ramtas
+ 	jmp restor	;restore vectors to initial system
+ 	jmp vector	;change vectors for user
+
+ 	jmp setmsg	;enable/disable Kernel messages
+ 	jmp secnd	;send sa after listen
+ 	jmp tksa	;send sa after talk
+ 	jmp memtop	;set/read top of memory
+ 	jmp membot	;set/read bottom of memory
+ 	jmp scnkey	;scan keyboard
+ 	jmp settmo	;set timeout in IEEE (unused)
+ 	jmp acptr	;handshake serial bus byte in
+ 	jmp ciout	;handshake serial bus byte out
+ 	jmp untlk	;send untalk out serial bus
+ 	jmp unlsn	;send unlisten out serial bus
+ 	jmp listn	;send listen out serial bus
+ 	jmp talk	;send talk out serial bus
+ 	jmp readss	;return I/O status byte
+ 	jmp setlfs	;set logical file parameters: la, fa, sa
+ 	jmp setnam	;set filename length and location
+open	jmp (iopen)	;open logical file
+close	jmp (iclose)	;close logical file
+chkin	jmp (ichkin)	;open channel for input
+ckout	jmp (ickout)	;open channel for output
+clrch	jmp (iclrch)	;close channel
+basin	jmp (ibasin)	;input from channel
+bsout	jmp (ibsout)	;output to channel
+load 	jmp loadsp	;load from file
+save 	jmp savesp	;save to file
+ 	jmp settim	;set internal clock
+ 	jmp rdtim	;read internal clock
+stop	jmp (istop)	;scan stop key
+getin	jmp (igetin)	;get byte from current input device (no wait if keybd)
+clall	jmp (iclall)	;close all files
+ 	jmp udtim	;increment clock
+jscrog	jmp scrorg	;read screen origin
+jplot	jmp plot	;read/set cursor X,Y coordinate
+jiobas	jmp iobase	;return address of 6526 (I/O) device
+
+	.page
+
+	* = $fff6
+
+	.byte $52,$52,$42,$59		;the creators
+
+
+	* = $fffa
+
+	.word nmi	;NMI		hardware vector
+reset	.word start	;reset		hardware vector
+	.word puls	;IRQ/BRK	hardware vector
+
+
+	.page
+	.subttl Console KERNEL Cross Reference Listing
+	.end
