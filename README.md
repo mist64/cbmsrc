@@ -4,11 +4,11 @@ This repository collects original source code of various Commodore Business Mach
 
 ## BASIC_VIC
 
-The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
+The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from [vic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
 
 ## KERNAL_VIC_04
 
-The Commodore VIC-20 KERNAL source, unreleased version (901486-04). Extracted from kernal.src from Bo Zimmer's [archive](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
+The Commodore VIC-20 KERNAL source, unreleased version (901486-04). Extracted from kernal.src from [vic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 KERNAL source.
 
 ## BASIC_C64
 
@@ -121,7 +121,9 @@ The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d8
 
 The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
 
-* The CBM 8070 is an unreleased device with one 8" hard drive (drive #0) and one 8" double-sided floppy drive (drive #1, like CBM 8062).
+The CBM 8070 is an unreleased device with one 8" hard drive (#0) and one 8" double-sided floppy drive (#1). It is derived from the dual 8" drive CBM 8061/8062 (1980), and the source is very similar to the firmware of that device.
+
+* The source only contains the bus controller portion of the ROM ($CE50-$FFFF), not the disk controller part.
 * The power-on message says "CBM DOS V3.0 8070".
 * The file copy code is stored on the hard disk and loaded on demand ("ldcopy").
 
