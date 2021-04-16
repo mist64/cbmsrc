@@ -20,7 +20,7 @@
 ;* COMMODORE BUSINESS MACHINES (CBM)   *
 ;***************************************
 .SKI 3
-;****LISTING DATE --1200 05 AUG 1983****
+;****LISTING DATE --1200 05 AUG  1983***
 .SKI 3
 ;***************************************
 ;* THIS SOFTWARE IS FURNISHED FOR USE  *
@@ -38,4 +38,5 @@
 ;* RELIABILITY OF THIS SOFTWARE. RSR   *
 ;*                                     *
 ;***************************************
+
 .END
