@@ -39,20 +39,28 @@ It does not contain the version byte at $FF80 (which is $AA in the binary) or th
 The Commodore 64 KERNAL source, final version (901227-03). Based on KERNAL_C64_00 and manually patched using
 
 * the [LST printout of the -03 KERNAL](http://pagetable.com/docs/C64_KERNAL_03_LST.pdf)
-* the [VAX-format LST from 1987](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz)
+* the [VAX-format SRC from 1987](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz)
 
 There are two differences though:
 
 * In both sources, the added patch function `PIOKEY` ends with `JMP CLKHI` ($EE85), but the -03 binary contains $EE8E, which is `JMP CLKLO`. The change was probably done in the binary and not added back to the source. The version in this repository contains the correct `JMP CLKLO` though.
-* The printout LST contains a version byte ($FF80) of 0, the VAX LST contains the correct version byte of 3. The version in this repository contains a 3.
+* The printout LST contains a version byte ($FF80) of 0, the VAX SRC contains the correct version byte of 3. The version in this repository contains a 3.
 
 The sources have been verified to build the correct -03 KERNAL binary, but no guarantees can be given that all changes, especially in comments and formatting, have been patched correctly.
 
-It contains the version byte at $FF80 (3), but it does not contain the "RRBY" signature at $FFF6.
+It contains the version byte (3) at $FF80, but it does not contain the "RRBY" signature at $FFF6.
+
+## BASIC_C64_VAX, KERNAL_C64_VAX
+
+This is the C64 BASIC and KERNAL source, converted from the PET-based to the VAX-based assembler by Fred Bowen in 1987, and with updated comments. Source: [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
+
+This produces the same binaries as BASIC_C64 and KERNAL_C64_03, except for the pre-03 `PIOKEY` patch (see above).
 
 ## BASIC_C64GS, KERNAL_C64GS
 
 The Commodore 64GS BASIC and KERNAL (390852-01) source (1990). Source: [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
+
+The source files are in VAX assembler format and derived from BASIC_C64_VAX and KERNAL_C64_VAX.
 
 * BASIC_C64GS: The source has updated comments, and the binary is identical with the regular C64 BASIC, except for:
 	* The BASIC vector table is initialized with a literal $F72E as the main loop address. This causes BASIC to jump to the C64GS power-on message in the KERNAL.
@@ -60,6 +68,9 @@ The Commodore 64GS BASIC and KERNAL (390852-01) source (1990). Source: [c64_kern
 * KERNAL_C64GS: The source has updated comments, and contains the following changes:
 	* Tape support has been replaced by the power-on message code.
 	* Memory test has been sped up by only testing one byte per block.
+	* The `PIOKEY` patch has been fixed in the source.
+
+The KERNAL source contains the version byte (3) at $FF80 as well as the "RRBY" signature at $FFF6.
 
 ## BASIC_TED, KERNAL_TED_0{4|5}
 
