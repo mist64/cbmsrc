@@ -1,0 +1,119 @@
+.PAGE 'INTERUPT'
+IRQ
+       PHA
+       TXA
+       PHA
+       LDA TICK        ; INTERRUPT INTERVAL
+       STA MITAT
+       INC CLOCK
+       LDA CLOCK
+       AND #$0F
+       BNE IRQ1
+       INC MTRCLK
+IRQ1
+       LDX #2-1
+       LDA PB
+       PHA             ; SAVE PB
+       ORA #1
+IRQ2
+       STA PB          ; SELECT DRIVE
+       LDA PB
+       AND #8          ; MASK WRITE PROTECT
+       CMP LWPT,X      ; CHECK LAST WRITE PROTECT
+       STA LWPT,X
+       BEQ IRQ3        ; NO CHANGE
+       LDA #1
+       STA WPSW,X      ; SET SWITCH
+;
+; SERVICE MOTOR
+;
+IRQ3
+       LDA MTRCLK
+       CMP MTRTM,X
+       BNE IRQ5
+       ASL DRVST,X
+       BCS IRQ4
+       LDA ANDC,X
+       ORA VB
+       STA VB          ; TURN MOTOR OFF
+IRQ4
+       JSR MTRCNT      ; KEEP MOTOR RUNNING
+       CLC
+       ROR DRVST,X
+;
+; SERVICE STEPPER
+;
+IRQ5
+       LDA STEPS,X
+       BNE IRQ7
+IRQ6
+       LDA SETL,X      ; GET SETTLING TIME
+       BEQ IR6         ; DONE SETTLING
+       DEC SETL,X
+       BPL IRQ11       ; JUMP, SERVICE OTHER DRIVE
+IR6
+       STA PHASE,X     ; .A = 0, FOR OLD DOS
+       LDA DRVST,X     ; ON TRACK
+       AND #$BF
+       STA DRVST,X     ; CLEAR STEPPING FLAG
+       JMP IRQ11       ; SERVICE OTHER DRIVE
+IRQ7
+       ASL A           ; 0=OUT, 1=IN
+       LDA VB
+       AND PHASES,X    ; MASK OUT OLD PHASE
+       STA COW
+       LDA VB
+       AND NOTOUT,X    ; MASK OUT OLD STATE
+       BCS IRQ8        ; STEP IN
+;
+; STEP OUT
+; (ENTER WITH PHASE STATE IN A)
+;
+       DEC STEPS,X
+       EOR NOTOUT,X    ; INVERT PHASE
+       JMP IRQ9
+;
+; STEP IN
+; (ENTER WITH PHASE STATE IN A)
+;
+IRQ8
+       INC STEPS,X
+IRQ9
+       EOR NOTIN,X     ; INVERT ONE PHASE
+       BEQ IRQ10       ; NEW STEPPER STATE
+       CMP NOTOUT,X
+       BEQ IRQ10       ; NEW STEPPER STATE
+       EOR NOTOUT,X    ; SWITCH PHASES
+;
+; WRITE NEW STEPPER POSITION
+; SERVICE NEXT DRIVE
+;
+IRQ10
+       ORA COW         ; ADD OLD STATE
+       STA VB          ; WRITE NEW STEPPER STATE
+IRQ11
+       LDA PB
+       AND #$FE        ; DRIVE 0
+       DEX
+       BPL IRQ2        ; JUMP, SERVICE DRIVE 0
+IRQ12
+       LSR CFLG2
+       PLA
+       STA PB          ; RESTORE DRIVE
+       PLA
+       TAX
+       PLA
+       RTI
+MTRCNT
+       LDA MTRCLK
+       STA MTRTM,X
+       DEC MTRTM,X
+       RTS
+;
+;
+;
+PHASES .BYTE $F3,$FC
+NOTIN  .BYTE $08,$02
+NOTOUT .BYTE $0C,$03
+ANDC   .BYTE $20,$10
+.END

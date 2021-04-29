@@ -1,0 +1,321 @@
+.PAG 'COMMANDS'
+;
+; MODE 001 (9)
+; WRITE
+;
+WRITE  CMP #$10
+       BNE    VRFY
+;
+       JSR CHKBLK
+       STA CHKSUM
+;
+       LDA PB
+       AND #08         ; ISOLATE WRITE PROTECT BIT
+       BEQ L198        ; BRANCH IF OK
+;
+L104   JMP ERROR
+;
+L198   JSR SRCH        ; GET CORRECT BLOCK
+;
+       LDX GAP1        ; LOAD WAIT GAP 1
+L200   BVC L200        ;WAIT X CHARS
+       CLV
+       DEX
+       BNE L200
+;
+       LDA #WRTSYN     ; WRITE SYNC MODE
+       STA PCR
+       LDA #WRTDAT
+;
+       LDX #$FF        ; LOAD FILL CODE
+       JSR OUT2        ; WRITE 4 SYNC CHARS OUT
+       JSR OUT2        ; 1 ST
+;
+L202   BVC L202        ; 4 TH
+       CLV
+;
+       STA PCR         ; STORE NORMAL CODE MODE
+;
+       LDA #7
+       STA DOUT        ; 2ND SYNC
+;
+       LDY #0
+.PAGE
+; WRITE BLOCK
+L203   BVC L203
+       CLV
+;
+       LDA (BUFPT),Y
+       STA DOUT
+;
+;
+       INY
+       BNE L203        ; LOOP FOR WHOLE BLOCK
+;
+       LDX CHKSUM      ; WRITE OUT CKSUM
+L204   BVC L204
+       CLV
+       STX DOUT
+       JSR OUT         ; SEND A BYTE
+       LDX #00
+       JSR OUT         ; SEND A BYTE
+       LDA #$FC        ; NORMAL, READ MODE
+;
+L442   BVC L442        ; TEST IF BYTE PRESENT
+       CLV
+;
+       STA PCR         ; CHANGE TO SEND SYNC
+;
+       LDX    #40
+L205   JSR BYTE
+       DEX
+       BNE L205
+;
+       LDY JOBNUM
+       LDA JOBS,Y      ; LOAD OLD WRITE JOB
+       EOR #$30        ; MAKE INTO VERIFY
+       STA JOBS,Y
+       JMP FSNUM       ; FIX SECTOR# FOR NEXT JOB
+.PAGE
+; MODE= 010 (A)
+; VERIFY
+;
+VRFY   CMP #$20
+       BNE SECSEK      ; SECTOR SEEK
+       JSR DSTRT       ; START READING DATA
+;
+L210   BVC L210        ;NO TIME FOR JSR
+       CLV
+;
+       LDA DIN         ; GET BYTE
+       CMP (BUFPT),Y   ; COMPARE TO CONTENTS OF BUFFER
+       BNE L212        ; VERIFY ERROR
+;
+       INY
+       BNE L210        ; 256 BYTES
+       JMP L101        ; COMPARE CKSUM BYTES
+L212   LDA #7          ; VERIFY ERROR
+       BNE ERR2
+;
+; END READING DATA
+.PAG
+;
+; MODE= 011 (B) X011 100D
+; SECTOR SEEK
+;
+SECSEK
+       JSR SRCH        ; GET CORRECT BLOCK
+       BEQ DONE        ; JUMP TO DONE
+.PAGE
+; SEEK TO DETERMINE NEXT SECTOR#
+;
+SEEK
+;
+       LDX #180        ; READ HEADER
+       JSR HEAD        ; GET BLOCK HEAD
+;
+       LDY #5-1
+L250   BVC L250
+       CLV
+       LDA DIN         ; GET BYTE
+       STA STAB,Y      ; STORE IN TABLE
+       DEY
+       BPL L250        ; LOOP
+;
+       LDY #4          ; CREATE CKSUM
+       LDA #0
+L254   EOR STAB,Y
+       DEY
+       BPL L254
+;
+       CMP #0
+       BNE CSERR       ; BRANCH IF ERROR
+;
+       LDX DRIVE       ;INDEX BY DRIVE#
+       LDA STAB+2
+       STA DRVTRK,X    ; UPDATE CORRECT TRACK#
+;
+       LDA JOB         ; LOAD JOB TYPE
+       CMP #$30        ; TEST IF SEEK
+       BEQ ESEEK       ; BRANCH IF YES
+;
+       LDY #1
+;
+L252   LDA (HDRPT),Y   ; LOAD ID
+       CMP STAB,Y      ; CHECK IF SAME AS HEADER
+       BNE L253        ; BRANCH IF MISMATCH
+;
+       DEY
+       BPL L252        ; LOOP
+;
+       JMP FSNUM1      ; DECIDE WHICH SECTORS TO SERVICE
+.PAGE
+; MODE= 011 (B)
+; SEEK
+;
+ESEEK
+;
+       LDY #4
+L251   LDA STAB,Y      ; LOAD HEADER
+       STA (HDRPT),Y   ; STORE HEADER
+       DEY
+       BPL L251        ; LOOP FOR WHOLE HEADER
+;
+DONE   LDA #1          ; ERROR CODE FOR NO ERROR
+       .BYTE SKIP2
+CSERR  LDA #9
+       .BYTE SKIP2
+L253   LDA #11
+ERR2   JMP ERROR       ; JUMP TO ERROR
+;
+.PAGE
+; SEARCH FOR SPECIFIC BLOCK
+;
+SRCH   LDY #4-1
+       LDA #0
+;
+L412   EOR (HDRPT),Y   ; COMPUTE CHECKSUM
+       DEY
+       BPL L412
+;
+       LDY #4          ; OFFSET FOR CHECKSUM
+       STA (HDRPT),Y   ; STORE CHECKSUM
+;
+       LDY JOBNUM
+       LDX #180        ; SEARCH FOR A SECTOR
+;
+L410   JSR HEAD        ; EVERY BYTE IN THE HEADER
+       LDY #5-1        ; MUST BE IDENTICAL
+;
+L411   BVC L411
+       CLV
+;
+       LDA DIN
+       CMP (HDRPT),Y   ; COMPARE TO HEADER
+       BNE L410        ; LOOP IF NOT RIGHT BLOCK
+;
+       DEY
+       BPL L411        ; LOOP FOR WHOLE HEADER
+;
+       INY             ; SET Y TO 0
+;
+;
+RTS
+;
+; SEARCH FOR BLOCK HEAD
+;
+HEAD   CLI
+       DEX             ; X HAS MAX # OF TRIALS
+       BNE L420        ; TRIALS LEFT
+;
+       LDA #2          ; ERROR CODE
+.PAGE
+; SEND ERROR CODE
+;
+ERROR
+       LDY JOBNUM      ; LOAD JOB#
+       STA JOBS,Y      ; SEND JOB STATUS
+       PHA
+;
+       LDA MTRCLK
+       LDX DRIVE
+       ADC CUTMT
+       STA MTRTM,X     ; MAKE MOTOR STAY ON LONGER
+;
+       JSR SETSRH
+;
+;
+       PLA             ; LOAD ERROR TYPE
+       LSR A           ; TEST IF OK EXIT
+       BNE L421        ; BRANCH IF NOT
+;
+       JMP FSNUM       ; LOOP FOR ALL SECTORS
+;
+L421   LDX #$3F
+       TXS             ; PURGE STACK
+       JMP START       ; GO TO NEXT JOB
+;
+L420   JSR SYNC        ; GET A BYTE
+       CMP #$08        ; COMPARE TO START OF HEADER
+       BNE HEAD
+       RTS
+;
+; ERRORS:
+;      #1: NO ERROR
+;      #2: CAN'T FIND BLOCK HEAD
+;      #3: NO SYNC CHARACTER
+;      #4: DATA BLOCK NOT PRESENT
+;      #5: CHECKSUM ERROR
+;      #7: VERIFY ERROR
+;      #8: WRITE WITH WRITE PROTECT ON
+;      #9: CHECKSUM ERROR IN SEEKED HEADER
+;     #10: DATA RAN INTO NEXT HEADER
+;     #11: DISK ID MISMATCH
+;     #16: DECODING ERROR
+.PAGE
+;
+; HUNT FOR SYNC CHARACTER
+;
+SYNC
+       LDA #30
+       STA SYNCS
+SYNC1  JSR SETSRH      ; GOTO SEARCH MODE
+;
+       SEI
+       LDA #$80+80
+       STA TIMER       ; 20 MS LIMIT
+;
+       LDA #3          ; ERROR CODE
+       DEC SYNCS
+       BMI ERROR       ; > 30 FALSE SYNCS
+L430   BIT TIMER       ; TEST IF OVER TIME LIMIT
+       BPL ERROR       ; BRANCH IF OVER
+       BIT VB          ; TEST IF SYNC PRESENT
+       BMI L430        ; LOOP UNTIL SYNC
+;
+       LDY SYNDLY      ; LOAD SYNCDLY
+WATSYN BIT VB          ; TEST SYNC PRESENT
+       BMI SYNC1       ; GONE, FIND AGAIN
+       DEY
+       BNE WATSYN      ; 10 US PER LOOP DELAY
+;
+       LDA VB          ; GOTO READ MODE
+       ORA #PLLBIT
+       STA VB
+;
+       BIT DIN         ; RESET VIA LATCHING DATA
+       CLV
+;
+; GET A BYTE
+;
+BYTE   BVC BYTE        ; TEST IF BYTE PRESENT
+       CLV
+;
+       LDA DIN         ; LOAD BYTE
+       RTS
+;
+; BYTE TO BE SENT IS IN X
+OUT2   JSR OUT         ; DO 2 OUTS
+OUT    BVC OUT         ;DATA IN 6530 WAS LATCHED
+       CLV
+       STX DOUT        ;WRITE NEW BYTE INTO PA
+       RTS
+;
+;
+CHKBLK LDA #0          ; CREATE BLOCK CHKSUM
+       TAY
+CHKB10 EOR (BUFPT),Y
+       INY
+       BNE CHKB10
+       RTS
+;
+;
+;
+SETSRH LDA VB          ; SET PLL INTO SEARCH MODE
+       AND #255-PLLBIT
+       STA VB
+       RTS
+;
+;
+;
+.END

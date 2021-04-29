@@ -1,0 +1,272 @@
+.PAGE 'INDIRECTS'
+*=$FC00                ; ROM START
+STARTI .WORD START     ; INDIRECT TO START ROUTINE
+DONEI  .WORD ERROR     ; INDIRECT TO DONE ROUTINE
+.PAGE 'RESET'
+RESET
+       LDY #2          ; WAIT FOR 2 SIGNALS
+RESET1
+       STY $0400       ; STORE NON-ZERO FLAG
+RESET2
+       LDA $0400
+       BNE RESET2      ; WAIT FOR DOS
+       DEY
+       BNE RESET1      ; ONE MORE TIME
+       JMP INIT        ; DIAGNOSTICS & INIT CODE
+.PAGE 'IDLE LOOP'
+START
+       LDY #15-1       ; # OF JOBS
+START1
+       CLI
+       LDA JOBS,Y      ; VALID JOB?
+       BPL START5      ; NO
+       CMP #JUMP       ; JUMP CODE?
+       BNE START2      ; NO
+       TYA
+       STA JOBNUM
+       JMP EX2         ; GOTO EXECUTE
+START2
+       SEI
+       AND #1          ; MASK DRIVE NUMBER
+       TAX             ; TRANSFER FOR INDEX
+       STA DRIVE       ; SAVE DRIVE NUMBER
+;
+; TEST MOTOR STATUS
+;
+       LDA VB
+       AND ANDC,X      ; LOOK AT MOTOR ON
+       BEQ START3      ; MOTOR IS ON
+       EOR VB
+       STA VB          ; TURN MOTOR ON
+       LDA MTRCLK      ; SET TIME FOR
+       ADC DELAY       ;  ACCELERATION DELAY
+       STA MTRTM,X
+       LDA DRVST,X
+       ORA #$80
+       STA DRVST,X     ; SET ACCELERATION BIT
+;
+; TEST MOTOR SPEED
+;
+START3
+       LDA DRVST,X     ; FULL SPEED?
+       BMI START5      ; NO, STILL SET
+       JSR MTRCNT      ; YES, KEEP MOTOR ON
+       LDA DRVST,X
+;
+; TEST HEAD STATUS
+;
+START4
+       ASL A           ; HEAD MOVING?
+       BPL QUE         ; NO, DO JOB
+START5
+       DEY             ; SCAN NEXT JOB
+       BPL START1
+       BMI START       ; START OVER
+.PAGE 'QUE'
+QUE
+       CLI
+       LDY #15-1       ; # OF JOBS
+       STY JOBNUM
+QUE1
+       JSR SETJOB
+       BMI QUE4
+QUE2
+       DEC JOBNUM
+       BPL QUE1
+       LDY NXTJOB
+       JSR SETJB1
+       LDA NXTRK       ; GET DISTANCE TO DESIRED TRACK
+       SEI
+       STA STEPS,X     ; STORE STEPS TO NEW TRACK
+       LDA HDSETL      ; HEAD SETTLE
+       STA SETL,X
+       LDA #$41
+       ORA DRVST,X
+       STA DRVST,X     ; SET STEPPING BIT
+       LDA (HDRPT),Y   ; TRACK
+       STA DRVTRK,X    ; STORE HEAD POSITION
+QUE3
+       JMP START       ; BACK TO START
+QUE4
+       AND #1
+       CMP DRIVE       ; TEST IF SAME DRIVE
+       BNE QUE2        ; NOT SAME DRIVE
+;
+; TEST IF ON RIGHT TRACK
+;
+       LDA PB
+       ORA #HEAD0
+       STA PB          ; SELECT BOTTOM SIDE OF DISK
+       LDA (HDRPT),Y   ; GET TRACK
+       CMP TAB3        ; MAX TRACK PER SIDE
+       BCC QU5         ; T < MAX TRACK
+       LDA PB
+       AND #HEAD1
+       STA PB          ; SELECT TOP SIDE OF DISK
+       LDA DRVTRK,X    ; CURRENT TRACK
+       CMP TAB3
+       BCS QUE5        ; CURRENT TRACK > MAX TRACK
+       ADC MAXTRK      ; ADJUST FOR TOP SIDE OF DISK
+       BNE Q5          ; JUMP
+QU5
+       LDA DRVTRK,X    ; CURRENT TRACK
+       CMP TAB3
+       BCC QUE5        ; CURRENT TRACK < MAX TRACK
+       SBC MAXTRK      ; ADJUST FOR BOTTOM SIDE OF DISK
+Q5
+       STA DRVTRK,X
+QUE5
+       LDA DRVTRK,X
+       BEQ GOTU
+       SEC
+       SBC (HDRPT),Y
+       BEQ GOTU        ; ON RIGHT TRACK
+QUE6
+       STA NXTRK       ; SAVE FOR LATER USE
+       LDA JOBNUM
+       STA NXTJOB
+       BPL QUE2
+.PAGE 'GOTU'
+GOTU
+       LDX #4
+       LDA (HDRPT),Y   ; LOAD TRACK NUMBER
+       STA TRACK
+       CMP TAB3
+       BCS GOTU2       ; TRACK > MAX TRACK
+GOTU1
+       CMP TAB3-1,X
+       DEX
+       BCS GOTU1
+       BCC GOTU3
+GOTU2
+       CMP TAB3+3,X
+       DEX
+       BCS GOTU2
+GOTU3
+       LDA TAB1,X      ; GET NUMBER OF SECTORS
+       STA SECTR       ;  ON TRACK
+       TXA
+       ASL A
+       STA WORK        ; TEMP SPACE
+       LDA PB
+       AND #$F8
+       ORA WORK
+       ORA DRIVE       ; ADD DRIVE
+       STA PB          ; STORE BIT DENSITY
+       LDX DRIVE
+       LDA DRVST,X
+       BMI QUE3        ; MOTOR STILL ACCELERATING
+       LDA JOB
+       CMP #BUMPC
+       BEQ BUMP        ; RESTORE HEAD TO TRACK 1
+.PAGE 'EXECUTE'
+;
+; MODE 110 (E)
+; EXECUTE
+;
+EXE
+       CMP #EXEC
+       BEQ EX
+       JMP SEEK
+EX
+       LDA JOBNUM
+EX2
+       CLC
+       ADC #>BUFS
+       STA BUFPT+1
+EX3
+       JMP (BUFPT)     ; GO EXECUTE
+.PAGE 'BUMP'
+;
+; MODE 100 (C)
+; BUMP (RESTORE)
+;
+BUMP
+       SEI
+       LDA #$41
+       STA DRVST,X
+       LDA #1
+       STA DRVTRK,X    ; SET TRACK TO 1
+       LDA NOTOUT,X
+       ORA VB
+       STA VB          ; SET TRACK 1 PHASE
+       LDA #92
+       STA STEPS,X     ; DO 92 STEPS
+       STA SETL,X      ; SET HEAD SETTLE TIME
+       JMP DONE        ; FINISH UP
+.PAGE 'SETJOB'
+SETJOB
+       LDY JOBNUM
+SETJB1
+       LDA JOBS,Y
+       PHA
+       AND #$78
+       STA JOB
+       TYA
+       ASL A
+       ASL A
+       ASL A
+       ADC #<HDRS
+       STA HDRPT
+       LDY #2
+       PLA
+       RTS
+FSNUM
+       LDY #3
+       LDA (HDRPT),Y
+       STA STAB+3
+FSNUM1
+       LDA #$7F
+       STA CSECT
+       LDA STAB+3
+       CLC
+       ADC #2
+       CMP SECTR
+       BCC FSNUM2
+       LDA #0
+FSNUM2
+       STA NEXTS
+       LDX #15-1
+       STX JOBNUM
+       LDX #$FF
+FSNUM3
+       JSR SETJOB
+       BPL FSNUM5      ; NO JOB
+       STA WORK
+       AND #1
+       CMP DRIVE
+       BNE FSNUM5      ; NOT THE RIGHT DRIVE
+       LDA (HDRPT),Y
+       CMP TRACK
+       BNE FSNUM5
+       LDA JOB
+       CMP #EXEC
+       BEQ FSNUM5
+       INY
+       SEC
+       LDA (HDRPT),Y
+       SBC NEXTS
+       BPL FSNUM4
+       CLC
+       ADC SECTR
+FSNUM4
+       CMP CSECT
+       BCS FSNUM5
+       STA CSECT
+       LDA JOBNUM
+       TAX
+       ADC #>BUFS
+       STA BUFPT+1
+FSNUM5
+       DEC JOBNUM
+       BPL FSNUM3
+       TXA
+       BPL FSNUM6
+       JMP START
+FSNUM6
+       STX ACTJOB
+       STX JOBNUM
+       JSR SETJOB
+FSNUM7
+       LDA JOB
+.END

@@ -116,6 +116,7 @@ The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d8
 
 * The same ROM binary will work on the 8250 (DS/QD), the 8050 (SS/QD) and the 4040 (SS/DD), the differences will be handled at runtime (symbols "NSIDES", "DOS").
 * Comments in the source call this "SUPER DOS".
+* This only contains the DOS and IEEE code. The controller is in CONTROLLER_8250.
 
 ## DOS_8070
 
@@ -183,6 +184,12 @@ The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Source
 ## RAMDOS
 
 The C64/C128 RAMDISK DOS V4.3 source (1987). Extracted from [ramdos.zip](http://www.zimmers.net/anonftp/pub/cbm/src/drives/ramdos.zip). This is a version of Commodore DOS running on the C64/C128 for using a REU (RAM Expansion Unit) as a RAM disk.
+
+## CONTROLLER_8250
+
+The CBM 8250/8050/4040 controller source (1981). Extracted from 4040-8050-8250-controller-code-tandon.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
+
+* This only contains the controller. The DOS and IEEE code is in DOS_8250.
 
 # Credits
 

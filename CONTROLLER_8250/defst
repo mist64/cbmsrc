@@ -1,0 +1,188 @@
+.PAGE 'DEFINITIONS'
+;I/O REGISTERS
+;
+*      =$40
+;MOS 6522
+VIAA
+VB     *=*+1           ;PORT B
+                       ;BIT 7 SYNC DETECT 1-NO 0-YES
+                       ;BIT 6 PLL CONTROL BIT
+                       ;BIT 5 MOTOR 0 OFF
+                       ;BIT 4 MOTOR 1 OFF
+                       ;BITS 3-2 STEPPER MOTOR DRIVE #0
+                       ;BITS 1-0 STEPPER MOTOR DRIVE #1
+DIN    *=*+1           ;PORT A
+VDDRB  *=*+1           ;DATA DIRECTION REGISTER B
+*      =*+1
+T1LL   *=*+1           ;TIMER 1 LATCH & COUNTER LOW
+TIMER  *=*+1           ;TIMER 1 COUNTER HIGH
+T1L    =T1LL
+T1H    =TIMER
+*      =*+5
+ACR    *=*+1           ;AUX CONTROL REGISTER
+PCR    *=*+1           ;PERIPH CONTROL REGISTE
+                       ;BIT 0:   (SET TO 0)
+                       ;CA1: BYTE READY 1:YES 0:NO
+                       ;BITS 1-3:
+                       ;CA2: FILL/SYNC
+                       ;  NORMAL: XC
+                       ;  SYNC/FILL: XE
+                       ;BIT 4:  (SET TO 1)
+                       ;CB1: ERROR DETECTED 1:YES 0:NO
+                       ;BITS 5-7:
+                       ;CB2: READ/WRITE
+                       ;  WRITE: DX
+                       ;  READ: FX
+IFR    *=*+1           ;INT FLAG REGISTER
+IER    *=*+1           ;INT ENABLE REGISTER
+;
+*=$80
+;MOS 6530
+MITA
+DOUT   *=*+1           ;PORT A
+EOUT   *=*+1           ;DIR A
+PB     *=*+1           ;PORT B
+                       ;BIT 6 *** UNUSED ***
+                       ;BIT 4 ODD HEAD SELECT
+                       ;BIT 3 WRITE PROTECT 1:YES
+                       ;BITS 2-1 FREQUENCY (BIT DENSITY)
+                       ;BIT 0 SWITCH 0: DRIVE #0
+                       ;             1: DRIVE #1
+DDRB   *=*+1           ;DATA DIRECT REG B
+*      =*+11
+MITAT  *=*+1           ;TIMER/1024
+.PAG
+;
+;RAM ON MOS 6530
+;0000-003F  0100-013F
+;
+*      =0
+CLOCK  *=*+1           ; CONTROLLER CLOCK
+MTRCLK *=*+1           ; MOTOR CLOCK CLOCK/16
+MTRTM  *=*+2           ;MOTOR TIMER
+                       ;+ WHEN MOTOR FULLY ON
+                       ;0 WHEN SHOULD TURN MOTOR OFF 
+DRVST  *=*+2           ;DRIVE STATUS WORDS
+                       ;BIT 7 ACCELERATING 0:NO 1:YES
+                       ;BIT 6 STEPPING 0:NO 1:YES
+                       ;BITS 5-0 TRACK#
+*=*+2                  ;#STEPS TO NEW TRACK
+COW    *=*+1           ;USED WITH INTERRUPT
+WORK   *=*+2
+                       ;+0 CLOSEST SEEK DISTANCE
+                       ;+1 CLOSEST SEEK DIRECTION
+DTRCK  *=*+1           ;# SPACES FOR FORMAT
+DSECT  *=*+1           ;# SECTORS UNTIL DESIRED SECTOR
+CSECT  *=*+1           ;CLOSEST SEC FROM CURRENT POSITION
+STAB   *=*+5           ;SECT HEADER TAB
+                       ;SAME FORMAT AS HDRS TABLE
+DRIVE  *=*+1           ;CURRENT DRIVE#
+;
+;
+TRACK  *=*+1           ;TRK# FOR CLOSEST SEEK
+NEXTS  *=*+1           ;NEXT SECTOR ON DRIVE
+SECTR  *=*+1           ;#SECT/TRK
+BUFPT  *=*+2
+                       ;L POINTER INTO BUFS TABLE
+                       ;H POINTER INTO BUFS TABLE
+HDRPT  *=*+2
+                       ;L POINTER INTO HDRS TABLE
+                       ;H POINTER INTO HDRS TABLE
+                       ;IF =FF THEN NO JOB
+FTNUM  *=*+1           ;FORMAT TAG
+IP     *=*+2
+CNT    *=*+1
+JOB    *=*+1           ;CURRENT JOB BEING DONE
+JOBNUM *=*+1           ;CURRENT JOB ID
+DRVTRK *=*+2           ; TRACK DRIVE IS ON CURRENTLY
+SETL   *=*+2           ; HEAD SETTLING TIME
+CHKSUM *=*+1
+BI     *=*+1
+FLG2   *=*+1
+NXTJOB *=*+1           ; OPT TRACK SEEK
+NXTRK  *=*+1           ; OPT TRACK SEEK
+;
+.PAG
+;4K OF COMMUNITY PROPERTY
+;
+*      =$400
+TICK   *=*+1           ;INTERRUPT INTERVAL
+DELAY  *=*+1           ;MOTOR ACCERATION DELAY
+CUTMT  *=*+1           ;MOTOR CUTOFF TIME
+JOBS   *=*+15
+                       ;BIT 7 0:IGNORE 1:JOB PRESENT
+                       ;BITS 6-4 MODE
+                       ;  000:READ     (8) (0)
+                       ;  001:WRITE    (9) (1)
+                       ;  010:VERIFY   (A) (2)
+                       ;  011:SEEK     (B) (3)
+                       ;  100:BUMP     (C) (4)
+                       ;  101:JUMP     (D) (5)
+                       ;  110:EXECUTE  (E) (6)
+                       ;  011:SECSEK   (B) (3) X011 100D
+                       ;BIT 0:DRIVE 0:#B 1:#A
+;
+;
+;
+*=$421                 ;HEADERS ARE AT $421
+HDRS   *=*+120         ;15*8
+                       ;HEADERS FOR CURRENT BLOCKS
+                       ;-3: SYNC
+                       ;-2: SYNC
+                       ;-1: "08"
+                       ; 0: ID1
+                       ; 1: ID2
+                       ; 2: TRACK# (BITS 7 & 6 PART OF ID)
+                       ; 3: SECTOR#
+                       ; 4: CHECKSUM
+                       ; 5: OFF
+                       ; 6,7: SPARE
+;
+TAB1   *=*+4           ;#SECTORS/TRK INITILIZED BY DOS FOR THIS CONTROLLER
+GAP1   *=*+1           ;GAP 1 SIZE SET BY DOS
+GAP2   *=*+1           ;USED IN FORMAT FOR MIN NUMBER OF CHARS LEFT
+VERNUM *=*+1           ; USED BY DOS
+;
+ACTJOB *=*+1           ;ACTIVE JOB #
+PHASE  *=*+2           ; PHASE OF STEPPER
+*=*+1
+NZONES *=*+1           ; NUMBER OF ZONES
+SYNDLY *=*+1           ; DELAY ON PLLSYN CONTROL AFTER SYNC DETECT
+WPSW   *=*+2           ; WRITE PROTECT SWITCH
+LWPT   *=*+2
+PBI    *=*+1
+CFLG2  *=*+1
+NSIDES *=*+1
+SPDVAR *=*+1           ; SPEED MEASURE
+UNUSED *=*+1           ; UNUSED
+*=$4B0
+TAB3   *=*+8           ; TRACK BOUNDRY TABLE, UP TO 4 ZONES
+;
+;
+                       ;DATA ON DISK PRECEEDED BY
+                       ;SYNC,SYNC,"07"
+                       ;CHKSUM FOLLOWS 256 DATA BYTES
+                       ;THEN APPROXIMATELY 16 SPACING BYTES
+*=$04EA
+DOS    *=*+1
+STEPS  *=*+2
+MAXTRK *=*+1
+HDSETL *=*+1
+SYNCS  *=*+1
+;
+; CONSTANTS
+HEAD0  = $10
+HEAD1  = $EF
+JUMP   = $D0           ;JUMP TO BUFFER CODE
+EXEC   = $60           ;START MOTOR THEN JUMP
+BUMPC  = $40           ; RESTORE
+WRTSYN = $DE           ;WRITE SYNC MODE
+WRTDAT = $DC           ;WRITE DATA MODE
+PLLBIT = $40           ;PLL CONTROL BIT, 1= READ MODE....0= SEARCH MODE
+FLG    = $133B
+SKIP2  =$2C            ; BIT INSTRUCTION TO SKIP NEXT 2 BYTES
+INIT   = $500
+*      =$500
+BUFS   *=*+$F00        ;=15*256
+                       ;SET OF 15 1 BLOCK (256 WORD) BUFFERS
+.END

@@ -1,0 +1,50 @@
+.PAGE 'READ/WRITE'
+; MODE= 000 (8)
+; READ
+;
+READ   CMP #0          ; SET STATUS
+       BNE WRITE
+;
+JSR    DSTRT           ; START READING DATA
+;
+L100   BVC L100        ; NO TIME FOR JSR
+       CLV             ; CLEAR BYTE READY (V)
+;
+       LDA DIN         ; LOAD BYTE
+       STA (BUFPT)Y    ; STORE IN BUFFER
+       INY
+       BNE L100        ;LOOP FOR 256 BYTES
+;
+L101   BVC L101        ; WAIT FOR CKSUM
+       LDA DIN
+       STA CHKSUM
+;
+       LDA #$10        ; TEST FOR DECODE ERROR
+       BIT IFR
+       BNE ERR         ; DECODE FLAG IS SET
+;
+       JSR CHKBLK
+       CMP CHKSUM      ; CMP THE CHECK SUM
+       BNE CSIDB
+       JMP DONE
+;
+CSIDB  LDA #5          ; DATA BLOCK CS ERROR
+ERR    JMP ERROR
+;
+;
+;START READING DATA
+DSTRT
+;
+       JSR SRCH        ;SEARCH FOR CORRECT HEADER
+;
+       JSR SYNC        ;WAIT FOR START OF DATA
+;
+       CMP #7          ; START OF DATA
+       BEQ L102        ;YES
+;
+       LDA #4
+       BNE L104        ;DISPLAY ERROR
+;
+L102   RTS
+.END
+”
