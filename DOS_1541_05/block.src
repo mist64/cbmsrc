@@ -169,7 +169,7 @@ blkpar  ldy  #0         ; parse block parms
 
         ldy  #3         ; else char #3 is beginning
 bp05    lda  cmdbuf,y    
-        cmp  #'          
+        cmp  #' '        
         beq  bp10        
 
         cmp  #29        ; skip character

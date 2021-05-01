@@ -136,7 +136,7 @@ The CBM D9065 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from St
 
 ## DOS_1540
 
-The Commodore 1540 DOS V2.6 source (1980), 325302-01/325303-01. Extracted from 1541-2031-num1.d64 and 1541-2031-source-disk-copy-num2-side1.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
+The Commodore 1540 DOS V2.6 source (1980), 325302-01/325303-01. Extracted from 1541-2031-copy-1-original-side1.d64/1541-2031-num1.d64 and 1541-2031-source-disk-copy-num2-side1.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
 
 * The source contains both the IEEE-488 and the IEC serial interface code, so it represents both the CBM 2031 and the Commodore 1540. Different `master` source files build different configurations.
 * The power-on message always says "`CBM DOS V2.6 V170`" though, which corresponds to the 1540.
