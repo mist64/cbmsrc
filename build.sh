@@ -64,6 +64,9 @@ build1 KERNAL_C64_03 kernal
 build2 KERNAL_C64_03_VAX kernal
 build2 KERNAL_C64GS console
 
+build2 KERNAL_TED_04 kernal
+build2 KERNAL_TED_05 kernal
+
 build2 KERNAL_C128_03 kernal
 build2 KERNAL_C128_05 kernal
 build2 KERNAL_C128_06 kernal
@@ -89,6 +92,8 @@ build2 BASIC_C128 basic
 build1 BASIC_CBM2_A cbm256 # or cbm128
 build1 BASIC_CBM2_B cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
 
+build2 MONITOR_C128 monitor
+
 build1 CONTROLLER_8250 lib
 build1 DOS_4040 master
 build1 DOS_1540 ser.lib
@@ -100,6 +105,11 @@ build1 DOS_1541_06_REC ser.lib
 build1 DOS_1541C_01_REC ser.lib
 build1 DOS_1541C_02_REC ser.lib
 build1 DOS_1541C_03_REC ser.lib
+build2 DOS_1570 serlib
+build2 DOS_1571_03 serlib
+build2 DOS_1571_05 serlib
+build2 DOS_1571CR serlibcr
+build2 DOS_1581 serlib
 
 build1 DOS_8250 master
 build1 DOS_8070 dos
@@ -111,15 +121,5 @@ build2 DOS_1541C_02 serlib
 build2 DOS_1541C_03 serlib
 
 # TODO cbm6502asm problems:
-# * problem with include that doesn't return to parent file
-#   DOS_1570
-#   DOS_1571_03
-#   DOS_1571_05
-#   DOS_1571CR
-#   DOS_1581
-# * problems with palmod symbol, ';' literal
-#   build2 KERNAL_TED_04 kernal
-# * problems with ';' literal
-#   build2 MONITOR_C128 monitor
 # * build problem
 #   build2 RAMDOS a

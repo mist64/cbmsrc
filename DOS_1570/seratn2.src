@@ -1,5 +1,5 @@
         .page  
-	.subtttl 'seratn1.src'
+	.subttl 'seratn1.src'
 
 jatnsrv sei      
         lda  #0         ; clear pending flag
