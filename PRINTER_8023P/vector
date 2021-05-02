@@ -1,0 +1,5 @@
+	*=$FFFB
+CHKSUM	.BYTE 0
+	.WORD INIT
+	.WORD IRQ
+	.END

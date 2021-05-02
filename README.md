@@ -204,6 +204,13 @@ The CBM 8250/8050/4040 controller source (1981). Extracted from 4040-8050-8250-c
 
 * This only contains the controller. The DOS and IEEE code is in DOS_8250.
 
+## PRINTER_8023P
+
+The CBM 8023P printer source code (1980). Extracted from 8023p-printer-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
+
+The CBM 8023P is a dot matrix printer with an IEEE-488 connection, a 6502/6532-based controller, and a Brother M82 machanism. The source contains references to Epson Model 3110/3210 mechanisms which seem to have been used in earlier printers.
+
+
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com

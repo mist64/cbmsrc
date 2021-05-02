@@ -1,0 +1,9 @@
+;*******************************
+;* BROTHER M82 PRINTER  SORCE  *
+;* VER 1.1 /1982/2/1           *
+;* BY SYSTEM APL.LAB  SA=21    *
+;*******************************
+;
+KATA=0
+DBUG=0
+	.FIL BROTHERM82

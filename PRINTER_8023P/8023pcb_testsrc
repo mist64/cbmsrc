@@ -1,0 +1,562 @@
+;*****************************
+;*                           *
+;*    8023P TEST PROGRAM     *
+;*                           *
+;* BROTHER PRINTER HEAD HAS  *
+;* HOME POSITION SIGNAL AND  *
+;* RTP SIGNAL.               *
+;*                           *
+;* ONE CHARACTOR PRINT NEED  *
+;* 6.6 MILI-SEC.             *
+;*                           *
+;*****************************
+;
+; PA-0 USED TO HP SIGNAL OUT
+; PA-1 USED TO RTP SIGNAL OUT
+; PA-2 USED TO HOLD SIGNAL INPUT
+; PA-3 USED TO PRINTER IFC OUT
+; PA-8 USED TO POWER ON INPUT
+;
+DDR=$E843
+DRA=$E84F
+TIMEL=$E846
+TIMEH=$E845
+IFR=$E84D
+IER=$E84E
+GET=$FFE4
+WRT=$FFD2
+IRQL=$90
+IRQH=$91
+TDL=$2700   ;SAVE TIMER LOW-B
+TDH=$2701   ;SAVE TIMER HI-B
+NOFC=$2702  ;CHARACTER COUNT-B
+NOFR=$2703  ;RTP COUNT-B
+SPOIN=$2704 ;SAVE STACK POINTER
+PRINT=$2705 ;USED PRINT HEAD TEST
+LRPOS=$2706 ;RIGHT/LEFT POINTER
+SCHEK=$2707 ;PASSED STEP CHK BYTE
+PWOFF=$2708 ;POWER ON CONDITION
+DIAGM=$2709 ;DIAG MODE BIT
+NIRQL=$270A ;NOMAL IRQ VECTOR
+NIRQH=$270B ;NOMAL IRQ VECTOR
+TEMP2=$270C
+TEMP3=$270D
+TEMP4=$270E
+TEMP5=$270F
+;
+	.WOR HOME,THUP,LPRT,HOMS
+;
+	*=$2710  ;SYS10000
+;
+;****************************
+;* INITIALIZE PORT/MEMORY   *
+;****************************
+;
+	TSX
+	STX SPOIN
+	JSR IRQV
+	JMP INIT ;PRINTER POWER SW/ON
+                  ;IF DIAG MODE  DIAGM=1
+                  ;IF NOMAL MODE DIAGM=0
+;
+	TSX      ;SYS10010
+	STX SPOIN
+	JSR IRQV
+	JMP IEEE ;PRINT NEEDLE TEST
+;
+	TSX      ;SYS10020
+	STX SPOIN
+	JSR IRQV
+	JSR IFC
+	JMP DIAG ;IF IFC FETCH
+;
+INIT	LDA #$1B ;0 0 0 1 1 0 1 1
+;
+; ^     ^ ^ ^ ^ ^
+;
+; P     D I H R H
+; W     I F O T P
+; R     A C L
+;       G   D
+	STA DDR
+	LDA DRA
+	ORA #$03
+	STA DRA  ;CR HEAD MOST LEFT
+	LDA #0
+	STA PRINT
+	STA LRPOS
+	STA PWOFF
+	STA NOFC
+	STA NOFR
+	STA SCHEK
+;
+;*****************************
+;* POWER ON TEST             *
+;*****************************
+;
+	LDA #$93
+	JSR WRT
+	LDX #0 ;MASSAGE REQUEST POWER ON
+W1	LDA TABL1,X
+	JSR WRT
+	INX
+	CPX #20
+	BNE W1
+;
+POWER	LDA DRA
+	AND #$80
+	CMP #$80
+	BNE POWER
+	LDA #$0F
+	STA SCHEK
+;
+	LDA #$50 ;TIME CONST
+	STA TDL
+	STA TDH
+	JSR TSET ;TIMER SET
+	JSR TIME ;WAIT TIME
+;
+	LDA #$0D
+	JSR WRT
+	LDX #0 ;MASSAGE DIAGNOSTIC TEST
+W2	LDA TABL2,X
+	JSR WRT
+	INX
+	CPX #32
+	BNE W2
+;
+;*****************************
+;* WAIT DIAGNOSTIC TEST TIME *
+;*****************************
+;
+DIAG	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE DI1
+	JMP BASIC
+DI1	LDA DRA
+	AND #$04
+	CMP #$04
+	BEQ DIAG
+	LDA #1
+	STA SCHEK
+;
+	LDA #$0D
+	JSR WRT
+	LDX #0
+W3	LDA TABL3,X
+	JSR WRT
+	INX
+	CPX #28
+	BNE W3
+;
+;
+;******************************
+;* FETCH CR-HOLD MOST RIGHT   *
+;******************************
+;
+START
+;
+	LDA DRA
+	ORA #$03
+	STA DRA  ;HOME POSITION
+	LDA #0
+	STA NOFC
+	STA NOFR
+;
+HOLD0	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE H0
+	JMP BASIC
+H0	LDA DRA ;HOLD STATUS CHK
+	AND #$04
+	CMP #$04  ;HOLD OFF ?
+	BNE HOLD0 ;HOLD ON
+	LDA #2
+	STA SCHEK
+;
+HOLD1	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE H1
+	JMP BASIC
+H1	LDA DRA
+	AND #$04
+	CMP #$04  ;HOLD OFF ?
+	BEQ HOLD1 ;HOLD OFF
+	LDA #$0E
+	STA SCHEK
+;
+HOLD2	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE H2
+	JMP BASIC
+H2	LDA DRA
+	AND #$04
+	CMP #$04  ;HOLD OFF ?
+	BNE HOLD2 ;HOLD ON
+	LDA #3
+	STA SCHEK
+	LDA #0
+	STA NOFC
+	STA NOFR
+;
+;****************************
+;* CR - RIGHT SEEK START    *
+;****************************
+;
+	JSR SIRQ1
+THUP	LDX #$00
+ST1	LDA #$00
+	STA TDL
+	LDA #$A4
+	STA TDH
+	JSR TSET
+	JSR TIME ;WAIT 84 M-SEC
+	JSR CRTP ;CHANGE RTP PHASE
+	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE ST2
+	JMP RBASI
+ST2	INX
+	CPX #2
+	BNE ST1
+	JSR RIRQ
+	LDA #4
+	STA SCHEK
+;
+;****************************
+;* HOME POSITION SET HP=0   *
+;****************************
+;
+RSEK	JSR SIRQ2
+HOME	LDA DRA ;PRINT START OK
+	AND #$FE
+	STA DRA     ;HOME POSITION
+RPRT	LDA #$A8
+	STA TDL
+	LDA #$19
+	STA TDH
+	JSR TSET
+	JSR TIME
+	JSR CHRNO
+	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE RPT1
+	JMP RBASI
+RPT1	LDA DRA
+	AND #$04 ;CR HOLD ON
+	CMP #$04 ;PRINTING
+	BEQ RPRT
+	JSR RIRQ
+	LDA #5
+	STA SCHEK
+	LDA #1
+	STA LRPOS
+	LDA PRINT
+	CMP #1
+	BNE RCRH
+	JMP BASIC
+;
+;*************************
+;* RIGHT HAND CR-HOLD    *
+;*************************
+;
+RCRH	LDA #$0D
+	JSR WRT
+	LDX #0
+W4	LDA TABL4,X
+	JSR WRT
+	INX
+	CPX #21
+	BNE W4
+;
+RHLD	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE XX1
+	JMP BASIC
+XX1	LDA DRA  ;WAIT CR HOLD
+	AND #$04
+	CMP #$04
+	BNE RHLD
+	LDA #6
+	STA SCHEK
+;
+;RHLD1 JSR PWRON
+;LDA PWOFF
+;CMP #$FF
+;BNE XX2
+;JMP BASIC
+;XX2 LDA DRA  ;WAIT CR HOLD
+;AND #$04
+;CMP #$04
+;BEQ RHLD1
+;LDA #16
+;STA SCHEK
+;
+;RHLD2 JSR PWRON
+;LDA PWOFF
+;CMP #$FF
+;BNE XX3
+;JMP BASIC
+;XX3 LDA DRA  ;WAIT CR HOLD
+;AND #$04
+;CMP #$04
+;BNE RHLD2
+;LDA #17
+;STA SCHEK
+;
+;**************************
+;* LEFT SEEK STRAT        *
+;**************************
+;
+LSEK	JSR SIRQ3
+LPRT	LDA #$A8
+	STA TDL
+	LDA #$19
+	STA TDH
+	JSR TSET
+	JSR TIME
+	JSR CHNO
+	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE LPR1
+	JMP RBASI
+LPR1	LDA NOFC
+	CMP #0
+	BNE LPRT
+	LDA NOFR
+	CMP #0
+	BNE LPRT
+	JSR RIRQ
+	LDA #8
+	STA SCHEK
+;
+;****************************
+;* ENTER HOME POSITION      *
+;****************************
+;
+	LDA DRA
+	ORA #$1 ; HOME POSITION SET
+	STA DRA
+;JSR CRTP
+	JSR SIRQ4
+HOMS	LDX #$00
+NSTP	LDA #$00
+	STA TDL
+	LDA #$A4
+	STA TDH
+	JSR TSET
+	JSR TIME
+	JSR CRTP
+	JSR PWRON
+	LDA PWOFF
+	CMP #$FF
+	BNE NST1
+	JMP RBASI
+NST1	INX
+	CPX #2
+	BNE NSTP
+	JSR RIRQ
+	LDA #9
+	STA SCHEK
+	LDA #0
+	STA LRPOS
+	LDA PRINT
+	CMP #1
+	BEQ BASIC
+;
+	LDA #$0D
+	JSR WRT
+	LDX #0
+W5	LDA TABL5,X
+	JSR WRT
+	INX
+	CPX #22
+	BNE W5
+;
+	LDA DIAGM
+	CMP #1    ;CHEK DIAG MODE
+	BNE BASIC
+	JMP HOLD2
+;
+BASIC	LDX SPOIN
+	TXS
+	RTS
+;
+RBASI	JSR RIRQ
+	JMP BASIC
+;
+;*****************************
+;*  ENTRY FROM IEEE PRINT    *
+;*****************************
+;
+IEEE
+	LDA #1
+	STA PRINT
+	LDA LRPOS
+	CMP #1
+	BEQ ENT2
+	JMP HOLD2
+ENT2	JMP LSEK
+;
+;***************************
+;* POWER CHECK SUB         *
+;***************************
+;
+PWRON	LDA DRA
+	AND #$80
+	CMP #$80
+	BNE STOP
+	RTS
+STOP	LDA #$FF
+	STA PWOFF
+	RTS
+;
+;**************************
+;* CHARACTOR COUNT SUB-R  *
+;**************************
+;
+CHRNO
+	LDA NOFC
+	CMP #7
+	BEQ RTP
+	INC NOFC  ;CHARACTOR COUNTUP
+	RTS
+;
+RTP	INC NOFR  ;NUMBER OF RTP/CHG
+	LDA #0
+	STA NOFC
+CRTP	LDA DRA   ;STATUS OF RTP
+	AND #2
+	CMP #2
+	BEQ CHPH
+	LDA DRA
+	AND #$FD
+	ORA #2
+	STA DRA
+	RTS
+CHPH	LDA DRA
+	AND #$FD
+	ORA #0
+	STA DRA
+	RTS
+;
+;**************************
+;* CHARACTOR COUNT SUB-L  *
+;**************************
+;
+CHNO
+	LDA NOFC
+	CMP #0
+	BEQ LRTP
+	DEC NOFC
+	RTS
+;
+LRTP	DEC NOFR
+	LDA #7
+	STA NOFC
+	JMP CRTP
+;
+;************************
+;* CHANG IRQ SUB        *
+;************************
+;
+SIRQ1	SEI
+	LDA #<HOME
+	STA IRQL
+	LDA #>HOME
+	STA IRQH
+	CLI
+	RTS
+SIRQ2	SEI
+	LDA #<THUP
+	STA IRQL
+	LDA #>THUP
+	STA IRQH
+	CLI
+	RTS
+SIRQ3	SEI
+	LDA #<LPRT
+	STA IRQL
+	LDA #>LPRT
+	STA IRQH
+	CLI
+	RTS
+SIRQ4	SEI
+	LDA #<HOMS
+	STA IRQL
+	LDA #>HOMS
+	STA IRQH
+	CLI
+	RTS
+;
+RIRQ	LDA NIRQL
+	STA IRQL
+	LDA NIRQH
+	STA IRQH
+	RTS
+;
+;***************************
+;* TIMER SUB               *
+;***************************
+;
+TSET	LDA TDL
+	STA TIMEL
+	LDA TDH
+	STA TIMEH
+	RTS
+;
+TIME	LDA DRA
+	AND #$04
+	CMP #$04
+	BEQ TIME2
+	JMP REST
+TIME2	LDA IFR
+	AND #$40
+	BEQ TIME
+REST	RTS
+;
+;**************************
+;* IFC OUTPUT TEST SUB    *
+;**************************
+;
+IFC	LDA DRA
+	AND #$F7
+	ORA #$08
+	STA DRA
+	LDA DRA
+	AND #$F8
+	ORA #$03
+	STA DRA
+	LDA #0
+	STA PRINT
+	STA LRPOS
+	STA PWOFF
+	STA NOFC
+	STA NOFR
+	STA SCHEK
+	RTS
+;
+IRQV	LDA IRQL
+	STA NIRQL
+	LDA IRQH
+	STA NIRQH
+	RTS
+;
+;**************************
+;* MASSAGE TABLE          *
+;**************************
+;
+TABL1	.BYT '(1) PLEASE POWER ON.'
+TABL2	.BYT '(2) POWER ON DIAGNISTIC TESTING.'
+TABL3	.BYT '(3) SEE LED FLICKER THEN NG.'
+TABL4	.BYT '(4) CR-SEEK NOMAL OK.'
+TABL5	.BYT '(5) CR-SEEK REVERS OK.'
+	.END
