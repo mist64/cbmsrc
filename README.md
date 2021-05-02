@@ -104,6 +104,10 @@ The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from [Da
 * The B version of the KERNAL contains minor modifications, and comes with alternate versions of some files as well as additional (test) sources.
 * Except for file naming, the editor sources A and B were identical.
 
+## MONITOR_C64
+
+The C64 monitor program. Extracted from ml-monitor-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting. The symbol `WALKON` in the file `micii4` was changed from `1` to `0` so the source builds.
+
 ## DOS_4040
 
 The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.

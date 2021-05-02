@@ -1,0 +1,38 @@
+	.PAGE 'MICII4 11/04/80'
+;*******************************************************
+;*
+;*
+;*   VICMON V1.0
+;*
+;*    (C) COPYRIGHT 1980
+;*    BY COMMODORE BUSINESS MACHINES
+;*    ALL RIGHTS RESERVED
+;*
+;*     ORIGINALLY WRITTEN  1/10/79  BY BILL SEILER
+;*
+;*
+;*     CHANGED  7/26/79
+;*              8/27/79
+;*             10/20/79
+;*             12/ 1/79
+;*              5/19/80
+;*             10/15/80
+;*
+;*     ADAPTED 12/1/80 BY JACK MARTINELLI FOR VIC-1001
+;*
+;*
+;*
+;*******************************************************
+WALKON	=0 ;NO I/O THRU 6526'S
+	.LIB MANII4
+	.LIB TRNII4
+	.LIB DISII4
+	.LIB ALTII4
+	.LIB ASMII4
+	.LIB WLKII4
+	.LIB NEWII4
+	.LIB UTLII4
+	.LIB ROLII4
+	.LIB SWAPER
+	.LIB TABII4
+	.END
