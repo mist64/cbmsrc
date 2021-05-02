@@ -1,0 +1,68 @@
+;***************************************
+;***************************************
+;
+;  PROCESS AN 'IRQ' OR 'BRK'
+;  THIS INCLUDES DISK SEQUENCER
+;  COMPLETIONS AND IEEE INTERRUPTS
+;
+;***************************************
+;
+IRQ
+	PHA             ;SAVE ACCUMULATOR
+	TXA             ;SAVE X
+	PHA             ;*
+	TYA             ;SAVE Y
+	PHA             ;*
+	TSX             ;SAVE BG STACK POINTER
+	STX BGSP        ;*
+	LDX IRQSP       ;RE-ESTABLISH IRQ SP
+	TXS
+	STX IRQMOD      ;SET IRQ MODE SWITCH
+	RTS             ;GO BACK TO IEEE PROCESS
+;
+; EXIT IRQ LEVEL OF PROCESSING
+;
+IRQEX
+	TSX             ;SAVE IRQ SP
+	STX IRQSP       ;*
+	LDX BGSP        ;RESTORE BG SP
+	TXS             ;*
+	JSR IRQPOL      ;CHECK FOR DISK COMPL.
+	LDA #0          ;RESET IRQ MODE SWITCH
+	STA IRQMOD      ;*
+	PLA             ;RESTORE Y
+	TAY             ;*
+	PLA             ;RESTORE X
+	TAX             ;*
+	PLA             ;RESTORE ACCUMULATOR
+	RTI             ;EXIT TO BG
+;
+; EXIT IRQ LEAVING INTERRUPTS DISABLED
+;
+IRQDEX
+	TSX             ;SAVE IRQ SP
+	STX IRQSP       ;*
+	LDX BGSP        ;RESTORE BG SP
+	TXS             ;*
+	JSR IRQPOL      ;CHECK FOR DISK COMP
+	LDA #0          ;RESET IRQ MODE SWITCH
+	STA IRQMOD      ;*
+	LDA IEIER       ;SAVE VIA ENABLES
+	ORA #$80        ;SET THE SET BIT
+	STA IEIERS      ;*
+	LDA DRCA        ;SAVE THE PIA ENABLES
+	STA DRCAS       ;*
+	LDA #$7F        ;DISABLE VIA
+	STA IEIER       ;*
+	LDA #$06        ;DISABLE PIA
+	STA DRCA        ;*
+	PLA             ;RESTORE Y
+	TAY             ;*
+	PLA             ;AND X
+	TAX             ;*
+	PLA             ;ACC
+	RTI             ;EXIT IRQ
+;
+;
+;
+.END

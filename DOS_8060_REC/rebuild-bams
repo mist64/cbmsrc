@@ -1,0 +1,255 @@
+;*************************************
+;  LINK TO NEXT S & T IND OFF TMPA
+;*************************************
+HDLNX
+	LDA (HDTMPA),Y  ;GET SECTOR FIRST
+	STA SECTOR      ;*
+	INY             ;BUMP TO TRACK
+	LDA (HDTMPA),Y  ;GET TRACK
+	STA TRACK       ;*
+	RTS             ;EXIT TO CALLER
+;*************************************
+;  LINK TO NEXT SECTOR & LOAD IT
+;*************************************
+HDLNXL
+	JSR HDLNX       ;LINK TO NEXT
+	JMP HDRDSR      ;READ SECTOR & RECOVER
+.PAG
+;*************************************
+;
+;  REBUILD BAM'S
+;  THIS IS USED BY BOTH FORMAT & VALIDATE
+;
+;*************************************
+CURTK	= HDTMP
+SURFCT	= HDTMP+1
+HDRAL
+;
+;  MARK BAM AS NA
+;
+	JSR HDISU       ;SET UP IND WORD TO BAM
+	LDY #HDZONE     ;PTR TO ZONE NUMBER
+	LDA #$7F        ;NOT VALID BAM & NOT MOD
+	STA (HDBMP),Y   ;STORE IN BAM
+;
+;  LINK THROUGH ALL BAMS FREEING ALL SECTORS
+;
+	JSR HDRVL       ;READ VOLUME LABEL
+	LDY #HDOPTN     ;GET # SURFACES
+	LDA (HDTMPA),Y  ;*
+	AND #HDSURF     ;*
+	STA HDTMPF      ;SAVE FOR HDFAS
+	LDY #HDBAM1     ;GET ADDR OF FIRST BAM
+	LDA #0          ;INIT TRACK COUNTER
+	STA CURTK       ;*
+;INIT BAM LOOP
+HDRAL1
+	JSR HDLNXL      ;POINT TO & LOAD BAM
+	JSR HDFAS       ;FREE ALL SECTORS IN BAM
+	LDA #WRITE      ;WRITE THE BAM OUT
+	LDX HDTMP1
+	JSR HDCSTR      ;*
+	LDY #HDNXTB     ;POINT TO NEXT BAM PTR
+	LDA (HDTMPA),Y  ;LOOK AT SECT ADDR
+	CMP #255        ;CHK FOR END OF BAM LIST
+	BNE HDRAL1      ;BR IF NOT EOL
+;
+;  NOW ALLOCATE VOL LBL
+;
+	LDX DRVNUM      ;SET SECTOR CT=FFFF
+	LDA #255        ;*
+	STA HDNFRH,X    ;*
+	STA HDNFRL,X    ;*
+	LDA #VOLTRK     ;GET OUTERMOST TRACK ADDR
+	STA TRACK       ;*
+	LDA #VOLSEC     ;HD & SECTOR = 0
+	STA SECTOR      ;*
+	JSR USEDTS      ;MARK VOL LBL USED
+;
+;  NOW ALLOCATE ALL BAMS
+;
+	JSR HDRVL       ;READ THE VOL LBL
+	LDY #HDBAM1     ;POINT TO ADDR OF 1ST
+HDRAL2
+	JSR HDLNX       ;GET ADDR OF NEXT
+	LDA #255        ;CHK IF EOL
+	CMP SECTOR      ;*
+	BEQ HDRAL3      ;BR IF EOL
+	JSR HDRDSR      ;READ THE BAM (&RECOVER)
+	JSR USEDTS      ;MARK IT ALLOCATED
+	LDY #HDNXTB     ;POINT TO ADDR OF NXT
+	BNE HDRAL2      ;GO DO NEXT BAM
+;
+;  NOW ALLOCATE EACH BSL SECTOR
+;  AND EACH SECTOR POINTED TO BY IT
+;
+HDRAL3
+	JSR HDRVL       ;READ VOL LBL
+	LDY #HDBSL1     ;POINT TO FIRST BSL
+HDRAL4
+	JSR HDLNX       ;GET ADDR OF NEXT
+	LDA #255        ;CHK IF EOL
+	CMP SECTOR      ;*
+	BEQ HDRAL6      ;BR IF EOL
+	JSR USEDTS      ;MARK THE BSL SECTOR USED
+	JSR HDRDSR      ;READ THE BSL & RECOVER
+	LDY #HDBDS1     ;POINT TO 1ST BAD SECTOR
+HDRAL5
+	JSR HDLNX       ;GET ITS ADDR
+	LDA #255        ;CHK IF EOL
+	CMP SECTOR      ;*
+	BEQ HDRAL6      ;BR IF EOL
+	TYA             ;SAVE PTR INTO BSL
+	PHA             ;*
+	JSR USEDTS      ;ALLOCATE THE BAD SECTOR
+	PLA             ;RESTORE INDEX INTO BSL
+	TAY             ;*
+	INY             ;BUMP TO NEXT ADDR IN LIST
+	BNE HDRAL5      ;BR UNLESS END OF SECTOR
+	LDY #HDNBSL     ;POINT TO ADDR OF NXT BSL
+	BNE HDRAL4      ;BRA DO THE NEXT SECTOR
+HDRAL6
+	JMP HDWBM       ;WRITE OUT THE LAST BAM
+;AND EXIT
+.PAG
+;*************************************
+;
+;  SET ALL SECTORS FREE FOR A BAM
+;  ASSUMING NO DEFECTIVE SECTORS FOR NOW
+;
+;*************************************
+HDFAS
+	LDY #HDBIT1     ;BUSY ALL SECTORS
+	LDA #0          ;IE CLEAR BAM = 00'S
+HDFAS1
+	STA (HDTMPA),Y  ;*
+	INY             ;BUMP TO NEXT
+	BNE HDFAS1      ;LOOP TILL ALL CLEARED
+	LDY #HDBIT1     ;POINT TO BEG FIRST TRK
+HDFAS2	;GET # SURFACES
+	LDA HDTMPF      ;*
+	STA SURFCT      ;SAVE IT
+HDFAS3	;GET # SECTORS THIS TRACK
+	LDA CURTK       ;*
+	JSR HDGNSB      ;*
+	TAX             ;INTO REG X
+	LDA #8          ;USES 8 BYTES/TRK
+	STA HDTMP5      ;STORE BYTES USED/TRK
+HDFAS9	;LOOP HERE PER BYTE OF TRK
+	LDA #8          ;# BITS PER BYTE
+	STA HDTMP4      ;*
+	LDA #0          ;NONE AVAIL THIS BYTE
+HDFAS8	;LOOP PER BIT
+	SEC             ;CARRY = 1 ASSUMES AVAIL
+	DEX             ;CHK IF ANY MORE AVAIL
+	BPL HDFAS7      ;BR IF MORE AVAIL
+	CLC             ;READY TO SHIFT IN A 0
+HDFAS7
+	ROL A           ;SHIFT IN NEXT BIT
+	DEC HDTMP4      ;COUNT # BITS PER BYTE
+	BNE HDFAS8      ;LOOP TILL BYTE DONE
+	STA (HDTMPA),Y  ;STASH BYTE
+	INY             ;BUMP TO NEXT IN BAM
+	DEC HDTMP5      ;NEXT BYTE IN TRK
+	BNE HDFAS9      ;LOOP TILL ALL 8
+	DEC SURFCT      ;CHK IF MORE SURFACES
+	BNE HDFAS3      ;DO SAME TRACK NXT SURF
+	LDA CURTK       ;CHK IF END OF DISK
+	LDX DRVNUM      ;*
+	CMP HDNTK,X     ;*
+	BCS HDFASA      ;BR IF DONE
+	INC CURTK       ;BUMP TO NEXT TRACK
+	CPY #256-3      ;CHK IF END OF BAM
+	BCC HDFAS2      ;GO DO NXT TRK IF NOT
+HDFASA
+	LDA HDTMPA      ;SET IND WORD
+	STA HDBMP       ;*
+	LDA HDTMPB      ;*
+	STA HDBMP+1     ;*
+	JMP HDGLRC      ;GEN NEW LRC
+;& EXIT TO CALLER
+;*************************************
+;
+;  START A COMMAND
+;  HDCST = NO ERROR RECOVERY
+;  HDCSTR = WITH ERROR RECOVERY
+;  A = CMD CODE
+;  X = JOB #
+;
+;*************************************
+HDCST
+	PHA             ;SAVE THE CMD CODE
+	LDA #255        ;NO ERROR REC
+	STA JOBRTN      ;*
+	PLA             ;CMD
+HDCSTR
+	ORA DRVNUM
+	STA CMD
+	TXA             ;JOB #
+	STX JOBNUM
+	JSR SETH        ;SET UP HEADERS
+	LDX JOBNUM
+	JMP DOIT2
+;
+;*************************************
+; GET MEMORY ADDR HIGH OF BUFFER X
+;*************************************
+HDGBAH
+	ASL A           ;BYTE # * 2
+	TAX             ;INTO INDEX
+	LDA BUFTAB+1,X  ;GET BUFR'S ADDR
+	RTS             ;EXIT TO CALLER
+;*************************************
+; READ INTO BUFFER 1 WITH RECOVERY
+;*************************************
+HDRDSR
+	LDX HDTMP1      ;GET BUFR #
+	LDA #READ       ;CMD CODE
+	JMP HDCSTR      ;WITH RECOVERY
+;*************************************
+; READ THE VOLUME LABEL INTO BUFR 1
+;*************************************
+HDRVL
+	LDA #VOLTRK     ;GET ADDR OF TRACK
+	STA TRACK       ;*
+	LDA #VOLSEC     ;HEAD & SECTOR
+	STA SECTOR      ;*
+HDRDB1
+	LDA #READ       ;CMD CODE
+	LDX HDTMP1      ;BUFR ONE'S NUMBER
+	JSR HDCSTR      ;READ W/RECOVERY
+;NOW POINT TO IT
+;*************************************
+;  POINT HDTMPA TO BUFFER 1
+;*************************************
+HDPB1
+	LDA HDTMP1      ;BUFR 1'S NUMBER
+	JSR HDGBAH      ;GET ITS ADDR
+	STA HDTMPB      ;SET UP IND WORD
+	LDA #0          ;*
+	STA HDTMPA      ;*
+	RTS             ;EXIT TO CALLER
+;***************************************
+;
+;  GET INNERMOST TRACK NUMBER
+;
+;***************************************
+HDLTK
+	LDX DRVNUM      ;GET THE DRIVE NUMBER
+	LDA HDNTK,X     ;# TRACKS - 1
+	RTS             ;EXIT
+;***************************************
+;  GET NUMBER OF SECTORS ON A TRACK
+;***************************************
+HDGNSB
+	LDX #0          ;BEGIN AT ZONE 0
+HDGNS2
+	CMP ZONTBL,X    ;CHK IF TRK IN THIS ZONE
+	BEQ HDGNS1      ;BR IF IT IS
+	BCC HDGNS1      ;"  "  "  "
+	INX             ;NEXT ZONE
+	BNE HDGNS2      ;LOOP TILL FOUND
+HDGNS1
+	LDA SECTRK,X    ;GET # SECTORS PER TRK
+	RTS             ;EXIT
+.END

@@ -118,11 +118,20 @@ The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d8
 * Comments in the source call this "SUPER DOS".
 * This only contains the DOS and IEEE code. The controller is in CONTROLLER_8250.
 
+## DOS_8060_REC
+
+The reconstructed source for the CBM 8061/8062 (1980). The source is based on DOS_8070 and modified by Martin Hoffmann-Vetter to build into the DOS portion of the 901488-01/-02 ROMs.
+
+The CBM 8061 (single side) and 8062 (dual side) are a pair of dual 8" disk drives. They were announced, but only a few were made and never sold publicly, but instead used internally at Commodore.
+
+* The source only contains the bus controller portion of the ROM ($CC78-$FFFF), not the disk controller part.
+* The power-on message says "CBM DOS V7.0 8060".
+
 ## DOS_8070
 
 The CBM 8070 DOS V3.0 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
 
-The CBM 8070 is an unreleased device with one 8" hard drive (#0) and one 8" double-sided floppy drive (#1). It is derived from the dual 8" drive CBM 8061/8062 (1980), and the source is very similar to the firmware of that device.
+The CBM 8070 is an unreleased device with one 8" hard drive (#0) and one 8" double-sided floppy drive (#1). It is derived from the dual 8" drive CBM 8061/8062 (1980).
 
 * The source only contains the bus controller portion of the ROM ($CE50-$FFFF), not the disk controller part.
 * The power-on message says "CBM DOS V3.0 8070".

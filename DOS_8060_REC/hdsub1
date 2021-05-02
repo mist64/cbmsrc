@@ -1,0 +1,376 @@
+;*************************************
+;
+;  THESE ROUTINES WERE WRITTEN FOR THE
+;  HARD DISK SUPPORT
+;
+;*************************************
+;
+;
+;*************************************
+;
+;  WRITE A BAM
+;  CHKS IF BAM IS MODIFIED
+;  IF NOT EXIT
+;  ELSE (MODIFIED)
+;  CHK LRC
+;  IF BAD GIVE ERROR
+;  ELSE (LRC GOOD)
+;  ZERO WRITTEN INTO BIT
+;  WRITE BAM TO DISK
+;  EXIT
+;
+;*************************************
+HDWBM
+	LDY #HDZONE     ;PT TO ZONE  BYTE
+	LDA (HDBMP),Y   ;*
+	AND #HDBMOD     ;CHK WRITTEN INTO BIT
+	BNE HDWBM1      ;JMP TO WRITE IT OUT
+	RTS             ;EXIT TO CALLER
+;
+;  BAM WAS MODIFIED SO WRITE IT OUT
+;
+HDWBM1
+	TXA             ;SAVE X
+	PHA             ;*
+	LDX DRVNUM      ;VALIDATE AS LEGAL ZONE
+	LDA (HDBMP),Y   ;GET THIS ZONE
+	AND #HDZMSK     ;LEAVE ONLY ZONE
+	CMP HDNZA,X     ;CHK IF LEGAL
+	BCC HDWBM2      ;BR IF OK
+	JMP HDCLB3      ;BAM ERROR
+HDWBM2
+	JSR HDCLBM      ;CHK LRC & BOMB IF BAD
+	LDY #HDZONE     ;
+	LDA (HDBMP),Y   ;GET ZONE & FLAGS
+	AND #HDZMSK     ;LEAVE ONLY ZONE #
+	STA (HDBMP),Y   ;PUT IT BACK
+	TAX             ;ZONE #
+	JSR HDCIND      ;CALC INDEX INTO TABLES
+	LDA TRACK       ;SAVE TRACK
+	PHA             ;*
+	LDA SECTOR      ;SAVE SECTOR
+	PHA             ;*
+	JSR HDCSU       ;SET UP COMMAND
+	ORA #WRITE      ;SET WRITE COMMAND
+	JSR DOIT        ;EXEC CMD
+	PLA             ;RESTORE SECTOR
+	STA SECTOR      ;*
+	PLA             ;RESTORE TRACK
+	STA TRACK       ;*
+	PLA             ;RESTORE X
+	TAX             ;*
+	RTS             ;EXIT TO CALLER
+;
+;*************************************
+;
+;  LOAD THE BAM FOR A GIVEN ZONE
+;
+;*************************************
+;  CHECKS IF ALREADY LOADED
+;  IF IT IS
+;  CHECK ITS LRC
+;  IF GOOD EXIT
+;  ELSE (BAD LRC) GIVE ERROR
+;  ELSE (NOT LOADED)
+;  CALL WRITE BAM
+;  LOAD SPECIFIED BAM
+;  EXIT TO CALLER -REG X IS NOT CHGD
+;
+;
+HDLBM
+	LDY #HDZONE     ;POINT TO ZONE FIELD
+	LDA (HDBMP),Y   ;LOOK AT BAM ZONE #
+	AND #HDZMSK     ;LEAVE ONLY ZONE #
+	CMP HDCZN       ;COMPARE TO DESIRED ZONE
+	BNE HDLBM1      ;BR IF NOT SAME BAM
+	JMP HDCLBM      ;CHECK THE LRC
+;
+;  BAM NOT CURRENTLY LOADED
+;
+HDLBM1
+	JSR HDWBM       ;WRITE OUT CURRENT BAM
+;
+;  NOW LOAD DESIRED BAM
+;
+	TXA             ;SAVE X
+	PHA             ;*
+	LDA TRACK       ;SAVE TRACK
+	PHA             ;*
+	LDA SECTOR      ;SAVE SECTOR
+	PHA             ;*
+	JSR HDCSU       ;DO COMMAND SETUP
+	ORA #READ       ;CMD = READ
+	JSR DOIT        ;DO THE CMD W/RECOVERY
+	PLA             ;RESTORE SECTOR
+	STA SECTOR      ;*
+	PLA             ;RESTORE TRACK
+	STA TRACK       ;*
+	PLA             ;RESTORE X
+	TAX             ;*
+	RTS             ;EXIT TO CALLER
+;
+;*************************************
+;
+; SET UP HDBMP TO POINT TO BAM BUFFER
+; LEAVES REG X UNMODIFIED
+;
+;*************************************
+HDISU
+	LDY DRVNUM      ;GET DRIVE NUMBER
+	LDA IPBM,Y      ;GET BUFFER ADDR
+	STA HDBMP+1     ;SAVE HIGH ADDR
+	LDA #0          ;POINT TO BEG OF BUFFER
+	STA HDBMP       ;AS LOW ADDR
+	RTS             ;EXIT TO CALLER
+;*************************************
+;
+;  BAM READ/WRITE SETUP (X=INDEX)
+;
+;*************************************
+HDCSU
+	LDA HDZAT,X     ;SET TRACK
+	STA TRACK       ;*
+	LDA HDZAS,X     ;SET SECTOR
+	STA SECTOR      ;*
+HDCSUD	;SET UP IF T&S DONE ALREADY
+	CLC             ;PREP FOR ADC
+	LDA #BAMJOB     ;CALC JOB NUMBER
+	ADC DRVNUM      ;*
+	STA JOBNUM      ;*
+	JSR SETH        ;SET UP HEADER TABLE ENTY
+	LDX JOBNUM      ;LEAVE X=JOB #
+	LDA DRVNUM      ;LEAVE A=DRIVE #
+	RTS             ;EXIT TO CALLER
+;*************************************
+;
+;  CALCULATE INDEX INTO TRACK/SECTOR/ZONE
+;  LISTS
+;
+;*************************************
+HDCIND
+	TXA             ;MULTIPLY ZONE # *2
+	ASL A           ;*
+	CLC             ;AND ADD DRIVE NUMBER TO IT
+	ADC DRVNUM      ;*
+	TAX             ;LEAVE RESULT IN X
+	RTS             ;EXIT
+;*************************************
+;  CALCULATE NEW BAM LRC & MARK MODIFIED
+;*************************************
+HDCLRC
+	JSR HDGLRC      ;GEN NEW LRC
+;
+; NOW SET THE MODIFIED BIT
+;
+	LDY #HDZONE     ;ITS IN THE ZONE BYTE
+	LDA (HDBMP),Y   ;GET CURNT CONTENTS
+	ORA #HDBMOD     ;SET THE MODIFIED BIT
+	STA (HDBMP),Y   ;STORE IT BACK
+	RTS             ;EXIT TO CALLER
+;*************************************
+;  GENERATE LRC IN BAM
+;*************************************
+HDGLRC
+	LDY #HDBIT1     ;PT TO FIRST BYTE
+	LDA #0          ;CLEAR RESULT
+	STA HDTMP4      ;*
+	CLC
+HDCLR1
+	ADC (HDBMP),Y   ;READ & ADD THE BYTE
+	BCC HDCLR2      ;BR IF NO CARRY
+	INC HDTMP4
+HDCLR2
+	INY             ;BUMP TO NEXT BYTE
+	BNE HDCLR1      ;LOOP TILL ALL DONE
+;
+;  STORE LRC IN BAM
+;
+	LDY #HDBLRC     ;POINT TO LRC STORAGE
+	STA (HDBMP),Y   ;STORE LOW BYTE
+	LDA HDTMP4      ;GET HIGH BYTE
+	INY             ;PT TO HIGH BYTE
+	STA (HDBMP),Y   ;STORE HIGH BYTE
+	RTS             ;EXIT TO CALLER
+;**************************************
+;  CHK BAM LRC & BOMB IF ITS BAD
+;**************************************
+HDCLBM
+	LDY #HDBIT1     ;POINT TO FIRST BYTE
+	LDA #0          ;SET CALCULATED RESULT =00
+	STA HDTMP4      ;HIGH BYTE TOO
+	CLC
+HDCLB1
+	ADC (HDBMP),Y   ;ADD IN FIRST BYTE
+	BCC HDCLB2      ;BR IF NO CARRY
+	INC HDTMP4
+HDCLB2
+	INY             ;BUMP TO NEXT
+	BNE HDCLB1      ;LOOP TILL DONE
+;
+; NOW COMPARE CALCULATED TO ACTUAL
+;
+	LDY #HDBLRC     ;POINT TO ACTUAL
+	CMP (HDBMP),Y   ;CMP THEM
+	BNE HDCLB3      ;BR IF BAD
+	INY             ;BUMP TO HIGH ACTUAL
+	LDA HDTMP4      ;GET HIGH CALC'D
+	CMP (HDBMP),Y   ;COMPARE THEM
+	BNE HDCLB3      ;BR IF BAD
+	RTS             ;EXIT TO CALLER
+HDCLB3
+	LDA #BAMERR     ;CALL IT A BAM ERROR
+	JMP CMDERR      ;BOMB THE COMMAND
+;*************************************
+;
+;  READ VOLUME LABEL
+;
+;*************************************
+HDORV
+	LDA #VOLTRK     ;VOL LABEL IS ON TRACK 0
+	STA TRACK       ;*
+	LDA #VOLSEC     ;SECTOR = 00
+	STA SECTOR      ;*
+HDORB
+	JSR HDCSUD      ;SET UP CMD
+	ORA #READ       ;READ CMD CODE
+	JSR DOIT        ;EXEC CMD
+	JSR HDISU       ;SETUP IND WORD
+	LDX DRVNUM      ;LEAVE X=DRIVE #
+	RTS             ;EXIT TO CALLER
+;*************************************
+;  LINK TO NEXT TRACK & SECTOR
+;*************************************
+HDNXB
+	LDA (HDBMP),Y   ;GET SECTOR
+	STA SECTOR      ;*
+	INY             ;BUMP TO TRACK
+	LDA (HDBMP),Y   ;GET TRACK
+	STA TRACK       ;*
+	RTS
+;*************************************
+;  MARK BAM AS NON RESIDENT
+;  MARK DIRECTORY AS NON EXISTENT
+;*************************************
+HDEMPT
+	LDX DRVNUM      ;NOW MARK NO DIRECTORY
+	LDA #255        ;SECTOR ADDR = NONE
+	STA HDDS,X
+	JSR HDISU       ;SET BAM PTR
+	LDY #HDZONE     ;PT TO ZONE #
+	LDA #$7F        ;NOT MODIFIED & WRONG BAM
+	STA (HDBMP),Y   ;*
+	RTS             ;EXIT TO CALLER
+;***************************************
+;
+;  GET DIRECTORY ADDRESS
+;
+;***************************************
+HDLDTS
+	LDX DRVNUM      ;DRIVE
+	LDA HDDT,X      ;TRACK ADDR
+	STA TRACK       ;*
+	LDA HDDS,X      ;SECTOR ADDR
+	STA SECTOR      ;*
+	RTS             ;EXIT TO CALLER
+;
+;
+;****************************************
+;
+;  READ/WRITE SUPER SIDE SECTOR
+;
+;****************************************
+RDSSS	;READ SUPER SIDE SECTOR
+	LDX LINDX       ;FCB #
+	LDA #254        ;CHK IF SSS IS RESIDENT
+	CMP SSSGRP,X    ;*
+	BNE RDSSSA      ;BR IF NOT
+	RTS             ;EXIT
+RDSSSA
+	LDA #READ       ;READ CMD
+	.BYTE $2C       ;SKIP NEXT TWO BYTES
+;
+WRTSSS	;WRITE SUPER SIDE SECTOR
+	LDA #WRITE      ;WRITE CMD
+	PHA             ;SAVE CMD CODE
+	JSR SETDRN      ;SET UP DRIVE #
+	LDX LINDX       ;GET FCB #
+	LDA SSSTRK,X    ;GET TRACK ADDR OF SSS
+	STA TRACK       ;*
+	LDA SSSSEC,X    ;GET SECTOR ADDR
+	STA SECTOR      ;*
+	LDA #255        ;MARK NO GROUP RESIDENT
+	STA SSSGRP,X    ;*
+	LDA SS,X        ;GET SS BUFR #
+	TAX             ;*
+	PLA             ;GET CMD CODE
+	JSR HDCSTR      ;READ/WRITE IT
+	LDX LINDX       ;FCB NUMBER
+	LDA #254        ;MARK SSS IS RESIDENT
+	STA SSSGRP,X    ;*
+	RTS             ;EXIT
+;
+;******************************************
+;
+;  READ LAST GROUP
+;
+;******************************************
+RDLG
+	LDA #HIGRP      ;POINT TO LAST POSSIBLE GROUP
+	STA GRPNUM      ;SAVE IT
+	JSR RDSS1       ;TRY TO READ IT
+	BNE RDLG1       ;BR IF NOT AVAILABLE
+	RTS             ;EXIT WITH IT LOADED
+RDLG1
+	DEC GRPNUM      ;TRY NEXT LOWER GROUP #
+	LDA GRPNUM      ;*
+	JSR RDSS1C      ;*
+	BNE RDLG1       ;LOOP TILL LAST REAL ONE FOUND
+	RTS             ;EXIT
+;
+;******************************************
+;
+;  READ IN SIDE SECTOR 1 OF GROUP N
+;
+;******************************************
+RDSS1	;A = GROUP # DESIRED
+	LDX LINDX       ;GET FCB #
+	CMP SSSGRP,X    ;IS IT RESIDENT
+	BNE RDSS1A      ;BR IF NOT
+	RTS             ;EXIT IT IS ALREADY RESIDENT
+RDSS1A
+	PHA             ;SAVE DESIRED GROUP #
+	JSR RDSSS       ;READ SUPER SIDE SECTOR
+RDSS1D
+	JSR SETDRN      ;SET DRIVE #
+	LDA #GRP0       ;POINT TO FIRST GROUP
+	JSR SSDIR       ;*
+	PLA             ;DESIRED GROUP #
+RDSS1C
+	TAX             ;SAVE GROUP #
+	ASL A           ;GROUP TIMES 2
+	TAY             ;USE TO INDEX SSS
+	LDA (DIRBUF),Y  ;GET THE GROUPS SECTOR AD
+	CMP #255        ;CHK IF THE GROUP EXISTS
+	BNE RDSS1B      ;BR IF IT EXISTS
+	ORA #255        ;SET NON-ZERO RETURN CODE
+	RTS             ;EXIT
+RDSS1B
+	STA SECTOR      ;ADDR OF 1ST SS OF GROUP
+	INY             ;BUMP TO TRACK ADDR
+	LDA (DIRBUF),Y  ;GET TRACK
+	STA TRACK       ;*
+	TXA             ;DESIRED GROUP #
+	PHA             ;*
+	LDA #255        ;MARK NO GROUP RESIDENT
+	LDX LINDX       ;*
+	STA SSSGRP,X    ;*
+	LDA SS,X        ;GET SS BUFR #
+	TAX             ;*
+	LDA #READ       ;READ THE SS IN
+	JSR HDCSTR      ;*
+	LDX LINDX       ;MARK GROUP AS RESIDENT
+	PLA             ;*
+	STA SSSGRP,X    ;*
+	LDA #0          ;SET ZERO RETURN CODE
+	RTS             ;EXIT
+.END

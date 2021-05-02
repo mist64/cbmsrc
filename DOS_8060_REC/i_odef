@@ -1,0 +1,13 @@
+;*****************************
+;*      I/O DEFINITIONS      *
+;*****************************
+;
+UNLSN	=$3F            ; IEEE UNLISTEN COMMAND
+NOTRDY	=$0             ; NOT READY
+EOIOUT	=$80            ; TALK WITH EOI
+EOISND	=$08            ;NOT EOI TO SEND
+RDYTLK	=$88            ; TALK NO EOI
+RDYLST	=$1             ; READY TO LISTEN
+RNDRDY	=RDYTLK+RDYLST  ; RANDOM CHNRDY
+RNDEOI	=EOIOUT+RDYLST  ; RANDOM W/ EOI
+.END

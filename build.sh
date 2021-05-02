@@ -112,6 +112,7 @@ build2 DOS_1571CR serlibcr
 build2 DOS_1581 serlib
 
 build1 DOS_8250 master
+build1 DOS_8060 dos
 build1 DOS_8070 dos
 build1 DOS_D9065 master
 

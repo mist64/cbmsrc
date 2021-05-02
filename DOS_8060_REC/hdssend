@@ -1,0 +1,54 @@
+;*********************************
+;* SSEND: POSITION SS & BUFTAB   *
+;*        TO END OF LAST RECORD. *
+;*   VARS:                       *
+;*********************************
+;
+SSEND
+;
+; <BIG FILES CHANGE>
+;
+	JSR RDLG        ;READ IN LAST GROUP SS
+;
+	JSR SSSET
+	STA SSNUM
+	LDA #4
+	STA DIRBUF
+	LDY #SSIOFF-5   ;<HD>
+	BNE SE20
+SE10
+	DEY
+	DEY
+	BMI BREAK
+SE20
+	LDA (DIRBUF)Y   ;LOOK FOR LAST SS #
+	CMP #255        ;<HD>
+	BEQ SE10        ;S=FF  NOT YET
+	DEY             ;<HD>
+	TYA
+	LSR A
+	CMP SSNUM       ;CHECK SS #
+	BEQ SE30        ;THIS IS LAST SS
+;
+	STA SSNUM
+	LDX LINDX
+	LDA SS,X
+	JSR IBRD        ;READ LAST SS
+SE30
+	LDY #0          ;SET SSIND
+	STY DIRBUF
+	LDA (DIRBUF)Y   ;DEBUG
+	CMP #255        ;CHK END OF CHAIN <HD>
+	BNE BREAK
+	INY             ;BUMP TO TRACK (LAST DATA PTR)
+	LDA (DIRBUF),Y  ;GET IT
+	TAY             ;BACK UP TO TRACK
+	DEY
+	STY SSIND
+	TYA
+	JMP SETSSP
+;
+BREAK
+	LDA #$67
+	JSR CMDER2
+.END

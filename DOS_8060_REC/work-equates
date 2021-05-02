@@ -1,0 +1,13 @@
+;****************************************
+;
+;  EQUATES TO VARIOUS WORK WORDS
+;
+;****************************************
+SRCPTR	= TEMP          ;VERIFY LOG WORDS
+DSTPTR	= HDTMP7        ;*
+POSNXT	= HDTMP6        ;*
+ERSAVE	= HDTMP9        ;*
+ERSRC	= HDTMPA        ;ERR MSG WORDS
+ERDST	= HDTMPB        ;*
+ERPTR	= HDTMPC        ;*
+.END

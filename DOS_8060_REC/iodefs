@@ -1,0 +1,209 @@
+;***************************************
+;***************************************
+;
+;   I/O DEFINITIONS FOR THE PHOENIX
+;   DISKETTE (8 INCH) BOARD
+;
+;***************************************
+;***************************************
+;
+;  IEEE MAIN CONTROL/DATA VIA
+;         (MOS 6522)
+;
+;***************************************
+	* = $A000       ;ORIGIN ADDRESS
+IEDATB	*=*+1           ;SIDE B DATA (SEE BELOW)
+IEDATA	*=*+1           ;SIDE A DATA (IEEE DATA)
+IEDDRB	*=*+1           ;SIDE B DATA DIRECTION
+IEDDRA	*=*+1           ;SIDE A DATA DIRECTION
+IET1	*=*+4           ;TIMER 1 REGS (REFRESH NMI)
+IET2	*=*+2           ;TIMER 2  -NOT USED-
+IESR	*=*+1           ;SHIFT REG (NOT USED)
+IEACR	*=*+1           ;AUXILLIARY CONTROL REG
+IEPCR	*=*+1           ;PERIPHERAL CONTROL REG
+IEIFR	*=*+1           ;INTERRUPT FLAG REG
+IEIER	*=*+1           ;INTERRUPT ENABLE REG
+IEORA	*=*+1           ;SIDE A DATA (NO HANDSHAKE)
+;
+;  CONTROL LINES
+;
+; CA1 = DAVI (USED FOR RX)
+; CA2 = NRFDO (USED FOR RX)
+;       NOTE: NRFDO HERE IS INVERTED FROM ON THE BUS
+;
+; CB1 = NDACI (USED FOR TX)
+; CB2 = DAVO LATCH (USED FOR TX)
+;
+;
+;  SIDE B DATA REGISTER DEFINITION
+;
+IEADR	= $03           ;CU ADDR IS LOW 2 BITS
+IEATN	= $04           ;ATN (HIGH=ATN)
+IEDAVI	= $08           ;DAV IN IS   2^3
+IEEOIO	= $10           ;EOI OUT IS  2^4
+IEDACD	= $20           ;NDAC DISABLE 2^5
+IELSTN	= $40           ;LISTEN OUT IS 2^6
+;LISTEN=1 TALK=0
+;LISTEN = DAVO HIGH ON THE BUS
+IENMI	= $80           ;NMI OUT IS  2^7
+;THIS IS SQUARE WAVE OUTPUT
+;BASED ON T1 TIMER
+;
+; NOTE: OUTBOARD HARDWARE CONTROLS NDACO AS FOLLOWS:
+;       WHEN NOT DISABLED (SEE IEDACD), NDACO
+;       WILL BE SET HIGH WHENEVER DAVI IS LOW
+;       AND NRFDO IS LOW.
+.PAG
+;***************************************
+;
+;  DISK TRANSCEIVER CONTROL
+;        (MOS 6520)
+;
+;***************************************
+;
+	* = $6000       ;ORIGIN ADDRESS
+DRDA	*=*+1           ;DATA & DIR REG SIDE A
+DRCA	*=*+1           ;SIDE A CONTROL REG
+DRDB	*=*+1           ;DATA & DIR REG SIDE B
+DRCB	*=*+1           ;SIDE B CONTROL REG
+;
+;  SIDE A DATA REGISTER DEFINITION
+;
+; 2^7 - FORMAT
+; 2^6 - GCR- / FM+ (GCR = 0)
+; 2^5 - ENABLE AUTO ACKNOWLEDGE (FOR TALK)
+;       HARDWARE NAME "ENDAC"
+; 2^4 - CK4
+; 2^3 - CK3   DENSITY SELECTS 5-0
+; 2^2 - CK2
+; 2^1 - CK1
+; 2^0 - CK0
+;
+;  NOTE: NO READS OF SIDE A DATA ARE ALLOWED
+;        BECAUSE IT WOULD CLEAR AN ATN INT.
+;        SEE "DRDAI" MEMORY IMAGE.
+;
+;
+;  SIDE B DATA REGISTER DEFINITION
+;
+; 2^7 - FR / W (READ=1 WRITE=0)
+; 2^6 - SEQUENCER RESET
+; 2^5 - STEPPER MOTOR SELECT DRIVE 1
+; 2^4 - STEPPER MOTOR SELECT DRIVE 0
+; 2^3 - SELECT LIGHT DRIVE 1 (0=LIT)
+; 2^2 - SELECT LIGHT DRIVE 0
+; 2^1 - RESET SEQ INT & ERROR
+;       LOW TO HIGH CAUSES RESET
+; 2^0 - NA
+;
+;  NOTE: BECAUSE A READ TO THE B SIDE DATA
+;        WOULD POSSIBLY RESET A LATCHED
+;        EOI, A MEMORY IMAGE IS KEPT OF DRDB
+;        SEE "DRDBI".
+;
+;
+;  CONTROL LINES
+;
+; CA1 = ATN (INT ON ATN GOING HIGH)
+; CA2 = ATN (INT ON ATN GOING LOW)
+; CB1 = EOI (ENABLED WHEN DAV LOW)
+; CB2 = NRFD LOCK TO CATCH ATN LOW THEN HIGH (RFDMSK)
+;
+.PAG
+;***************************************
+;
+;  PHYSICAL DISK CONTROL
+;      (MOS 6520)
+;
+;***************************************
+;
+	* = $4000       ;ORIGIN ADDRESS
+PDDA	*=*+1           ;DATA & DIR REG SIDE A
+PDCA	*=*+1           ;SIDE A CONTROL REG
+PDDB	*=*+1           ;DATA & DIR REG SIDE B
+PDCB	*=*+1           ;SIDE B CONTROL REG
+;
+;  SIDE A DATA REGISTER DEFINITION
+;
+; 2^7 - STEP CONTROL 3 (LOW=SINGLE SIDED)
+; 2^6 - STEP CONTROL 2 (0=ON FOR ALL PHASES)
+; 2^5 - STEP CONTROL 1
+; 2^4 - STEP CONTROL 0
+; 2^3 - HEAD NUMBER B (SEE NOTE)
+; 2^2 - HEAD NUMBER A   "    "
+; 2^1 - HEAD LOAD DRIVE 1 (1=LOADED)
+; 2^0 - HEAD LOAD DRIVE 0
+;
+;  NOTE: HEAD NUMBER A & B ARE DECODED IN HARDWARE
+;        TO SELECT ONE OF UP TO FOUR HEADS
+;        THIS ALLOWS FOR UP TO TWO HEADS FOR EACH
+;        OF TWO DRIVES.  THEY ARE DECODED AS SHOWN
+;
+;          BIT   HEAD  DRIVE
+;          B-A
+;
+;          0 0    0      0
+;          0 1    1      0
+;          1 0    0      1
+;          1 1    1      1
+;
+;  SIDE B DATA REGISTER DEFINITION
+;
+; 2^7 - DOOR OPEN DRIVE 1 IN (1=OPEN)
+; 2^6 - DOOR OPEN DRIVE 0 IN
+; 2^5 - WRITE PROTECT 1 IN (1=NOT PROTECTED)
+; 2^4 - WRITE PROTECT 0 IN
+; 2^3 - NRFDI IN
+; 2^2 - NDACI IN
+; 2^1 - TRK 00 DRIVE 1 IN
+; 2^0 - TRK 00 DRIVE 0 IN
+;
+;  CONTROL LINES
+;
+; CA1 = SEQUENCE DONE IN
+; CA2 = SEQUENCER ERROR
+; CB1 = NA
+; CB2 = ATN ACK
+;
+.PAG
+;***************************************
+;
+;      DISK DMA CHIP
+;      (INTEL 8257)
+;
+;***************************************
+;
+	* = $8000       ;ORIGIN ADDRESS
+DMACH0	*=*+1           ;CHANNEL 0 DMA
+DMATC0	*=*+1           ;CHANNEL 0 TERMINAL COUNT
+;$40=DMA WRITE
+;$80=DMA READ
+DMACH1	*=*+1           ;CHANNEL 1 DMA
+DMATC1	*=*+1           ;CHANNEL 1 TERMINAL COUNT
+DMACH2	*=*+1           ;CHANNEL 2 DMA
+DMATC2	*=*+1           ;CHANNEL 2 TERMINAL COUNT
+DMACH3	*=*+1           ;CHANNEL 3 DMA
+DMATC3	*=*+1           ;CHANNEL 3 TERMINAL COUNT
+DMAMOD	*=*+1           ;MODE SET
+;
+;VALUES OF DMAMOD WHEN WRITTEN
+;2^7 AUTOLOAD
+;2^6 TC STOP
+;2^5 EXTENDED WRITE
+;2^4 ROTATING PRIORITY
+;2^3 CHNL 3
+;2^2 CHNL 2
+;2^1 CHNL 1
+;2^0 CHNL 0
+;
+;VALUES OF DMAMOD WHEN READ
+;2^7,6,5 NOT USED
+;2^4 UPDATE FLAG
+;2^3 TC STATUS FOR CHNL 3
+;2^2 TC STATUS FOR CHNL 2
+;2^1 TC STATUS FOR CHNL 1
+;2^0 TC STATUS FOR CHNL 0
+;
+;***************************************
+;***************************************
+.END

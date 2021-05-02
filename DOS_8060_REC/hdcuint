@@ -1,0 +1,52 @@
+;***************************************
+;***************************************
+;
+; DOS INTERFACE TO THE DISK
+;         CONTROLLER
+;
+;***************************************
+;
+HDSTRT	;START A NEW IO ENTRANCE
+HDCHK	;CHECK ON THE OUTSTANDING IO'S
+	LDA IRQMOD      ;CHECK IF IRQ MODE
+	BNE IRQPRC      ;BR IF IRQ MODE
+;
+; IN BG MODE SO JUST CALL CU
+;
+	JMP START       ;GO TO THE CU
+;SAME AS 'JSR RTS'
+;
+; IN IRQ MODE SO SET IRQ REQUEST SWITCH
+; AND GO BACK TO BG DISABLED
+;
+IRQPRC
+	STA IRQREQ      ;SET THE SWITCH
+	TXA             ;SAVE X
+	PHA             ;*
+	TYA             ;SAVE Y
+	PHA             ;*
+	LDA IEIER       ;SAVE ENABLES
+	ORA #$80        ;SET THE SET BIT
+	PHA             ;*
+	LDA DRCA        ;SAVE ATN ENABLES
+	PHA             ;*
+	LDA #$7F        ;DISABLE ALL VIA INTS
+	STA IEIER       ;*
+	LDA #$06        ;DISABLE ATN INTS
+	STA DRCA        ;*
+	JSR IRQEX       ;EXIT
+	PLA             ;RESTORE ATN ENABLES
+	STA DRCA        ;*
+	PLA             ;RESTORE VIA ENABLES
+	STA IEIER
+	PLA             ;RESTORE Y
+	TAY             ;*
+	PLA             ;RESTORE X
+	TAX             ;*
+	LDA #0          ;CLEAR THE IRQ REQUEST SW.
+	STA IRQREQ      ;*
+	RTS             ;EXIT TO CALLER
+;
+;
+;
+.END

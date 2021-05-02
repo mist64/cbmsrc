@@ -1,0 +1,53 @@
+;*************************************
+;
+;  AUTO INITIALIZE
+;
+;*************************************
+AUTOIT
+	LDA DRVNUM      ;GET DRIVE #
+	ASL A           ;TIMES TWO
+	TAX             ;*
+	LDA DSKID,X     ;CURNT DISK ID
+	CMP REALID,X    ;SAME DISKETTE ?
+	BNE AUTOI1      ;BR IF NOT SAME
+	LDA DSKID+1,X   ;CURNT DISK ID
+	CMP REALID+1,X  ;SAME ?
+	BNE AUTOI1      ;BR IF NOT SAME
+	RTS             ;EXIT NO INIT NEEDED
+;
+;  DISKETTES HAVE BEEN CHANGED
+;  DO AN AUTOMATIC INIT TO DRIVE X
+;
+AUTOI1
+	JMP INITDR      ;THIS WILL CLOSE ANY OPEN CHNLS
+;*************************************
+;
+;  CHECK THE STATUS OF THE DISK
+;  READY = ZERO RETURN
+;  NOT READY = NON ZERO RETURN
+;   NOT READY MEANS EITHER DOOR OPEN
+;   OR DOOR CLOSED AND VOL LABEL NOT READABLE
+;
+;*************************************
+TRDY
+	LDX DRVNUM      ;GET THE DRIVE #
+	LDA DOMSK,X     ;DOOR OPEN MASK
+	AND DOOPSW      ;CHK IF DOOR OPEN
+	BEQ TRDY1       ;BR IF NOT OPEN
+TREX
+	ORA #$FF        ;SET NON ZERO
+	RTS             ;EXIT NOT READY
+TRDY1
+	TXA             ;DRIVE #
+	ASL A           ;TIMES 2
+	TAX             ;*
+	LDA #$FF        ;CHK IF VOL LBL READABLE
+	CMP REALID,X    ;*
+	BNE TRDY2       ;BR IF READABLE
+	CMP REALID+1,X  ;CHK 2ND BYTE TOO
+	BEQ TREX        ;BR IF NOT READABLE
+TRDY2
+	JSR AUTOIT      ;INITIALIZE IT IF NECESSARY
+	LDA #0          ;ZERO RETURN CODE
+	RTS             ;EXIT
+.END

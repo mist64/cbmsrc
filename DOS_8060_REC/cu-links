@@ -1,0 +1,37 @@
+;***************************************
+;***************************************
+;
+;  EQUATES USED BY RAM RESIDENT
+;  ROUTINES TO GET INTO THE ROM
+;       RESIDENT ROUTINES
+;
+;***************************************
+;***************************************
+;
+;  ADDRESSES LOCATED IN THE CONTROLLER
+;
+BMPJB	= $C30F
+CHECK	= $C000         ;CHECK ENTRANCE
+DMARST	= $CBEB
+DOOPSW	= NMIRAM        ;DOOR OPEN SWITCH
+DORCK	= $C70E         ;DOOR OPEN CHECK
+DOSSET	= $C3BD
+GENHD1	= $CAFC         ;GEN HDR
+GENHDR	= $CB02         ;GENERATE HEADER
+ID1WR	= $C32A         ;WRITE JOB
+ID1WR1	= $C32D
+IRQ4	= $C050
+IRQPOL	= $C019         ;IRQ ENTRANCE
+NMI	= NMIRAM+4      ;NMI ENTRANCE
+POR	= $C013         ;INITIALIZATION ENTRANCE
+PORBMP	= $C016         ;POWER UP RESTORE
+POST1	= $C38F
+PSTBAD	= $CB86         ;POST BAD CMD
+SCNX	= $C2EB
+SHSKP	= $CBF1         ;SEEK HSKPG
+START	= $C000         ;START A JOB
+STC2	= $C66B
+STC3	= $C66B         ;COMMON START
+SUPDP	= $CBCA
+WPMSK	= $C127         ;WRITE PROTECT MASK TABLE
+.END

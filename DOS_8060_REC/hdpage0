@@ -1,0 +1,93 @@
+;*********************************
+;*
+;*      ZERO PAGE VARIABLES <HD>
+;*
+;*********************************
+TEMP	*=*+6           ; TEMP WORK SPACE
+BGTEST	;BEG. ADDR FOR MEM TEST
+LSNADR	*=*+1           ; LISTEN ADDRESS
+TLKADR	*=*+1           ;TALKER ADDRESS
+LSNACT	*=*+1           ; ACTIVE LISTENER FLAG
+TLKACT	*=*+1           ; ACTIVE TALKER FLAG 
+ADRSED	*=*+1           ; ADDRESSED FLAG
+PRGTRK	*=*+1           ;LAST PROG ACCESSED
+DRVNUM	*=*+1           ;CURRENT DRIVE #
+TRACK	*=*+1           ;CURRENT TRACK
+SECTOR	*=*+1           ;CURRENT SECTOR
+LINDX	*=*+1           ;LOGICAL INDEX
+SA	*=*+1           ;SECONDARY ADDRESS
+ORGSA	*=*+1           ;ORIGINAL SA
+DATA	*=*+1           ; TEMP DATA BYTE
+;*
+;*
+T0	=TEMP
+T1	=TEMP+1
+T2	=TEMP+2
+T3	=TEMP+3
+T4	=TEMP+4
+R0	*=*+1
+R1	*=*+1
+R2	*=*+1
+R3	*=*+1
+R4	*=*+1
+R5	*=*+1           ;<HD>
+RESULT	*=*+4
+ACCUM	*=*+5
+DIRBUF	*=*+2
+BUFTAB	*=*+CBPTR+4     ; BUFFER BYTE POINTERS
+CB=BUFTAB+CBPTR
+BUF0	*=*+MXCHNS
+BUF1	*=*+MXCHNS
+NBKL
+RECL	*=*+MXCHNS
+NBKH
+RECH	*=*+MXCHNS
+NR	*=*+MXCHNS
+RS	*=*+MXCHNS
+SS	*=*+MXCHNS
+F1PTR	*=*+1           ; FILE STREAM 1 POINTER
+RECPTR	*=*+1
+SSNUM	*=*+1
+SSIND	*=*+1
+RELPTR	*=*+1
+EOIFLG	*=*+1           ; TEMP EOI
+JOBNUM	*=*+1           ; CURRENT JOB #
+LINTAB	*=*+MAXSA+1     ; SA:LINDX TABLE
+TYPE	*=*+1           ; ACTIVE FILE TYPE
+;
+;*
+;*************************************
+;
+;  THESE ARE ALL THE PAGE 0 RAM LOCATIONS
+;  NEEDED FOR THE HARD DISK CHANGES
+;
+;*************************************
+HDBMP	* = *+2         ;IND PTR TO BAM
+HDTMP	* = *+2         ;GENERAL WORK
+HDTMP1	* = *+1
+HDTMP2	* = *+1
+HDTMP3	* = *+1
+HDTMP4	* = *+1
+HDTMP5	* = *+1
+HDTMP6	* = *+1
+HDTMP7	* = *+1
+HDTMP8	* = *+1
+HDTMP9	* = *+1
+HDTMPA	* = *+1
+HDTMPB	* = *+1
+HDTMPC	* = *+1
+HDTMPD	* = *+1
+HDTMPE	* = *+1
+HDTMPF	* = *+1
+HDNFRL	* = *+2         ;LOW # FREE SECTS PER DRV
+HDNFRH	* = *+2         ;HIGH # FREE SECTS PER DRV
+;
+BGSP	*=*+1           ;BACKGROUND STACK POINTER
+IRQSP	*=*+1           ;INTERRUPT STACK POINTER
+IRQMOD	*=*+1           ;IRQ MODE =1 BGMODE =0
+IRQREQ	*=*+1           ;IRQ NEEDS RE-ENTRY FROM BG
+DRDBI	*=*+1           ;DRDB MEMORY IMAGE
+IRQSAV	*=*+1           ;SAVE FOR IRQ EXIT
+DRDAI	*=*+1           ;DRDA MEMORY IMAGE
+;
+.END

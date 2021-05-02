@@ -1,0 +1,216 @@
+;*********************************
+;* B0TOB0: TRANSFER BYTES FROM   *
+;*         ONE BUF TO OTHER.     *
+;*   REG: IN: .A= # BYTES        *
+;*            .Y= SOURCE BUF #   *
+;*            .X= DESTIN BUF #   *
+;*********************************
+;
+B0TOB0
+	PHA
+	LDA #0
+	STA TEMP
+	STA TEMP+2
+	LDA BUFIND,Y
+	STA TEMP+1
+	LDA BUFIND,X
+	STA TEMP+3
+	PLA
+	TAY
+	DEY
+B02
+	LDA (TEMP)Y
+	STA (TEMP+2)Y
+	DEY
+	BPL B02
+	RTS
+;
+;*********************************
+;* CLRBUF: CLEAR BUFFER GIVEN    *
+;*   REG: IN: .A= BUFFER #       *
+;*       OUT: .Y,.A =0           *
+;*********************************
+;
+CLRBUF
+	TAY
+	LDA BUFIND,Y
+	STA TEMP+1
+	LDY #0
+	STY TEMP
+	LDA #255        ;<HD>
+CB10
+	STA (TEMP),Y
+	INY
+	BNE CB10
+	RTS
+;
+;
+;*********************************
+;* SSSET: SET SS PNTR TO 0       *
+;*   REG: OUT: .A= SS NUMBER     *
+;*********************************
+;
+SSSET
+	LDA #0
+	JSR SSDIR
+	LDY #2
+	LDA (DIRBUF)Y   ;GET CURNT SS #
+	RTS
+;
+;*********************************
+;* SSDIR: SET DIRBUF WITH CURRENT*
+;*        SS POINTER.            *
+;*   REGS: IN: .A= LOW BYTE      *
+;*********************************
+;
+SSDIR
+	STA DIRBUF
+	LDX LINDX
+	LDA SS,X
+	TAX
+	LDA BUFIND,X
+	STA DIRBUF+1
+	RTS
+;
+;*********************************
+;* SETSSP: SET DIRBUF & BUFTAB   *
+;*        WITH CURRENT SS PTR.   *
+;*   REGS: IN: .A= LOW BYTE      *
+;*********************************
+;
+SETSSP
+	PHA
+	JSR SSDIR
+	PHA
+	TXA
+	ASL A
+	TAX
+	PLA
+	STA BUFTAB+1,X
+	PLA
+	STA BUFTAB,X
+	RTS
+;
+;*********************************
+;* SSPOS: POSITION SS & BUFTAB   *
+;*        TO SSNUM SSIND.        *
+;*   FLAG:  .V=0: OK             *
+;*          .V=1: OUT OF RANGE   *
+;*********************************
+;
+SSPOS
+	JSR SSTEST
+	BMI SSP10       ;OUT OF RANGE
+	BVC SSP20       ;ER0:OK, IN RANGE
+;
+	LDX LINDX       ;ER1: POSSIBLY IN RANGE
+	LDA SS,X
+	JSR IBRD        ;READ SS IN
+	JSR SSTEST      ;TEST AGAIN
+	BPL SSP20
+SSP10
+	JSR SSEND       ;NOT IN RANGE,SET END
+	BIT ER1
+	RTS
+SSP20
+	LDA SSIND       ;OK, SET PTR W/ INDEX
+	JSR SETSSP
+	BIT ER0
+	RTS
+;
+;*********************************
+;* IBRD: INDIRECT BLOCK READ &   *
+;* IBWT: WRITE.                  *
+;*   REGS: IN: .A= BUF # FOR R/W *
+;*             .X= LINDX         *
+;*         (DIRBUF)Y   POINTS TO *
+;*         T&S TO BE R/W.        *
+;*********************************
+;
+IBRD
+	STA JOBNUM
+	LDA #READ
+	BNE IBOP
+IBWT
+	STA JOBNUM
+	LDA #WRITE
+IBOP
+	PHA
+	LDA FILTYP,X
+	AND #1
+	STA DRVNUM
+	PLA
+	ORA DRVNUM
+	STA CMD
+;
+	LDA (DIRBUF)Y
+	STA TRACK
+	INY
+	LDA (DIRBUF)Y
+	STA SECTOR
+	LDA JOBNUM
+	JSR SETH
+	LDX JOBNUM
+	JMP DOIT2
+;
+;
+;*
+;*****************************
+;*
+;*  GSSPNT
+;*
+;*****************************
+;*
+GSSPNT	LDX LINDX
+	LDA SS,X
+	JMP GP1
+;
+;
+;*****************************************
+;  CALCULATE # SECTORS NEEDED
+; ON ENTRANCE: R3= # WHOLE GROUPS
+;              T4= # WHOLE SIDE SECTORS
+;              T3= # DATA SECTORS
+;
+;*****************************************
+SSCALC
+	JSR ZERRES      ;ZERO RESULT
+	JSR ZERACC      ;ZERO ACCUMULATOR
+	LDY R3          ;GROUP #
+LABEL
+	DEY             ;MULT GROUP BY 726
+	BMI LABEL1      ;BR IF MULT DONE
+	LDX #>726       ;HIGH AMOUNT
+	LDA #<726       ;LOW AMOUNT
+	JSR ADDLIT      ;ADD IT TO RESULT
+	JMP LABEL       ;GO TILL DONE
+LABEL1
+	LDY T4          ;SIDE SECTORS
+LABEL2
+	DEY             ;COUNT # OF FULL SIDE SECTORS
+	BMI LABEL3      ;BR WHEN DONE
+	LDX #0          ;# SS + 1 FOR SS ITSELF
+	LDA #NSSP+1     ;*
+	JSR ADDLIT      ;ADD TO RESULT
+	JMP LABEL2      ;GO TILL DONE
+LABEL3
+	LDA T3          ;ADD # DATA SECTORS *2
+	LSR A           ;DIVIDE BY 2
+	LDX #0          ;HIGH BYTE
+	JMP ADDLIT      ;ADD IT IN AND RETURN
+;
+; SSCALC SUBROUTINES
+;
+ZERACC
+	LDX #0          ;ZERO THE ACCUMULATOR
+	STX ACCUM+1     ;*
+	STX ACCUM+2     ;*
+	STX ACCUM+3     ;*
+	RTS             ;EXIT
+;
+;
+ADDLIT	;ADD 16 BIT VAL TO ACCUM
+	STX ACCUM+2     ;HIGH BYTE
+	STA ACCUM+1     ;LOW BYTE
+	JMP ADDRES      ;ADD TO THE RESULT
+.END

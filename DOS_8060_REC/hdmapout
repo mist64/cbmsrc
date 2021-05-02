@@ -1,0 +1,29 @@
+;*************************************
+; WRITE OUT THE BIT MAP TO 
+; THE DRIVE IN LSTJOB(ACTIVE)
+;*************************************
+MAPOUT	JSR GETACT
+	TAX             ;GET THE DRIVE # FROM LAST JOB
+	LDA LSTJOB,X
+	AND #1
+	STA DRVNUM      ;SAVE DRIVE NUMBER
+	TAX
+MAPOU1
+	LDA IPBM,X      ;USE DR # TO GET BUFR ADDR
+	STA HDBMP+1
+	LDA #0
+	STA HDBMP
+	JMP HDWBM       ;WRITE THE BAM
+.PAGE 'NUMFRE'
+;*************************************
+; CALC THE NUMBER OF FREE BLOCKS ON DRVNUM <HD>
+;
+;*************************************
+NUMFRE
+	LDX DRVNUM      ;GET THE DR #
+	LDA HDNFRL,X    ;GET LOW # FREE
+	STA NBTEMP
+	LDA HDNFRH,X    ;GET HIGH # FREE
+	STA NBTEMP+1
+	RTS
+.END

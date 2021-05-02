@@ -1,0 +1,32 @@
+;***************************************
+;***************************************
+;
+;    COMMON EQUATES USED BY ALL
+;    SUB-SYTEMS OF THE DISK SOFTWARE
+;
+;***************************************
+;DEFINE PAGE 0 USAGE
+DOSPG0	= $00           ;DOS PAGE 0 BEGINNING
+CUPAG0	= $E8           ;BEG ADDR OF PAGE 0 RAM
+;DEFINE NON-PAGE 0 RAM USEAGE
+NMIRAM	= $780          ;FOR NMI
+DOSRAM	= $500          ;DOS WORK AREA START
+CURAM	= $200          ;BEG ADDR OF CU WORK AREA
+CKSM	= $200          ;BEG ADDR OF CHK SUM CODE
+;DEFINE CODE LOCATIONS
+; CU CODE FOLLOWS BEHIND NMI CODE
+CUCODE	= $C000         ;BEG ADDR OF CU CODE
+DOSCOD	= $CC78         ;DOS CODE
+FMTCOD	= $800          ;ORIGIN ADDR OF FMT CODE
+FMTBUF	= 16            ;FIRST BUFR FOR FMT
+READ	= $80           ;READ CMD
+WRITE	= $90           ;WRITE CMD
+FMTCMD	= $F0           ;FORMAT A TRACK CMD
+BUMP	= $C0           ;RESTORE CMD
+SNSCMD	= $B0           ;REQUEST SENSE CMD
+WVERFY	= $A0           ;VERIFY CMD
+VOLTRK	= 0             ;VOLUME LABEL TRACK
+VOLSEC	= 1             ;VOLUME LABEL SECTOR
+;
+;
+.END
