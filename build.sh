@@ -127,4 +127,4 @@ build2 DOS_1541C_03 serlib
 # TODO cbm6502asm problems:
 #   build2 RAMDOS a
 
-build1 PRINTER_8023 us.ptr.src
+build1 PRINTER_8023P us.ptr.src
