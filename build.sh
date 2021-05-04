@@ -60,6 +60,7 @@ mkdir build
 build1 KERNAL_VIC_04 kernal
 
 build1 KERNAL_C64_01 kernal
+build1 KERNAL_C64_02 kernal
 build1 KERNAL_C64_03 kernal
 build2 KERNAL_C64_03_VAX kernal
 build2 KERNAL_C64GS console

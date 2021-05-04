@@ -34,9 +34,15 @@ The source contains the ranges
 
 It does not contain the version byte at $FF80 (which is $AA in the binary) or the "RRBY" signature at $FFF6.
 
+## KERNAL_C64_02
+
+The Commodore 64 KERNAL source, universal (PAL/NTSC) version (901227-02).
+
+It contains the version byte (0) at $FF80, but it does not contain the "RRBY" signature at $FFF6.
+
 ## KERNAL_C64_03
 
-The Commodore 64 KERNAL source, final version (901227-03). Based on KERNAL_C64_00 and manually patched using
+The Commodore 64 KERNAL source, final version (901227-03). Based on KERNAL_C64_02 and manually patched using
 
 * the [LST printout of the -03 KERNAL](http://pagetable.com/docs/C64_KERNAL_03_LST.pdf)
 * the [VAX-format SRC from 1987](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz)
@@ -46,7 +52,7 @@ There are two differences though:
 * In both sources, the added patch function `PIOKEY` ends with `JMP CLKHI` ($EE85), but the -03 binary contains $EE8E, which is `JMP CLKLO`. The change was probably done in the binary and not added back to the source. The version in this repository contains the correct `JMP CLKLO` though.
 * The printout LST contains a version byte ($FF80) of 0, the VAX SRC contains the correct version byte of 3. The version in this repository contains a 3.
 
-The sources have been verified to build the correct -03 KERNAL binary, but no guarantees can be given that all changes, especially in comments and formatting, have been patched correctly.
+The sources have been verified to build the correct -03 KERNAL binary.
 
 It contains the version byte (3) at $FF80, but it does not contain the "RRBY" signature at $FFF6.
 
