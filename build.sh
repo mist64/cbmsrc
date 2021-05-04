@@ -96,6 +96,7 @@ build1 MONITOR_VIC micii4
 build2 MONITOR_C128 monitor
 
 build1 CONTROLLER_8250 lib
+build1 CONTROLLER_1001 single.src
 
 build1 DOS_4040 master
 build1 DOS_1540 ser.lib

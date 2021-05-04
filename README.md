@@ -116,11 +116,11 @@ The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from St
 
 ## DOS_8250
 
-The CBM 8250/8050/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
+The CBM 8250/8050/1001/4040 DOS V2.7 source (1981). Extracted from old-dos-sources.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
 
-* The same ROM binary will work on the 8250 (DS/QD), the 8050 (SS/QD) and the 4040 (SS/DD), the differences will be handled at runtime (symbols "NSIDES", "DOS").
+* The same ROM binary will work on the 8250 (DS/QD), the 8050 (SS/QD), the SFD-1001 (DS/QD, single drive) and the 4040 (SS/DD), the differences will be handled at runtime (symbols "NSIDES", "DOS").
 * Comments in the source call this "SUPER DOS".
-* This only contains the DOS and IEEE code. The controller is in CONTROLLER_8250.
+* This only contains the DOS and IEEE code. The controller is in CONTROLLER_8250/CONTROLLER_1001.
 
 ## DOS_8060_REC
 
@@ -201,6 +201,12 @@ The C64/C128 RAMDISK DOS V4.3 source (1987). Extracted from [ramdos.zip](http://
 ## CONTROLLER_8250
 
 The CBM 8250/8050/4040 controller source (1981). Extracted from 4040-8050-8250-controller-code-tandon.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
+
+* This only contains the controller. The DOS and IEEE code is in DOS_8250.
+
+## CONTROLLER_1001
+
+The SFD-1001 controller source (1981). Extracted from old-dos-sources.d81 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting.
 
 * This only contains the controller. The DOS and IEEE code is in DOS_8250.
 
