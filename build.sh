@@ -57,6 +57,8 @@ test_tools
 rm -rf build
 mkdir build
 
+build1 MONITOR_KIM kim.asm
+
 build1 KERNAL_VIC_04 kernal
 
 build1 KERNAL_C64_01 kernal

@@ -114,6 +114,10 @@ The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from [Da
 
 The C64 monitor program. Extracted from ml-monitor-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting. The symbol `WALKON` in the file `micii4` was changed from `1` to `0` so the source builds.
 
+## MONITOR_KIM
+
+The KIM-1 "monitor" ROM from the [zimmers.net archive](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.asm), converted to LF line breaks. The missing closing `'` characters have been added to the `KIM` and `ERR` lines.
+
 ## DOS_4040
 
 The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
