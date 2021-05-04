@@ -96,6 +96,7 @@ build1 MONITOR_VIC micii4
 build2 MONITOR_C128 monitor
 
 build1 CONTROLLER_8250 lib
+
 build1 DOS_4040 master
 build1 DOS_1540 ser.lib
 build1 DOS_1541_01_REC ser.lib
@@ -123,5 +124,6 @@ build2 DOS_1541C_02 serlib
 build2 DOS_1541C_03 serlib
 
 # TODO cbm6502asm problems:
-# * build problem
 #   build2 RAMDOS a
+
+build1 PRINTER_8023 us.ptr.src
