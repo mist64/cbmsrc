@@ -1,0 +1,383 @@
+	.page
+	.subttl  numsyms
+
+; convert base 8,10,16 to binary
+; carry set if successful conversion, carry clear if error.
+; x must point to character
+
+number	lda #0
+	sta knval	;value of number is 0
+	sta knval+1
+e10	lda icrd,x	;character
+	jsr numrc	;see if numeric
+	bcc e20		;not numeric
+	sbc #48		;remove zone
+	jmp e30		;check for valid base
+e20	jsr nalph	;char alphabetic
+	bcc e40		;no...means error
+	sbc #55		;alpha--remove zone
+e30	cmp kbase	;base valid
+	bcc e50		;yes...valid
+e40	clc		;invalid base
+	rts
+
+e50	sta colcnt
+	txa
+	pha		;put pointer on stack
+	ldy kbase	;base
+	cpy #2		;binary?
+	bne e60		;no...
+	ldx #1		;binary...1 shift
+	bne e90
+
+e60	cpy #8		;octal
+	bne e70		;no...
+	ldx #3		;octal--3 shifts.
+	bne e90
+
+e70	cpy #16		;hex
+	bne e80		;no...
+	ldx #4		;hex--4 shifts
+	bne e90
+
+e80	cpy #10		;decimal
+	bne e40		;no... base is invalid
+	lda knval
+	sta temp
+	lda knval+1
+	sta temp+1
+	ldx #3		;decimal--3 + 1 shifts
+
+e90	asl knval+1	;low order bits
+	rol knval	;high order bits
+	bcc e100	;not overflow
+	lda iflags+1	;overflow bit
+	ora #8
+	sta iflags+1
+e100	dex		;shift counter
+	bne e90		;continue
+	cpy #10		;decimal
+	bne e120	;no...
+	asl temp+1	;decimal does another
+	rol temp
+	bcc e115	;did not overflow
+	lda iflags+1	;set overflow
+	ora #8
+	sta iflags+1
+e115	lda knval+1	;add to finish
+	clc
+	adc temp+1
+	sta knval+1
+	lda knval
+	adc temp
+	sta knval
+	bcc e120	;overflow?
+	lda iflags+1
+	ora #8
+	sta iflags+1
+e120	lda colcnt
+	clc
+	adc knval+1
+	sta knval+1
+	bcc e130
+	inc knval
+	bne e130	;no overflow
+	lda iflags+1
+	ora #8
+	sta iflags+1
+e130	pla
+	tax
+	inx
+	dec klen	;length of number
+	beq e140	;done
+	jmp e10
+e140	sec		;success
+	rts
+
+
+
+
+
+; search sym tab for current sym. search is linear.
+; carry set if found. carry clear if not found.
+; tops points to insert adr for new symbol.
+
+nfind	lda stsave	;copy start syms' adr
+	sta bots
+	lda stsave+1
+	sta bots+1
+	lda nosym	;calc top from syms' #
+	sta tops+1
+	lda nosym+1
+	asl a		;times 8
+	rol tops+1
+	asl a
+	rol tops+1
+	asl a
+	rol tops+1
+	clc		;add delta to beginning
+	adc bots
+	sta tops
+	sta itops
+	lda tops+1
+	adc bots+1
+	sta tops+1
+	sta itops+1
+
+g10	sec		;calc delta = tops-bots
+	lda tops
+	sbc bots
+	sta dels
+	lda tops+1
+	sbc bots+1
+	bcs ggg10	;always i hope !
+	brk		;<<<<<<<<<< error <<<<<<<<<<
+
+ggg10	lsr a		;divide by 2
+	sta dels+1
+	lda dels
+	ror a
+	and #$f8	;mod 8
+	sta dels
+
+	clc		;calc mids=bots+dels/2
+	lda bots
+	adc dels
+	sta mids
+	lda bots+1
+	adc dels+1
+	sta mids+1
+
+	ldy #$ff	;so we start at zero
+g30	iny
+	cpy #6		;a match on sym
+	beq smtch	;yes
+	lda (mids),y	;cmp another char
+	cmp isym,y
+	beq g30		;equal check next column
+	lda dels	;no more in top & bot ?
+	ora dels+1
+	beq nomtch	;yes - no match
+
+	lda mids
+	ldy mids+1
+	bcc sgreat	;sym greater than
+
+sless	sta tops	;sym less than
+	sty tops+1
+	bne g10		;always
+
+sgreat	sta bots	;sym greater than
+	sty bots+1
+	bne g10		;always
+
+
+
+nomtch	bcc fnrts	;exit
+	lda bots	;lowest label
+	ldy bots+1	;move tops to bots
+	sta tops
+	sty tops+1
+	clc
+fnrts	rts
+
+smtch	lda (mids),y	;copy value
+	sta knval
+	iny
+	lda (mids),y
+	sta knval+1
+
+
+
+xtests	lda pass	;on pass two ?
+	beq xrf300	;no
+	lda xref	;doing a cross ref ?
+	beq xrf300	;no
+xrf110	sec		;get sym #
+	lda mids	;actual adr
+	sbc stsave	;subtract base
+	sta dels
+	lda mids+1
+	sbc stsave+1
+	lsr a		;divide by 8
+	ror dels
+	lsr a
+	ror dels
+	lsr a
+	ror dels
+	sta dels+1
+
+	ldx #9		;is our channel open ?
+	cpx chan
+	beq xrf120	;yes
+	jsr clrch	;clear last
+	stx chan
+	jsr ckout	;open it
+xrf120	lda dels	;send label #
+	jsr bsout
+	lda dels+1
+	jsr bsout
+	lda icrdno+1	;send card #
+	jsr bsout
+	lda icrdno
+	jsr bsout
+xrf300	sec		;flag a find
+	rts
+
+; **********************************
+; * enter new symbol into sym tab
+; * (symtbl)-next available location
+; * in the symbol table.
+; * .x contains offset
+; * for symbol information storage.
+; **********************************
+
+nsert	txa		;save the x register
+	pha
+
+	clc		;calc new top from syms
+	lda itops	;tops from nfind
+	adc #8		;move up by 8
+	sta dels
+	lda itops+1
+	adc #0
+	sta dels+1
+
+	ldy #7		;for indirects
+	sec
+	lda dels	;out of room ?
+	sbc #<syend
+	lda dels+1
+	sbc #>syend
+	bcs g110	;yes
+
+	sec		;calc how much to move
+	lda dels
+	sbc tops
+	tax
+	lda dels+1
+	sbc tops+1
+	sta count
+
+g105	txa		;done moving ?
+	ora count
+	beq g108	;yes
+
+	lda (itops),y	;move a symbol
+	sta (dels),y
+
+	tya	 	;adjust pointers
+	bne g106
+	dec itops+1
+	dec dels+1
+g106	dey
+
+	txa	  	;adjust counter
+	bne g107
+	dec count
+g107	dex
+	jmp g105
+
+g108	clc		;adjust itops to its final value
+	tya
+	adc itops
+	sta itops
+	bcc g109
+	inc itops+1
+g109	pla		;restore the x resister
+	tax
+
+	ldy #5		;put sym into table
+g100	lda isym,y	;source
+	sta (tops),y	;destination
+	dey
+	bpl g100	;not done
+
+;
+; symbol is in table- define
+;
+
+	ldy #6
+	lda knval
+	sta (tops),y
+	iny
+	lda knval+1
+	sta (tops),y
+	inc nosym+1
+	bne g101
+	inc nosym
+g101	rts
+
+;
+; overflowed symbol table
+;
+
+g110	lda #>stoerr
+	ldy #<stoerr
+	jsr wscrn
+	jmp done
+
+
+
+; search opcode tab for opcode, using binary search.
+; carry set if opcode found, carry clear if opcode not found.
+
+nopfnd	lda #0
+	sta first
+	lda #55		;# of op codes (0-55)
+	sta last
+	bne sbin0	;always
+
+sbin1	lda last
+	cmp first
+	bmi sbno	;no match
+
+sbin0	clc		;x=int(first+last)/2
+	adc first
+	lsr a		;(0 in bit 7)
+	sta btemp
+	tax
+	asl a		;y=x*3 (0 in carry)
+	adc btemp
+	tay
+
+	lda isym
+	cmp oprnds,y
+	bne sbin2
+
+	lda isym+1
+	cmp oprnds+1,y
+	bne sbin2
+
+	lda isym+2
+	cmp oprnds+2,y
+	bne sbin2	;didn't find the op code
+
+;
+; found valid template & base
+;
+
+	lda ktmpl,x	;template
+	sta joptem
+	lda kcode,x	;base opcode
+	sta jopbas
+	sec		;opcode found-so carry set
+	rts
+
+;
+; no match
+;
+
+sbin2	bcc sbin3	;opcode is in first part of list
+	inx		;throw away first part of list
+	stx first
+	jmp sbin1
+
+sbin3	dex		;throw away last part of list
+	stx last
+	jmp sbin1
+
+sbno	clc		;opcode not found
+	rts
+
+;	.end

@@ -1,0 +1,409 @@
+	.page
+	.subttl  asmtable
+;
+; ind tables & search tables
+;
+
+numsav	= 16
+numasm	= 30
+
+asmjmp
+	.word h312	;nolist
+	.word h311	;list
+	.word h310	;nomem
+	.word h309	;mem
+	.word h308	;noerr
+	.word h307	;err
+	.word h306	;count
+	.word h306	;count
+	.word h305	;nocount
+	.word h304	;nosymbol
+	.word h303	;symbol
+	.word h302	;nogen
+	.word h323	;gen
+	.word h330	;noexpand macros
+	.word h331	;expand macros
+	.word nhash	;labels 6 chars or less
+	.word hash	;allow long labels
+
+	.word hmac 	;.mac command
+	.word hmnd 	;.mnd command
+	.word hife	;.ife command
+	.word hifn	;.ifn command
+	.word hlib	;.lib command
+	.word hfil	;.file command
+	.word h301	;.opt command
+	.word h10 	;.end command
+	.word h12 	;.page command
+	.word h26 	;.skip command
+	.word h506	;.dbyt command
+	.word h113	;.word command
+	.word h111	;.byte command
+	.word dimes	;.mes command
+
+asmdir
+	.byte 'MES'
+	.byte 'BYT'
+	.byte 'WOR'
+	.byte 'DBY'
+	.byte 'SKI'
+	.byte 'PAG'
+	.byte 'END'
+	.byte 'OPT'
+	.byte 'FIL'
+	.byte 'LIB'
+	.byte 'IFN'
+	.byte 'IFE'
+mnd	.byte 'MND'
+	.byte 'MAC'
+
+optdir	.byte 'LON'	;allow long labels
+	.byte 'NLO'	;don't allow long labels
+	.byte 'MLI'	;expand macros
+	.byte 'NML'	;don't expand macros
+	.byte 'GEN'
+	.byte 'NOG'
+	.byte 'SYM'
+	.byte 'NOS'
+	.byte 'NOC'
+	.byte 'CNT'
+	.byte 'COU'
+	.byte 'ERR'
+	.byte 'NOE'
+	.byte 'MEM'
+	.byte 'NOM'
+	.byte 'LIS'
+	.byte 'NOL'
+
+oprnds	.byte 'ADC'
+	.byte 'AND'
+	.byte 'ASL'
+	.byte 'BCC'
+	.byte 'BCS'
+	.byte 'BEQ'
+	.byte 'BIT'
+	.byte 'BMI'
+	.byte 'BNE'
+	.byte 'BPL'
+	.byte 'BRK'
+	.byte 'BVC'
+	.byte 'BVS'
+	.byte 'CLC'
+	.byte 'CLD'
+	.byte 'CLI'
+	.byte 'CLV'
+	.byte 'CMP'
+	.byte 'CPX'
+	.byte 'CPY'
+	.byte 'DEC'
+	.byte 'DEX'
+	.byte 'DEY'
+	.byte 'EOR'
+	.byte 'INC'
+	.byte 'INX'
+	.byte 'INY'
+	.byte 'JMP'
+	.byte 'JSR'
+	.byte 'LDA'
+	.byte 'LDX'
+	.byte 'LDY'
+	.byte 'LSR'
+	.byte 'NOP'
+	.byte 'ORA'
+	.byte 'PHA'
+	.byte 'PHP'
+	.byte 'PLA'
+	.byte 'PLP'
+	.byte 'ROL'
+	.byte 'ROR'
+	.byte 'RTI'
+	.byte 'RTS'
+	.byte 'SBC'
+	.byte 'SEC'
+	.byte 'SED'
+	.byte 'SEI'
+	.byte 'STA'
+	.byte 'STX'
+	.byte 'STY'
+	.byte 'TAX'
+	.byte 'TAY'
+	.byte 'TSX'
+	.byte 'TXA'
+	.byte 'TXS'
+	.byte 'TYA'
+
+; constant tables
+
+kludg	.byte 255,13,27,41
+	.byte 55,69,83,97
+	.byte 111,125,139,153
+	.byte 167,181,195
+
+kltbl	.byte 255,255,255,255
+	.byte 4,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 4,4,255,255,0,4,0
+	.byte 4,0,0,4,0,255,0
+	.byte 20,20,255,255,16
+	.byte 255,255,20,255,16
+	.byte 255,16,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 16,255,20,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 0,0,32,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,16
+	.byte 16,255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 8,255,255,255,255,0,255
+	.byte 0,255,255,0,255,255,255
+	.byte 12,12,0,0,8,12,8,12,8 
+	.byte 8,12,8,255,255
+	.byte 28,28,255,255,24,255,255
+	.byte 28,255,255,255,24,255,255,24
+	.byte 24,255,255,255,255,255,255
+	.byte 255,255,$1c,255,255,255
+
+ktmpl	.byte 1
+	.byte 1
+	.byte 5
+	.byte 21
+	.byte 21
+	.byte 21
+	.byte 7
+	.byte 21
+	.byte 21
+	.byte 21
+	.byte 20
+	.byte 21
+	.byte 21
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 1
+	.byte 6 
+	.byte 6
+	.byte 12
+	.byte 20
+	.byte 20
+	.byte 1 
+	.byte 12
+	.byte 20
+	.byte 20
+	.byte 3
+	.byte 4
+	.byte 1
+	.byte 11
+	.byte 8
+	.byte 5
+	.byte 20
+	.byte 1
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 5
+	.byte 5
+	.byte 20
+	.byte 20
+	.byte 1
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 2
+	.byte 9
+	.byte 10
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+
+kcode	.byte 97
+	.byte 33
+	.byte 6
+	.byte 144
+	.byte 176
+	.byte 240 
+	.byte 36
+	.byte 48
+	.byte 208
+	.byte 16
+	.byte 0
+	.byte 80 
+	.byte 112
+	.byte 24
+	.byte 216
+	.byte 88
+	.byte 184
+	.byte 193
+	.byte 224
+	.byte 192
+	.byte 198
+	.byte 202
+	.byte 136
+	.byte 65
+	.byte 230
+	.byte 232
+	.byte 200
+	.byte 76
+	.byte 32
+	.byte 161
+	.byte 162
+	.byte 160
+	.byte 70
+	.byte 234
+	.byte 1
+	.byte 72
+	.byte 8
+	.byte 104
+	.byte 40
+	.byte 38 
+	.byte $66
+	.byte 64
+	.byte 96
+	.byte 225
+	.byte 56
+	.byte 248
+	.byte 120
+	.byte 129
+	.byte 134
+	.byte 132
+	.byte 170
+	.byte 168
+	.byte 186
+	.byte 138
+	.byte 154
+	.byte 152
+
+; messages
+
+msgs
+ermsg	.byte '**',$aa
+
+pg	.byte 'PAGE',$a0
+
+hd	.byte $d,$a,$d,$a,'LINE#'
+	.byte '  LOC   '
+	.byte 'CODE       '
+	.byte ' LINE',$d,$a,$d,$a,$d,$8a
+
+stoerr	.byte 'SYMBOL TABLE'
+	.byte ' OVERFLOW',$d,$8a
+numerr	.byte $d,'ERRORS =',$a0
+p1msg	.byte $d,'PASS1',$8d
+p2msg	.byte $d,'PASS2',$8d
+p3msg	.byte $d,'PASS3',$8d
+dnmsg	.byte $d,'END OF ASSEMBLY'
+	.byte $d,$8a
+
+stttl	.byte $d,$a,$d,$a,'SYMBOL'
+	.byte ' TABLE',$d,$a,$d,$a
+	.byte 'SYMBOL VALUE',$d,$8a
+xrttl	.byte $d,$a,$d,$a,'  CROSS '
+	.byte 'REFERENCE LISTING'
+	.byte $d,$a,$d,$a,'  SYMBOL'
+	.byte ' VALUE CROSS REFERENCE'
+	.byte $d,$8a
+
+;pserr	.byte $d,'ERROR(S) FOUND IN PASS 1',$8d
+;
+
+fnerr	.byte $d,'FILE NAME ERROR',$8d
+liberr	.byte $d,'.LIB ERROR',$8d
+
+sttmsg	.byte $d,$d,' COMMODORE ASSEMBLER'
+	.byte '  V2.0  (C) 1984',$8d
+
+pcmove	.byte $d,'ERROR: PC RESET IN BINARY OBJECT FILE',$8d
+ioerr	.byte 'ERROR',$8d
+
+;
+; cross ref file names
+;
+
+xnlab	.byte '@0:XRLL0000.$$$,S,W'
+
+xne10
+xn11	= xne10-xnlab
+
+xnref	.byte '@0:XRFF0000.$$$,S,W'
+
+xn20
+xn21	= xn20-xnref
+
+;
+; erase work file command string
+;
+
+erswrk	.byte 'S0:????????.$$$',0
+
+;
+; error messages
+;
+
+err01	.byte 'UNDEFINED SYMBOL*****'
+err02	.byte 'DUPLICATE SYMBOL*****'
+err03	.byte 'IMPROPER OPCODE******'
+err04	.byte 'INVALID ADDRESS******'
+err05	.byte '.A MODE NOT ALLOWED**'
+err07	.byte 'RAN OFF END OF CARD**'
+err08	.byte 'LABEL START NEEDS A-Z'
+err09	.byte 'LABEL TOO LONG*******'
+err10	.byte 'NON-ALPHANUMERIC*****'
+err11	.byte 'FORWARD REFERENCE****'
+err12	.byte 'INDEX MUST BE X OR Y*'
+err13	.byte 'CAN''T EVAL EXPRESSION'
+err14	.byte 'UNDEFINED DIRECTIVE**'
+err17	.byte 'BRANCH OUT OF RANGE**'
+err18	.byte 'ILLEGAL OPERAND TYPE*'
+err19	.byte 'INDIRECT OUT OF BOUND'
+err20	.byte 'A,X,Y,S,P RESERVED***'
+err21	.byte 'PC NEGATIVE--RESET 0*'
+
+errtab
+	.word err01,err02,err03
+	.word err04,err05,0,err07
+	.word err08,err09,err10,err11
+	.word err12,err13,err14,0,0
+	.word err17,err18,err19,err20
+	.word err21
+decl
+	.byte <1,<10,<100,<1000,<10000
+dech
+	.byte >1,>10,>100,>1000,>10000
+
+derr0	.byte '?STOP KEY HIT',$a0
+derr1	.byte '?TOO MANY FILES',$a0
+derr2	.byte '?FILE OPEN',$a0
+derr3	.byte '?FILE NOT OPEN',$a0
+derr4	.byte '?FILE NOT FOUND',$a0
+derr5	.byte '?DEVICE NOT PRESENT',$a0
+derr6	.byte '?NOT INPUT FILE',$a0
+derr7	.byte '?NOT OUTPUT FILE',$a0
+derr8	.byte '?MISSING FILE NAME',$a0
+derr9	.byte '?ILLEGAL DEVICE NUMBER',$a0
+
+dertbl	.byte <derr0,<derr1,<derr2,<derr3,<derr4
+	.byte <derr5,<derr6,<derr7,<derr8,<derr9
+dertbh	.byte >derr0,>derr1,>derr2,>derr3,>derr4
+	.byte >derr5,>derr6,>derr7,>derr8,>derr9
+
+;	.end

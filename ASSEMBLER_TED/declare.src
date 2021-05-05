@@ -1,0 +1,289 @@
+	.page
+	.subttl  assembler declare
+
+;	********************************
+;	*                              *
+;	*     commodore  ver-2.0       *
+;	*                              *
+;	*    pet 2-pass assembler      *
+;	*    for basic 3.5             *
+;	*must be called hal-editor 2.32*
+;	*                or later      *
+;	*                              *
+;	*  copyright 13 december, 1982 *
+;	*  commodore business machines *
+;	*  hal laboratory ltd.  cse    *
+;	*                              *
+;	********************************
+
+;	listing date: nov 23, 1984
+
+;	the assembler opens and refers to seven logical files.
+;	it assumes a printer attached as device 4, and a  disk
+;	as device 8.  an 'n' response to the question 'hard copy?'
+;	will direct output to the screen and no printer will be
+;	required.  a null response to will terminate operation
+;	and return to BASIC.
+;
+;	
+;	logical files used:
+;
+;		 1 =crt screen
+;		 2 =source file
+;		 3 =library file
+;		 4 =printer output file
+;		 5 =keyboard input file
+;		 6 =object output file
+;		 7 =disk command channel
+;		 8 =label output file
+;		 9 =cross ref output file
+	
+
+;  constants from ted os
+
+;sytbnd	= $30	;end of symbol table (basic fretop)
+satus	= $90	;i/o status byte
+stkey	= $91
+
+time	= $a3	;jiffy clock
+fnlen	= $ab	;file name length
+la	= $ac	;logical address
+sa 	= $ad	;secondary address
+fa 	= $ae	;file address
+fnadr	= $af	;file name address
+
+ndx	= $ef	;number chars in buffer
+keyd	= $26f	;keyboard input buffer
+
+zstore	= $af00	;zero page save area
+
+romon	= $ff3e
+ramon	= $ff3f
+
+;
+;  constants
+;
+
+lines	= $3a
+stpval	= $7f	;value for checking stop key
+stkval	= $fb	;initial stack value
+
+
+;	********************
+;	* zero page storage
+;	********************
+
+	* = $02
+
+user	*=*+1	;save area for e. c. read
+savex	*=*+1	;save .x (wsw)
+savey	*=*+1	;save .y (ptch)
+
+baspnt		;work area base of xref
+symtbl	*=*+2
+toppnt	*=*+2	;word area top of xref
+
+zbuf
+ipc	*=*+2
+tblptr	*=*+2
+pnt1	*=*+2
+pnt2	*=*+2
+
+stsave	*=*+2	;symbol table begin
+pnt3	*=*+2
+
+inpmin		;input range min
+bots	*=*+2	;sym table sort ptr
+
+inpmax		;input range max
+mids	*=*+2	;sym table sort ptr
+
+tops	*=*+2	;sym table sort ptr
+dels	*=*+2	;sym table sort ptr
+itops	*=*+2	;sym table sort ptr
+xref	*=*+1	;cross ref flag,0 none
+t0	*=*+2	;indirect pointer in base page
+dfltdn	*=*+1	;default drive
+count	*=*+1	;counter for symbol move
+first	*=*+1	;binary search variable
+last	*=*+1	;binary search variable
+btemp	*=*+1	;binary search variable
+
+chan	*=*+1	;current i/o channel
+j	*=*+1	;general counter
+knval	*=*+2	;intermed val in eval
+icsb	*=*+1	;current string begin
+icse	*=*+1	;current string end
+iexp	*=*+2	;value of expr eval
+icolp	*=*+1	;current column
+iflags	*=*+2	;set of flags
+
+
+;	nogen 128 = don't generate strings
+;	nosym 64  = don't gen symbol tablew
+;	opcnt 32  = do an opcode count
+;	noerr 16  = error only listing
+;	inter 8   = create interface file
+;	list  4   = create output listing
+;	exp   2   = expand macros
+
+
+imaxcl	*=*+1	;max columns on card
+temp	*=*+2
+lchar	*=*+1	;last character got
+nosym	*=*+2	;# symbols in symtbl
+lpgct	*=*+2
+jopbas	*=*+1	;base opcode (pass 1)
+joptem	*=*+1	;opcode template
+kop	*=*+1	;nxt oper for eval
+klen	*=*+1	;length of str to pack
+return	*=*+1	;rtn code from eval
+delm	*=*+1	;string delimiter
+kbase	*=*+1	;base of # to eval
+ltllen	*=*+1	;title length
+lerct	*=*+2	;total error count
+joptyp	*=*+1	;operand type (pass 1)
+jnopv	*=*+1	;flag for no oper val
+leror	*=*+1	;error number (pass 2)
+jercol	*=*+1	;error column
+ilsst	*=*+1	;start of a label
+lcdpt	*=*+1	;multiple lines flag
+
+jlabl	*=*+1
+jorg	*=*+1
+jbywor	*=*+1	;asm directive word
+pass	*=*+1
+icrdno	*=*+2	;current card number
+icsl	*=*+1	;current strint length
+lnct	*=*+1
+joplen	*=*+1	;operand length
+ierr	*=*+1	;error code
+lboth	*=*+1	;list to scr & prnter
+noprin	*=*+1	;no hard copy flag
+colcnt	*=*+1	;column count
+klow	*=*+1	;< flag
+khigh	*=*+1	;> flag
+char	*=*+1
+temb	*=*+2	;work area
+sfile	*=*+1
+
+mesflg	*=*+1	;.mes mode flag
+absflg	*=*+1	;absolute mode flag
+equflg	*=*+1	;equate mode flag
+xsave	*=*+1	;xr-save
+ysave	*=*+1	;yr-save
+
+nobj	*=*+1	;no obj file flag
+ifflag	*=*+1	;flag for cond asmb
+
+optsav	*=*+1	;options save for update
+ysave1	*=*+1	;yr-save for opt gen
+xrfsav	*=*+2	;xref output save
+
+cksuml	*=*+1	;record checksum
+cksumh	*=*+1
+laddl	*=*+1	;last address
+laddh	*=*+1
+recntl	*=*+1	;record count
+recnth	*=*+1
+
+binary	*=*+1	;generate an object or binary file
+scflag	*=*+1	;screen output flag
+
+wparam	*=*+1	;parameter for unit assignment
+sunit	*=*+1	;source file unit #
+ounit	*=*+1	;object file unit #
+xunit	*=*+1	;cross reference unit #
+
+prunit	*=*+1	;printer unit #
+ltemp	*=*+1
+fhash	*=*+1	;flag to allow long variables
+
+;
+;  non zero page storage
+;
+
+	* = $7d00
+
+;
+;  file name passage area
+;
+
+vpass	*=*+89	;area for variable passing
+
+fcb	= vpass	;source file name and device # from editor
+		;fcb+2  = source file name and device # from editor
+		;fcb+20 = command string from editor
+
+strlen	= vpass
+sflen	= vpass+1	;source file name length
+xflag	= vpass+88	;assembly or xref print operation
+
+date	*=*+12	;date is passed by editor
+fstrng	*=*+32	;file name processing area
+
+;
+;  input buffer area
+;
+
+icrd	*=*+80	;input buffer (move to $0200 ??)
+
+ltlbuf	*=*+50	;title buffer (e.c.)
+ltab	*=*+6
+isym	*=*+16
+
+isrc	*=*+20	;original source file
+isrcln	*=*+1	;source name length
+
+;
+;  object file build area
+;
+
+objmap	*=*+40	;memory map
+
+maxbyt	=24	;maximum bytes/record
+bytcnt	= *	;record byte count
+
+objbuf	*=*+maxbyt+3	;obj out buf
+objfil	*=*+20	;object file name
+objlen	*=*+1	;file name length
+
+mctbpt	*=*+2	;macro table pointer
+mcstpt	*=*+2	;macro stack pointer
+newmac	*=*+2	;pointer to start of macro entry
+maybe	*=*+2	;ptr to possible macro end
+holda	*=*+1	;temporary cell for holding acc
+xtemp	*=*+1	;temporary cell for x reg
+tmpmac	*=*+2	;temp for macro table pointer
+prmcnt	*=*+1	;paramet counter for macro call
+macent	*=*+2	;macro table entry pointer
+stkfrm	*=*+2	;frame pointer for macro stack
+curpnt	*=*+2	;current text ptr in macro scan
+mlabel	*=*+4	;generated label
+parmpt	*=*+2	;pointer for macro param text
+level	*=*+1	;macro generation level
+
+
+;-------------------------
+; work variables for xref
+;-------------------------
+
+wrksiz	= $100	;work area size
+wflnm1	*=*+18	;read filename
+wrkfnm	*=*+19	;write filename
+ladcnt	*=*+1	;line adrs count
+zspflg	*=*+1	;zero sup. flag
+outcnt	*=*+1	;out counter
+
+
+;*********************************
+;* definitions controlling sfile
+;* for get character source
+;*********************************
+
+frmsrc	= $80	;source file bit
+frmlib	= $40	;library file open
+frmmac	= $20	;macro being scanned
+frmprm	= $10	;expanding macro parameter
+
+;	.end

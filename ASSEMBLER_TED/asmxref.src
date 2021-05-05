@@ -1,0 +1,436 @@
+	.page
+	.subttl  asm_xref
+
+;	***************************
+;	*                         *
+;	* cross reference         *
+;	*    for asm/plus         *
+;	*                         *
+;	*        by commodore     *
+;	*                         *
+;	* patched by cse (s.iwata)*
+;	*                         *
+;	*   special thanks        *
+;	*    to dr. mak (j.suzuki)*
+;	*                         *
+;	* (c) hal  apr.29.1981    *
+;	* (c) commodore 1982      *
+;	* (c) commodore 1984      *
+;	*                         *
+;	***************************
+
+
+cross	cld		;xref start
+	lda #0
+	sta inpmax
+	sta inpmax+1
+
+	ldy #xn211-1	;open symbol file #8
+xrefzz	lda xnref1,y
+	sta wrkfnm,y
+	dey
+	bpl xrefzz
+	jsr xttl-3
+	jsr clrch
+	lda xunit
+	sta fa
+	lda #8
+	sta la
+	sta sa
+	lda #<xnlab1
+	sta fnadr
+	lda #>xnlab1
+	sta fnadr+1
+	lda #xn111
+	sta fnlen
+	jsr fopen	;read label file
+	jsr fitest	;test for input
+
+xrf100	lda inpmax	;reset input address area
+	ldy inpmax+1
+	sta inpmin
+	sty inpmin+1
+	clc
+	lda inpmin
+	adc #<wrksiz
+	sta inpmax
+	lda inpmin+1
+	adc #>wrksiz
+	sta inpmax+1
+	lda #<worka
+	ldy #>worka
+	sta baspnt
+	sty baspnt+1
+	lda #<workb
+	ldy #>workb
+	sta toppnt
+	sty toppnt+1
+
+	lda baspnt	;clear up work area
+	ldy baspnt+1
+	sta pnt1
+	sty pnt1+1
+	ldy #0
+xrf20a	tya
+	sta (pnt1),y
+	inc pnt1
+	bne xrf301
+	inc pnt1+1
+xrf301	lda pnt1+1
+	cmp toppnt+1
+	bne xrf20a
+	lda pnt1
+	cmp toppnt
+	bne xrf20a
+
+	ldy #xn211-2	;set new filename
+xrf400	lda wrkfnm+1,y
+	sta wflnm1,y
+	dey
+	bpl xrf400
+	lda #'R'
+	sta wflnm1+17
+	ldx #4
+xrf500	inc wrkfnm+6,x
+	lda wrkfnm+6,x
+	cmp #$3a
+	bne xrf600
+	lda #'0'
+	sta wrkfnm+6,x
+	dex
+	bne xrf500
+
+xrf600	lda xunit	;open xref file #9 (read)
+	sta fa
+	lda #9
+	sta la
+	sta sa
+	lda #<wflnm1
+	sta fnadr
+	lda #>wflnm1
+	sta fnadr+1
+	lda #xn211-1
+	sta fnlen
+	jsr fopen
+	jsr fitest
+
+	lda xunit	;open work file #10 (write)
+	sta fa
+	lda #$a
+	sta la
+	sta sa
+	lda #<wrkfnm
+	sta fnadr
+	lda #>wrkfnm
+	sta fnadr+1
+	lda #xn211
+	sta fnlen
+	jsr fopen
+	jsr fdtest
+	lda #0
+	sta stsave
+inpbgn	ldx #9
+	cpx chan
+	beq inpadr
+	stx chan
+	jsr clrch
+	ldx #9
+	jsr chkin
+inpadr	jsr basin
+	sta zbuf
+	jsr basin
+	sta zbuf+1
+	jsr basin
+	sta zbuf+2
+	jsr basin
+	sta zbuf+3
+	lda satus
+	sta stsave
+	sec
+	lda zbuf
+	sbc inpmin
+	lda zbuf+1
+	sbc inpmin+1
+	bcc rngovr
+	lda zbuf
+	sbc inpmax
+	lda zbuf+1
+	sbc inpmax+1
+	bcc sort
+
+rngovr	jsr clrch	;range over
+	ldx #$a
+	stx chan
+	jsr ckout
+	lda zbuf
+	jsr bsout
+	lda zbuf+1
+	jsr bsout
+	lda zbuf+2
+	jsr bsout
+	lda zbuf+3
+	jsr bsout
+	jmp sort30
+
+; sort
+
+sort	sec
+	lda zbuf
+	sbc inpmin
+	sta pnt1
+	lda zbuf+1
+	sbc inpmin+1
+	asl pnt1
+	rol a
+	asl pnt1
+	rol a
+	sta pnt1+1
+	clc
+	lda pnt1
+	adc baspnt
+	sta pnt1
+	lda pnt1+1
+	adc baspnt+1
+	sta pnt1+1
+	ldy #1
+	lda (pnt1),y
+	bne sort10
+	dey
+	lda toppnt
+	sta (pnt1),y
+	iny
+	lda toppnt+1
+	sta (pnt1),y
+	iny
+	lda toppnt
+	sta (pnt1),y
+	iny
+	lda toppnt+1
+	sta (pnt1),y
+	bne sort20
+
+sort10	dey
+	lda (pnt1),y
+	sta pnt2
+	iny
+	lda (pnt1),y
+	sta pnt2+1
+	lda toppnt+1
+	sta (pnt1),y
+	sta (pnt2),y
+	dey
+	lda toppnt
+	sta (pnt1),y
+	sta (pnt2),y
+sort20	ldy #1
+	lda #0
+	sta (toppnt),y
+	iny
+	lda zbuf+2
+	sta (toppnt),y
+	iny
+	lda zbuf+3
+	sta (toppnt),y
+	clc
+	lda toppnt
+	adc #4
+	sta toppnt
+	bcc sort30
+	inc toppnt+1
+sort30	lda stsave
+	bne nxtrng
+	jmp inpbgn
+
+nxtrng	lda #9
+	jsr fclose
+	lda #$a
+	jsr fclose
+
+
+outedt	ldy #1		;edit & output xref
+	lda (baspnt),y
+	ldy #3
+	cmp (baspnt),y
+	bne outed1
+	ldy #0
+	lda (baspnt),y
+	ldy #2
+	cmp (baspnt),y
+	bne outed1
+	lda #'*'
+	bne outed2
+
+outed1	lda #' '
+outed2	jsr output
+	jsr pspace
+	ldy #6
+outed3	jsr xrefin
+	jsr output
+	dey
+	bne outed3
+	jsr pspace
+	lda #'$'
+	jsr output
+	jsr xrefin
+	jsr numa
+	jsr xrefin
+	ldx satus
+	stx stsave
+	jsr numa
+	ldy #2
+	lda (baspnt),y
+	tax
+	iny
+	lda (baspnt),y
+	stx pnt1
+	sta pnt1+1
+	lda #0
+	sta xrfsav
+	sta xrfsav+1
+	beq outed6	;** bra
+
+outed4	ldy #2
+	lda (pnt1),y
+	iny
+	tax
+	cmp xrfsav
+	bne oute45
+	lda (pnt1),y
+	cmp xrfsav+1
+	beq oute46	;equal to last one
+oute45	lda (pnt1),y	;output ref.
+	stx xrfsav
+	sta xrfsav+1
+	jsr pspace
+	ldx xrfsav
+	lda xrfsav+1
+	jsr outdec
+	dec ladcnt
+oute46	ldy #1
+	lda (pnt1),y
+	tax
+	beq outed7
+	dey
+	lda (pnt1),y
+	sta pnt1
+	stx pnt1+1
+	lda ladcnt
+	bne outed4
+	jsr crout
+	ldx #7
+outed5	jsr p2spc
+	dex
+	bne outed5
+outed6	ldy #$a
+	sty ladcnt
+	bne outed4	;*** bra
+
+outed7	jsr crout
+	lda stsave
+	bne next1
+	clc
+	lda baspnt
+	adc #4
+	sta baspnt
+	bcc outed8
+	inc baspnt+1
+outed8	sec
+	lda baspnt
+	sbc #<workb
+	lda baspnt+1
+	sbc #>workb
+	bcs next
+	jmp outedt
+
+next	jsr clrch
+	jmp xrf100
+
+
+
+next1	lda #8		;end of cross reference listing
+	jsr fclose
+	jmp clrch
+
+
+
+xrefin	ldx #8		;read xrll0000
+	cpx chan
+	beq xref00
+	stx chan
+	jsr clrch
+	ldx #8
+	jsr chkin
+xref00	jmp basin
+
+
+; output decimal value.    x=lower, a=upper
+
+outdec	stx pnt3
+	sta pnt3+1
+	lda #0
+	sta zspflg
+	ldx #4
+	stx outcnt
+outdc1	ldx outcnt
+	ldy #$30
+	bne outdc3
+outdc2	iny
+	sty zspflg
+outdc3	sec
+	lda pnt3
+	sbc decl,x
+	sta pnt3
+	lda pnt3+1
+	sbc dech,x
+	sta pnt3+1
+	bcs outdc2
+	lda pnt3
+	adc decl,x
+	sta pnt3
+	lda pnt3+1
+	adc dech,x
+	sta pnt3+1
+	tya
+	cmp #$30
+	bne outdc4
+	ldy zspflg
+	bne outdc4
+	lda #$20
+outdc4	jsr output
+	dec outcnt
+	bpl outdc1
+	rts
+
+
+; output subroutines
+
+p2spc	jsr pspace
+pspace	lda #' '
+	jmp output
+
+; cr & lf (check next page)
+
+crout	jsr crlf
+	inc lnct
+	lda lnct
+	cmp #lines
+	bne crrts
+	jsr ptttl
+xttl	ldx #xrttl-msgs
+	jsr msg
+	lda #3
+	sta lnct
+crrts	rts
+
+
+xnlab1	.byte '0:XRLL0000.$$$,S,R'
+
+xne111
+xn111	= xne111-xnlab1
+
+xnref1	.byte '@0:XRFF0000.$$$,S,W'
+
+xn201
+xn211	= xn201-xnref1
+
+;	.end

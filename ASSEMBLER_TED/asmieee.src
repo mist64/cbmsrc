@@ -1,0 +1,559 @@
+	.page
+	.subttl  asmieee
+
+;	getchr
+;
+;	subroutine to get next character of input from wherever source is
+;
+;	sfile is source flag register.
+;	if v=1 then library
+;	if minus then disk
+;
+;	returns character in .a, and a=0 if end of file.
+;	lchar has last char returned.
+
+
+getchr	sty savey
+	stx savex
+
+getch1	lda sfile
+	and #frmprm	;($10)
+	beq getch2
+	jmp fparm	;scanning a macrro parameter
+
+getch2	lda sfile
+	and #frmmac	;($20)
+	beq getch3
+	jmp fmac	;scanning a macro
+
+getch3	bit sfile	;source?
+	bvs flibr	;from library
+
+fdisk	ldx #2		;from main
+	cpx chan
+	beq fdisk2
+	jsr clrch
+	ldx #2
+fdisk1	stx chan
+	jsr chkin
+fdisk2	jsr basin
+	ldx satus	;check for eof
+	beq getchx	;zero is ok...
+
+; not zero check for EOI, etc.
+
+	tay		;save the data
+	txa		;status into .a
+	and #$40	;?eoi
+	bne fdisk3	;yes...
+	jsr ftest	;bad status read e.c.
+	jmp done	;bad so get out
+
+fdisk3	lda #0
+	sta lchar	;set eof
+	tya		;restore the data byte
+
+getchx	ldy savey
+	ldx savex
+	rts
+
+flibr	ldx #3
+	cpx chan
+	beq fdisk2
+	jsr clrch
+	ldx #3
+	jmp fdisk1
+
+
+
+crlf	lda #$d
+	jsr output
+	lda #$a
+
+
+
+output	stx savex
+	sty savey
+	pha
+	bit noprin	;hardcopy?
+	bpl out50	;no hardcopy (used to go to out15)
+;	bvs out40	;centronics print
+
+	lda chan	;output channel open?
+	cmp #4
+	beq out10	;yes...
+	jsr clrch
+	ldx #4
+	stx chan
+	jsr ckout
+out10	pla
+	pha
+	jsr bsout
+;	jmp out50
+;
+;out40	sta $e841	;centronics is disabled for awhile
+;	lda #$cc
+;	sta $e84c
+;ack	lda $e84d
+;	and #$02
+;	beq ack
+;	lda #$ec
+;	sta $e84c
+;	bit $e841
+;	pla
+;	pha
+
+out50	bit scflag	;force print to screen?
+	bvs out15	;yes
+
+	ldx lboth
+	beq out20
+out15	jsr prt
+out20	pla		;restore contents .a
+	jmp getchx
+
+
+
+done	lda #1
+	jsr fclose	;close display
+	lda #4
+	jsr fclose	;close printer
+	lda #5
+	jsr fclose	;close keyboard
+	lda pass	;if in pass 1 then done
+	beq done10
+done05	lda nobj
+	bne done10
+	jsr objend
+	lda #6		;close obj file
+	jsr fclose
+done10	lda xref
+	beq done20
+
+	jsr clrch	;erase work file
+	ldx #7
+	jsr ckout
+	ldy #0
+done15	sty savey
+	lda erswrk,y
+	beq done20
+	jsr bsout
+	ldy savey
+	iny
+	bne done15	;** bra
+
+done20	jsr clrch
+	lda #7
+	jsr fclose
+	jmp ready	;goto basic
+
+chkbrk	lda stkey	;stop key hit ?
+	cmp #stpval
+	beq chb1
+chb0	rts
+
+chb1	lda stkey	;wait for user to lift finger
+	cmp #stpval
+	beq chb1	; not yet
+
+	sei
+	jsr clrch
+	lda #0
+	sta chan
+	sta ndx		;flush buffer
+	cli
+
+chb2	jsr getin
+	ora #0
+	beq chb2	;no character yet
+	cmp #'B'	;return to basic?
+	bne chb0	;no
+
+chb4	lda #2		;close source file
+	jsr fclose
+	bit sfile	;lib file is open ?
+	bvc chb5	; no
+	lda #3		;close lib file
+	jsr fclose
+
+chb5	jmp done
+
+
+fitest	jsr clrch
+	ldx la		;get last file number used
+	stx chan
+	jsr chkin
+	bcs fterr4
+	jmp clrch	;jsr/rts
+
+fdtest	jsr clrch
+	ldx la		;get last file number used
+	stx chan
+	jsr ckout
+	bcs fterr4
+	jmp clrch	;jsr/rts
+
+ftest	jsr clrch	;read error chan
+	ldx #7
+	stx chan
+	jsr chkin
+	bcs fterr4	;we got a problem
+	jsr basin
+	sta user	;save for later
+	jsr basin
+	sta user+1	;save for later
+	cmp #'0'
+	bne fterr
+	lda user
+	cmp #'0'
+	bne fterr
+moret	jsr basin	;suck up msg
+	cmp #$0d	;terminateon a return
+	bne moret
+	rts
+
+fterr	ldx #1		;print the error condition (ec)
+ftlp1	lda user,x
+	sta ltlbuf,x
+	dex
+	bpl ftlp1
+	ldy #2
+fterr2	sty savey
+	jsr basin	;copy into buffer
+	cmp #$0d	;stop on (return)
+	beq fterr3
+	ldy savey
+	sta ltlbuf,y
+	iny
+	bne fterr2
+fterr3	lda #$8d	;put in shift-cr
+	sta ltlbuf,y
+	lda #>ltlbuf
+	ldy #<ltlbuf
+	jsr wscrn
+
+
+; print the filename also
+
+	ldy fnlen
+	lda #$8d	;terminator for msg
+	sta (fnadr),y
+	lda fnadr+1
+	ldy fnadr
+	jsr wscrn
+	jmp ready
+
+fterr4	pha		;save error
+	jsr clrch	;just in case
+
+	pla		;get error back
+	cmp #10		;in range ?
+	bcs fterr5	;no, just say error
+
+	tax		;output error message
+	lda dertbl,x
+	tay
+	lda dertbh,x
+	jsr wscrn
+
+fterr5	lda #>ioerr	;say error
+	ldy #<ioerr
+	jsr wscrn
+
+	jmp ready
+
+; message to listing only
+
+msg	stx savex
+msg10	ldx savex
+	lda msgs,x
+	php
+	and #$7f
+	jsr output
+	inc savex
+	plp
+	bpl msg10
+	rts
+
+	.page
+;
+; object output routine
+;
+
+objout	stx savex
+	jsr obj01
+	ldx savex
+	rts
+
+obj01	pha		;data byte
+	sta objmap,y	;save in mem map
+	lda nobj
+	bne obj02
+	lda pass
+	bne ob10	;not pass 1
+obj02	pla
+obexit	rts
+
+ob10	lda iflags
+	and #8		;object file?
+	beq obj02	;nomem in effect
+	tya
+	clc
+	adc ipc
+	eor laddl
+	bne ob15
+	adc ipc+1
+	cmp laddh
+	beq ob25
+
+ob15	lda bytcnt	;is addr consec ?
+	beq ob20	;yes.  bytcnt=0 means reset
+
+	lda binary	;can we move pc ?
+	beq ob16	;yes
+
+	lda #>pcmove	;warn the user
+	ldy #<pcmove
+	jsr wscrn
+
+ob16	jsr objwrt	;dump record
+ob20	jsr obint1	;reset buffer
+
+ob25	ldx bytcnt
+	pla
+	sta objbuf+3,x	;put byte
+	inc bytcnt	;inc count
+
+	clc
+	adc cksuml
+	sta cksuml
+	bcc ob30
+	inc cksumh
+
+ob30	inc laddl	;inc last address
+	bne ob35
+	inc laddh
+
+ob35	cpx #maxbyt-1
+	bcc obexit
+	jsr objwrt	;full buffer, dump
+	jmp obint2
+
+	.page
+objint	lda #0		;initialize for...
+	sta recntl	;...object dump
+	sta recnth
+
+obint1	lda ipc		;init for...
+	sta laddl	;...record dump
+	lda ipc+1
+	sta laddh
+
+obint2	lda #0		;init for consec...
+	sta bytcnt	;...record dump
+	sta cksumh
+	lda laddl
+	sta objbuf+2
+	sta cksuml	;init checksum
+	lda laddh
+	sta objbuf+1
+	clc
+	adc cksuml
+	sta cksuml
+	bcc obint3
+	inc cksumh
+obint3	rts
+
+;
+; write out record to channel
+;
+
+objwrt	inc recntl	;inc record cnt
+	bne ow20
+	inc recnth
+
+ow20	ldx #0
+	stx savex
+	lda bytcnt
+	clc
+	adc #3
+	sta savey
+
+	lda binary	;are we writing a binary file ?
+	beq ow22	;no
+	bmi ow21	;we've been through it before
+
+	lda #$80	;flag it
+	sta binary
+
+	lda objbuf+2	;write out load address
+	jsr ow45
+	lda objbuf+1
+	jsr ow45
+ow21	ldx #3
+	stx savex
+	cpx savey
+	beq ow24
+
+ow23	ldx savex
+	lda objbuf,x
+	jsr ow45
+	inc savex
+	ldy savey
+	cpy savex
+	bne ow23
+ow24	rts
+
+ow22	lda #';'
+	jsr ow45
+ow25	ldx savex
+	lda objbuf,x
+	jsr ow40
+	inc savex
+	ldy savey
+	cpy savex
+	bne ow25
+	lda bytcnt
+	clc
+	adc cksuml
+	pha
+	lda #0
+	adc cksumh
+	jsr ow40
+	pla
+	jsr ow40
+	lda #$d		;record terminator
+	bne ow45
+
+ow40	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr ascii
+	jsr ow45
+	pla
+	and #$0f
+	jsr ascii
+ow45	pha
+	lda chan
+	cmp #6
+	beq ow50
+	jsr clrch
+	ldx #6
+	stx chan
+	jsr ckout
+ow50	pla
+	jmp bsout
+
+objend	lda bytcnt	;last record?
+	beq oe10	;none to dump...
+	jsr objwrt
+oe10	lda recntl	;dump trailer rec
+	sta laddl
+	lda recnth
+	sta laddh
+
+	jsr obint2
+	jmp objwrt
+
+
+
+ascii	clc
+	adc #$f6
+	bcc asc1
+	adc #6
+asc1	adc #$3a
+	rts
+
+fmac	jsr macchr
+	bne fmac1	;zero denotes end of scan
+	jsr popmac	;restore last scanner
+	jmp getch1
+fmac1	cmp #'?'	;is a macro parameter?
+getext	beq getex1	;yes
+	jmp getchx	;no, so exit
+
+getex1	jsr macchr	;get parameter number
+	sec
+	sbc #'0'	;convert to binary
+	jsr prmpnt	;construct parameter pointer
+	ldy #0		;has parameter been defined?
+	lda (t0),y	;get low byte of pointer
+	sta parmpt	;pointer to parameter
+	iny
+	lda (t0),y	;then high byte
+	sta parmpt+1	;high byte of ptr
+	ora parmpt	;is the pointer null?
+	bne fmac2
+	lda t0
+	sta newmac	;save the pointer to param
+	lda t0+1
+	sta newmac+1
+	jsr genlab	;make a new label
+	lda newmac	;reclaim the parameter pointer
+	sta t0
+	lda newmac+1
+	sta t0+1
+	ldy #0
+	lda parmpt
+	sta (t0),y
+	iny
+	lda parmpt+1
+	sta (t0),y
+fmac2	lda sfile
+	ora #frmprm	;tell getchr to scan parameter
+	sta sfile
+fparm	lda parmpt	;get next char
+	sta t0
+	lda parmpt+1
+	sta t0+1
+	inc parmpt	;bump pointer
+	bne fparm1
+	inc parmpt+1
+fparm1	ldy #$00
+	lda (t0),y
+	bne getext	;exit with char if not eof
+	lda sfile
+	and #-frmprm+255 ;mask out the parameter bit
+	sta sfile
+	jmp getch1	;loop for the next character
+
+macchr	lda curpnt	;get next macro char
+	sta t0
+	lda curpnt+1
+	sta t0+1
+	inc curpnt	;bump the pointer
+	bne macch1
+	inc curpnt+1
+macch1	ldy #0
+	lda (t0),y
+	rts
+
+
+; generate label makes a new label, pushes it into macro stack,
+; and leaves a pointer to it in parmpt.
+
+genlab	ldx #$03
+gen1	inc mlabel,x
+	lda mlabel,x
+	cmp #$3a	;has ascii 9 overflowed?
+	bne gen2
+	lda #'0'	;reset this digit
+	sta mlabel,x
+	dex
+	bne gen1
+gen2	lda mcstpt
+	sta parmpt
+	lda mcstpt+1
+	sta parmpt+1
+	ldy #0
+gen3	lda mlabel,y
+	jsr push	;copy text to macro stack
+	iny
+	cpy #$04
+	bcc gen3
+	lda #0
+	jmp push	;push end-of-file char (jsr/rts)
+
+;	.end

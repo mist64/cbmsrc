@@ -1,0 +1,461 @@
+	.page
+	.subttl  main2
+
+; ****************
+; * pass 1 start
+; ****************
+
+pas1st	lda xflag	;assemble or cross reference print
+	beq pas1s	;assemble
+	jmp cross
+
+pas1s	jsr opnsub	;open disk cmd chan.
+	lda iflags	;save flags
+	sta optsav
+
+	lda scflag	;view option on ?
+	and #$40
+	beq pass1d	;no
+
+	lda #>sttmsg
+	ldy #<sttmsg
+	jsr wscrn
+
+pass1d	jsr sopen	;open source file
+
+	lda #>p1msg	;'pass 1'
+	ldy #<p1msg
+	jsr wscrn
+
+pass1c	jsr clrttl	;clr title buff
+	jsr ptttl0	;force page heading
+	jsr ptttl1	;prt 'line# loc..'
+	jmp snewln	;begin assembly
+
+; *******************************
+; * open disk command channel
+; *******************************
+
+opnsb1	lda ounit
+	bne opnsb2	;always
+
+opnsub	lda sunit
+opnsb2	sta fa
+	lda #7
+	sta la
+	lda #15
+	sta sa
+
+	lda #1
+	sta fnlen
+	lda #<iname
+	sta fnadr
+	lda #>iname
+	sta fnadr+1
+	jsr fopen	;open command channel & send i
+	jmp ftest	;jsr/rts
+
+iname  .byte 'I'
+
+
+; ********************
+; * open source file
+; ********************
+
+sopen	lda sunit	;open source file
+	sta fa
+	lda #2
+	sta la
+	sta sa
+	lda #>isrc
+	sta fnadr+1
+	lda #<isrc
+	sta fnadr
+	lda isrcln
+	sta fnlen
+	jsr fopen	;open source file
+	jsr ftest
+	lda #$80
+	sta sfile
+	rts
+
+setxd	sta xnlab+1	;set disk drive for x-reference
+	sta xnref+1
+	sta xnref1+1
+	sta xnlab1
+	sta erswrk+1
+	rts
+
+; ********************
+; *      pass2
+; ********************
+
+pass2	lda xref	;doing a cross ref ?
+	bne pxref	;yes
+	jmp pas222	;no
+
+pxref	jsr clrch	;clear open chan
+	lda #8		;open file to save syms
+	sta la
+	sta sa
+	lda xunit
+	sta fa
+	lda #>xnlab	;'0:xrlabel,s,w'
+	sta fnadr+1
+	lda #<xnlab
+	sta fnadr
+	lda #<xn11
+	sta fnlen
+	jsr fopen	;open cross reference symbol file
+	jsr fdtest
+	jsr clrch	;clear other channels
+	ldx #8		;check out
+	stx chan
+	jsr ckout
+	lda stsave	;set ptr to beginning
+	ldy stsave+1
+	sta bots
+	sty bots+1
+	lda nosym+1	;# of syms
+	ldy nosym
+	sta dels
+	sty dels+1
+xsyms	ldy #0		;save a sym
+xsy100	lda (bots),y
+	jsr bsout
+	iny
+	cpy #8
+	bne xsy100
+	lda dels	;done ?
+	bne xsy120	;no
+	dec dels+1
+xsy120	dec dels
+	lda dels
+	ora dels+1	;done ?
+	beq xsy200	;yes
+	tya		;bump to next sym
+	clc
+	adc bots
+	sta bots
+	bcc xsyms	;no carry
+	inc bots+1
+	bne xsyms	;always
+
+xsy200	lda #8		;close the sym fil.
+	jsr fclose
+	jsr clrch
+	lda xunit	;open the refs file
+	sta fa
+	lda #9
+	sta sa
+	sta la
+	lda #>xnref	;'0:xref1234,s,w'
+	sta fnadr+1
+	lda #<xnref
+	sta fnadr
+	lda #<xn21
+	sta fnlen
+	jsr fopen	;open cross ref file
+	jsr fdtest
+
+
+
+pas222	jsr reset
+	jsr objint
+	lda #>p2msg
+	ldy #<p2msg
+	jsr wscrn	;open object file
+	lda nobj
+	bne pass2b
+
+	jsr objsuf	;add suffix to object file
+
+	lda objlen
+	sta fnlen
+	lda #>objfil
+	sta fnadr+1
+	lda #<objfil+1
+	sta fnadr
+	lda #6
+	sta la
+	sta sa
+	lda ounit
+	sta fa
+	jsr fopen 	;open object file
+	jsr fdtest
+
+pass2b	jsr clrttl
+	jsr sopen
+pass2a	jmp snewln
+
+reset	lda #0
+	sta ipc
+	sta ipc+1
+	sta icrdno
+	sta icrdno+1
+	sta ltllen
+;	sta lerct
+;	sta lerct+1
+	sta level
+
+	ldy #>mcstck
+	ldx #<mcstck
+	stx mcstpt	;macro stack pointer
+	sty mcstpt+1
+	stx stkfrm 	;stack frame pointer
+	sty stkfrm+1
+
+	lda #$0d
+	sta lchar	;makes clean start
+
+	lda optsav	;restore options
+	sta iflags
+
+	ldy #3
+	lda #'0'
+reset1	sta mlabel,y
+	dey
+	bne reset1
+	lda #'L'
+	sta mlabel
+	rts
+
+
+
+
+wscrn	pha		;write to pet screen
+	lda #1
+	cmp chan
+	beq wscrn1
+	tya
+	pha
+	jsr clrch
+	ldx #1
+	stx chan
+	jsr ckout
+	pla
+	tay
+wscrn1	pla
+	sta tblptr+1
+	sty tblptr
+	ldy #0
+wscrn2	lda (tblptr),y
+	iny
+	pha
+	and #$7f
+	jsr bsout
+	pla
+	bpl wscrn2
+	rts
+
+clrttl	ldy #19
+	lda #$20
+pass2h	sta ltlbuf,y
+	dey
+	bpl pass2h
+
+	ldx isrcln	;don't output the drive #
+	dex
+	dex
+	stx ltllen
+
+pass2d	lda isrc+1,x
+	sta ltlbuf-1,x
+	dex
+	bne pass2d
+	rts
+
+; ************************
+; *
+; * -- scan new lines --
+; *  main logic of
+; *    pass 1 & pass 2
+; *
+; ************************
+
+snewln	jsr chkbrk
+	lda #0		;init next card
+	sta lcdpt
+	sta iflags+1
+	sta icsb
+	sta icse
+	sta ierr
+	sta imaxcl
+	sta icsl
+	sta iexp
+	sta iexp+1
+	sta ilsst
+	sta jlabl
+	sta jorg
+	sta jbywor
+	sta icolp
+	sta equflg
+	sta mesflg
+	sta absflg
+	lda lchar
+	beq h8921
+	jsr cardin
+card0	bcc h87
+h8921	jmp h10		;exit on null character (no .end card)
+
+cardin	ldx #0
+	inc icrdno+1
+	bne card1
+	inc icrdno
+card1	jsr getchr	;input a char
+	cmp #$0d
+	beq card3	;branch if a c.r.
+	cmp #$00	;is it null
+	bne card2
+	sec
+	rts
+
+card2	sta icrd,x
+	inx
+	jmp card1
+
+card3	dex
+	stx imaxcl
+	clc
+	rts
+
+;
+;  main line block
+;
+
+h87	jsr nfndnb	;blank card?
+	bcc h8830b	;yes
+h8830	ldx icolp
+	lda icrd,x
+	cmp #'>'	;if terminator card
+	beq h8830b	;yes .. listout
+	cmp #';'
+	bne h8831	;not a comment card
+h8830b	jmp h990	;a comment card
+h8831	jsr nfnden	;find string end
+	bcs h1		;end found
+	lda #3		;error--end not found
+	ldx icsb
+	tay
+	jmp lts1
+
+h1	ldx icsb
+	lda icrd,x
+	cmp #'.'
+	bne h8841	;not assem direct
+	jmp h5		;an assem direct
+
+h8841	cmp #'*'
+	bne h8832	;not an org
+	jmp h102	;redefine org
+
+h8832	ldy icsl
+	cpy #6		;6 characters long
+	beq h76		;<=
+	bcc h76
+
+	ldy fhash	;long labels allowed
+	bne h75		;yes
+	lda #9
+	ldy #3
+	jmp lts1
+
+h75	ldy #6		;adjust to 6
+h76	sty klen	;length of symbol
+	jsr consym	;construct the symbol
+	bcs h3		;no errors in consym
+	lda #$10
+	ldy #3
+	jmp lts1
+
+h3	lda icsl	;length of string
+	cmp #3		;right length for label
+	bne h92		;label process-over 3
+	jsr nopfnd	;find a mnemonic
+	bcc h92		;failed-must be a label
+	jmp h201	;an op code
+
+
+; ************************
+; *   label processing
+; ************************
+
+h92	lda jlabl	;label on this card
+	beq h91		;no
+	lda #3		;error
+	tay
+	ldx icsb
+	jmp lts1
+
+h91	lda #1
+	sta jlabl	;now lbl on this card
+	ldx icolp
+	jsr nalph	;1st letter is a-z
+	bcs h94		;is good
+	lda #8		;error-not alphabetic
+	ldy #3
+h93	jmp lts1
+
+h94	jsr labprc	;call process label routine
+	bcs h93		;error
+
+	stx ilsst	;save parms for equ
+	ldx #0		;save the symbol
+h8845	lda isym,x
+	pha
+	inx
+	cpx #6
+	bne h8845
+
+	lda icsl	;save icsl
+	pha
+	lda icse
+	sta icolp	;save icse
+	inc icolp
+	jsr nfndnb	;check for equate
+	bcc h120	;only blanks found
+	lda icrd,x
+	cmp #'='
+	bne h120
+	inc equflg	;equate statement
+	bne h121	;** bra
+
+h120	jsr nfind	;see if good label
+	bcc h95		;not present
+
+	lda knval	;is the new value the same as the old value ?
+	cmp ipc+1
+	bne mr02	;no
+	lda knval+1
+	cmp ipc
+	beq h95a	;ok
+
+mr02	lda knval	;macro ?
+	and knval+1
+	cmp #$ff
+	bne mr04	;no
+
+	jsr ismac	;in the macro table already ?
+	bcc mr03	;no
+	jmp calmac	;call the macro
+
+mr03	lda pass	;redefined only if in pass 1 ?
+	bne h95a
+
+mr04	lda #2		;previously defined
+	ldy #3
+	ldx ilsst
+	jmp lts1
+
+h95	lda ipc+1	;put in sym tab
+	sta knval
+	lda ipc
+	sta knval+1
+	jsr nsert
+h95a	lda imaxcl	;try for opcode
+	cmp icolp	;off card check
+	bcs h8842
+	jmp h990	;yes--off card
+h8842	jmp h87		;back to main sect
+
+;	.end

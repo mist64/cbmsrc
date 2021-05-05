@@ -1,0 +1,459 @@
+	.page
+	.subttl  dmacro
+
+; macro definition handling.
+; written by harold s. stone, the interfactor, inc.
+
+putmac	stx xtemp
+	ldx mctbpt
+	stx t0
+putm1	ldx mctbpt+1
+	stx t0+1
+	ldx #0
+	sta (t0,x)
+	ldx xtemp
+	rts
+
+putbmp	pha		;save the output char
+	lda pass
+	beq put1
+	pla
+	rts
+
+put1	pla
+	jsr putmac
+bmmctb	inc mctbpt	;bump macro table pointer
+	bne bmm1
+	inc mctbpt+1
+bmm1	sec
+	lda mctbpt	;has pointer overrun?
+	sbc #<mctbnd
+	lda mctbpt+1
+	sbc #>mctbnd
+	bcs bmm2	;yes
+	rts		;no
+
+bmm2	lda #$22	;error code for macro overflow
+bmm3	jmp fixstk
+
+push	pha		;push acc into macro stack
+	lda mcstpt
+	sta t0
+	lda mcstpt+1
+	sta t0+1
+	pla		;retrieve the byte
+	stx xtemp
+	ldx #$00	;index for indirect store
+	sta (t0,x)	;store into stack
+	ldx xtemp
+bmstpt	inc mcstpt	;bump macro stack pointer
+	lda mcstpt	;has pointer overrun?
+	sbc #<mcstnd
+	lda mcstpt+1
+	sbc #>mcstnd
+	bcs bms2	;yes
+	rts		;no
+
+bms2	lda #$23	;error code for stack overflow
+	jmp fixstk
+
+hmac	lda jlabl
+	beq hmac0	;was there a label seen?
+	lda #$25	;must not have a label
+	jmp fixerr	;exit to error processor
+
+hmac0	lda icse
+	sta icolp	;advance scan pointers over .mac
+	inc icolp
+	jsr getsym	;look for the macro name
+	bcc hmac0b	;found an alphanumeric string
+hmac0a	lda #$18	;illegal operand
+	jmp fixerr	;exit to error process
+hmac0b	ldx icolp
+	jsr nalph	;label must begin with a letter
+	bcc hmac0a	;not alpha so exit
+	lda icsl
+	cmp #$03	;might be an op code
+	bne hmac1
+	jsr nopfnd	;is it an opcode
+	bcc hmac1	;not an opcode
+	lda #$03	;improper opcode
+	jmp fixerr
+
+hmac1	jsr labprc	;make more checks
+	bcc hmac01
+	jmp lts1
+
+hmac01	jsr nfind	;look it up
+	bcc hmac2	;not defined before
+	lda pass	;prior define. is this pass 1?
+	bne hmac5a	;no so all is ok
+	lda #$02	;defined earlier
+	jmp fixerr
+
+hmac2	lda #$ff
+	sta knval
+	sta knval+1	;define it as macro
+	jsr nsert
+	lda mctbpt
+	sta newmac	;save this place in the table
+	lda mctbpt+1
+	sta newmac+1
+	ldy #$0		;copy symbol name to macro table
+hmac3	lda (tops),y
+	jsr putbmp	;character to macro table
+	iny
+	cpy #$06
+	bne hmac3	;do it 6 times
+	ldy #20		; 2 for ptr, 18 for 9 params
+hmac4	lda #0
+	jsr putbmp	;character to table
+	dey
+	bne hmac4
+	beq hmac5a
+hmac5	lda #$0d	;pass a carriage return
+	jsr putbmp
+hmac5a	jsr pas2pr
+	jsr cardin
+	bcc hmac6
+	jmp h10
+
+hmac6	ldx #$ff
+	stx icolp
+hmac7	jsr nextch	;look for .mnd and .mac
+	bcc hmac5	;end of card
+	cmp #'.'	;decimal point
+	beq hmac9
+hmac8	jsr putbmp
+	jmp hmac7
+
+hmac9	lda mctbpt
+	sta maybe
+	lda mctbpt+1
+	sta maybe+1	;save where .mnd might start
+	lda #'.'	;restore the period
+	jsr putbmp
+	ldy #0		;get next three characters
+hmac10	jsr nextch
+	bcc hmac5
+	sta holda
+	jsr putbmp
+	lda holda
+	cmp mnd,y	;compare to "mnd"
+	beq hmac14
+
+;.....here if we saw a ".".......
+
+	cpy #1		;saw ".M"
+	bne hmac7
+	cmp #'A'
+	bne hmac7
+	jsr nextch	;look for final "C"
+	bcc hmac5
+	cmp #'C'
+	bne hmac8
+	lda newmac	;error--restore macro pointer
+	sta mctbpt
+	lda newmac+1
+	sta mctbpt+1
+	lda #$26	;.mac within .mac
+	jmp fixerr
+
+hmac14	iny
+	cpy #$03
+	bne hmac10
+
+;.....when you get here you found .MND.......
+
+	lda pass
+	bne hmac15	;no pointer update on pass 2
+	lda maybe
+	sta mctbpt	;restore pointer
+	lda maybe+1
+	sta mctbpt+1
+	lda #$0d	;last char is cr
+	jsr putbmp
+	lda #0
+	jsr putbmp	;store zero at end for end file
+	lda newmac
+	sta t0		;prepare to fill in fwd pointer
+	lda newmac+1
+	sta t0+1
+	ldy #6
+	lda mctbpt
+	sta (t0),y
+	lda mctbpt+1
+	iny
+	sta (t0),y
+hmac15	jsr pas2pr
+	jmp endln	;normal exit
+
+hmnd	lda #$27	;.MND unmatched
+	jmp fixerr
+
+nextch	ldx icolp
+	inx
+	stx icolp
+	lda imaxcl
+	cmp icolp
+	bcs mnext1
+	clc
+	rts
+
+mnext1	lda icrd,x
+	sec
+	rts
+
+ismac	lda #<mactab
+	sta t0
+	lda #>mactab
+	sta t0+1	;point to macro table
+ism1	sec		;WHILE t0 < mactbnd DO
+	lda t0
+	sbc mctbpt
+	lda t0+1
+	sbc mctbpt+1
+	bcc ism2
+	clc		;report not in table
+	rts
+
+ism2	ldy #5		;BEGIN  
+ism3	lda (t0),y	;       IF name(isym) = name(t0) THEN
+	cmp isym,y
+	bne ism4
+	dey
+	bpl ism3
+	sec		;       return with carry set
+	rts
+
+ism4	ldy #6		;       ELSE t0 := next(t0)
+	lda (t0),y	;END
+	tax
+	iny
+	lda (t0),y
+	sta t0+1
+	stx t0
+	jmp ism1
+
+calmac	lda t0
+	sta tmpmac	;macro table pointer
+	lda t0+1
+	sta tmpmac+1
+	jsr pas2pr	;print the call line
+	jsr pshmac	;push down text pointers
+	lda tmpmac	;point to new macro
+	sta t0
+	lda tmpmac+1
+	sta t0+1
+	jsr setmac	;setup new text pointers
+	jsr macprm	;initialize params
+	jmp endln	;normal exit
+
+; getsym scans for an identifier.
+;	it returns with carry clear if it finds one.
+;	it sets length (icsl), first (icolp), & last (icse)
+
+getsym	jsr nfndnb	;look for nonblan
+	bcs gets2	;found something
+gets1	sec
+	rts		;normal exit - empty card
+
+gets2	ldx icolp	;point to it
+	ldy #$00	;symbol length count
+	lda icrd,x	;get first character
+	cmp #';'	;is it a comment?
+	beq gets1	;yes, take normal exit
+
+; return symbol found
+;
+;	while char = alpha or number do
+;	 begin  isym[i] := char;
+;	   i := i+1;
+;	   if i > maccol then exit loop;
+;	 end
+;	 if i = 0 then report symbol not found
+;	 if i > 6 the report symbol too long
+;	 while i < 6 do
+;	   begin isym[i] := blank
+;	     i := i+1
+;	   end
+
+gets4	jsr nalph	;is it alpha?
+	bcs gets3	;yes
+	jsr numrc	;is it a number?
+	bcc gets3a	;no
+gets3	sta isym,y	;build the symbol
+	inx
+	iny
+	lda icrd,x
+	cpx imaxcl
+	beq gets4
+	bcc gets4
+gets3a	cpy #00		;symbol found?
+	beq gets1	;report no symbol
+	cpy #$07	;is symbol too long?
+	bcc gets4a	;no
+	lda #$9		;symbol too long
+	jmp fixerr
+
+gets4a	lda #' '	; fill remainder with blanks
+	sty icsl	;set the symbol length
+gets5	cpy #$06
+	bcs gets6
+	sta isym,y
+	iny
+	bne gets5	;branch always
+
+gets6	clc		;report symbol found
+	stx icse
+	rts
+
+; macprm processes the parameters for a macro call.
+;
+;	clear parameters
+;	advance to next nonblank
+;	parmct := 0
+;	tmpmac := macstpt;  remember stack pointer
+;	while ismore do
+;	   begin if char <> comma then push(char)
+;	      else
+;	        begin movprm;
+;	        end;
+;	      nextchar; point to next char;
+;	   end
+;	movprm;
+
+macprm	lda #$01	;point to first param
+	jsr prmpnt
+	ldy #17		;initialize 18 cells to 0
+	lda #$0
+macp0	sta (t0),y
+	dey
+	bpl macp0
+	sta prmcnt
+macp1	jsr nfndnb	;find next nonblank
+	bcc macp9	;no more so exit
+	lda mcstpt
+	sta tmpmac
+	lda mcstpt+1
+	sta tmpmac+1
+macp2	jsr ismore	;any more?
+	bcc macp9	;no more so exit
+	cmp #','	;is it a comma?
+	beq macp3
+	jsr push
+	jmp macp2
+
+macp3	jsr movprm
+	jmp macp2
+macp9	jsr movprm
+	rts		;exit
+
+fixstk	pha
+	lda stkfrm
+	sta mcstpt	;reset stack pointer
+	lda stkfrm+1
+	sta mcstpt+1
+	lda #$80	;turn off macro expansion
+	sta sfile	;error recovery (hopefully)
+	pla
+fixerr	ldx icse	;**************** might be incorrect !! (3)
+	ldy #$00	;bump plc by 3 after error
+	jmp lts1	;exit to error handler
+
+; ismore says there is more (carry set) or not (carry clear)
+
+ismore	ldx icolp
+	cpx imaxcl	;off end of card?
+	beq isc1	;no
+	bcs isc3	;yes
+isc1	lda icrd,x	;get the character
+	cmp #' '	;is it a blank?
+	beq isc3	;yes
+	cmp #';'	;a comment beginning?
+	beq isc3	;yes
+	inc icolp	;advance pointer over comma
+	sec
+	rts
+
+isc3	clc		;report nothing found
+	rts
+
+pas2pr	pha
+	txa
+	pha
+	tya
+	pha
+	lda pass
+	beq pas2p1
+	lda #00
+	tax
+	tay
+	jsr ltins
+	lda #$00
+	sta lcdpt	;enable multiple line print
+pas2p1	pla
+	tay
+	pla
+	tax
+	pla
+	rts
+
+; movprm moves a param to macro table.
+; it inserts a pointer to text in stack in the param cell push(0)
+; trailing 0 after parm
+
+movprm	lda mcstpt
+	cmp tmpmac	;has anything been pushed?
+	bne movpr0	;yes
+	lda mcstpt+1
+	cmp tmpmac+1
+	beq movprx	;equal so exit
+movpr0	lda #$00
+	jsr push	;trailing 0 for param
+	lda prmcnt
+	cmp #9
+	bcc movpr1	;ok if fewer than 9 so far
+	lda #$29	;too many params
+	jmp fixstk
+movpr1	lda prmcnt
+	clc
+	adc #$01	;this is the parameter number
+	jsr prmpnt	;set t0 to point to it
+	ldy #0
+	lda tmpmac	;point param to stack
+	sta (t0),y
+	iny
+	lda tmpmac+1
+	sta (t0),y
+	lda mcstpt
+	sta tmpmac
+	lda mcstpt+1
+	sta mcstpt+1	;point to next text area
+movprx	inc prmcnt
+	rts
+
+; parameter point translates a parameter number into an address.
+;	it requires: parm number in acc & macent pointing to macro entry.
+;	it sets t0 in base page.
+
+prmpnt	sec
+	sbc #1		;subtract lower bound
+	bpl prm2	;cannot be negative
+prm1	lda #$13	;can't evaluate expression
+	jmp fixstk
+
+prm2	cmp #9		;check upper bound
+	bcs prm1
+	asl a		;double it
+	clc
+	adc #$08	;offset
+	clc
+	adc macent
+	sta t0
+	lda macent+1
+	adc #$00
+	sta t0+1
+	rts
+
+;	.end

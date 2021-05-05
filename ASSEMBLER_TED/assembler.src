@@ -1,0 +1,19 @@
+	.page  master
+
+	.include declare
+	.include start
+	.include main1
+	.include main2
+	.include directive
+	.include operand
+	.include eval
+	.include numsyms
+	.include asmprint
+	.include asmxref
+	.include asmieee
+	.include dmacro
+	.include umacro
+	.include asmtable
+	.include asmlast
+
+	.end

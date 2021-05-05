@@ -1,0 +1,475 @@
+	.page
+	.subttl  eval
+
+; test a char to see if alphabetic
+; carry set if alphabetic, carry clear if not alphabetic
+; reg x contains index into icrd
+
+nalph	lda icrd,x	;char to test
+	cmp #'A'
+	bcc nalp1	;less than alphabet
+	cmp #$5b 	;'Z' + 1
+	bcc numr1	;in alphabet range
+nalp1	clc      	;not alpha
+	rts
+
+; tests a char to see if numeric
+; carry set if numeric, carry clear if not numeric
+; reg x contains index into icrd
+
+numrc	lda icrd,x	;char to test
+	cmp #'0'
+	bcc nalp1 	;less than numbers
+	cmp #':'	;'9' + 1
+	bcs nalp1	;not numeric
+numr1	sec
+numr2	rts
+
+; *********************************
+; * constructs a symbol
+; * non-alphabetic causes carry clr
+; * otherwise carry set .x is index
+; *********************************
+
+consym	ldy #$ff	;y is a counter
+c10	iny
+	cpy #5		;maximum symbol length
+	beq c12
+	bcs numr2	;sucessful construct (carry is set)
+c12	cpy klen	;all chars to sym?
+	bcs c30		;yes...fill in blanks
+
+c14	jsr nalph	;char alphabetic
+	bcs c20		;yes...
+	jsr numrc	;is it a number
+	bcc numr2	;no-(carry is clear) (non-alpha)
+
+c20	lda icrd,x	;next char of sym
+	sta isym,y
+	inx		;next column of source
+	bne c10
+c30	lda #$20	;fill in with blanks
+	sta isym,y
+	bne c10		;always
+
+	.page
+; **********************************************************************
+;
+;    evaluates an expression
+;
+; reg x contains index to start of expression to be evaluated.
+; upon rtn from routine x contains pointer to first character
+; beyond end, or on error return, contains pointer to bad portion.
+;
+; return set as follows:
+;
+;	0  --  string could be evaluated (iexp = value of the string)
+;	1  --  undefined symbol
+;	2  --  expression is bad
+;
+; **********************************************************************
+
+eval	lda #0		;init expression
+	sta iexp
+	sta iexp+1
+	lda #$fc	;iexp & knval to plus
+	and iflags+1
+	sta iflags+1
+	cpx imaxcl	;beyond card?
+	beq d10		;no...
+	bcc d10		;no....
+jd300	jmp d300	;null string
+d10	jsr endtst	;end of expr?
+	bcs jd300	;yes-null string
+
+;
+; get initial operation
+;
+
+d11	ldy #'+'
+	cmp #'-'	;unary minus?
+	bne d15 	;no
+	ldy #'-'
+	inx
+d15	sty kop		;save oper
+	cpx imaxcl	;end of card
+	beq d20		;no
+	bcs jd300	;yes-uninterpretable
+
+;
+; search for '<' & '>' flag
+;
+
+d20	lda #0		;initialize
+	sta klow	;<> flags
+	sta khigh
+	jsr endtst	;end of expression?
+	bcs jd300	;uninterpretable
+
+d21	cmp #'<'	;lower byte
+	bne d150
+	inc klow
+	jmp d151
+d150	cmp #'>'	;higher byte
+	bne d1580
+	inc khigh
+d151	inx
+	cpx imaxcl
+	beq d158
+	bcs jd300
+d158	lda icrd,x	;chk '<-' or '>-'
+	cmp  #'-'
+	bne d1580
+	sta kop
+	inx
+
+;
+; constant number ?
+;
+
+d1580	jsr numrc	;char numeric
+	bcc d25		;no...not base 10
+	ldy #10		;base 10
+	jmp d55		;evaluate the number
+
+d25	cmp #'$'	;hex?
+	bne d30		;no...not base 16
+	ldy #16		;base 16
+	jmp d50		;get next char
+
+d30	cmp #'@'	;octal?
+	bne d35		;no...not base 8
+	ldy #8		;base 8
+	jmp d50		;get next char
+
+d35	cmp #'%'	;binary?
+	bne d40		;no...not base 2
+	ldy #2		;base 2
+	bne d50
+
+;
+; symbols ?
+;
+
+d40	jsr nalph	;alphabetic?
+	bcc d46		;no...maybe assem cnter
+
+; process a symbol
+
+	txa		;looks like a symbol
+	tay
+
+d41	inx		;find length of symbol
+	cpx imaxcl	;off end of card
+	beq d415	;no
+	bcs d42		;yes-compute length
+d415	jsr numrc	;char numeric?
+	bcs d41		;yes...continue
+	jsr nalph	;character alpha?
+	bcs d41		;yes...continue
+d42	sty temp	;end..compute length
+	txa		;get ending column
+	sec
+	sbc temp	;starting column
+	sta ltemp	;save in length temp
+	cmp #7		;length over 6 chars?
+	bcc d43		;no...continue
+
+	lda fhash	;long symbol names allowed ?
+	beq j2d300	;no
+
+	lda #6		;use max length
+d43	sta klen	;length of sym
+	ldx temp
+	jsr consym	;construct symbol
+	bcc j2d300	;bad symbol
+
+	lda ltemp	;oversized symbol ?
+	cmp #7
+	bcc d44		;no
+d48	inx		;next char
+	cpx imaxcl	;end of card ?
+	beq d45		;almost
+	bpl d44		;yes
+d45	jsr numrc	;still symbol ?
+	bcs d48		;yes
+	jsr nalph	;alpha in symbol ?
+	bcs d48		;yes, still the symbol
+
+d44	stx temp+1
+	jsr nfind
+	ldx temp+1
+	bcs d60
+	ldx temp
+	jmp d200
+
+j2d300	jmp d300	;yes-unint
+
+; evaluate '*' assembly counter
+
+d46	cmp #'*'
+	bne j2d300	;no-bad expression
+d47	lda ipc
+	sta knval+1
+	lda ipc+1
+	sta knval
+	inx
+	jmp d60
+
+;
+; evaluate numeric field
+;
+
+d50	inx
+	cpx imaxcl	;end of card?
+	beq d51		;no...continue
+	bcs j2d300	;yes...bad expression
+d51	jsr numrc	;char numeric?
+	bcs d55		;yes...continue
+	jsr nalph	;char alpha?
+	bcc j2d300	;no...bad expression
+d55	sty kbase	;base of operation
+
+; get length of number
+
+	txa		;starting column
+	tay
+d56	inx		;next character
+	cpx imaxcl	;end of card?
+	beq d565	;no...
+	bpl d57		;yes...
+d565	jsr numrc	;char numeric?
+	bcs d56		;yes...get next char
+	jsr nalph	;no...is char alpha?
+	bcs d56		;yes...get next char
+d57	sty temp	;compute length
+	txa		;get ending column
+	sec
+	sbc temp	;starting column
+	sta klen	;length of number
+
+	tya		;compute the value
+	tax
+	jsr number	;compute number
+	bcs d60		;successful conversion
+	jmp d300	;couldn't compute
+
+;
+; do the operation
+;
+
+d60	lda kop		;get the operation
+	cmp #'+'	;an add?
+	bne d65		;no...
+
+;
+; '+' = addition
+;
+
+	lda iexp+1	;low byte of expr
+	clc
+	adc knval+1	;low byte of number
+	sta iexp+1
+	lda iexp
+	adc knval	;hi byte of number
+	sta iexp
+	jmp d70		;continue
+
+d65	cmp #'-'	;a subtract
+	beq *+5
+	jmp d80
+
+;
+; '-' = subtraction
+;
+
+	lda iexp+1	;get low byte
+	sec
+	sbc knval+1	;low byte
+	sta iexp+1
+	lda iexp	;high byte
+	sbc knval	;high byte
+	sta iexp
+	jmp d70
+
+;
+; do '>' & '<' operation
+;
+
+lohigh	lda klow	;'<'low byte only
+	beq d68
+	lda #0		;high byte to zero
+	sta iexp
+	beq d69
+d68	lda khigh	;'>'high byte only
+	beq d69
+	lda iexp
+	sta iexp+1
+	lda #0
+	sta iexp
+d69	jmp d100
+
+; end of operation.  do end check & if end then do '<' & '>'
+
+d70	cpx imaxcl	;start next field
+	beq d71		;not end of card
+	bpl lohigh	;yes-end of card
+d71	jsr endtst	;end expression?
+	bcs lohigh	;yes-bad
+	ldy icrd,x	;(operation)
+	inx
+	sty kop		;save oper.
+	cpx imaxcl	;end of card ?
+	beq cse001
+	bcc cse001
+cse000	jmp d300	;uninterpretable
+cse001	jsr endtst	;eval. next
+	bcs cse000
+	jmp d158
+
+;
+; operation continued
+;
+
+d80	pha		;save operator
+	lda #0		;zero for mult or divide
+	sta temp
+	sta temp+1
+	pla
+	cmp #'*'	;multiply?
+	bne d90		;no...
+	beq d83		;yes...
+
+;
+; '*' = multiply
+;
+
+d82	asl iexp+1	;shift product
+	rol iexp
+d83	lsr knval	;shift multiplier
+	ror knval+1
+	bcc d84		;skip add-bit is 0
+	clc
+	lda temp+1	;multiplicand+product
+	adc iexp+1
+	sta temp+1	;back to product
+	lda temp
+	adc iexp
+	sta temp
+
+;
+; note multiply is modulo 64k
+;
+
+d84	lda knval	;stop when multiplr
+	ora knval+1
+	bne d82		;is zero
+
+;
+; product-quotient to iexp
+;
+
+d86	lda temp
+	sta iexp
+	lda temp+1
+	sta iexp+1
+	jmp d70		;continue expression
+
+d90	cmp #'/'	;divide?
+	bne opradd	;no...
+
+;
+; '/' = division
+;
+
+d92	lda iexp+1
+	sec
+	sbc knval+1
+	sta iexp+1
+	lda iexp
+	sbc knval
+	sta iexp
+	bcc d86
+	inc temp+1
+	bne d92
+	inc temp
+	jmp d92
+
+;
+; '&' = and operation
+;
+
+opradd	cmp #'&'	;and ?
+	bne oprad1	;no
+
+	lda iexp+1
+	and knval+1
+	sta iexp+1
+	lda iexp
+	and knval
+	sta iexp
+	jmp d70		;eval next
+
+;
+; '.' = or 
+;
+
+oprad1	cmp #'.'	;or ?
+	bne oprad2	;no
+
+	lda iexp+1
+	ora knval+1
+	sta iexp+1
+	lda iexp
+	ora knval
+	sta iexp
+	jmp d70		;eval next
+
+;
+; '!' = xor
+;
+
+oprad2	cmp #'!'	;exor ?
+	bne d300	;no... => error
+
+	lda iexp+1
+	eor knval+1
+	sta iexp+1
+	lda iexp
+	eor knval
+	sta iexp
+	jmp d70		;eval next
+
+
+;--- evaluate end ---
+;
+; returns - set code and return
+
+d100	lda #0		;good return
+	.byte $2c
+
+d200	lda #1		;undefined symbol
+	.byte $2c
+
+d300	lda #2		;bad expr
+	sta return
+	rts
+
+
+; test for the end of a string (finds blank, comma, right paren)
+; carry set if found, carry clear if none found
+; x points to char in icrd
+
+endtst	lda icrd,x
+	cmp #$20
+	beq dd10
+	cmp #','
+	beq dd10
+	cmp #')'
+	beq dd10
+	cmp #';'
+	beq dd10
+	clc		;characters not found
+dd10	rts
+
+;	.end

@@ -1,0 +1,828 @@
+	.page
+	.subttl  directive
+
+; equate and org processing ****
+
+h102	lda #$ff	;-1
+	sta jorg
+	inc icolp
+	stx ilsst	;save start of string
+	jsr nfndnb	;if rest field blank
+	bcs h103	;nonblank found
+h103a	jmp h99
+
+h103	lda icrd,x	;equate or org
+	cmp #'='
+	bne h103a
+h121	inc icolp
+	lda icolp
+	cmp imaxcl
+	beq h8804
+	bcc h8804
+	jmp h99		;g.t. imaxcl
+h8804	jsr nfndnb
+	bcs h104	;non-blank found
+	ldx icse
+	lda #7
+	ldy #0
+	jmp lts1
+h104	jsr eval	;eval operand field
+	dec return
+	bmi h105
+	bne h8806
+	lda #$11
+	ldy #3
+	jmp lts1
+
+h8806	lda #$13
+	ldy #3
+	jmp lts1
+
+h105	lda jorg	;equ or org
+	beq h9
+	lda #1		;org,expression ok
+	and iflags+1
+	beq h150	;expression is ge 0
+	ldx #0
+	stx ipc
+	stx ipc+1
+	ldx icsb	;bad expr - flag
+	lda #$21
+	ldy #$ff
+	jsr ltins
+	jmp endln
+
+h150	ldx #0
+	txa
+	tay
+	jsr ltins
+	lda iexp	;ipc = iexp
+	sta ipc+1
+	lda iexp+1
+	sta ipc
+	jmp endln
+
+; is equate****
+
+h9	pla		;restore label portion
+	sta icsl	;restore length
+	ldx #5
+h8846	pla
+	sta isym,x
+	dex
+	bpl h8846
+	jsr nfind
+	bcc h106
+
+	lda knval	;see if value is the same
+	cmp iexp
+	bne mr01
+	lda knval+1
+	cmp iexp+1
+	beq h106a	;ok
+mr01	ldx ilsst	;already defined
+	lda #2
+	ldy #0
+	jmp lts1
+
+h106	lda iexp
+	sta knval
+	lda iexp+1
+	sta knval+1
+	jsr nsert
+h106a	jmp h990
+
+; assembler directives *****
+; find what directive to process
+
+h5	lda #$14	;asm error code
+	sta ierr
+	ldx icsb	;start of directive
+	inx		;skip period
+	lda #<asmdir
+	sta tblptr
+	lda #>asmdir
+	sta tblptr+1
+	lda #3		;get length
+	sta klen
+	jsr consym	;build directive
+h8847	cpx imaxcl
+	beq h8848
+	bcs h8849
+h8848	lda icrd,x
+	cmp #$20
+	beq h8849
+	inx
+	jmp h8847
+h8849	stx icolp	;pntr to char after direct
+	lda #0		;init column to zero
+	sta j
+	bcs h8835
+	jmp h900	;error--bad symbol
+
+	.page
+; search table for match
+; 
+; compare done back-front
+; match-ind jmp made to process
+; mismatch-pointer points to next
+; valid directive in table.
+; numasm is # direct to search.
+; (tblptr) is curr directive
+
+h8835	ldx #numasm
+h9938	ldy #2		;offset to chars
+h9939	lda isym,y	;chr from symbol
+	cmp (tblptr),y	;char in table
+	bne h9940
+
+	dey
+	bpl h9939	;not done yet
+
+; a match-x used to loc addr
+
+	txa
+	asl a		;*2 for addr table index
+	tax
+	lda asmjmp,x	;low byte addr
+	sta tblptr
+	lda asmjmp+1,x	;high byte addr
+	sta tblptr+1
+	lda iflags	;.opt flgs
+	jmp (tblptr)	;=>directive provess
+
+; point next dir & start again
+; quit if done (error).
+
+h9940	lda tblptr	;low addr
+	clc
+	adc #3		;offset to next directive
+	sta tblptr
+	bcc h9938a
+	inc tblptr+1
+h9938a	dex
+	bpl h9938	;more directives
+
+; invalid directive - error
+
+	jmp h900	;put in length table
+
+
+
+
+
+; byte, word, dbyte processing ***
+
+dimes	lda #1		;*** .mes ***
+	sta mesflg
+
+h111	lda #1		;*** .byte ***
+	.byte $2c
+
+h506	lda #3		;*** double byte ***
+	.byte $2c
+
+h113	lda #2		;*** .word ***
+	sta jbywor
+	ldy #0
+	sty j		;memmap index for byte gen
+	tay
+	cpy #3		;dbyte ?
+	bne h8809	;no
+	dey
+h8809	sty char	;length of each param.
+	jsr nfndnb	;next non-blank
+	bcs h18		;non-blank found
+
+	ldx icse	;ran off eol
+	lda #7
+	jmp lts1
+
+h18	ldx icsb
+	jsr eval
+	dec return
+	bmi h14		;return =0
+	beq h8836	;return =1
+	jmp h29		;return =2
+
+h8836	lda #1		;undef'd sym
+	sta ierr
+	lda char
+	clc
+	adc j
+	tay
+	lda ierr
+	ldx icsb
+	jsr ltins
+	ldy #0
+	sty j
+	jmp h15
+
+h14	lda #4		;good return
+	sta ierr
+	ldx jbywor
+	cpx #1		;.byt or .mes ?
+	beq byte51
+	cpx #3
+	bne h8812
+	lda iexp
+	ldy j
+	jsr objout
+	inc j
+h8812	lda iexp+1
+	ldy j
+	jsr objout
+	inc j
+	ldx jbywor
+	cpx #2
+	bne h8820
+	lda iexp
+	ldy j
+	jsr objout	;iexp in memory map
+	inc j
+h8820	lda #0
+	tax
+	ldy char
+	sta j
+	jsr ltins
+	jmp h15
+
+byte51	lda mesflg	;.mes ?
+	bne byte52	; yes
+
+	lda iexp+1
+	ldy j
+	jsr objout
+	inc j
+	bne h15
+
+byte52	jsr nfncmp	;more parms ?
+	lda iexp+1
+	bcs byte53	; more parms
+	eor #$80
+byte53	ldy j
+	jsr objout
+	inc j
+
+; find next parm
+
+h15	jsr nfncmp	;next comma
+	bcs h8843
+	jmp byte15	;no more parms
+
+h8843	lda icrd,x
+
+; found comma or parenthesis
+
+	inx		;skip to next column
+	stx icolp
+	cpx imaxcl	;passed end
+	beq h8814
+	bcc h8814
+	jmp h99		;ran off end of card
+
+h8814	cmp #','
+	bne h15		;might be a paren
+	jsr nfndnb
+	bcs h8844	;non blank found
+	jmp h99		;only blanks found
+h8844	jmp h18
+
+; expression handler bombed
+
+h29	lda j
+	beq bytea6
+
+	txa		;output line (remain)
+	pha
+	ldy j
+	lda #0
+	tax
+	sta j
+	jsr ltins
+	pla
+	tax
+
+bytea6	lda icrd,x
+	cmp #$27	;might be ascii (appostrophi)
+	beq h31		;yes
+	cmp #'"'
+	beq h31
+
+h30	lda #$13	;bad expression
+	ldy temp
+	jsr ltins
+	ldy #0
+	sty j
+	jmp h15
+
+; looks like ascii
+
+h31	sta delm	;save delimiter
+	cpx icsb	;first in string
+	bne h30
+	ldy jbywor	;after a .byt
+	cpy #2
+	bcs h30
+
+	stx icolp	;count bytes generated
+	ldy #0
+h33	inc icolp
+	ldx icolp
+	cpx imaxcl	;off end of card?
+	beq h8815
+	bcs h473	;off card
+h8815	lda icrd,x
+	cmp delm	;compare delimiter
+	bne h32		;no
+
+	inc icolp	;imbedded quote
+	ldx icolp
+	cpx imaxcl
+	beq h8821
+	bcs h34		;ran off end of card
+h8821	lda icrd,x
+	cmp delm
+	bne bytcal	;no
+
+h32	ldy j		;convert to ascii
+	sta objmap,y	;byt to memory map
+	inc j		;count of ascii chars
+	bne h33		; ** bra
+
+
+h473	ldy j		;*** ran off end of card ***
+	lda #7
+	jmp lts1
+
+;--------------------------
+; .byte 'ascii' expression
+;--------------------------
+
+bytcal	sta kop
+	jsr endtst
+	bcs h34
+	ldy #0
+	sty ysave
+	stx xsave
+bcal00	cpy j
+	beq h34
+	lda #0
+	sta iexp
+	lda objmap,y
+	sta iexp+1
+	ldx xsave	;restore x
+	stx icolp	;restore x
+	jsr d71		;eval follows
+	dec return
+	beq bcal02	;undefed symbol
+	bpl bcal03	;bad expression
+
+bcal01	lda iexp+1	;expression ok
+	ldy ysave
+	sta objmap,y
+	iny
+	inc ysave
+	bne bcal00	;** bra
+
+bcal02	lda #1		;undefed sym.
+	.byte $2c
+
+bcal03	lda #$18	;bad expr.
+	sta ierr	;undefed symbol
+
+h34	ldy #0		;done with ascii string
+	sty ysave
+bcal04	iny
+	cpy j
+	beq byt135	;last character
+	dey
+	lda objmap,y
+	jsr objout	;output object
+	inc ysave
+	ldy ysave
+	bne bcal04	;** bra
+
+byt135	lda mesflg
+	bne byt136
+
+	dey
+	lda objmap,y
+	jsr objout
+	inc ysave
+	ldy ysave
+	bne bcal05	;** bra
+
+byt136	txa
+	pha
+	jsr nfncmp
+	pla
+	tax
+	ldy ysave
+	lda objmap,y
+	bcs byt137
+	eor #$80
+byt137	jsr objout
+	inc ysave
+	ldy ysave
+
+bcal05	lda #0
+	sta j
+	tax
+	jsr ltins
+	jmp h15
+
+byte15	lda j
+	bne *+5
+	jmp endln
+
+	ldy j
+	lda #0
+	tax
+	jmp lts1
+
+	 .page
+; .opt assembler directive
+; look for parms until none left
+; when done treat as a comment
+; use search from asmb directives
+
+h301	jsr nfndnb	;find stt of parm
+	bcs h8837	;a nonblank found
+	jmp h990	;no-treat like comment
+h8837	ldx icsb	;get start of parm
+	lda #3		;3 is length of parm
+	sta klen	;store for consym
+	jsr consym	;construct the parm
+	bcs h8838	;o.k.  so continue
+	jmp h900	;bad parm - error
+
+; are ready for search
+; need to restore x and the adrs
+; where the search left off
+
+h8838	lda #<optdir
+	sta tblptr
+	lda #>optdir
+	sta tblptr+1
+	ldx #numsav
+	jmp h9938	;go do the search
+
+nhash	lda #$00
+	beq hash1	;always
+
+hash	lda #$ff
+hash1	sta fhash
+	jmp h391
+
+; generate ascii strings
+
+h323	and #127	;clear nogen bit
+	.byte $2c
+
+; don't generate ascii strings
+
+h302	ora #128	;set nogen bit
+	.byte $2c
+
+; symbols ************
+
+h303	ora #64		;set sym bit
+	.byte $2c
+
+; don't print symbol table
+
+h304	and #191	;clear sym bit
+	.byte $2c
+
+; don't count op code usage
+
+h305	and #223	;clear opcode cnt
+	.byte $2c
+
+; count op code usage
+
+h306	ora #32		;set opcode count
+	.byte $2c
+
+; generate error file
+
+h307	ora #16		;set error gen bit
+	.byte $2c
+
+; don't generate error file
+
+h308	and #239	;clear error gen
+	.byte $2c
+
+; generate interface file
+
+h309	ora #8		;set interface file
+	.byte $2c
+
+; don't gen interface file
+
+h310	and #247	;no gen int file
+	.byte $2c
+
+h330	and #%11111101	;don't expand macros
+	.byte $2c
+
+h331	ora #$02	;expand macros
+	.byte $2c
+
+; don't suppress print file
+
+h311	ora #4		;set list
+	.byte $2c
+
+; suppress print file
+
+h312	and #251	;turn off prt file
+
+h390	sta iflags	;all done with this parm
+
+
+
+h391	jsr nfncmp	;look for comma & start again
+	bcs h8840	;comma or right paren
+	jmp h990	;none found
+
+h8840	lda icrd,x	;icrd(icolp)
+	cmp #','	;a comma?
+	beq h8839	;yes,
+	jmp endln	;no,
+h8839	inx
+	stx icolp
+	jmp h301
+
+; skip ***
+
+h26	jsr nfndnb	;next non-blank
+	bcs h8808	;non-blank found
+	ldx j
+h8808	lda #204
+	ldy #0
+	jmp lts1
+
+; page ***
+; has a title with it?
+
+h12	jsr nfndnb	;next nonblank
+	bcc h8807	;only blanks found
+	lda icrd,x	;next title char
+	cmp #$27	;a quote?
+	beq h600	;yes
+h8807	ldx #0
+h600	lda #203
+	ldy #0
+	jmp lts1
+
+; end ***
+
+h10	bit sfile	;what is done?
+	bvs enlib	;a library routine...
+	ldx #$ff	;a source file...
+	txs
+	ldx pass	;which pass on source?
+	beq dend2	;pass1...
+
+;
+; ***** completion of pass 2 *****
+;
+
+dend0	lda #2		;logical file #2
+	jsr fclose	;is source to close
+dend1	ldx #0
+	ldy #0
+	lda #205
+;	inc lboth
+	jsr ltins	;print the .end
+;	dec lboth
+	jmp pass3	;then sort & prt syms
+
+;
+; ***** end of pass 1 *****
+;
+
+dend2	inc pass
+	lda #2
+	jsr fclose
+dend2a	jmp pass2
+
+enlib	lda #3		;close library file
+	jsr fclose
+	lda sfile
+	and #$bf	;switch control
+	sta sfile
+endr	ldx #0
+	stx chan
+	ldy #0
+	lda #205
+	inc lboth
+	jsr ltins
+	dec lboth
+	lda #$0d
+	sta lchar
+	jmp endln
+
+
+
+; file ***
+
+hfil	bit sfile
+	bvc hfil2	;not in .lib
+	lda #3		;close .lib file
+	jsr fclose
+	jmp dlib1	;reopen .lib as .fil
+hfil2	lda #2		;close old file
+	jsr fclose
+	jsr nfile	;parse new file
+	lda #2
+	sta la		;logical address
+	sta sa		;secondary address
+	lda #8
+	sta fa		;device number
+	jsr fopen
+	jsr ftest
+	jmp endr
+
+
+
+; common parse routine
+
+nfile	jsr nfndnb	;find stt of nam
+	bcc nfil1	;no name
+	ldy #0
+nfil3	lda icrd,x
+	cmp #$20
+	beq nfil4
+	sta isym,y
+	cpx imaxcl
+	beq nfil4
+	iny
+	inx
+	cpy #14
+	bne nfil3
+	beq nfil1
+nfil4	lda #$0d
+	iny
+	sty fnlen
+	sta lchar
+	bne nfil2
+nfil1	lda #>fnerr
+	ldy #<fnerr
+	jsr wscrn
+	jmp done
+
+nfil2	ldx fnlen	;add file type
+	lda #','
+	sta isym,x
+	inx
+	lda #'S'
+	sta isym,x
+	inx
+	stx fnlen
+	lda #>isym	;set up name call
+	sta fnadr+1
+	lda #<isym
+	sta fnadr
+	rts
+
+
+
+; lib ***
+
+hlib	bit sfile
+	bvc dlib1	;not already in .lib
+	lda #>liberr
+	ldy #<liberr
+	jsr wscrn
+	jmp done
+
+dlib1	jsr nfile	;parse parms
+	lda #3
+	sta la
+	sta sa
+	lda #8
+	sta fa
+	jsr fopen
+	jsr ftest
+	lda #$40
+	ora sfile
+	sta sfile	;flag in .lib
+	jmp endr
+
+	.page
+; .ifn and .ife ***
+;
+; syntax for condtional assembley
+; is as follows:
+;
+;  .ife expr <
+;
+; where .ife(.ifn)is the directive
+; meaning if equ and if not equ.
+; expr is a valid expression
+;     (no forward references).
+; & < is the start of an if range
+;             (on same card).
+;
+; & range is terminated by > chr
+; in the first col. of a card.
+; the terminator card must be in
+; the same file as the if sttmnt.
+
+
+hifn	lda #$ff	;not equal flag
+	.byte $2c
+
+hife	lda #$00	;equal flag
+	sta ifflag
+
+	jsr nfndnb	;find next non blank
+	bcc ranoff	;ran off end of card.
+	sty char
+	ldx icsb	;index into card
+	jsr eval	;eval. the expression
+	dec return	;simpler testing
+	bmi hset	;good return
+	beq hundef	;undefined something
+	jmp noeval	;could not eval...
+
+; look for '< , test expr and execute result
+
+hset	stx icolp	;new pntr in line
+	jsr nfndnb	;skip blanks
+	bcc ranoff	;not there
+	cmp #'<'	;check for right char.
+	beq hok		;found it
+	jmp ranoff	;bad directive
+
+hok	ldy #$ff	;set y to inverse
+	lda iexp	;get value of expr
+	ora iexp+1
+	beq tstflg
+	ldy #$00
+tstflg	tya
+	eor ifflag	;tack in the flag
+	bne hdone	;false condition asmb
+
+; eat source until '> is found.
+
+getmor	jsr newchr	;get a char.
+	cmp #$0d	;return char?
+	bne getmor
+
+	jsr newchr	;if next card starts with > then stop
+	cmp #'>'
+	bne getmor
+
+	lda #0
+	tax
+	tay
+	jsr ltins
+
+	inc icrdno+1
+	bne *+4
+	inc icrdno
+
+	lda #0
+	sta lcdpt	;clear multiple lines flag
+
+	lda #'>'
+	sta icrd
+	ldx #1
+	jsr card1
+	jmp card0
+
+hdone	jmp h990	;finished...
+
+;
+; errors and subroutines for if's
+;
+
+hundef	lda pass	;pass 1 or 2 ?
+	bne notdef
+	lda #11		;foward ref error
+	.byte $2c
+
+notdef	lda #01		;not defined
+	.byte $2c
+
+ranoff	lda #07		;ran off card
+	.byte $2c
+
+noeval	lda #13		;can't eval expr..
+	ldx icse	;pointer into card
+	ldy #$00	;num of bytes generated
+	jmp lts1
+
+newchr	jsr getchr	;get a char.
+	cmp #$00	;eof ?
+	beq noend	;end missing
+	rts
+
+noend	jmp h10
+
+;	.end

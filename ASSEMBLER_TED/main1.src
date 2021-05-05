@@ -1,0 +1,419 @@
+	.page
+	.subttl  main1
+
+pass1	ldx #stkval
+	txs
+	cld
+	lda #0
+	sta xref	;assume no cross ref
+	sta lboth	;list only to printer
+	sta noprin	;not hard copy
+	sta chan
+	sta pass	;set pass 1
+	sta sfile
+	sta nosym
+	sta nosym+1
+	sta iflags+1
+	sta objlen	;assume no object file
+	sta binary	;assume object format
+;	sta p1err	;pass 1 error flag
+	sta lerct	;reset error flag
+	sta lerct+1
+	sta scflag	;screen output flag
+	sta wparam	;first unit is for source file
+	sta fhash	;short labels is the default
+
+	sta macent
+	sta macent+1
+	sta curpnt
+	sta curpnt+1
+
+	lda #%10010001	;nog,nos,noc,err,nob,nol,noexp
+	sta optsav	;for iflags
+
+	lda #$ff
+	sta nobj	;assume no object file
+
+	ldy #>sytbst	;start of symtbl
+	ldx #<sytbst
+	stx stsave
+	sty stsave+1
+	ldy #0		;clear first sym
+	tya
+	sta (stsave),y
+
+	ldy #>mactab
+	ldx #<mactab
+	stx mctbpt
+	sty mctbpt+1
+
+	lda #1
+	sta lpgct
+	lda #0
+	sta lpgct+1
+
+	lda #8		;set default unit #
+	sta sunit
+	sta ounit
+	sta xunit
+
+	lda #4		;set default printer unit
+	sta prunit
+
+	jsr reset
+
+	lda #5		;just in case
+	jsr fclose
+	lda #1
+	jsr fclose
+
+	lda #5		;open keyboard file #5
+	sta la
+	lda #0
+	sta sa
+	sta fa
+	sta fnlen
+	jsr fopen
+
+	lda #0		;open display file #1
+	sta fnlen
+	sta sa
+	lda #1
+	sta la
+	lda #3
+	sta fa
+	jsr fopen
+
+
+;*******************
+;* assembler parser
+;*******************
+
+	lda sflen	;is there a source file name ?
+	bne *+5		;yes, we have something to assemble
+	jmp ready	;might as well return to basic
+
+	ldx strlen	;set end of option string
+	lda #0
+	sta fcb+20,x
+
+	lda fcb+2	;get source file device number
+	jsr defdri	;make sure it is valid
+	sta dfltdn	;use it as default
+	jsr setxd	;set drive for xref
+
+	lda #'S'	;for the auto object name feature
+	sta objfil
+
+	ldx sflen	;put a comma after the name
+	lda #','
+	sta fcb+2,x
+
+	ldx #2		;process source file name
+	jsr stproc
+	sty isrcln	;set source filename length
+
+rob0	lda fstrng,y
+	sta isrc,y
+	sta objfil+1,y	;just in case no object file name specified
+	dey
+	bpl rob0
+
+;
+;  now process the options
+;
+
+	ldx #20		;start after the source file name
+	stx savex
+
+rdop	ldx savex
+	lda fcb,x	;done all options ?
+	bne *+5		;no
+	jmp pas1st	;yes => start pass1
+
+	cmp #','	;comma ?
+	bne *+5		;no
+	jmp rdopnx	;skip the commas
+
+	lda fcb,x 	;object file specification ?
+	cmp #'O'
+	bne rdop0	;no
+
+	lda #1	;set unit parameter
+	sta wparam
+
+	lda fcb+1,x	;is there an equals sign ?
+	cmp #'='
+	beq rob02	;yes, we have an object file name
+
+	jsr defdri	;is there a drive # ?
+	bcc robj0	;no, use the source file drive #
+	sta objfil+1	;use the drive # specified
+
+robj0	ldy isrcln
+	cpy #12		;in range ?
+	bcc *+4		;yes
+	ldy #12		;set to maximum
+
+	lda #'.'
+	sta objfil+1,y
+	iny
+	lda #'H'
+	sta objfil+1,y
+	iny
+	lda #'E'
+	sta objfil+1,y
+	iny
+	lda #'X'
+	sta objfil+1,y
+	iny
+	sty objlen
+
+;	jsr opnsub	;initialize drive (go to other unit also)
+;	ldx #7		;send scratch to command channel
+;	jsr ckout	;define as channel out
+;	ldy #00
+;robj1	lda objfil,y
+;	jsr bsout
+;	iny
+;	cpy objlen
+;	bpl robj1
+;
+;	lda #$0d
+;	jsr bsout
+;	lda #7
+;	jsr fclose
+;	jsr clrch
+
+rob03	lda #$00	;we got an object file
+	sta nobj
+
+	lda iflags
+	ora #$08
+	sta iflags
+
+	jmp rdopnx
+
+rob02	inx 	;process object file name (skip O=)
+	inx
+	jsr stproc
+	stx savex
+	sty objlen
+
+rob01	lda fstrng,y
+	sta objfil+1,y
+	dey
+	bpl rob01
+	bmi rob03	;always
+
+rdop0	cmp #'L'
+	bne rdop1
+
+	lda iflags	;list option
+	ora #%00000100
+	sta iflags
+
+	jmp rdopnx	;always
+
+rdop1	cmp #'P'
+	bne rdop3
+
+	lda fcb+1,x	;got a unit spec ?
+	cmp #'4'
+	beq rdop11	;yes
+	cmp #'5'
+	bne rdop12	;no
+rdop11	sta prunit
+
+rdop12	jsr ieeep	;open ieee printer
+	jmp rdopnx
+
+;rdop2	cmp #'C'	;centronics is disabled
+;	bne rdop3
+;	jmp centro	;open centro printer
+
+rdop3	cmp #'S'
+	bne rdop35
+	lda iflags	;symbol table option
+	ora #$40
+	sta iflags
+	bne rdopnx	;always
+
+rdop35	cmp #'G'
+	bne rdop36
+	lda iflags	;gen. string option
+	and #$7f
+	sta iflags
+	jmp rdopnx
+
+rdop36	cmp #'X'
+	bne rdop41
+	lda #2
+	sta xref	;do xref
+	sta wparam
+
+	lda fcb+1,x	;is a drive # specified ?
+	jsr defdri
+	bcc rdopnx	;no drive specified
+	jsr setxd
+	inc savex	;skip the drive #
+	bne rdopnx	;always
+
+rdop41	cmp #'M'	;expand macros ?
+	bne rdop37
+	lda iflags
+	ora #$02
+	sta iflags
+	bne rdopnx	;always
+
+rdop37	cmp #'B'
+	bne rdop38
+	lda #$01
+	sta binary
+	bne rdopnx	;always
+
+rdop38	cmp #'V'	;view option ?
+	bne rdop40	;no
+	lda #$40
+	sta scflag
+	bne rdopnx	;always
+
+rdop40	cmp #'U'	;unit # ?
+	bne rdop39	;no
+	lda fcb+1,x	;check & set the unit number
+	jsr defuni
+	bcc rdopnx	;illegal unit
+
+	inc savex	;skip the unit #
+	bne rdopnx	;always
+
+rdop39	cmp #'N'	;no errors ?
+	bne rdopnx	;no
+	lda iflags
+	and #$ef
+	sta iflags
+
+rdopnx	inc savex	;next option
+	jmp rdop
+
+; centro printer open sub.
+; (centronics is disabled)
+;centro	lda #$40+$80
+;	sta noprin
+;	ldx #$ff
+;	stx $e843	;port ddr
+;	lda #$ec
+;	sta $e84c
+;	bit $e841
+;	jmp rdopnx
+
+;
+; ieee printer open sub.
+
+ieeep	lda #4
+	sta la
+	lda prunit
+	sta fa
+	lda #0
+	sta sa
+	sta fnlen
+	jsr fopen	;open printer file
+	bcs ieclos	;error
+	lda #$0d	;try a return
+	ldx #4		;see if the printer is there
+	jsr ckout
+	bcs ieclos
+	lda #$80
+	sta noprin
+	jmp clrch	;jsr/rts
+
+ieclos	lda #4
+	jsr fclose
+	jmp clrch	;jsr/rts
+
+defdri	cmp #'0'	;choose default drive
+	beq defdr1	;ok
+	cmp #'1'
+	beq defdr1	;ok
+	lda #'0'
+	clc
+	rts
+
+defdr1	sec
+	rts
+
+
+defuni	cmp #'8'
+	beq defun1	;ok
+	cmp #'9'
+	beq defun1	;ok
+	clc
+	rts
+
+defun1	ldx wparam	;set appropriate unit number
+	sec
+	sbc #$30
+	sta sunit,x
+	cpx #0		;setting source unit ?
+	bne defun2	;no
+	sta xunit
+	sta ounit
+
+defun2	sec
+	rts
+
+
+stproc	ldy #2		;process a file name
+	lda fcb,x	;string start comes in .x
+	cmp #34		;quote ?
+	bne stprc1
+	inx		;skip it
+
+stprc1	cmp #'0'	;valid drive number ?
+	beq stp1	;yes
+	cmp #'1'
+	beq stp1	;yes
+	lda #'0'	;use 0
+	bne stp2	;always
+
+stp1	inx
+	inx
+
+stp2	sta fstrng
+	lda #':'
+	sta fstrng+1
+
+stp3	lda fcb,x
+	beq stp4	;end of option list
+	cmp #','
+	beq stp4
+	cmp #34		;quote ?
+	beq stp5	;yes, skip it
+
+	sta fstrng,y
+	iny
+stp5	inx
+	bne stp3	;always
+
+stp4	dex	;back up a character
+	rts
+
+objsuf	ldx #3
+objsf1	ldy objlen
+	lda osufix,x
+	sta objfil+1,y
+	inc objlen
+	dex
+	bpl objsf1
+
+	lda binary
+	beq objsf2
+	lda #'P'
+	sta objfil-1,y
+objsf2	rts
+
+
+osufix	.byte 'W,S,'
+
+
+;	.end

@@ -1,0 +1,131 @@
+	.page
+	.subttl  start
+
+       *=$7f00
+
+start	sei
+	sta romon	;just in case
+	lda #$c0	;transfer kernal to ram
+	sta user+1
+	lda #$00
+	sta user
+
+	tay		;.y=0
+start1	lda (user),y
+	sta (user),y
+	dey
+	bne start1
+
+	inc user+1
+	lda user+1
+	cmp #$fd
+	bne start1
+
+	lda #$ff	;now transfer the vectors
+	sta user+1
+	tay
+
+start2	lda (user),y
+	sta (user),y
+	dey
+	cpy #$3f
+	bne start2
+
+	sta ramon	;turn on the ram
+
+	ldx #$bf	;save zero page
+start3	lda $00,x
+	sta zstore,x
+	dex
+	cpx #1
+	bne start3
+
+	cli
+	jmp pass1	;start the assembly
+
+	.page
+;	*************************
+;	* kernal routines
+;	*
+;	* after each access to
+;	* a kernal routine, the
+;	* ram is turned back on
+;	* (just in case)
+;	*
+;	*************************
+
+;stop1	jsr $ffe1
+;	sta ramon
+;	rts
+
+getin	jsr $ffe4	;get char from kybd
+	sta ramon
+	rts
+
+ready	sta romon	;all rom on
+
+	jsr $ffcc	;clrchn
+	ldy #10		;close all files
+ready2	tya
+	clc
+	jsr $ffc3	;close
+	dey
+	bne ready2
+
+	sta ramon	;access stored zero page
+	ldx #$bf	;restore zero page
+ready1	lda $af00,x
+	sta $00,x
+	dex
+	cpx #1
+	bne ready1
+
+	lda #00		;do a new
+	sta $2000
+	sta $2001
+	sta $2002
+
+	sta romon	;all rom on
+	sei
+	ldx #stkval	;restore stack
+	txs
+	cli
+	jmp $8003	;exit to basic
+
+prt	jsr $ff4c
+	sta ramon
+	rts
+
+fclose	clc		;close real file
+	jsr $ffc3	;close file
+	sta ramon
+	rts
+
+fopen	clc		;open real file
+	jsr $ffc0	;open file
+	sta ramon
+	rts
+
+chkin	jsr $ffc6	;open input channel
+	sta ramon
+	rts
+
+ckout	jsr $ffc9	;open output channel
+	sta ramon
+	rts
+
+clrch	jsr $ffcc	;clear channel
+	sta ramon
+	rts
+
+basin	jsr $ffcf	;input character
+	sta ramon
+	rts
+
+bsout	jsr $ffd2	;output character
+	sta ramon
+	rts
+
+;mon	jsr $f44c	;monitor entry
+
+;	.end

@@ -1,0 +1,132 @@
+	.page
+	.subttl  umacro
+
+; macro definition handling
+; written by harold s. stone, the interfactor, inc.
+;
+; the stack frame is:  + 0 =  pointer to prior frame
+;                      + 2 =  macro table entry ptr
+;                      + 4 =  current char pointer
+;                      + 4 =  last source (sfile)
+
+pshmac	inc level	;bump the macro level
+	lda level
+	cmp #$09
+	bcc pshm1	;level ok
+	lda #$28	;too many levels
+	jmp bmm3
+
+pshm1	lda mcstpt
+	sta newmac
+	lda mcstpt+1
+	sta newmac+1	;save stack pointer
+	lda stkfrm
+	jsr push
+	lda stkfrm+1
+	jsr push
+	lda macent
+	jsr push
+	lda macent+1
+	jsr push
+	lda curpnt
+	jsr push
+	lda curpnt+1
+	jsr push
+	lda sfile
+	jsr push
+	lda newmac	;set the frame pointer
+	sta stkfrm
+	lda newmac+1
+	sta stkfrm+1
+	rts
+
+popmac	dec level
+	bpl popm1
+	lda #$24	;stack underflow
+	jmp bmm3
+
+popm1	lda stkfrm
+	sta t0
+	sta mcstpt	;reset the stack pointer
+	lda stkfrm+1
+	sta t0+1
+	sta mcstpt+1
+	ldy #0
+	lda (t0),y
+	sta stkfrm
+	iny
+	lda (t0),y
+	sta stkfrm+1
+	iny
+	lda (t0),y
+	sta macent
+	iny
+	lda (t0),y
+	sta macent+1
+	iny
+	lda (t0),y
+	sta curpnt
+	iny
+	lda (t0),y
+	sta curpnt+1
+	iny
+	lda (t0),y
+	sta sfile
+	sec
+	lda stkfrm
+	sbc #<mactab
+	lda stkfrm+1
+	sbc #>mactab
+	bcs pop1
+	lda #$24	;table underflow
+pop0	jmp bmm3
+
+pop1	sec
+	lda #<mctbnd
+	sbc stkfrm
+	lda #>mctbnd
+	sbc stkfrm+1
+	bcc pop2
+	lda #$23	;table overflow
+	bne pop0
+pop2	rts
+
+setmac	lda tmpmac+1	;recover macro table entry
+	sta macent+1
+	tax
+	lda tmpmac
+	sta macent
+	clc
+	adc #26		;offset to text in table
+	sta curpnt
+	txa
+	adc #0		;carry into high byte
+	sta curpnt+1
+	lda sfile
+	ora #frmmac	;mark it from macro
+	sta sfile
+	rts
+
+labprc	lda isym+1
+	cmp #$20	;could be a reserved label
+	bne lab2
+	lda isym
+	cmp #'A'
+	beq lab1
+	cmp #'X'
+	beq lab1
+	cmp #'Y'
+	beq lab1
+	cmp #'S'
+	beq lab1
+	cmp #'P'
+	bne lab2
+lab1	lda #$20
+	ldy #3
+	sec
+	rts
+
+lab2	clc
+	rts
+
+;	.end

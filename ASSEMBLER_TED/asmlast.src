@@ -1,0 +1,27 @@
+	.page
+	.subttl  asm.last
+
+jnk	*=*+100	;patch area
+
+; *****************
+; *   ram usage   *
+; *****************
+
+	*=$2000
+sytbst		;symbol table area
+
+worka		;for xref
+workb	=worka+$400
+
+	*=$6500	;up to the start of the macro area
+syend	=*-1
+
+mactab		;macro definition area
+	*=*+$1400
+mctbnd	=*-1
+
+mcstck		;macro stack
+	*=*+$400
+mcstnd	=*-1	;this should come to $7cff
+
+;	.end

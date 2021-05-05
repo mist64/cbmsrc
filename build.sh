@@ -57,8 +57,6 @@ test_tools
 rm -rf build
 mkdir build
 
-build1 MONITOR_KIM kim.asm
-
 build1 KERNAL_VIC_04 kernal
 
 build1 KERNAL_C64_01 kernal
@@ -97,6 +95,8 @@ build1 BASIC_CBM2_B cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet
 
 build1 MONITOR_VIC micii4
 build2 MONITOR_C128 monitor
+
+build2 ASSEMBLER_TED assembler
 
 build1 CONTROLLER_8250 lib
 build1 CONTROLLER_1001 single.src
