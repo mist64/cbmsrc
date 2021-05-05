@@ -1,0 +1,509 @@
+	.messg "mcntl"
+	.subttl "mcntl"
+	.page
+
+; Controller command in .a and job # in .y
+
+lcc     tsx     	; save current stk pntr
+        stx  savsp       
+	lda  #bit7
+	sta  nextjob	; set no job flag
+	ldy  #numjob	; include bam jobs
+lcc0	lda  jobs,y     ; find a job 
+        bmi  prcmd	; ... a real job
+
+	lda  cacheoff,y
+	and  #all-bit7	; leave offset into track cache
+	sta  cacheoff,y	; clear translation flag 
+	
+top     dey     	; try next one
+        bpl  lcc0	; next if no job's now
+	
+	ldy  nextjob
+	bpl  start_ctl	; start job
+	
+	jmp  end_ctl	; do timing
+	.page
+prcmd	sty  nextjob
+	tax		; job index
+	tya
+	asl  a		; x2
+	sta  hdrjob	; shifted nextjob
+	lda  cmdindex,x	; translate for internal use
+	sta  cindex	; save index
+	tax
+        lda  ctl_cmd_info,x   
+        sta  info       ; get information and save it
+        lda  ctl_cmd_info1,x   
+        sta  info+1     ; get information and save it
+
+	jsr  jtrans_ts	; translate logical track and sector to physical
+	
+1$	asl  info       ; cache operation ?
+        bcc  2$
+
+	jsr  trk_in_mem	; is trk in memory ?, don't come back if it is...
+
+2$	ldy  nextjob
+	jmp  top
+
+	.page
+
+start_ctl
+	asl  info       ; start motor ?
+        bcc  1$		
+	
+	jsr  start_mtr  ; start motor
+
+1$	asl  info       ; wait for motor up to speed ?
+        bcc  2$
+
+        jsr  wait_mtr   ; check mtr don't come back if drv not ready
+
+2$      asl  info	; logical seek required ?
+	bcc  3$
+
+	jsr  seek	; seek - won't come back on an error
+
+3$	asl  info       ; check dirty track cache flag ?
+        bcc  4$
+
+	lda  dirty	
+	bpl  4$		; br, not dirty
+
+	lda  cachetrk	
+	sta  cmdtrk	; want to go here
+	cmp  drvtrk	; where are we?
+	bne  5$		; br, step there first
+
+	lda  cacheside
+	jsr  sid_select ; select side
+	jmp  wrtold_ctl	; handle dirty condition & write out old track
+
+4$      asl  info       ; step?
+	bcc  6$
+
+	ldy  hdrjob
+	lda  hdrs2,y	; get address
+	sta  cmdtrk	; want to go here
+	cmp  drvtrk
+	beq  6$
+
+5$      lda  drvst	; set stepping mode
+	ora  #bit6
+	sta  drvst
+	jmp  end_ctl	; do stepper stuff
+
+6$	asl  info       ; select side
+	bcc  7$
+
+	lda  tcacheside	; get translated side
+	jsr  sid_select ; select side
+
+7$	lda  cindex	; get index
+	asl  a		; x2
+	tax	
+	lda  ctl_cmd,x
+	sta  ip+2
+        lda  ctl_cmd+1,x
+        sta  ip+3	
+	jmp  (ip+2)	; go do the command 
+        .page  
+
+; Command Table Information
+
+ctl_cmd_info
+
+;bit   7   -  Translate T & S ?
+;bit   6   -  Cache Op ?
+;bit   5   -  Start Motor ?
+;bit   4   -  Wait Motor ?
+;bit   3   -  Seek?
+;bit   2   -  Check Dirty Flag ?
+;bit   1   -  Step Required ?
+;bit   0   -  Select side?
+
+bit7543=bit7+bit5+bit4+bit3
+bit543=bit5+bit4+bit3
+
+  .byte    all			; read sector* 1
+  .byte    0			; reset disk controller 2
+  .byte    bit5+bit4		; motor on with spinup sequence 3
+  .byte    0			; motor off with spin down sequence 4
+  .byte    bit5			; motor on 5
+  .byte    0			; motor off 6
+  .byte    bit5+bit4+bit1	; move physical 7
+  .byte    bit5+bit4		; format side 8
+  .byte    all			; write sector* 9
+  .byte    bit5+bit4		; disk present? 10
+  .byte    0			; turn activity led on 11
+  .byte    0			; turn activity led off 12
+  .byte    0			; blink power led 13
+  .byte    0			; disable power led blink 14
+  .byte    0			; select side 15
+  .byte    0			; buffer move 16
+  .byte    bit7543+bit1+bit0	; verify sector* 17
+  .byte    bit5+bit4+bit3+bit2	; dump track cache buffer 18
+  .byte    all-bit7-bit6-bit2	; read physical into buffer 19
+  .byte    all-bit7-bit6-bit2	; write physical from buffer 20
+  .byte    all-bit7-bit6	; move head to physical track 21
+  .byte    bit5+bit4		; seek any header* 22
+  .byte    all-bit6-bit2	; seek a particular header* 23
+  .byte    bit5+bit4		; restore head* 24
+  .byte    0			; execute buffer* 25
+  .byte    bit543+bit1		; execute buffer w/ mtr on speed & on track* 26
+  .byte    bit7+bit5+bit4+bit1	; format disk 27
+  .byte    all			; read sector notransfer 28
+  .byte    all			; write sector notransfer 29
+  .byte    all-bit7		; read sector notranslate, notransfer 30
+  .byte    all-bit7		; write sector notranslate, notransfer 31
+  .byte    bit5+bit4		; check write protect status 32
+  .byte    0			; syntax error 33
+ 
+ctl_cmd_info1
+
+;bit   7   -  Bypass translate routine?
+;bit   6   -  Logical/Physical?
+;bit   5   -  Write/Read Operation?
+;bit   4   -  *** reserved ***
+;bit   3   -  *** reserved ***
+;bit   2   -  *** reserved ***
+;bit   1   -  *** reserved ***
+;bit   0   -  *** reserved ***
+
+  .byte    0			; read sector* 1 
+  .byte    bit7			; reset disk controller 2
+  .byte    bit7			; motor on with spinup sequence 3
+  .byte    bit7			; motor off with spin down sequence 4
+  .byte    bit7			; motor on 5
+  .byte    bit7			; motor off 6
+  .byte    bit7			; move physical 7
+  .byte    0			; format side 8
+  .byte    bit5			; write sector* 9
+  .byte    bit7			; disk present? 10
+  .byte    bit7			; turn activity led on 11
+  .byte    bit7			; turn activity led off 12
+  .byte    bit7			; blink power led 13
+  .byte    bit7			; disable power led blink 14
+  .byte    bit7			; select side 15
+  .byte    bit7			; buffer move 16
+  .byte    0			; verify sector* 17
+  .byte    0			; dump track cache buffer 18
+  .byte    bit6			; read physical into buffer 19
+  .byte    bit6+bit5		; write physical from buffer 20
+  .byte    0			; move head to physical track 21
+  .byte    0			; seek any header* 22
+  .byte    0			; seek a particular header* 23
+  .byte    0			; restore head* 24
+  .byte    0			; execute buffer* 25
+  .byte    0			; execute buffer w/ mtr on speed & on track* 26
+  .byte    0			; format disk 27
+  .byte    bit6			; read sector notransfer 28
+  .byte    bit6+bit5		; write sector notransfer 29
+  .byte    bit6			; read sector notranslation, notransfer 30
+  .byte    bit6+bit5		; write sector notranslation, notransfer 31
+  .byte    bit7			; check write protect status 32
+  .byte    bit7			; syntax error 33
+
+
+; Command Indirects
+
+ctl_cmd
+  .word    read_ctl		; read from track cache buffer* 1
+  .word    reset_ctl		; reset disk controller 2
+  .word    moton_ctl		; motor on with spinup sequence 3
+  .word    motoff_ctl		; motor off with spin down sequence 4
+  .word    motoni_ctl		; motor on 5
+  .word    motoffi_ctl		; motor off 6
+  .word    seek_ctl		; move physical 7
+  .word    format_ctl		; format side 8
+  .word    wrtsd_ctl		; write to track cache buffer* 9
+  .word    diskin_ctl		; disk present? 10
+  .word    ledacton_ctl		; turn activity led on 11
+  .word    ledactoff_ctl	; turn activity led off 12
+  .word    errledon_ctl		; blink power led 13
+  .word    errledoff_ctl	; disable power led blink 14
+  .word    side_ctl		; select side 15
+  .word    bufmove_ctl		; buffer move 16
+  .word    wrtver_ctl		; verify track cache buffer 17
+  .word    trkwrt_ctl		; track cache dump 18
+  .word    spread_ctl		; read notrx in buffer 19
+  .word    spwrt_ctl		; wrt notrx in buffer 20
+  .word    pseek_ctl		; move head to physical track 21
+  .word    seekhd_ctl		; seek any header* 22
+  .word    seekphd_ctl		; seek a particular header 23
+  .word    restore_ctl		; restore head* 24
+  .word    jumpc_ctl		; execute buffer* 25
+  .word    exbuf_ctl		; execute buffer w/ mtr on speed & on track* 26
+  .word    formatdk_ctl		; format disk 27
+  .word    read_ctl		; read from track 28
+  .word    wrtsd_ctl		; write to track 29
+  .word    pread_ctl		; read physical address 30
+  .word    pwrt_ctl		; write physical address 31
+  .word    detwp_ctl		; check write protect status 32
+  .word    syntaxer		; syntax error 33
+
+ctllen=  *-ctl_cmd
+
+	.page
+
+; Index for Jobs
+
+cmdindex
+
+	.byte    $20    ; 0 
+	.byte    $20    ; 1  
+	.byte    $20    ; 2  
+	.byte    $20    ; 3
+	.byte    $20    ; 4
+	.byte    $20    ; 5  
+	.byte    $20    ; 6  
+	.byte    $20    ; 7
+	.byte    $20    ; 8  
+	.byte    $20    ; 9  
+	.byte    $20    ; a  
+	.byte    $20    ; b
+	.byte    $20    ; c  
+	.byte    $20    ; d  
+	.byte    $20    ; e  
+	.byte    $20    ; f
+	.byte    $20    ; 10  
+	.byte    $20    ; 11  
+	.byte    $20    ; 12  
+	.byte    $20    ; 13
+	.byte    $20    ; 14  
+	.byte    $20    ; 15  
+	.byte    $20    ; 16  
+	.byte    $20    ; 17  
+	.byte    $20    ; 18
+	.byte    $20    ; 19  
+	.byte    $20    ; 1a  
+	.byte    $20    ; 1b  
+	.byte    $20    ; 1c  
+	.byte    $20    ; 1d  
+	.byte    $20    ; 1e  
+	.byte    $20    ; 1f  
+	.byte    $20    ; 20 
+	.byte    $20    ; 21 
+	.byte    $20    ; 22
+	.byte    $20    ; 23  
+	.byte    $20    ; 24  
+	.byte    $20    ; 25  
+	.byte    $20    ; 26  
+	.byte    $20    ; 27  
+	.byte    $20    ; 28  
+        .byte    $20    ; 29  
+	.byte    $20    ; 2a  
+	.byte    $20    ; 2b
+	.byte    $20    ; 2c  
+	.byte    $20    ; 2d  
+	.byte    $20    ; 2e  
+	.byte    $20    ; 2f
+	.byte    $20    ; 30
+	.byte    $20    ; 31
+	.byte    $20    ; 32  
+	.byte    $20    ; 33  
+	.byte    $20    ; 34  
+	.byte    $20    ; 35  
+	.byte    $20    ; 36  
+	.byte    $20    ; 37
+	.byte    $20    ; 38
+	.byte    $20    ; 39  
+	.byte    $20    ; 3a  
+	.byte    $20    ; 3b
+	.byte    $20    ; 3c  
+	.byte    $20    ; 3d  
+	.byte    $20    ; 3e  
+	.byte    $20    ; 3f
+	.byte    $20    ; 40  
+	.byte    $20    ; 41
+	.byte    $20    ; 42  
+	.byte    $20    ; 43  
+	.byte    $20    ; 44
+	.byte    $20    ; 45  
+	.byte    $20    ; 46  
+	.byte    $20    ; 47  
+	.byte    $20    ; 48
+	.byte    $20    ; 49  
+	.byte    $20    ; 4a
+	.byte    $20    ; 4b
+	.byte    $20    ; 4c
+	.byte    $20    ; 4d  
+	.byte    $20    ; 4e
+	.byte    $20    ; 4f
+	.byte    $20    ; 50  
+	.byte    $20    ; 51
+	.byte    $20    ; 52
+	.byte    $20    ; 53  
+	.byte    $20    ; 54
+	.byte    $20    ; 55  
+	.byte    $20    ; 56
+	.byte    $20    ; 57
+	.byte    $20    ; 58  
+	.byte    $20    ; 59  
+	.byte    $20    ; 5a
+	.byte    $20    ; 5b
+	.byte    $20    ; 5c
+	.byte    $20    ; 5d  
+	.byte    $20    ; 5e  
+	.byte    $20    ; 5f  
+	.byte    $20    ; 60  
+	.byte    $20    ; 61
+	.byte    $20    ; 62
+	.byte    $20    ; 63  
+	.byte    $20    ; 64
+	.byte    $20    ; 65  
+	.byte    $20    ; 66
+	.byte    $20    ; 67
+	.byte    $20    ; 68  
+	.byte    $20    ; 69  
+	.byte    $20    ; 6a
+	.byte    $20    ; 6b
+	.byte    $20    ; 6c
+	.byte    $20    ; 6d  
+	.byte    $20    ; 6e
+	.byte    $20    ; 6f
+	.byte    $20    ; 70  
+	.byte    $20    ; 71
+	.byte    $20    ; 72
+	.byte    $20    ; 73  
+	.byte    $20    ; 74
+	.byte    $20    ; 75  
+	.byte    $20    ; 76
+	.byte    $20    ; 77
+	.byte    $20    ; 78  
+	.byte    $20    ; 79  
+	.byte    $20    ; 7a
+	.byte    $20    ; 7b
+	.byte    $20    ; 7c
+	.byte    $20    ; 7d
+	.byte    $20    ; 7e  
+	.byte    $20    ; 7f  
+	.byte    $00    ; 80  read*
+	.byte    $20    ; 81
+	.byte    $01    ; 82  reset
+	.byte    $20    ; 83  
+	.byte    $02    ; 84  moton
+	.byte    $20    ; 85  
+	.byte    $03    ; 86  motoff
+	.byte    $20    ; 87  
+	.byte    $04    ; 88  motoni
+	.byte    $20    ; 89  
+	.byte    $05    ; 8a  motoffi
+	.byte    $20    ; 8b  
+	.byte    $06    ; 8c  seek
+	.byte    $20    ; 8d  
+	.byte    $07    ; 8e  format side
+	.byte    $20    ; 8f
+	.byte    $08    ; 90  write*
+	.byte    $20    ; 91
+	.byte    $09    ; 92  diskin
+	.byte    $20    ; 93  
+	.byte    $0a    ; 94  ledacton
+	.byte    $20    ; 95  
+	.byte    $0b    ; 96  ledactoff
+	.byte    $20    ; 97  
+	.byte    $0c    ; 98  errledon
+	.byte    $20    ; 99  
+	.byte    $0d    ; 9a  errledoff
+	.byte    $20    ; 9b  
+	.byte    $0e    ; 9c  sidesel
+	.byte    $20    ; 9d  
+	.byte    $0f    ; 9e  bufmove
+	.byte    $20    ; 9f
+	.byte    $10    ; a0  verify*
+	.byte    $20    ; a1
+	.byte    $11    ; a2  trkwrt
+	.byte    $20    ; a3  
+	.byte    $12    ; a4  spread
+	.byte    $20    ; a5  
+	.byte    $13    ; a6  spwrt
+	.byte    $20    ; a7  
+	.byte    $14    ; a8  pseek
+	.byte    $20    ; a9  
+	.byte    $1b    ; aa  read notrx
+	.byte    $20    ; ab  
+	.byte    $1c    ; ac  write notrx
+	.byte    $20    ; ad  
+	.byte    $20    ; ae  
+	.byte    $20    ; af  
+	.byte    $15	; b0  seek*
+	.byte    $20    ; b1
+	.byte    $1d    ; b2  read notransl, notrx
+	.byte    $20    ; b3  
+	.byte    $1e    ; b4  write notransl, notrx
+	.byte    $20    ; b5  
+	.byte    $1f    ; b6  check write protect status
+	.byte    $20    ; b7  
+	.byte    $16	; b8  seekparticular*
+	.byte    $20    ; b9  
+	.byte    $20    ; ba  
+	.byte    $20    ; bb  
+	.byte    $20    ; bc  
+	.byte    $20    ; bd
+	.byte    $20    ; be  
+	.byte    $20    ; bf  
+	.byte    $17    ; c0  bump*
+	.byte    $20    ; c1
+	.byte    $20    ; c2  
+	.byte    $20    ; c3  
+	.byte    $20    ; c4  
+	.byte    $20    ; c5  
+	.byte    $20    ; c6  
+	.byte    $20    ; c7
+	.byte    $20    ; c8  
+	.byte    $20    ; c9  
+	.byte    $20    ; ca  
+	.byte    $20    ; cb  
+	.byte    $20    ; cc  
+	.byte    $20    ; cd  
+	.byte    $20    ; ce  
+	.byte    $20    ; cf
+	.byte    $18	; d0  jumpc*
+	.byte    $20    ; d1
+	.byte    $20    ; d2  
+	.byte    $20    ; d3  
+	.byte    $20    ; d4  
+	.byte    $20    ; d5  
+	.byte    $20    ; d6  
+	.byte    $20    ; d7  
+	.byte    $20    ; d8  
+	.byte    $20    ; d9  
+	.byte    $20    ; da  
+	.byte    $20    ; db  
+	.byte    $20    ; dc  
+	.byte    $20    ; dd  
+	.byte    $20    ; de  
+	.byte    $20    ; df  
+	.byte    $19	; e0  exbuf*
+	.byte    $20    ; e1
+	.byte    $20    ; e2  
+	.byte    $20    ; e3  
+	.byte    $20    ; e4
+	.byte    $20    ; e5
+	.byte    $20    ; e6
+	.byte    $20    ; e7
+	.byte    $20    ; e8  
+	.byte    $20    ; e9  
+	.byte    $20    ; ea  
+	.byte    $20    ; eb  
+	.byte    $20    ; ec  
+	.byte    $20    ; ed  
+	.byte    $20    ; ee
+	.byte    $20    ; ef
+	.byte    $1a    ; f0  format
+	.byte    $20    ; f1  
+	.byte    $20    ; f2  
+	.byte    $20    ; f3  
+	.byte    $20    ; f4  
+	.byte    $20    ; f5  
+	.byte    $20    ; f6  
+	.byte    $20    ; f7  
+	.byte    $20    ; f8  
+	.byte    $20    ; f9  
+	.byte    $20    ; fa  
+	.byte    $20    ; fb  
+	.byte    $20    ; fc  
+	.byte    $20    ; fd  
+ 	.byte    $20    ; fe  
+	.byte    $20    ; ff  

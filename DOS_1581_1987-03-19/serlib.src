@@ -1,0 +1,76 @@
+	.nam  1581 DOS v10  318045-01  (c)1987 CBM
+
+;**********************************************
+; 318045-01 ROM    03/19/87   F.BOWEN    $977E
+;**********************************************
+
+	.INCLUDE mfmmacro
+	.INCLUDE common
+	.INCLUDE equate
+	.INCLUDE iodef
+	.INCLUDE ram
+	.INCLUDE dversion	;checksum, signature, & version bytes
+	.INCLUDE parsex
+	.INCLUDE setdrv
+	.INCLUDE lookitup
+	.INCLUDE trnsfr
+	.INCLUDE scrtch
+	.INCLUDE formatd
+	.INCLUDE copy
+	.INCLUDE rename
+	.INCLUDE memrw
+	.INCLUDE blk
+	.INCLUDE fndrel
+	.INCLUDE tst2
+	.INCLUDE tst3
+	.INCLUDE tst4
+	.INCLUDE tst5
+	.INCLUDE job
+	.INCLUDE addfil
+	.INCLUDE open
+	.INCLUDE close
+	.INCLUDE opchnl
+	.INCLUDE tstflg
+	.INCLUDE tsutil
+	.INCLUDE ssutil
+	.INCLUDE sstest
+	.INCLUDE getact
+	.INCLUDE rel1
+	.INCLUDE rel2
+	.INCLUDE rel3
+	.INCLUDE rel4
+	.INCLUDE ssend
+	.INCLUDE record
+	.INCLUDE nulbuf
+	.INCLUDE addrel
+	.INCLUDE newss
+	.INCLUDE system
+	.INCLUDE erproc
+	.INCLUDE utlodr
+	.INCLUDE utl
+	.INCLUDE signature
+	.INCLUDE sieee
+	.INCLUDE dskint
+	.INCLUDE idle
+	.INCLUDE lstdir
+	.INCLUDE verdir
+	.INCLUDE newdsk
+	.INCLUDE mapit
+	.INCLUDE frets
+	.INCLUDE bamutl
+	.INCLUDE tstfnd
+	.INCLUDE part
+	.INCLUDE fastld
+	.INCLUDE burstc
+	.INCLUDE mcntl
+	.INCLUDE mrout
+	.INCLUDE msub
+	.INCLUDE msub1
+	.INCLUDE crc
+	.INCLUDE irq
+	.INCLUDE romtbl
+	.INCLUDE relnotes
+	.INCLUDE patch
+	.INCLUDE vects
+
+	.end

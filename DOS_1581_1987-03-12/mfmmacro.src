@@ -1,0 +1,8 @@
+	.messg "mfmmacro"
+	.subttl "mfmmacro"
+	.page
+WDTEST	.macro
+	.ife <*!.$03
+	nop
+	.endif
+	.endm

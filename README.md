@@ -205,8 +205,11 @@ The Commodore 1571 DOS sources:
 Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz); the -03 version was reconstructed from 1571/310654_03/serlib.lst in the dump.
 
 ## DOS_1581
+## DOS_1581_1987-03-12
 
-The Commodore 1581 DOS source (10.0, 1987), original version (318045-01). Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz)
+* DOS_1581: The Commodore 1581 DOS source (10.0, 1987-03-20), original version (318045-01). Source: [all_new_dos.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/drives/all_new_dos.tar.gz)
+* DOS_1581_1987-03-19: work revision, serlib_977e.lst from same archive.
+* DOS_1581_1987-03-12: work revision, serlib_a9f5.lst from same archive; ".subttl" typo fixed in sieee.src.
 
 ## RAMDOS
 

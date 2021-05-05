@@ -1,0 +1,650 @@
+	.messg "msub"
+	.subttl "msub"
+        .page  
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+resetim
+
+	lda  ctltimh
+	sta  timb_h	; set high
+	lda  ctltiml
+	sta  timb_l	; set low
+	lda  #bit4+bit0	; start timer b
+	sta  crb
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+moton   lda  pa
+	and  #all-mtr_on
+	sta  pa
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+motoff  lda  pa
+	ora  #mtr_on
+	sta  pa
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ledon	lda  pa		; turn on led
+	and  #all-act_led
+	sta  pa
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ledoff	lda  pa		; turn led off
+	ora  #act_led
+	sta  pa
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+xms     jsr  onems      ; delay 1 ms
+        dey      
+        bne  xms         
+
+        rts      
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+one_6	ldx  #3		; 1.6 mS
+	.byte skip2	
+onems   ldx  #2		; 1.0 mS
+	clc
+        lda  #$6f
+onems1  adc  #1          
+        bne  onems1      
+
+        dex      
+        bne  onems1      
+
+        rts      
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+wdunbusy
+
+	lda  #bit0
+	WDTEST
+1$	bit  WDSTAT
+	bne  1$
+
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+wdbusy
+	WDTEST
+	sta  WDCMD	; send command
+
+	lda  #bit0
+	WDTEST
+1$	bit  WDSTAT
+	beq  1$
+
+	jmp  delay16
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+; Read Address Routine
+
+;  0       1      2           3         4    5 + header
+;  ^       ^      ^           ^         ^    ^
+; track  side#  sector  sector_length  crc  crc
+
+*=*+256-<*
+
+seekhdr 
+	ldx  #5		; invalidate header
+1$	txa
+	sta  header,x
+	dex 
+	bpl  1$
+	
+	jsr  tstfoready ; check drive status
+	bcs  5$
+
+	lda  wdreadaddress
+	jsr  wdbusy	; start cmd
+
+        ldx  #0          
+        ldy  #6          
+	WDTEST		; chk address
+2$	lda  WDSTAT
+	and  #3
+	lsr  a
+        bcc  3$		; no address mark found
+	beq  2$
+
+        lda  wddat      ; get data
+        sta  header,x   ; put in header
+        inx      
+        dey      
+        bne  2$
+
+3$	jsr  getwdstat	; get status
+	beq  4$		; ok
+
+	sec
+	.byte skip1
+4$	clc
+	bit  iobyte	; bit-6 chck crc
+	bvc  6$
+
+	jmp  crcheader	; check crc in software
+
+5$	lda  #$03	; no disk
+	sta  controller_stat
+	sec
+6$	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+getwdstat
+
+	jsr  wdunbusy	; wait for unbusy first
+
+;~~~~~~~~~~~~~~~
+
+wdstatus 
+
+	php
+	WDTEST
+	lda  WDSTAT	; get status
+	lsr  a
+	lsr  a
+	lsr  a
+	bcs  1$
+
+	and  #bit3+bit1+bit0
+	tax
+	plp		; restore carry
+	lda  wdtrans,x
+	.byte skip2
+1$	lda  #9
+	sta  controller_stat
+	lda  controller_stat
+	rts
+
+wdtrans	.byte 0,5,2,0,0,0,0,0,8
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+start_mtr
+
+	lda  drvst	; motor at least running ?
+	bmi  2$
+
+	and  #bit5+bit4 ; test running and timeout flags
+	bne  1$		; br, it's alive 
+
+	jsr  moton	; turn it on
+	lda  motoracc
+	sta  acltim	; set acceleration time
+
+	lda  #$a0	; accelerating
+	.byte skip2
+1$	lda  #$20	; running now
+	sta  drvst
+2$	rts	
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+wait_mtr
+	lda  drvst	; check for acceleration bit
+	bpl  1$
+
+	lda  acltim	; timeout?
+	bne  4$
+
+1$	lda  pa		; disk changed?
+	and  #disk_change
+	bne  3$
+
+	lda  wdstepin	; clear it
+	jsr  wdbusy
+	jsr  wdunbusy
+	lda  wdstepout	
+	jsr  wdbusy
+	jsr  wdunbusy
+	ldy  setval
+	jsr  xms	; settle...it
+	lda  pa		; new disk or no disk?
+	and  #disk_change
+	bne  3$
+
+2$	lda  #$03	; no disk 
+	jmp  errr
+	
+3$	jsr  tstfoready ; check drive status
+	bcs  2$
+
+	lda  #$20
+	sta  drvst
+	rts		; running
+
+4$	pla		; remove return address
+	pla		; *
+	jmp  end_ctl	; do acceleration stuff	
+
+
+
+
+tstfoready
+
+	ldy  #30	; debounce
+1$	lda  pa		; is drive ready?
+	and  #_drv_rdy
+	bne  2$	
+
+	dey
+	bne  1$
+
+	clc
+	.byte skip1
+2$	sec
+	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+errr
+
+	ldy  nextjob	; return job code
+	sta  jobs,y
+
+	ldy  #bit7
+	cmp  #2
+	bcc  1$
+
+	lda  #0
+	sta  dirty	; clear it
+	sty  cachetrk	; uninit
+1$	sty  nextjob	; clear entry
+
+	ldy  #numjob
+	.byte skip2
+back	ldy  nextjob	; original
+	lda  drvst	; motor doing anything?
+	beq  erret		
+
+	and  #$10
+	bne  erret	; already timeout
+
+	lda  drvst	
+	ora  #$10	; start motor timeout
+	sta  drvst
+	lda  #all
+	sta  acltim	
+	lda  #4
+	sta  acltim+1	; timeout
+
+erret	ldx  savsp	; restore sp
+	txs
+	jmp  lcc0	; continue
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	
+end_ctl
+	ldx  savsp	; get sp
+	inx
+	inx
+	lda  $104,x
+	and  #$10
+	bne  9$
+	
+	lda  sieeetim	; count to zero
+	beq  1$
+
+	dec  sieeetim	; decrement serial bus timer
+
+1$	lda  ledprint
+	and  #pwr_led	; blink?
+	beq  2$
+
+	dec  blink	; blink yet?
+	bpl  2$
+
+	lda  #9		; toggle it & start timer
+	sta  blink
+
+	lda  pa
+	eor  #pwr_led	; toggle power led
+	sta  pa
+
+2$	lda  ledprint	; activity led on?
+	and  #act_led
+	and  ledprint
+	sta  ctmp
+	lda  pa		; save pa
+	and  #all-act_led
+	ora  ctmp
+	sta  pa		; restore port
+
+	lda  pa		; chk msb
+	and  #disk_change
+	bne  3$		; br, ok
+
+	sta  dirty	; clear dirty flag
+	lda  #bit7
+	sta  cachetrk	; uninit
+	lda  #1
+	sta  wpsw
+
+3$	lda  drvst	; motor on ?
+	beq  5$
+
+	tay		; save it
+	cmp  #$20
+	beq  6$	
+
+	dec  acltim	; dec timer
+	bne  6$
+
+	tya		; accelerating ?
+	bpl  4$
+
+	and  #all-bit7	; clear acceleration bit
+	sta  drvst
+4$	and  #$10	; timeout ?
+	beq  6$
+
+	dec  acltim+1	; dec 2nd timer
+	bne  6$
+
+	jsr  motoff	; turn off the motor
+	lda  #0
+	sta  drvst	; all dead
+5$	ldx  savsp
+	txs		; restore stack
+	rts
+
+9$	ldy  drvst
+6$	tya
+	and  #$40	; stepping?
+	beq  5$	
+
+7$	lda  cmdtrk	; destination
+	cmp  drvtrk
+	beq  8$		; we are there
+
+	sta  wddat	; this is where we want to go...
+	lda  drvtrk	; this is where we are...
+	sta  wdtrk	
+
+	lda  wdseek
+	jsr  wdbusy
+	jsr  wdunbusy
+	lda  cmdtrk	; to...
+	sta  drvtrk
+	sta  wdtrk	; update all
+8$	lda  drvst
+	and  #all-bit6	; clear stepping flag
+	sta  drvst
+	ldy  setval
+	jsr  xms	; settle...it
+	jmp  5$
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+bufcache
+
+	bit  tmp+1	; check mark flag
+	bvc  1$
+
+	lda  #bit7
+	.byte skip2
+1$	lda  #all-all
+	sta  dirty
+
+cachebuf
+	lda  #bit5	; check transfer flag
+	bit  ctmp+1
+	bne  1$		; br, yes transfer
+
+	rts
+
+1$	ldy  hdrjob	; get header address
+	lda  hdrs,y	; get cache pointer
+	clc
+	adc  cache+1
+	sta  ip+5
+
+	ldy  #0	
+	sty  ip+2	; buffer index
+	sty  ip+4	; track cache index
+
+	ldx  nextjob
+	lda  bufind,x	; which buffer 
+	sta  ip+3
+
+	lda  tmp+1	; get parms 
+	and  #all-bit7-bit6-bit5
+	tax		; buffer count must be in .x
+	bit  tmp+1
+	bpl  2$		; direction
+
+	jmp  dma_to	; ugly fast linear code
+2$	jmp  dma_from	; *
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+trans_ts
+	asl  info+1	; translate at all?
+	bcs  10$
+
+	ldy  hdrjob	; index
+	asl  info	; translate log/physical
+	bcc  6$
+
+	ldx  nextjob	; get job #
+	lda  cacheoff,x	; already translated ?
+	bpl  1$		; br, nope
+
+	rts
+
+1$	lda  hdrs,y	; get logical track
+	sec
+	sbc  #1		; -1
+	sta  hdrs2,y	; put physical track
+	
+	lda  numsec	; get logical # of sectors
+	lsr  a		; /2
+	tax		; save it
+	cmp  hdrs+1,y	; cmp to logical sector
+	beq  2$
+	bcc  2$
+
+	lda  #0		; side zero
+	.byte skip2
+2$	lda  #1		; side one
+	sta  tcacheside ; translated track cache side
+
+	beq  3$		; 0
+
+	txa		; numsec/2
+3$	sta  tmp+1	; save start sector
+
+	ldx  nextjob
+	lda  hdrs+1,y	; get logical sector number
+	sec
+	sbc  tmp+1
+	ora  #bit7	; set flag
+	sta  cacheoff,x
+	and  #all-bit7
+
+	ldx  psectorsiz	; get physical sector size
+4$	dex
+	beq  5$
+
+	lsr  a		; /2
+	jmp  4$	
+
+5$	clc
+	adc  pstartsec
+	jmp  9$
+
+6$	ldx  nextjob	; current
+	lda  sids,x	; get side
+	sta  tcacheside ; translated track cache side
+	lda  hdrs,y	; get logical track
+	sta  hdrs2,y	; store physical
+	lda  hdrs+1,y	; get logical sector
+	pha		; save
+	sec
+	sbc  pstartsec	; get offset
+	ldx  psectorsiz
+7$	dex
+	beq  8$
+
+	asl  a		; *2
+	jmp  7$
+
+8$	sta  cacheoff,x	; save offset
+	pla		
+9$	sta  hdrs2+1,y	; store sector logical/physical
+	.byte skip2
+10$	asl  info
+	rts
+	
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+trk_in_mem
+	
+	ldy  hdrjob	; get index
+	lda  hdrs2,y	; get converted track address
+	cmp  cachetrk	; same
+	bne  1$		; br, nope
+
+	lda  tcacheside ; translated side
+	cmp  cacheside	; same as what is in memory ?
+	bne  1$
+
+	jmp  buffer_op	; do buffer operation
+
+1$	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+buffer_op
+
+	ldx  nextjob	; get buffer #
+	lda  bufind,x
+	sta  ip+3	; high address for buffer
+	lda  cacheoff,x	; get offset for track cache buffer
+	and  #all-bit7	; clear flag 
+	clc
+	adc  cache+1	; get high address
+	sta  ip+5	; save it
+
+	ldy  #0
+	sty  ip+2	; clear it
+	sty  ip+4	; *
+
+	ldx  #1		
+	asl  info+1	; buffer transfer?
+	bcs  4$
+	
+	asl  info+1	; read/wrt?
+	bcs  2$
+
+	jsr  dma_from	; readit
+1$	jmp  okfin
+2$	lda  wpstat	; check write protect status
+	bne  5$
+	
+	jsr  dma_to	; writeit
+
+3$	lda  #bit7
+	sta  dirty	; set dirty flag
+	bne  1$		; bra		
+
+4$	asl  info+1	; read/wrt?
+	bcc  1$		; bra, finish up
+
+	lda  wpstat	; check write protect status
+	bne  5$
+	
+	bcs  3$		; wrt, set dirty
+
+5$	jmp  fin	; write protected
+	
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+seek
+	jsr  seekhdr	; seek any header
+	bcs  1$
+
+	lda  header	; get track
+	sta  drvtrk
+	lda  header+3	; & physical sector size
+	sta  psectorsiz
+	rts
+
+1$	jmp  errr	; drive not ready
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+cacheip
+	lda  cache	; get track cache address
+	sta  ip+4	; lo
+	lda  cache+1
+	sta  ip+5	; hi
+	rts
+
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+sid_select
+
+	beq  1$		; side zero?
+
+	lda  #side_sel
+1$	sta  ctmp	; set mask
+	lda  pa
+	and  #all-side_sel
+	ora  ctmp	; doit
+	sta  pa
+	rts
+
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+wdabort
+
+	lda  wdforceirq
+	sta  wdcmd	; send command
+	jsr  delay40	; wait 40uS
+	jsr  delay40	; wait 40uS
+	jsr  delay40	; wait 40uS
+	jmp  wdunbusy
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+precmp  sec		; wdtrk in .a
+	sbc  pstartsec	
+	cmp  #precmptrk
+	bcc  1$
+
+	lda  wdwritesector
+	ora  #bit1
+	sta  wdwritesector
+	lda  wdwritetrack
+	ora  #bit1
+	sta  wdwritetrack
+	bcs  2$		; bra
+
+1$	lda  wdwritesector
+	and  #all-bit1
+	sta  wdwritesector
+	lda  wdwritetrack
+	and  #all-bit1
+	sta  wdwritetrack
+2$	rts
+
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

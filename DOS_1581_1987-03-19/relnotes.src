@@ -1,0 +1,32 @@
+	.messg "relnotes"
+	.subttl "relnotes"
+	.page	
+;********************************************************************
+;
+;Format does not work properly under a partition.
+;Change start_motor, and wait_motor routines because ready from 
+; the drive is not reliable, so a mandatory startup delay is needed.
+;Change disk change clear software so it's not as abnoxious.
+;Check for BAM allocation in partit.
+;Fix burst inquire hang.
+;Point to directory sector via BAM0.
+;Accept an unspecified drive.
+;Set wpstat on init.
+;Add two additional vectors :
+;	jspinout - carry set is spout
+;		 - carry clr is spinp
+;      jallocbuf - allocates buffer
+;
+;Add spread and spwrt controller commands these command will read and 
+; write directly from buf0 any physical sized sector.
+;Add burst read and write logical.
+;Add burst memory read and memory write command.
+;Check partition size for zero.
+;Set psetdef in autoi.
+;Add seek always in controller, and disable init_seek on SEEK cmd.
+;Clear out first eight bytes of first partition sector 
+; when it is created.
+;Add vector jintdsk - if disk was changed it will set default parms.
+;Set BAM 0/1/2 used in mapout not in format, so verdir likes it.
+;Set clkhi in burst logical write, fix status send in write's.
+;********************************************************************

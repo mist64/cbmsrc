@@ -1,0 +1,15 @@
+	.messg "dversion"
+	.subttl "dversion"
+	.page 
+
+	*=$8000         	; start of ROM  03/20/87  csum = $8E8B
+
+signature_lo	
+	.byte  $7f
+signature_hi
+	.byte  $6c
+
+cchksm  .byte  $24
+
+dversion
+	.byte  $01

@@ -1,0 +1,152 @@
+        .messg "newss"
+        .subttl "newss"
+        .page
+;generate new ss & fix old ss's to
+;reflect it..
+
+newss   jsr  nxtts      ; get t&s based on hdr
+        jsr  dblbuf     ; use inactive buffer
+        jsr  scrub       
+        jsr  getact      
+        pha      
+        jsr  clrbuf      
+        ldx  lindx       
+        lda  ss,x       ; set regs for transfer
+        tay      
+        pla      
+        tax      
+	jsr  hugerel
+	bne  newss1
+
+	jmp  newss3
+newss1
+        lda  #ssioff    ; # of chars
+        jsr  b0tob0     ; transfer at buf(0)
+        lda  #0          
+        jsr  ssdir       
+        ldy  #2          
+        lda  (dirbuf),y ; get ss #
+        pha      
+        lda  #0          
+        jsr  setpnt      
+        pla      
+        clc      
+        adc  #1          
+        sta  (dirbuf),y ; put ss # in new ss
+        asl  a   
+        adc  #4          
+        sta  r3         ; save position
+        tay      
+        sec      
+        sbc  #2          
+        sta  r4          
+newss2
+        lda  track       
+        sta  r1         ; save for ss update
+        sta  (dirbuf),y ; put track in ss
+        iny      
+        lda  sector      
+        sta  r2         ; save for ss update
+        sta  (dirbuf),y ; put sector in ss
+        ldy  #0          
+        tya      
+        sta  (dirbuf),y ; null link
+        iny      
+        lda  #ssioff+1  ; ptr to last byte
+        sta  (dirbuf),y   
+        lda  #ssioff     
+        jsr  setpnt      
+        jsr  wrtab       
+        jsr  watjob      
+	.pag             
+ns20    ldx  lindx       
+        lda  ss,x       ; get ss buffer #
+        pha      
+        jsr  gaflgs      
+        ldx  lindx       
+        sta  ss,x       ; swap act-buf & ss
+        pla      
+        ldx  lbused      
+        sta  buf0,x      
+        lda  #0          
+        jsr  setpnt     ; set link to new ss
+        ldy  #0          
+        lda  track       
+        sta  (dirbuf),y   
+        iny      
+        lda  sector      
+        sta  (dirbuf),y   
+	jsr  hugerel
+	bne  ns50
+
+	lda  r0
+	cmp  #all
+	bne  ns50
+
+	lda  sector
+	pha
+	lda  track
+	pha
+	jsr  wrtout	; write old ss
+	jsr  watjob
+	jsr  dblbuf
+	jsr  rdsssa	; read sss
+	inc  r5
+	lda  r5		; next group number
+	asl  a
+	clc
+	adc  #3		; index into sss
+	jsr  setssp	; point to it
+	pla
+	jsr  putss	; set the track
+	pla
+	jsr  putss	; set the sector
+	jsr  wrtsss	; write out the sss
+	lda  r5
+	pha
+	jmp  rdss1d	; now read the ss back in
+	
+ns40    jsr  getact      
+        ldx  lindx       
+        jsr  ibrd       ; read next ss
+        lda  #0          
+        jsr  setpnt     ; ptr=0
+ns50    dec  r4          
+        dec  r4          
+        ldy  r3         ; get new ss link ptr
+        lda  r1          
+        sta  (dirbuf),y ; put track in
+        iny      
+        lda  r2          
+        sta  (dirbuf),y ; put sector in
+        jsr  wrtout     ; write it back
+        jsr  watjob     ; ...& wait
+        ldy  r4          
+        cpy  #3          
+        bcs  ns40       ; more ss to update!
+
+        jmp  dblbuf     ; reset active buffer
+newss3
+	lda  r0
+	cmp  #nssl-1
+	bcs  newss4
+	
+	jmp  newss1
+newss4
+	lda  #all
+	sta  r0
+	lda  #0
+	jsr  setpnt
+	ldy  #2
+	sta  (dirbuf),y	; ss 0
+	ldx  lindx
+	lda  rs,x
+	iny
+	sta  (dirbuf),y	; record size
+	iny
+	beq  newss5
+	
+	jmp  newss2
+newss5
+	jmp  newss1
+	

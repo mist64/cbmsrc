@@ -1,0 +1,529 @@
+		.page
+	.messg "sieee"
+	.subttl "sieee"
+        .page  
+atnsrv  sei  
+	lda  sieeeset
+	sta  sieeetim	; init counter
+	lda  fsflag	
+	and  #all-bit7-bit6-bit0	    
+        sta  fsflag	; clear serial flags (bit7=talk,bit6=listen,
+			; 		      bit0=atn pending)
+
+        ldx  tos	; reset stack
+        txs      
+	jsr  spinp	; serial input
+
+        lda  #$80       ; set atn mode flag for acpt routine
+        sta  eoiflg     ; reset eoi flag to non-eoi state
+	
+	lda  fsflag	
+	ora  #bit1
+	sta  fsflag     ; atnmod      
+
+        jsr  clkhi       
+        jsr  datlow     ; set data line low as response
+
+        lda  pb		; set atn ack to release data line
+	and  #all-atna  
+	sta  pb
+
+1$	lda  pb		; test atn still here
+        bpl  a2		; gone !
+
+        and  #clkin     ; clock still low
+        bne  1$
+
+a3	jsr  acptr	; get a command byte
+
+	cmp  #unlsn      
+        bne  a4
+
+	lda  fsflag	; clr fast host flag & listen flag
+	and  #all-bit5-bit6
+	sta  fsflag
+        jmp  a6	
+
+a4	cmp  #untlk      
+        bne  a5
+
+	lda  fsflag	; clr fast host flag & talk flag
+	and  #all-bit5-bit7
+	sta  fsflag
+
+a6	jmp  a9		; jmp
+
+a5	cmp  tlkadr     ; our talk address?
+        bne  a7		; nope
+
+	lda  fsflag
+	ora  #bit7	; set talk flag
+	and  #all-bit6	; clear listen flag
+	sta  fsflag
+        bne  a8		; bra
+
+a7	cmp  lsnadr     ; our listen address?
+        bne  a10	; nope
+
+	lda  fsflag
+	ora  #bit6	; set talk flag
+	and  #all-bit7	; clear talk flag
+	sta  fsflag
+        bne  a8		; bra  
+
+a10	tax     	; test if sa
+        and  #$60        
+        cmp  #$60       ; sa = $60 + n
+        bne  a11	; did not get a valid command
+
+        txa     	; a sa for me
+        sta  orgsa       
+        and  #$0f       ; strip junk
+        sta  sa          
+
+        lda  orgsa      ; test if close
+        and  #$f0        
+        cmp  #$e0        
+        bne  a9		; no
+
+        cli      
+        jsr  close      ; close the file
+        sei      
+
+;warning:::close doesn't return in time for a9	
+
+a8	bit  pb		; test atn still here
+        bmi  a3
+
+;atn gone , do what we where told to do
+
+a2	lda  fsflag
+	and  #all-bit1
+	sta  fsflag     ; clear atn mode
+
+        lda  pb		; atn gone, release atn ack
+        ora  #atna
+	sta  pb
+
+        bit  fsflag 	; listen ?
+        bvc  a12
+
+	lda  #bit5
+        bit  fsflag  	; fast ?
+        beq  a14
+
+        jsr  drq	; device request fast
+
+a14	jsr  jlisten      
+        jmp  xidle       
+
+a12	bit  fsflag 	; talk?
+        bpl  a13
+
+        jsr  dathi      ; release data line
+        jsr  clklo
+
+        jsr  delay40	; slow down for plus4 series 
+        jsr  jtalk        
+        jsr  delay40	; slow down for plus4 series
+
+a13	jmp  ilerr      ; release all lines and go to idle
+
+;fix so (device not present) errors reported
+
+a11
+	lda  #0	
+	sta  pb		; kill all 
+
+a9	bit  pb
+        bpl  a2		; exit out same way after atn done
+
+        bmi  a9		; bra
+
+
+drq	jsr  tstatn     ; does the host want us ?
+        jsr  debnc       
+        and  #clkin      
+        bne  drq	; wait for clk hi
+
+        jsr  spout      ; output
+
+        lda  #0          
+        sta  sdr	; send zero
+
+fs_wait lda  #8
+1$	bit  icr	; wait for byte to shift out
+        beq  1$
+
+	.byte $ea, $ea, $ea, $ea, $ea	; placeholder
+
+spinp	php		; save uP status
+	sei
+	lda  cra	; turn 8520 in
+	and  #%10111111	; serial port input
+        jsr  spin_patch	; sta cra
+        lda  pb		; turn drvr in
+        and  #all-fsdir
+	sta  pb
+	plp
+	rts      
+
+	.byte $ea, $ea, $ea, $ea, $ea	; placeholder
+
+spout   php		; save uP status
+	sei
+	lda  pb
+        ora  #fsdir
+        sta  pb		; turn drvr out
+	lda  cra	; turn 6526 out
+        ora  #%01000000
+        jsr  spout_patch ; sta cra
+	plp
+        rts      
+
+
+
+dathi   lda  pb         ; set data out hi
+        and  #all-datout         
+        sta  pb          
+        rts      
+
+
+
+datlow  lda  pb         ; set data out low
+        ora  #datout     
+        sta  pb          
+        rts      
+
+
+
+clklo   lda  pb         ; set clk out low
+        ora  #clkout     
+        sta  pb          
+        rts      
+
+
+
+clkhi   lda  pb         ; set clk out high
+        and  #$ff-clkout         
+        sta  pb          
+        rts      
+
+
+
+debnc   lda  pb         ; debounce port
+        cmp  pb          
+        bne  debnc       
+
+        rts      
+
+
+
+tstatn  lda  #bit1
+	bit  fsflag	; test if in atn mode
+        beq  1$		; no
+
+        lda  pb         ; in atnmod
+        bpl  2$		; atn gone,do what we are told to do
+
+3$	rts     	; still in atn  mode
+
+1$	lda  pb         ; not atnmode
+        bpl  3$		; no atn present
+
+	bit  icr	; clear atn
+	jmp  jatnsrv    ; do atn command
+
+2$	jmp  a2	
+
+
+
+delay40	txa     	; only affect .a
+        ldx  #$0c	; insert 40us of delay with this routine
+	bne  delay16+3
+
+delay16 txa     	; only affect .a
+        ldx  #3         ; insert 16us of delay with this routine
+1$	dex      
+        bne  1$
+
+        tax      
+        rts      
+
+
+
+nnmi    lda  cmdbuf+2   ; new nmi routine check for
+        cmp  #'-'        
+        beq  1$		; if ui- then no delay
+
+        sec      
+        sbc  #'+'        
+        bne  2$		; if not ui+ then must be a real ui command
+
+1$	and  #bit1
+	asl  a
+	asl  a
+	asl  a
+	sta  tmp
+	sei
+	lda  fsflag
+	and  #all-bit4
+	ora  tmp
+	sta  fsflag	; set/clr slow flag
+        rts      
+
+2$	jmp  jnmi	; doit
+        .page
+        .subttl	"sieee.sertalk1.src"
+
+talk   	sei     	; find if open channel
+        jsr  fndrch      
+        bcs  1$		; no one home
+
+2$	ldx  lindx       
+        lda  chnrdy,x    
+        bmi  3$
+
+1$	rts      
+
+;  code added to correct verify error
+
+3$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        php      
+        jsr  clkhi      ; set clk hi
+        plp     	; see if verify error...
+        beq  4$		; br,  yes...data line hi, eoi !!!!
+
+5$	jsr  tstatn     ; test for atn
+        jsr  debnc       
+        and  #datin      
+        bne  5$		; wait for data high
+
+        ldx  lindx      ; prepare to send eoi if needed
+        lda  chnrdy,x    
+        and  #eoi        
+        bne  7$		; no eoi
+
+4$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin     ; test if data line is low
+        bne  4$		; yes, wait till hi
+
+6$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        beq  6$	
+
+7$	jsr  clklo      ; set clock low
+        jsr  tstatn     ; chk atn line
+        jsr  debnc      ; debounce
+        and  #datin      
+        bne  7$	
+
+;**********  fast serial routines  **********
+
+	lda  #bit5
+        bit  fsflag  	; fast or slow ?
+        beq  10$
+
+	lda  pb		; fast serial output
+        ora  #fsdir
+        sta  pb		; turn drvr out
+	lda  cra	; turn 6526 out
+        ora  #%01000000
+        sta  cra
+	bit  icr
+        ldx  lindx       
+        lda  chndat,x   ; get data
+        sta  sdr	; send it
+
+	lda  #8
+8$	bit  icr	; wait for byte ready
+        beq  8$
+
+        lda  cra
+        and  #%10111111 ; release the data bus
+        sta  cra	; must go input
+        lda  pb
+        and  #all-fsdir	; turn drvr in
+        sta  pb
+        bne  9$		; wait for data accepted
+
+;**********  end fast serial routines  **********
+
+10$	
+        lda  #8         ; set up bit counter
+        sta  cont        
+
+11$
+        jsr  debnc      ; let port settle
+        and  #datin     ; test that data line is now high before we send
+        bne  16$
+
+12$	ldx  lindx      ; get byte to send
+        lda  chndat,x    
+        ror  a   
+        sta  chndat,x    
+
+        bcs  13$	; send a 1
+
+        jsr  datlow     ; send a 0
+        bne  14$	; and clock it
+
+13$	jsr  dathi       
+14$	jsr  delay16	; wait a bit for t-s ( 2 mhz )
+
+	lda  #bit4
+        bit  fsflag	; slow down?
+        bne  17$
+
+        jsr  delay40	; delay 40 us ( host dma )
+17$	jsr  clkhi      ; rising edge clock
+        jsr  delay16	; increase t-v ( 2 mhz )
+
+	lda  #bit4
+        bit  fsflag	; slow down?
+        bne  15$
+
+        jsr  delay40	; delay 40 us ( host dma )
+15$	jsr  clklo	; pull clock low and ...
+	jsr  dathi	; release data
+
+        dec  cont       ; more bits?
+        bne  11$	; yes
+
+9$	jsr  tstatn     ; test for atn
+        jsr  debnc      ; debounce
+        and  #datin      
+        beq  9$		; wait for data low
+
+        cli     	; let the controller run
+        jsr  get       	; get the next byte
+        sei     	; sorry sync protocol
+
+	jsr  tstatn     ; test for atn
+        jmp  2$		; keep on talkin
+
+16$	jmp  frmerr      
+        .page  
+        .subttl "sieee.serlistn1.src"
+
+acptr   bit  icr	; clear pending
+	lda  #8         ; set byte bit count
+        sta  cont        
+
+1$	jsr  tstatn      
+        jsr  debnc       
+        and  #clkin      
+        bne  1$
+
+        jsr  dathi      ; make data line hi
+
+	lda  #datin
+2$	bit  pb		; wait for data high
+	bne  2$
+
+	ldx  #$0a	; > 256uS is EOI
+3$	jsr  tstatn      
+	dex		
+	beq  4$		; times up?
+
+        jsr  debnc      ; test clock low
+        and  #clkin      
+        beq  3$		; no
+        bne  5$		; yes
+
+4$	jsr  datlow     ; set data line low as response
+
+        ldx  #24        ; delay for talker turnaround
+6$	dex      
+        bne  6$
+
+        jsr  dathi      ; set data line hi
+
+7$	jsr  tstatn      
+        jsr  debnc      ; wait for low clock
+        and  #clkin      
+        beq  7$
+
+        lda  #0         ; set eoi received
+        sta  eoiflg      
+
+5$	lda  pb		; wait for clock high
+        eor  #01        ; complement datain
+
+;**********  fast serial routines  **********
+
+        tax     	; save .a
+        lda  icr
+        and  #8		; fast byte ?
+        beq  11$
+
+        lda  sdr	; get data
+        sta  data       ; keep
+        jmp  10$	; finish up
+
+;**********  end fast serial routines **********
+
+11$	txa     	; restore .a
+        lsr  a          ; shift into carry
+        and  #$02       ; clkin/2
+        bne  5$
+
+        ror  data        
+
+9$	jsr  tstatn      
+        jsr  debnc       
+        and  #clkin     ; wait for clock low
+        beq  9$
+
+        dec  cont       ; more to do?
+        bne  5$
+
+10$	jsr  datlow     ; set data line low
+        lda  data        
+        rts      
+
+
+listen  sei      
+        jsr  fndwch     ; test if active write channel
+        bcs  1$
+
+        lda  chnrdy,x    
+        ror  a   
+        bcs  2$
+
+1$	lda  orgsa      ; test if open
+        and  #$f0        
+        cmp  #$f0        
+        beq  2$		; its an open
+
+        jmp  ilerr      ; not active channel
+
+2$	jsr  acptr      ; get a byte
+
+        cli      
+        jsr  put        ; put(data,eoiflg,sa)
+        jmp  listen    	; and keep on listen
+
+
+frmerr  lda  fsflag
+	and  #all-bit5  ; leave ...
+        sta  fsflag	; clear serial flags 
+
+
+ilerr	lda  #atna
+        sta  pb		; in atnmod, release all bus lines
+
+
+xidle	jsr  spinp
+	jmp  jidle	; go idle it
+
+
+spinout			; carry set spout
+	bcs  1$
+
+	jmp  spinp	; carry clear spin
+1$	jmp  spout

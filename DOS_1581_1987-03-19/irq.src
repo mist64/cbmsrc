@@ -1,0 +1,44 @@
+        .messg "irq"
+        .subttl "irq"
+        .page  
+irq     pha     	;  save .a,.x,.y
+        txa      
+        pha      
+        tya      
+        pha      
+
+	lda  icr	; get status
+	tay		; save	
+	and  fsflag	; lock bit
+	and  #bit3	; fast serial byte ?
+	beq  1$		; br, nope
+
+	lda  fsflag	
+	ora  #bit5	; set it
+	sta  fsflag
+1$	tya
+	and  #bit4	; flag (atn)
+	beq  2$
+
+	lda  fsflag
+	ora  #bit0	; atnpnd
+	sta  fsflag	
+2$	tya
+	and  #bit1	; timer b (controller timer)
+	beq  3$
+
+	jsr  jlcc	; controller
+
+3$	tsx
+	lda  $104,x	; check brk flag
+	and  #$10
+	beq  4$
+	
+	jsr  jlcc	; controller
+
+4$	pla     	; restore .y,.x,.a
+        tay      
+        pla      
+        tax      
+        pla      
+        rti      

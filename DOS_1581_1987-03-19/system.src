@@ -1,0 +1,101 @@
+        .messg "system"
+        .subttl "system"
+        .page  
+hugerel
+	lda  relsw
+	and  #bit5
+	rts
+
+;
+; read and write super sidesectors
+;
+rdsss
+	ldx  lindx
+	lda  #all-1
+	cmp  sssgrp,x
+	bne  rdsssa	; ss not resident read it
+
+	rts
+rdsssa
+	lda  #read_dv
+	.byte skip2
+wrtsss	lda  #wrtsd_dv
+	pha
+	ldx  lindx
+	lda  ssstrk,x
+	sta  track	; set track
+	lda  ssssec,x
+	sta  sector	; set sector
+	lda  #all
+	sta  sssgrp,x
+	lda  ss,x	; get ss buffer #
+	sta  jobnum
+	jsr  seth	; set the job header
+	pla
+	jsr  dojob	; do the job
+	ldx  lindx
+	lda  #all-1
+	sta  sssgrp,x	; mark sss resident
+	rts
+;
+; read last group
+;
+rdlg
+	lda  #$5a
+	sta  grpnum
+	jsr  rdss1
+	bne  rdlg1
+
+	rts
+rdlg1
+	dec  grpnum
+	lda  grpnum
+	jsr  rdss1c
+	bne  rdlg1
+	
+	rts
+;
+; read side sector 1 of group n
+;
+rdss1
+	ldx  lindx
+	cmp  sssgrp,x
+	bne  rdss1a
+	
+	rts
+rdss1a
+	pha		; save group
+	jsr  rdsss	; read the sss
+rdss1d
+	lda  #3
+	jsr  ssdir	; point to the first group
+	pla
+rdss1c
+	tax		; save group number
+	asl  a
+	tay
+	lda  (dirbuf),y	; get track
+	bne  rdss1b	
+
+	ora  #all
+	rts		; return $ff
+rdss1b
+	sta  track
+	iny
+	lda  (dirbuf),y	; get sector
+	sta  sector
+	txa		; get group #
+	pha
+	lda  #all
+	ldx  lindx
+	sta  sssgrp,x	; mark group nonresident
+	lda  ss,x	; get ss buffer #
+	sta  jobnum
+	jsr  seth	; set the job header
+	lda  #read_dv
+	jsr  dojob	; read the ss in
+	ldx  lindx
+	pla
+	sta  sssgrp,x	; mark the group as resident
+	lda  #0
+	rts		; return 0

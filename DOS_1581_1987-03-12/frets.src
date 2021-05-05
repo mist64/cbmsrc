@@ -1,0 +1,100 @@
+        .messg "frets"
+        .subttl "frets"
+        .page 
+frets   jsr  setbam     ; mrk bam free
+        jsr  bambit     
+        bne  fre10      ; free already
+
+        lda  (bmpnt),y  ; not free, free it
+        ora  bmask,x     
+        sta  (bmpnt),y    
+        lda  #1          
+        sta  wbam       ; set it dirty
+        ldy  #0         ; point to blks free
+        clc      
+        lda  (bmpnt),y    
+        adc  #01        ; add one
+        sta  (bmpnt),y    
+        lda  track       
+        cmp  dirtrk      
+        beq  use10       
+
+        inc  ndbl        
+        bne  fre10       
+
+        inc  ndbh        
+fre10   rts      
+
+wused   jsr  setbam     ; get bam index
+        jsr  bambit      
+        beq  use30      ; used, no action
+
+        lda  (bmpnt),y  ; get bits
+        eor  bmask,x    ; mark sec used
+        sta  (bmpnt),y    
+        lda  #1          
+        sta  wbam       ; set it dirty
+        ldy  #0          
+        lda  (bmpnt),y  ; count -1
+        sec      
+        sbc  #01         
+        sta  (bmpnt),y  ; save it
+        lda  track       
+        cmp  dirtrk      
+        beq  use20       
+
+        lda  ndbl        
+        bne  use10       
+
+        dec  ndbh        
+use10   dec  ndbl        
+use20   lda  ndbh        
+        bne  use30       
+
+        lda  ndbl        
+        cmp  #3          
+        bcs  use25
+
+        lda  #dskful     
+        jmp  errmsg      
+
+use25	lda  #1		
+use30   rts      
+	.page
+setbam  lda  nodrv      
+        beq  bamtrk     ; ok
+
+        lda  #nodriv     
+        jsr  cmder2     ; no drive present
+
+bamtrk  jsr  setbp2     ; default base adr
+        lda  track       
+        cmp  #41        ; which bam ?
+        bcc  stbm20     ; bam1
+
+        sbc  #40        ; range 40 trk per bam
+        inc  bmpnt+1    ; it's bam2
+stbm20  asl  a          ; trk x6 offset
+        sta  bmpnt      ; save x2
+        asl  a          ; x4
+        clc     	; total=x6
+        adc  bmpnt      ; 
+        adc  #bindx-6   ; bam offset -1 trk blk
+        sta  bmpnt       
+        ldy  #0         ; point to blks free
+        rts      
+
+bambit  lda  sector     ; get sector bit in bam
+        lsr  a          ; sectr/8
+        lsr  a   
+        lsr  a   
+        tay      
+        iny     	; adjust it
+        lda  sector     ; get remainder
+        and  #$07        
+        tax     	; bit mask index
+        lda  (bmpnt),y    
+        and  bmask,x     
+        rts      
+
+bmask    .byte  1,2,4,8,16,32,64,128     

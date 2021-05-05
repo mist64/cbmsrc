@@ -1,0 +1,14 @@
+	.messg "tst5"
+	.subttl "tst5"
+        .page  
+; init to default parms
+intdsk
+	lda  #bit0	; set?
+	bit  wpsw
+	beq  1$
+
+	eor  #bit0
+	sta  wpsw
+	jsr  psetdef	; set physical parms
+	jmp  setdef	; reg parms
+1$	rts

@@ -1,0 +1,1465 @@
+	.messg "burstc"
+	.subttl "burstc"
+	.page
+logical_err
+	lda  #%10001101
+	jmp  fail
+
+logical_rd
+	lda  dkoramask
+	bmi  logical_err
+
+        ldx  #0         ; job #0
+        lda  cmdbuf+3   ; get track
+        sta  hdrs,x
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1,x
+
+        lda  #read_dv	; read 
+	jsr  stbctl
+	jsr  upinst	; update controller status
+
+	bit  switch	; check E
+	bvs  lerror_sw	
+
+        cmp  #2         ; error
+        bcc  lerror_sw
+
+	jmp  fail
+
+lerror_sw
+	jsr  hskstat    ; handshake on state of clkin
+
+	ldy  #0         ; even page
+	sty  bufpnt
+	lda  #>buff0
+	sta  bufpnt+1	; pointer to data
+1$	lda  (bufpnt),y ; get data
+        jsr  hskrd      ; handshake on state
+        iny      
+        bne  1$
+
+	dec  cmdbuf+5	; any more sectors
+	beq  2$
+
+	jsr  lsectnx	; next sector
+	jmp  logical_rd	; read next
+
+2$	jmp  lchksee	; next track
+
+	.page
+nchnl	lda  #%00001011 ; no channel
+	.byte skip2
+ndkrd	lda  #%01001111 ; no drive
+
+fail	jsr  upinst     ; update dkmode
+	jsr  statqy	; wait for state handshake
+final	lda  burst_stat
+	cmp  #2
+	bcs  exbad
+
+	rts
+
+exbad  	and  #15	; bits 0-3 only
+	ldx  #0         ; jobnum
+        jmp  error      ; controller error entry
+
+	.page
+; (1) FAST READ 
+
+fstrd   lda  wpsw	; disk change?
+	bne  nchnl	; br, bad
+
+fstread	jsr  spout      ; output mode
+	lda  switch	; check for L
+	bmi  logical_rd
+
+        ldx  #0         ; job #0
+        lda  cmdbuf+3   ; get track
+        sta  hdrs,x
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1,x
+
+	lda  switch
+	and  #bit4
+	sta  sids,x
+        lda  #tpread_dv	; read 
+	jsr  stbctl
+	jsr  upinst	; update controller status
+
+	bit  switch	; check E
+	bvs  error_sw	
+
+        cmp  #2         ; error
+        bcs  fail
+
+error_sw
+	jsr  hskstat    ; handshake on state of clkin
+
+buffer_sw
+	ldy  #0         ; even page
+	sty  bufpnt
+	lda  cacheoff,y
+	and  #all-bit7
+	clc
+	adc  cache+1
+	sta  bufpnt+1	; pointer to data
+	ldx  psectorsiz
+	cpx  #3
+	bne  1$
+
+	inx
+1$	lda  (bufpnt),y ; get data
+        jsr  hskrd      ; handshake on state
+        iny      
+        bne  1$
+
+	dex
+	beq  trans_sw
+
+	inc  bufpnt+1
+	bne  1$		; bra
+
+trans_sw
+	dec  cmdbuf+5   ; any more sectors ?
+        beq  1$
+
+        jsr  sectnx	; next sector
+        jmp  fstread	; more to do
+
+1$	jmp  chksee     ; next track ?
+
+	.page
+; (2) FAST WRITE 
+
+logical_werr
+	lda  #%10001101
+	sta  burst_stat
+	lda  switch	; set internal abort switch
+        ora  #%00001000
+	sta  switch
+	bne  lfstwrite	; bra
+
+logical_wrt
+	lda  dkoramask
+	bmi  logical_werr
+
+lfstwrite
+	ldy  #0
+	sty  bufpnt
+	lda  #>buff0
+	sta  bufpnt+1
+1$	lda  pb		; debounce
+        eor  #clkout    ; toggle state of clock
+	bit  icr	; clear pending
+        sta  pb
+	lda  #8
+2$	bit  pb
+        bmi  3$		; br, attn low 
+
+	bit  icr	; wait for byte
+        beq  2$
+
+        lda  sdr	; get data
+        sta  (bufpnt),y ; put away data
+        iny      
+        bne  1$		; more ?
+
+	beq  ltrans_sw1	; bra
+
+3$	jsr  tstatn
+	jmp  2$		; if it comes back then ok
+
+labort_sw
+	lda  burst_stat
+	jmp  fail	; abort
+
+ltrans_sw1
+	jsr  clkhi	; release clock
+	lda  switch	; check internal abort switch
+	and  #%00001000
+	bne  labort_sw	; br, ok...
+
+	ldx  #0         ; job #0
+	lda  cmdbuf+3   ; get track
+        sta  hdrs,x
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1,x
+	lda  #wrtsd_dv	; get write job
+	jsr  stbctl
+	jsr  upinst	; update status
+	jsr  statqb	; send status
+	bit  switch	; check error ignore switch
+	bvs  1$
+
+	lda  burst_stat
+	cmp  #2         ; error on job ?
+        bcc  1$
+
+	jmp  exbad
+
+1$	dec  cmdbuf+5	; any more sectors
+	beq  2$
+	
+	jsr  lsectnx	; next sector
+	jmp  logical_wrt
+
+2$	jmp  lchksee	; next track
+
+	.page
+wnochnl	lda  #%00001011	; no channel
+	.byte  skip2
+ndkwrt	lda  #%01001111	; no drv 1
+	sta  burst_stat
+	jmp  fstwrt1	; bra
+
+fstwrt  lda  wpsw	; disk change
+	bne  wnochnl	
+
+	lda  switch	; check for logical
+	bpl  1$
+	
+	jmp  logical_wrt
+
+1$	ldx  #0         ; job #0
+	lda  switch
+	and  #bit4
+	sta  sids,x
+	lda  cmdbuf+3   ; get track
+        sta  hdrs,x
+        lda  cmdbuf+4   ; get sector
+        sta  hdrs+1,x
+	lda  #tpwrt_dv	; get write job
+	jsr  stbctl
+	jsr  upinst	; update status
+	cmp  #2
+	bcc  fstwrite
+
+	lda  #0
+	sta  dirty	; clear dirty flag
+
+fstwrt1 lda  switch	; set internal abort switch
+        ora  #%00001000
+	sta  switch
+fstwrite
+	jsr  cachepoint ; set pointer to cache buffer
+	ldx  psectorsiz
+	cpx  #3
+	bne  1$
+
+	inx
+1$	lda  pb		; debounce
+        eor  #clkout    ; toggle state of clock
+	bit  icr	; clear pending
+        sta  pb
+	lda  #8
+2$	bit  pb
+        bmi  3$		; br, attn low 
+
+	bit  icr	; wait for byte
+        beq  2$
+
+        lda  sdr	; get data
+        sta  (bufpnt),y ; put away data
+        iny      
+        bne  1$		; more ?
+
+	inc  bufpnt+1
+
+	dex
+	bne  1$
+	
+	beq  trans_sw1	; bra
+
+3$	jsr  tstatn
+	jmp  2$		; if it comes back then ok
+
+abort_sw
+	lda  burst_stat
+	jmp  fail	; abort
+
+trans_sw1
+	jsr  clkhi	; release clock
+	lda  switch	; check internal abort switch
+	and  #%00001000
+	bne  abort_sw	; br, ok...
+
+	jsr  statqb	; send status
+                
+	bit  switch	; check error ignore switch
+	bvs  buffer_sw1
+
+	lda  burst_stat
+	cmp  #2         ; error on job ?
+        bcc  buffer_sw1
+
+	jmp  exbad
+
+buffer_sw1
+	dec  cmdbuf+5   ; more sectors ?
+        beq  1$
+
+        jsr  sectnx	; increment sector
+        jmp  fstwrt
+
+1$	jmp  chksee	; next track ?
+
+
+cachepoint
+
+	ldy  #0         ; even page
+	sty  bufpnt
+	lda  cmdbuf+4	; sector
+	sec
+	sbc  pstartsec
+	ldx  psectorsiz ; multiply by sector size
+1$	dex
+	beq  2$
+	
+	asl  a
+	jmp  1$
+
+2$	clc
+	adc  cache+1	; add offset
+	sta  bufpnt+1
+	rts
+
+	.page
+; (3) FAST SEEK
+
+fstsek  lda  cmdbuf+2	; check drive number
+	and  #1
+        bne  1$		; drive 1 - error
+
+	ldx  #0
+	stx  dkmode
+
+	lda  #restore_dv	
+	jsr  stbctl	; restore head
+
+	php
+	cli
+	lda  #bit7
+	sta  xjobrtn	; return
+	jsr  fintdsk	; init new dsk
+	jsr  initdr	; read in appropiate info
+	asl  xjobrtn	; clear
+	plp
+	lda  switch
+	and  #bit4
+	lsr  a
+	lsr  a
+	lsr  a
+	lsr  a
+	sta  sids,x
+	lda  #side_dv	; select side
+	jsr  strobe_controller
+
+	lda  #seekhd_dv	; seek
+	jsr  stbctl
+	.byte  skip2	; return status
+1$	lda  #%01001111 ; no drv 1
+2$	jsr  fail	; update status
+	lda  #1
+	sta  minsek
+	sta  pstartsec
+	ldx  header+3
+	lda  nsecks,x	; get max #
+	beq  3$		; br, error
+
+	sta  pnumsec
+	sta  pendsec
+	sta  maxsek
+	rts
+
+3$	lda  #$0e
+	bne  2$		; bra, not supported
+
+nsecks  .byte 0,16,10,5
+		
+	.page
+nonedr	lda  #%01001111 ; no drive one
+	jsr  upinst	; update status
+	jmp  final	; finish up ...
+
+; (4) BURST FORMAT MFM/GCR
+
+fstfmt  lda  cmdbuf+2   ; check drive number
+	and  #1
+	bne  nonedr
+
+	lda  cmdbuf+2	; format gcr or mfm ?
+	bpl  usenew
+
+; (4) FORMAT DISK 
+
+;  0     1    2    3    4    5    6    7   8     9 + cmdbuf
+;  ^     ^    ^    ^    ^    ^    ^    ^   ^     ^
+; "U" + "0" + N + SZ + LT + NS + ST + FL + SS + GP
+
+	lda  cmdsiz	; setup default parms
+	sec
+	sbc  #3		; less mandatory + 1
+	tay
+	beq  sz00	; not sz
+
+	lda  cmdbuf+3
+	sta  psectorsiz	
+	
+	dey
+	beq  lt00	; sz only, not lt
+
+	dey
+	beq  ns00	; sz, lt only, not ns
+	
+	dey
+ 	beq  st00       ; sz, lt, ns only, not st
+
+	dey
+	beq  fl00	; sz, lt, ns, st only, not fl
+
+	dey
+	beq  ss00	; sz, lt, ns, st ,fl only, not ss
+
+	lda  cmdbuf+8
+	sta  pstartsec
+
+	dey
+	beq  gap00	; sz, lt, ns, st ,fl,ss only, not gp
+
+	lda  cmdbuf+9
+	sta  gap3
+
+	jmp  startfmt
+
+fmtfil	.byte 'N0:COPYRIGHT CBM,86',$0D
+flenf=*-fmtfil
+
+usenew	
+
+	ldy  #flenf-1
+1$	lda  fmtfil,y
+	sta  cmdbuf,y	; transfer filename to cmd buffer
+	dey
+	bpl  1$
+
+	lda  #20
+	sta  cmdsiz
+	lda  #17
+	sta  filtbl+1	; set dskid
+	lda  #1
+	sta  filtbl
+	ldx  #0
+	jmp  jnew	; new it
+
+	.page
+cp00
+sz00	lda  #sysiz	; 512 byte sectors
+	sta  psectorsiz
+
+lt00	lda  #79	; last track is #79, 80 tracks total
+	sta  cmdbuf+4	; *** pmaxtrk ***
+
+ns00	ldx  psectorsiz
+	lda  nsecks,x	; x=sector size index for # of sectors per track
+	sta  cmdbuf+5	; *** pnumsec ***
+
+st00	lda  #0		; default track #0 start
+	sta  cmdbuf+6	; *** startrk - 1 ***
+
+fl00	lda  #$e5	; default block fill
+	sta  cmdbuf+7	; *** fillbyte ***
+ss00	lda  #1
+	sta  pstartsec	
+gap00	ldx  psectorsiz
+	lda  gp3,x	; get gap
+	sta  gap3
+
+	.page
+startfmt
+	lda  startrk
+	pha
+	lda  fillbyte
+	pha
+	lda  pmaxtrk
+	pha
+	lda  cmdbuf+4
+	sta  pmaxtrk	; maximum track
+	lda  cmdbuf+5	; # of sectors
+	sta  pnumsec
+	clc
+	adc  pstartsec
+	sec
+	sbc  #1		; get ending sector and maximum sector
+	sta  pendsec
+	sta  maxsek
+	ldy  cmdbuf+6   ; store logical
+	iny
+	sty  startrk
+
+	lda  cmdbuf+7
+	sta  fillbyte
+	lda  startrk
+	sta  track
+	lda  #0
+	sta  sector
+	jsr  seth 	; set header
+	lda  #restore_dv
+	jsr  strobe_controller
+	lda  #formatdk_dv
+	jsr  strobe_controller
+	cmp  #2
+        bcs  c_801      
+
+c_802	lda  #0
+	.byte  skip2
+c_801   lda  #6
+	jsr  upinst
+	pla
+	sta  pmaxtrk
+	pla
+	sta  fillbyte
+	pla
+	sta  startrk
+	jmp  final	
+
+gp3  .byte 14,22,38,68
+
+	.page
+; (5) SOFT INTERLEAVE NOT SUPPORTED
+
+cpmint
+	lda  #%00001110 ; syntax error
+	jsr  upinst	; update dkmode
+
+        lda  #badcmd     
+        jmp  cmderr      
+
+	.page
+; (6) QUERY DISK FORMAT
+
+querdk  jsr  fstsek	; send initial
+	ldx  #0
+	stx  tmp+5
+	lda  #restore_dv
+	jsr  query_patch ; do restore & seek any header
+	cmp  #2
+	bcs  2$
+
+	lda  header
+	sta  pstartrk	; set physical starting track
+	bit  switch	; seek to n-track ?
+	bpl  1$
+
+	lda  cmdbuf+3
+	sta  hdrs2	; goto this track
+	lda  #seek_dv
+	jsr  strobe_controller
+	cmp  #2
+	bcs  2$
+
+1$	lda  switch
+	and  #bit4
+	lsr  a
+	lsr  a
+	lsr  a
+	lsr  a
+	sta  sids,x
+	lda  #side_dv
+	jsr  strobe_controller
+
+	lda  #seekhd_dv	; read a header
+	jsr  strobe_controller
+	cmp  #2
+	bcs  2$
+
+	lda  header+2	; sector is?
+	sta  tmp+6	; this is where we stop
+
+3$  	ldx  #0
+	lda  #seekhd_dv
+	jsr  strobe_controller
+	cmp  #2
+	bcs  2$
+
+	lda  header+2	; get next sector
+	ldy  tmp+5
+	sta  cmdbuf+11,y 
+	inc  tmp+5	; inc sector count
+	cpy  #31	; went too far ?
+	bcs  5$
+
+	cmp  tmp+6	; done yet ?
+	bne  3$		; wait for rap...
+
+	lda  tmp+5
+	sta  pnumsec	; physical
+
+	lda  #0
+	.byte  skip2
+5$	lda  #2
+2$	jsr  upinst	
+	cmp  #2
+	bcc  4$
+
+	jmp  fail
+		
+4$	jsr  maxmin	; determine low/high sector
+	jsr  spout	; serial port output
+	lda  minsek
+	sta  pstartsec
+	lda  maxsek	; send max.
+	sta  pendsec
+	jsr  hskstat	; send status
+
+	lda  pnumsec	; get number of sectors
+	jsr  hskrd	; send it
+
+	lda  header 	; get logical track number
+	jsr  hskrd	; send track
+
+	lda  minsek
+	jsr  hskrd	; wait for handshake
+
+	lda  maxsek	; send max.
+	jsr  hskrd	; wait for handshake
+
+	lda  #1
+	jsr  hskrd	; interleave
+	lda  #bit5
+	bit  switch
+	beq  7$
+
+	ldy  #0
+6$	lda  cmdbuf+11,y
+	jsr  hskrd	; send back sector table
+	iny
+	cpy  pnumsec	; done?
+	bne  6$
+
+7$	rts
+
+	.page
+; (7) QUERY/INIT STATUS
+
+inqst   bit  switch	; read/write op ?
+	bpl  wrstat
+	
+statqy  jsr  spout      ; serial port out
+	jsr  hskstat	; send status
+	jmp  spinp	; serial port input
+
+wrstat	lda  cmdbuf+3	; new value
+	sta  dkmode	
+	
+	lda  #bit5
+	bit  switch	; M mask?
+	beq  1$
+
+	lda  cmdbuf+4	; new value
+	sta  dkoramask	
+	lda  cmdbuf+5	; new value
+	sta  dkandmask	
+1$	bit  switch	; clear wp-latch the hard way
+	bvc  fintdsk
+
+	php
+	cli
+	lda  #bit7
+	sta  xjobrtn	; return
+	jsr  jintdsk	; init new disk
+	jsr  initdr	; read in appropiate info
+	asl  xjobrtn	; clear
+	plp
+	rts
+
+
+fintdsk	lda  #bit0
+	sta  wpsw
+	jmp  jintdsk	; clear it default
+
+	.page
+; (8) BACKUP DISK
+
+duplc1  ldx  #%00001110
+	jsr  upinst	; update dkmode
+	
+	lda  #badcmd
+	jmp  cmderr
+
+	.page
+; (9) DUMP BUFFER
+
+dumpbuf	lda  cmdbuf+2	; check drive number
+	tay		; save it
+	and  #1	
+        bne  2$		; drive 1 - error
+
+	ldx  #0		; job 0
+
+	tya		; retrieve
+	bpl  1$		; force bit on?
+
+	and  #bit6	; extract side
+	lsr  a
+	lsr  a
+	lsr  a
+	lsr  a
+	lsr  a
+	lsr  a
+	and  #bit0	; got this bit correct!!!
+	sta  cacheside  
+	lda  cmdbuf+3
+	sta  cachetrk
+	lda  #bit7
+	sta  dirty
+
+1$	lda  dirty	; dirty?
+	bpl  3$
+
+	lda  #detwp_dv	; wp?
+	jsr  strobe_controller
+	sta  wpstat
+	bne  4$		; br, wp
+
+	lda  #bit7
+	sta  xjobrtn
+	jsr  jdumptrk	; dump it now!!!
+	asl  xjobrtn
+	.byte  skip2	; return status
+2$	lda  #%01001111 ; no drv 1
+	.byte  skip2
+3$	lda  #0
+4$	jmp  fail	; update status
+
+	.page
+;       SUBROUTINES
+
+lchksee
+	dec  cmdbuf+6
+
+chksee  lda  cmdsiz     ; chk for next track
+        cmp  #7          
+        bcc  1$
+
+	ldx  #0
+	lda  cmdbuf+6	; next track
+	sta  hdrs,x
+	lda  #pseek_dv
+	jmp  strobe_controller
+
+1$	rts
+
+;******************************************************
+
+statqb  jsr  spout      ; serial port out
+	jsr  hskstat	; send status
+	jsr  burst	; other side
+	jmp  spinp	; serial port input
+
+;******************************************************
+
+upinst  sta  burst_stat
+	ldx  psectorsiz
+	lda  dkmode     ; update main status w/ controller status
+        and  #%10000000 ; clear old controller status
+        ora  burst_stat
+	ora  shftsiz,x	; mask in sector size
+	and  dkandmask	; mask status
+	ora  dkoramask	; *
+        sta  dkmode     ; updated
+        lda  burst_stat
+	rts
+
+shftsiz .byte $00,$10,$20,$30
+
+;******************************************************
+
+hsktst  jmp  tstatn     ; test for atn
+hskrd	pha
+1$	lda  pb		; debounce
+        cmp  pb
+        bne  1$
+
+	and  #$ff	; set/clr neg flag
+        bmi  hsktst     ; br, attn low 
+
+        eor  fsflag     ; wait for state chg
+        and  #4          
+        beq  1$
+
+hsksnd  pla		; retrieve data
+        sta  sdr	; send it
+        lda  fsflag
+        eor  #clkin	; change state of clk
+        sta  fsflag
+
+        lda  #8
+1$	bit  icr	; wait transmission time
+        beq  1$
+
+        rts      
+
+;******************************************************
+
+hskstat
+	lda  dkmode	; get status and send it
+	jmp  hskrd	; transmit status
+
+;******************************************************
+
+stbctl
+	pha
+	lda  #bit6
+	sta  jobrtn	; no check t&s, vernum
+	pla
+stbctr	php
+	cli		; let controller run free
+	sta  cmd	; save cmd for later
+	jsr  strobe_controller
+        cmp  #2         ; was there an error ?
+        bcc  1$		; br, nope
+
+	jsr  stbret	; let DOS retry
+
+1$	lda  #0
+	sta  jobrtn
+	lda  jobs,x	; get error
+	plp		; restore status
+	rts
+
+;******************************************************
+
+stbret	lda  jobrtn	
+	ora  #bit7	
+	sta  jobrtn	; set error recovery on
+	stx  jobnum	; set job #
+	lda  cmd	; set for dos
+	sta  lstjob,x	; set last job
+	jsr  strobe_controller
+	jmp  watjob	; let dos clean it up
+
+;******************************************************
+
+dumptrk lda  #trkwrt_dv
+	sta  lstjob,x
+	lda  cachetrk
+	sta  track
+	lda  pstartsec
+	sta  sector	; sector
+	stx  jobnum
+	txa
+	jsr  seth
+	ldx  jobnum
+
+	lda  revcnt
+	and  #$3f
+	sta  cmd	; set retry
+	jsr  firstdump	; first dump
+	bcc  3$
+
+1$	jsr  retrydump	; retry dump
+	bcc  3$
+
+	dec  cmd
+	bne  1$	
+
+	bit  xjobrtn
+	bmi  3$		; ok return
+
+	bit  jobrtn
+	bmi  3$		; ok return
+
+	jmp  quit2
+
+3$	rts
+
+;******************************
+
+retrydump
+	lda  #bit7
+	sta  dirty
+firstdump		; Ah .. Oh .. Eh
+	lda  track
+	sta  cachetrk	; set track
+	ldy  #1
+	jmp  dorec1	; go for it	
+	
+;******************************************************
+
+burtst	jsr  tstatn     ; test for atn
+burst
+1$	lda  pb		; debounce
+        cmp  pb
+        bne  1$		; same ?
+
+	and  #$ff	; set/clr neg flag
+        bmi  burtst	; br, attn low 
+
+        eor  fsflag	; wait for state chg
+        and  #4          
+        beq  1$
+	
+	eor  fsflag
+	sta  fsflag 	; state change
+	rts
+
+
+;******************************************************
+
+sectnx  sec
+	lda  minsek	
+	beq  1$
+	
+	sbc  #2
+	.byte skip2
+1$	sbc  #1
+	sta  tmp+5	; save min sector - 1, -2
+	
+	lda  cmdbuf+4	; get original sector
+	cmp  maxsek
+	beq  2$		; equal to or
+
+	clc
+	adc  #1		; next sector
+	jmp  5$
+
+2$	lda  switch	; check side
+	tay
+	eor  #bit4	; invert side
+	sta  switch
+	tya
+	and  #bit4
+	beq  4$		; bra
+
+3$	inc  cmdbuf+3	; next track
+4$	lda  pstartsec
+	bcs  6$		; bra ... here or there
+
+5$	bcc  6$		; less than
+
+	sbc  maxsek	; rap around
+	clc	
+	adc  tmp+5	; add min now
+6$	sta  cmdbuf+4	; next sector for controller
+	rts
+;******************************************************
+
+lsectnx 
+	lda  numsec
+	sec
+	sbc  #1
+	sta  tmp+5	; last logical sector number
+
+	lda  cmdbuf+4	; get original sector
+	cmp  tmp+5
+	beq  1$		; equal to or
+
+	clc
+	adc  #1		; next sector
+	jmp  2$
+
+1$	inc  cmdbuf+3	; next track
+	lda  #0
+2$	sta  cmdbuf+4
+	rts
+
+;******************************************************
+
+	.page
+
+;******************************************************
+
+maxmin	ldy  pnumsec	; get ns
+	dey		; one less
+	lda  #255	; as small as min can get
+minim	cmp  cmdbuf+11,y
+	bcc  no_min	; br, no change
+
+	lda  cmdbuf+11,y
+no_min	dey
+	bpl  minim
+
+	sta  minsek	; save min
+
+	ldy  pnumsec	
+	dey		; one less
+	lda  #0		; as small as max can get
+maxim	cmp  cmdbuf+11,y
+	bcs  no_max	; br, no change
+
+	lda  cmdbuf+11,y
+no_max	dey
+	bpl  maxim
+
+	sta  maxsek	; save max
+	rts
+
+;******************************************************
+
+	.page
+;~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+;BURST CMD ONE - READ
+;
+;      BYTE BIT 7       6       5       4       3       2       1       0  
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	L	E	X	S	0	0	0       N
+;----------------------------------------------------------------------------
+;       03	               DESTINATION TRACK
+;----------------------------------------------------------------------------
+;       04		       DESTINATION SECTOR
+;----------------------------------------------------------------------------
+;       05		       NUMBER OF SECTORS
+;----------------------------------------------------------------------------
+;       06		       NEXT TRACK (OPTIONAL)
+;----------------------------------------------------------------------------
+;
+;
+;   RANGE:
+;
+;	VALUES ARE DETERMINED UPON THE PARTICULAR DISK FORMAT.
+;
+;SWITCHES:
+;
+;	L - LOGICAL SECTOR (1=LOGICAL) 
+;	E - IGNORE ERROR (1=IGNORE)
+;	S - SIDE SELECT 
+;	N - DRIVE NUMBER
+;
+;
+;
+;PROTOCOL:
+;
+;	BURST HANDSHAKE.
+;
+;
+;
+;CONVENTIONS:
+;
+;	CMD ONE MUST BE PROCEEDED WITH CMD 3 OR CMD 6  ONCE TO LOG
+;	THE DISK IN,  THEN READS  OR WRITES CAN BE PERFORMED UNTIL
+;	THE DISK IS CHANGED.
+;
+;
+;OUTPUT:
+;	ONE  BURST  STATUS  BYTE PRECEDING BURST DATA WILL BE SENT  
+;	FOR  EVERY  SECTOR  TRANSFERRED.    ON  AN  ERROR  CONDITION  
+;	DATA  WILL NOT BE SENT UNLESS THE E BIT IS SET.
+	.page
+;BURST CMD TWO - WRITE
+;
+;      BYTE BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	L	E	X	S	0	0	1       N
+;----------------------------------------------------------------------------
+;       03	               DESTINATION TRACK
+;----------------------------------------------------------------------------
+;       04		       DESTINATION SECTOR
+;----------------------------------------------------------------------------
+;       05		       NUMBER OF SECTORS
+;----------------------------------------------------------------------------
+;       06		       NEXT TRACK (OPTIONAL)
+;----------------------------------------------------------------------------
+;
+;
+;   RANGE:
+;
+;	VALUES ARE DETERMINED UPON THE PARTICULAR DISK FORMAT.
+;
+; 
+;SWITCHES:
+;
+;	L - LOGICAL (1=LOGICAL)
+;	E - IGNORE ERROR (1=IGNORE) 
+;	S - SIDE SELECT 
+;	N - DRIVE NUMBER
+;
+;
+;
+;PROTOCOL:
+;
+;	BURST DATA TO THE DRIVE, THEN HOST MUST PERFORM THE FO-
+;	LLOWING: FAST SERIAL INPUT, PULL THE CLOCK LOW AND WAIT 
+;	FOR THE BURST STATUS BYTE, PULL CLOCK HIGH, GO OUTPUT
+;	FOR MULTI-SECTOR TRANSFERS AND CONTINUE.
+;
+;
+;
+;CONVENTIONS:
+;
+;	CMD TWO MUST BE PROCEEDED WITH CMD 3 OR CMD 6  ONCE TO LOG
+;	THE DISK IN,   THEN WRITES CAN BE PERFORMED UNTIL THE DISK 
+;	IS CHANGED.
+;
+;
+;INPUT:
+;	HOST MUST TRANSFER BURST DATA.
+;
+;
+;OUTPUT:
+;	ONE BURST STATUS BYTE FOLLOWING EACH WRITE OPERATION.
+	.page
+;BURST CMD THREE - INQUIRE DISK
+;
+;
+;      BYTE BIT 7       6       5       4       3       2       1       0  
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	X	X	X	S	0	1	0       N
+;----------------------------------------------------------------------------
+;
+;
+; 
+;SWITCHES:
+;
+;	N - DRIVE NUMBER
+;
+;
+;OUTPUT:
+;	ONE BURST STATUS  BYTE FOLLOWING THE INQUIRE OPERATION.
+	.page
+;BURST CMD FOUR - FORMAT 
+;
+;
+;      BYTE  BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	M	X	X	X	0	1	1	N
+;----------------------------------------------------------------------------
+;       03           SECTOR SIZE	  * (OPTIONAL DEF-02,512 BYTE SECTORS)
+;----------------------------------------------------------------------------
+;       04           LAST TRACK NUMBER      (OPTIONAL DEF-79)
+;----------------------------------------------------------------------------
+;       05           NUMBER OF SECTORS   ** (OPTIONAL DEPENDS ON BYTE 05)
+;----------------------------------------------------------------------------
+;       06	     STARTING TRACK 	    (OPTIONAL DEF-0)
+;----------------------------------------------------------------------------
+;       07           FILL BYTE              (OPTIONAL DEF-$E5)
+;----------------------------------------------------------------------------
+;       08           START SECTOR	    (OPTIONAL DEF-1)
+;----------------------------------------------------------------------------
+;       09           GAP BYTE		*** (OPTIONAL)
+;----------------------------------------------------------------------------
+;
+;*  01 - 256 BYTE SECTORS	     **	16 - 256 BYTE SECTORS
+;   02 - 512 BYTE SECTORS	         9 - 512 BYTE SECTORS
+;   03 - 1024 BYTE SECTORS		 5 - 1024 BYTE SECTORS
+;
+; *** 22 - 256 BYTE SECTORS
+;     38 - 512 BYTE SECTORS
+;     68 - 1024 BYTE SECTORS
+; 
+;SWITCHES:
+;
+;	M - MODE (0=CREATE DIRECTORY & BAM , IGNORE OTHER PARMS)
+;	N - DRIVE NUMBER
+;
+;
+;PROTOCOL:
+;
+;	CONVENTIONAL.
+;
+;
+;CONVENTIONS:
+;
+;	CMD FOUR MUST BE FOLLOWED WITH CMD 3 OR CMD 6 ONCE TO LOG
+;	THE DISK IN.
+;
+;
+;OUTPUT:
+;        NONE.  STATUS WILL BE UPDATED WITHIN THE DRIVE.  
+	.page
+;BURST CMD FIVE - SECTOR INTERLEAVE NOT SUPPORTED
+;		
+;
+;      BYTE BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	W	X	X	0	1	0	0       N
+;----------------------------------------------------------------------------
+;       04		       INTERLEAVE
+;----------------------------------------------------------------------------
+;
+; 
+;SWITCHES:
+;
+;	W - WRITE SWITCH
+;	N - DRIVE NUMBER
+;	X - DON'T CARE
+;
+;PROTOCOL:
+;
+;	BURST HANDSHAKE (W=1), CONVENTIONAL (W=0).
+;
+;
+;CONVENTIONS:
+;
+;	THIS IS A SOFT INTERLEAVE USED FOR MULTI-SECTOR BURST 
+;	READ AND WRITE.
+;
+;OUTPUT:
+;        NONE (W=0), INTERLEAVE BURST BYTE (W=1).
+	.page
+;BURST CMD SIX - QUERY DISK FORMAT
+;		
+;
+;      BYTE BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	F	X	T	S	1	0	1       N
+;----------------------------------------------------------------------------
+;       03   	            OFFSET      (OPTIONAL F-BIT SET)
+;----------------------------------------------------------------------------
+;
+; 
+;SWITCHES:
+;
+;	F - FORCE FLAG (F=1, WILL STEP THE HEAD WITH THE 
+;	    OFFSET SPECIFIED IN BYTE 03)
+;	T - SECTOR TABLE (T=1, SEND SECTOR TABLE).
+;	N - DRIVE NUMBER
+;	X - DON'T CARE.
+;
+;PROTOCOL:
+;
+;	BURST HANDSHAKE.
+;
+;
+;CONVENTIONS:
+;
+;	THIS IS A METHOD OF DETERMINING THE FORMAT OF THE DISK ON 
+;	ANY PARTICULAR TRACK, IT ALSO LOGS NON-STANDARD DISKS
+;	(IE. MINIMUM SECTOR ADDRESSES OTHER THAN ZERO).
+;
+;OUTPUT:
+;      * BURST STATUS BYTE (IF THERE WAS AN ERROR THEN NO BYTES WILL FOLLOW)
+;     **	BURST STATUS BYTE (IF THERE WAS AN ERROR IN COMPILING 
+;		           MFM FORMAT INFORMATION NO BYTES
+;			   WILL FOLLOW)
+;	NUMBER OF SECTORS (THE NUMBER OF SECTORS ON A PARTICULAR
+;			   TRACK)
+;	LOGICAL TRACK	  (THE LOGICAL TRACK NUMBER FOUND IN THE 
+;			   DISK HEADER)
+;	MINIMUM SECTOR 	  (THE LOGICAL SECTOR WITH THE LOWEST
+;			   VALUE ADDRESS)
+;	MAXIMUM SECTOR	  (THE LOGICAL SECTOR WITH THE HIGHEST
+;			   VALUE ADDRESS)
+;	INTERLEAVE	  (THE HARD INTERLEAVE FOUND ON A PARTICULAR
+;			   TRACK) ALWAYS RETURNS A 1
+;	SECTOR TABLE	  (WITH T BIT SET SECTOR TABLE IS SENT)
+;
+; * STATUS FROM TRACK OFFSET ZERO.
+;** IF F BIT IS SET STATUS IS FROM OFFSET TRACK.
+	.page
+;BURST CMD SEVEN - INQUIRE STATUS
+;		
+;
+;     BYTE  BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	W	X	M	0	1	1	0       N
+;----------------------------------------------------------------------------
+;       03                  	NEW STATUS (W-BIT CLEAR)
+;----------------------------------------------------------------------------
+;       04                  	NEW ORA MASK (M-BIT SET)
+;----------------------------------------------------------------------------
+;       05                  	NEW AND MASK (M-BIT SET)
+;----------------------------------------------------------------------------
+; 
+;SWITCHES:
+;
+;	W - WRITE SWITCH 
+;	M - MODIFY ORA/AND MASK
+;	N - DRIVE NUMBER
+;	X - DON'T CARE
+;
+;PROTOCOL:
+;	
+;	BURST HANDSHAKE (W=1), CONVENTIONAL (W=0).
+;
+;
+;CONVENTIONS:
+;
+;	THIS IS A METHOD OF READING OR WRITING CURRENT STATUS.
+;
+;
+;OUTPUT:
+;        NONE (W=0), BURST STATUS BYTE (W=1)
+	.page
+;BURST CMD EIGHT - DUMP TRACK CACHE BUFFER
+;		
+;
+;      BYTE  BIT 7      6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	F	S	X	1	1	1	0       1
+;----------------------------------------------------------------------------
+;       03			PHYSICAL TRACK 
+;----------------------------------------------------------------------------
+; 
+;SWITCHES:
+;	F - FORCE FLAG WILL SET DIRTY FLAG, (S MUST BE SET AND PARM 03 MUST BE
+;	    INCLUDED)
+;	S - SIDE
+;
+;PROTOCOL:
+;	
+;	BURST HANDSHAKE 
+;
+;CONVENTIONS:
+;
+;	THIS IS A METHOD OF WRITING CURRENT TRACK BUFFER CONTENTS
+;       TO DISK IF THE DIRTY FLAG IS SET.  IF THE F FLAG IS SPECIFIED
+;	THEN THE S FLAG MUST BE INCLUDED ALONG WITH PARM 03.
+;
+;OUTPUT:
+;        BURST STATUS BYTE 
+;
+;
+	.page
+;BURST CMD NINE - CHGUTL UTILITY
+;		
+;
+;      BYTE  BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	X	X	X	1	1	1	1       0
+;----------------------------------------------------------------------------
+;       03     UTILITY COMMANDS: 'S', 'F', 'R', 'T', 'I', 'V', 'MR', 'MW', #DEV
+;----------------------------------------------------------------------------
+;       04         COMMAND PARAMETER 
+;----------------------------------------------------------------------------
+;SWITCHES:
+;
+;	X - DON'T CARE.
+;
+;
+;
+;UTILITY COMMANDS:
+;
+;	'S' - DOS SECTOR INTERLEAVE.
+;	'F' - FAST SERIAL.
+;	'R' - DOS RETRIES.
+;	'T' - ROM SIGNATURE ANALYSIS.
+;	'I' - IEEE CACHE TIMEOUT
+;	'MR/W' - BURST MEMORY READ/WRITE
+;	'V' - VERIFY SELECT.
+;       #DEV - DEVICE #.
+;
+;
+;NOTE: BYTE 02 IS EQUIVALENT TO A '>'
+;	
+;EXAMPLES:
+;	"U0>S"+CHR$(SECTOR-INTERLEAVE)
+;	"U0>I"+CHR$(IEEE_TIMEOUT_VALUE)
+;	"U0>R"+CHR$(RETRIES)
+;	"U0>T"
+;	"U0>B0"=SLOW SERIAL, "U0>B1"=FAST SERIAL
+;	"U0>V1"=VERIFY ON, "U0>V0"=VERIFY OFF 
+;	"U0>MR"=BURST MEM READ, "U0>MW"=BURST MEM WRITE 
+;	"U0>"+CHR$(#DEV), WHERE #DEV = 4-30
+;
+	.page
+;BURST CMD TEN - FASTLOAD UTILITY
+;		
+;
+;      BYTE  BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;       00	0	1	0	1	0	1	0	1
+;----------------------------------------------------------------------------
+;       01	0	0	1	1	0	0	0	0
+;----------------------------------------------------------------------------
+;       02	P	X	X	1	1	1	1       1
+;----------------------------------------------------------------------------
+;       03                    FILE NAME
+;----------------------------------------------------------------------------
+; 
+;SWITCHES:
+;
+;	P - SEQUENTIAL FILE BIT (P=1, DOES NOT HAVE TO BE A PROGRAM 
+;				      FILE)
+;	X - DON'T CARE.
+;
+;PROTOCOL:
+;	
+;	BURST HANDSHAKE.
+;
+;
+;OUTPUT:
+;        BURST STATUS BYTE PRECEDING EACH SECTOR TRANSFERRED.
+;	
+;STATUS IS AS FOLLOWS:
+;
+;	0000000X ............. OK
+;     *	00000010 ............. FILE NOT FOUND
+;    **	00011111 ............. EOI
+;	
+; * VALUES BETWEEN THE RANGE 3-15 SHOULD BE CONSIDERED A FILE READ ERROR.
+;
+;** FOLLOWING THE EOI STATUS BYTE THE NEXT BYTE IS THE NUMBER OF DATA 
+;   BYTES TO FOLLOW.
+	.page
+;STATUS BYTE BREAK DOWN
+;		
+;
+;       BIT 7       6       5       4       3       2       1       0 
+;============================================================================
+;	 MODE	   DN	  SECTOR SIZE	   [  CONTROLLER  STATUS   ]
+;----------------------------------------------------------------------------
+; 
+;
+;	MODE - DISK FORMAT 0=RESIDENT, 1= ALIEN
+;	  DN - DRIVE NUMBER 
+;
+; SECTOR SIZE - (MFM ONLY)
+;	       00 .... 128 BYTE SECTORS (NOT SUPPORTED)
+;	       01 .... 256 BYTE SECTORS	
+;	       10 .... 512 BYTE SECTORS (DEFAULT)
+;	       11 .... 1024 BYTE SECTORS
+;
+; CONTROLLER STATUS 
+;	     000X .... OK
+;            0010 .... SECTOR NOT FOUND
+;	     0011 .... NO ADDRESS MARK
+;	     0100 .... DATA BLOCK NOT PRESENT
+;	     0101 .... DATA CRC ERROR
+;	     0110 .... FORMAT ERROR
+;	     0111 .... VERIFY ERROR
+;	     1000 .... WRITE PROTECT ERROR
+;	     1001 .... HEADER BLOCK CHECKSUM ERROR
+;	     1010 .... 
+;	     1011 .... DISK CHANGE
+;	     1100 .... DRIVE ELECTRONICS NOT READY
+;	     1101 .... NOT LOGICAL FORMAT
+;	     1110 .... SYNTAX ERROR
+;	     1111 .... NO DRIVE PRESENT
+;

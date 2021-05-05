@@ -115,6 +115,8 @@ build2 DOS_1570 serlib
 build2 DOS_1571_03 serlib
 build2 DOS_1571_05 serlib
 build2 DOS_1571CR serlibcr
+build2 DOS_1581_1987-03-12 serlib
+build2 DOS_1581_1987-03-19 serlib
 build2 DOS_1581 serlib
 
 build1 DOS_8250 master
