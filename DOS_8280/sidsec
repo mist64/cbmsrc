@@ -1,0 +1,23 @@
+.PAGE 'SIDE SECTOR'
+;
+; SIDE SECTOR FORMAT
+;
+;     S
+;     I   S S S S S S S S S S S S
+;     D R S S S S S S S S S S S S
+;     E E
+;       C # # # # # # # # # # # #
+;     S O 0 0 1 1 2 2 3 3 4 4 5 5
+;     E R
+;   S C D   S   S   S   S   S   S
+; T E T   T E T E T E T E T E T E
+; R C O S R C R C R C R C R C R C
+; A T R I A T A T A T A T A T A T
+; C O   Z C O C O C O C O C O C O
+; K R # E K R K R K R K R K R K R
+;
+;                     1 1 1 1 1 1
+; 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
+;
+; 16-255 120 TRACK AND SECTOR POINTERS TO DATA BLOCKS
+.END

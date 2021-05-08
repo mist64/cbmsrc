@@ -1,0 +1,25 @@
+.PAGE 'SUPER SIDE SECTOR'
+;
+; SUPER SIDE SECTOR FORMAT
+;
+;   S
+; T E
+; R C I
+; A T D
+; C O E
+; K R N
+;     T
+; O O I
+; F F F
+;     I
+; 1 1 C
+; S S A
+; T T T
+;     I
+; S S O
+; S S N
+;
+; 0 1 2
+;
+; 3-255 TRACK AND SECTOR POINTERS TO SIDE SECTORS
+.END

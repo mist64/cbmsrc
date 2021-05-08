@@ -1,0 +1,5 @@
+.PAGE 'ROM'
+	*=ROM
+CCHKSM
+	.BYTE 0
+.END

@@ -124,6 +124,7 @@ build1 DOS_8250 master
 build1 DOS_8060 dos
 build1 DOS_8070 dos
 build1 DOS_D9065 master
+build1 DOS_8280 master3.1
 
 build2 DOS_1551 d1551
 build2 DOS_1541_05 1541

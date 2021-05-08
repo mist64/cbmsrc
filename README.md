@@ -136,6 +136,10 @@ The CBM 8250/8050/1001/4040 DOS V2.7 source (1981). Extracted from old-dos-sourc
 * Comments in the source call this "SUPER DOS".
 * This only contains the DOS and IEEE code. The controller is in CONTROLLER_8250/CONTROLLER_1001.
 
+## DOS_8280
+
+The CBM 8280 V3.1 source (1981). Extracted from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/8280DOS.D80) and converted to LF line breaks and LST-style indenting.
+
 ## DOS_8060_REC
 
 The reconstructed source for the CBM 8061/8062 (1980). The source is based on DOS_8070 and modified by Martin Hoffmann-Vetter to build into the DOS portion of the 901488-01/-02 ROMs.

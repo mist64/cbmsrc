@@ -1,0 +1,44 @@
+.PAGE 'GETACT'
+;*********************************
+;* GETACT: GET ACTIVE BUFFER #   *
+;*   VARS: BUF0,BUF1,LINDX       *
+;*   REGS: OUT: .A= ACT BUFFER # *
+;*              .X= LINDX        *
+;*   FLAGS:     .N=1: NO ACT-BUF *
+;*********************************
+;
+GETACT
+	LDX LINDX
+	LDA BUF0,X
+	BPL GA1
+	LDA BUF1,X
+GA1
+	AND #$BF        ; STRIP DIRTY BIT
+	RTS
+;
+;*********************************
+;* GAFLG: GET ACTIVE BUFFER #;   *
+;*        SET LBUSED & FLAGS.    *
+;*   REGS: OUT: .A= ACT BUFFER # *
+;*              .X= LINDX        *
+;*   FLAGS:     .N=1: NO ACT-BUF *
+;*              .V=1: DIRTY BUF  *
+;*********************************
+;
+GAFLGS
+	LDX LINDX
+GA2
+	STX LBUSED      ; SAVE BUF #
+	LDA BUF0,X
+	BPL GA3
+	TXA
+	CLC
+	ADC #MXCHNS
+	STA LBUSED
+	LDA BUF1,X
+GA3
+	STA T1
+	AND #$1F
+	BIT T1
+	RTS
+.END
