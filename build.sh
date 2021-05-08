@@ -93,6 +93,7 @@ build2 BASIC_C128 basic
 build1 BASIC_CBM2_A cbm256 # or cbm128
 build1 BASIC_CBM2_B cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
 
+build1 MONITOR_KIM kim.asm
 build1 MONITOR_VIC micii4
 build2 MONITOR_C128 monitor
 
