@@ -94,7 +94,7 @@ build1 BASIC_CBM2_A cbm256 # or cbm128
 build1 BASIC_CBM2_B cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
 
 build1 MONITOR_KIM kim.asm
-build1 MONITOR_VIC micii4
+build1 MONITOR_C64 micii4
 build2 MONITOR_C128 monitor
 
 build2 ASSEMBLER_TED assembler
@@ -121,7 +121,7 @@ build2 DOS_1581_1987-03-19 serlib
 build2 DOS_1581 serlib
 
 build1 DOS_8250 master
-build1 DOS_8060 dos
+build1 DOS_8060_REC dos
 build1 DOS_8070 dos
 build1 DOS_D9065 master
 build1 DOS_8280 master3.1
