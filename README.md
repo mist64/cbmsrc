@@ -2,6 +2,8 @@
 
 This repository collects original source code of various Commodore Business Machines (CBM) computers converted to a modern encoding (ASCII, LF, indentation).
 
+Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://github.com/mist64/cbm6502asm), almost all source in this repo can be built from the UNIX command line. To build everything, run `build.sh` from the Unix command line, on a case-insensitive filesystem.
+
 ## BASIC_VIC
 
 The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from [vic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
