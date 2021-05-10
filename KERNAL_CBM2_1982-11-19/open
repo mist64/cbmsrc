@@ -1,0 +1,188 @@
+.PAG 'OPEN FILE'
+;***********************************
+;*                                 *
+;* OPEN FUNCTION                   *
+;*                                 *
+;* ENTER: CY=1, TRANSMIT COMMAND TO*
+;*              DEVICE.            *
+;*        CY=0, PERFORM OPEN OPERA-*
+;*              TION.              *
+;*                                 *
+;* LA, FA, SA MUST BE SET UP PRIOR *
+;* TO THE CALL TO THIS ROUTINE, AS *
+;* WELL AS THE FILE NAME DESCRIPT- *
+;* TOR.                            *
+;*                                 *
+;***********************************
+;
+NOPEN
+	BCC OP000       ;DO OPEN
+	JMP TRANR       ;DO TRANSMIT
+.SKI 4
+;***********************************
+;*                                 *
+;* CREATE AN ENTRY IN THE LOGICAL  *
+;* FILES TABLES CONSISTING OF      *
+;* LOGICAL FILE NUMBER--LA, DEVICE *
+;* NUMBER--FA, AND SECONDARY CMD-- *
+;* SA.                             *
+;*                                 *
+;* A FILE NAME DESCRIPTOR, FNADR & *
+;* FNLEN, IS PASSED TO THIS ROUTINE*
+;*                                 *
+;***********************************
+;
+OP000	LDX LA          ;CHECK FILE #
+	BNE OP98        ;IS NOT THE KEYBOARD
+;
+	JMP ERROR6      ;NOT INPUT FILE...
+;
+OP98	JSR LOOKUP      ;SEE IF IN TABLE
+	BNE OP100       ;NOT FOUND...O.K.
+;
+	JMP ERROR2      ;FILE OPEN
+;
+OP100	LDX LDTND       ;LOGICAL DEVICE TABLE END
+	CPX #10         ;MAXIMUM # OF OPEN FILES
+	BCC OP110       ;LESS THAN 10...O.K.
+;
+	JMP ERROR1      ;TOO MANY FILES
+;
+OP110	INC LDTND       ;NEW FILE
+	LDA LA
+	STA LAT,X       ;STORE LOGICAL FILE #
+	LDA SA
+	ORA #$60        ;MAKE SA AN IEEE COMMAND
+	STA SA
+	STA SAT,X       ;STORE COMMAND #
+	LDA FA
+	STA FAT,X       ;STORE DEVICE #
+;
+;PERFORM DEVICE SPECIFIC OPEN TASKS
+;
+	BEQ OP175       ;IS KEYBOARD...DONE.
+	CMP #3
+	BEQ OP175       ;IS SCREEN...DONE.
+	BCC OP150       ;ARE CASSETTES 1 & 2
+;
+	JSR OPENI       ;IS ON IEEE...OPEN IT
+	BCC OP175       ;BRANCH ALWAYS...DONE
+;
+;PERFORM TAPE OPEN STUFF
+;
+OP150	CMP #2
+	BNE OP152
+;
+	JMP OPN232
+;
+OP152	JSR ZZZ         ;SEE IF TAPE BUFFER
+	BCS OP180       ;ERROR RETURNED
+;
+OP155	LDA SA
+	AND #$F         ;MASK OFF COMMAND
+	BNE OP200       ;NON ZERO IS TAPE WRITE
+;
+;OPEN CASSETE TAPE FILE TO READ
+;
+	JSR CSTE1       ;TELL "PRESS PLAY"
+	BCS OP180       ;STOP KEY PRESSED
+;
+	JSR LUKING      ;TELL USER "SEARCHING"
+;
+	LDA FNLEN
+	BEQ OP170       ;LOOKING FOR ANY FILE
+;
+	JSR FAF         ;LOOKING FOR NAMED FILE
+	BCC OP171       ;FOUND IT!!!
+	BEQ OP180       ;STOP KEY PRESSED
+;
+OP160	JMP ERROR4      ;FILE NOT FOUND
+;
+OP170	JSR FAH         ;GET ANY OLD HEADER
+	BEQ OP180       ;STOP KEY PRESSED
+	BCC OP171       ;ALL O.K.
+	BCS OP160       ;FILE NOT FOUND...
+;
+;OPEN CASSETTE TAPE FOR WRITE
+;
+OP200	JSR CSTE2       ;TELL "PRESS PLAY AND RECORD"
+	BCS OP180       ;STOP KEY PRESSED
+	LDA #BDFH       ;DATA FILE HEADER TYPE
+	JSR TAPEH       ;WRITE IT
+	BCS OP180       ;EXIT IF STOP KEY PRESSED...
+;
+;FINISH OPEN FOR TAPE READ/WRITE
+;
+OP171
+	LDA #BUFSZ-1    ;ASSUME FORCE READ
+;
+	LDY SA
+	CPY #$60        ;OPEN FOR READ?
+	BEQ OP172
+;
+;SET POINTERS FOR BUFFERING DATA
+;
+	LDA #BDF        ;TYPE FLAG FOR BLOCK
+	JSR TAPZWY      ;TO BEGIN OF BUFFER
+	TYA
+;
+OP172	STA BUFPT       ;POINT TO DATA
+OP175	CLC             ;FLAG GOOD OPEN
+OP180	RTS             ;EXIT IN PEACE
+.SKI 5
+OPENI	LDA SA
+	BMI OP50        ;NO SA...DONE
+;
+	LDY FNLEN
+	BEQ OP50        ;NO FILE NAME...DONE
+;
+	LDA FA
+	JSR LISTN       ;DEVICE LA TO LISTEN
+;
+	LDA SA
+	ORA #$F0
+OPENIB	JSR SECND
+;
+	LDA STATUS      ;ANYBODY HOME?
+	BPL OP35        ;YES...CONTINUE
+;
+;THIS ROUTINE IS CALLED BY OTHER
+;KERNAL ROUTINES WHICH ARE CALLED
+;DIRECTLY BY OS.  KILL RETURN
+;ADDRESS TO RETURN TO OS.
+;
+	PLA
+	PLA
+	JMP ERROR5      ;DEVICE NOT PRESENT
+;
+OP35	LDA FNLEN
+	BEQ OP45        ;NO NAME...DONE SEQUENCE
+;
+;SEND FILE NAME OVER IEEE
+;
+	LDY #0
+OP40	JSR FNADRY
+	JSR CIOUT
+	INY
+	CPY FNLEN
+	BNE OP40
+;
+OP45	JSR UNLSN
+;
+OP50	CLC             ;NO  ERROR
+	RTS
+.SKI 4
+;*****************************************
+;*  TRANSMIT COMMAND TO DEVICE           *
+;*                                       *
+;*   FNLEN,FNADR MUST BE SET UP ALREADY  *
+;*   TO CONTAIN THE COMMAND STRING.      *
+;*   FA MUST BE SET FOR THE DEVICE.      *
+;*****************************************
+TRANR
+	LDA FA
+	JSR LISTN
+	LDA #$6F
+	STA SA
+	JMP OPENIB
+.END

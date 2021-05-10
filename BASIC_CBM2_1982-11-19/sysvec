@@ -1,0 +1,47 @@
+.PAGE   'INTERFACE JUMP VECTORS.'
+ *=VECORG
+;
+IOINIT	*=*+3           ;I/O INITIALIZATION
+CINT	*=*+3           ;SCREEN INITIALIZATION
+ALLOC	*=*+3           ;ALLOCATE ROUTINE
+VECTOR	*=*+3           ;READ/SET I/O VECTORS
+KRESTR	*=*+3           ;RESTORE I/O VECTORS
+LKUPSA	*=*+3           ;SECONDARY TO PHYSICAL MAP
+LKUPLA	*=*+3           ;LOGICAL TO PHYSICAL MAP
+SETMSG	*=*+3           ;CONTROL OS MESSAGES
+SECOND	*=*+3           ;SEND SA AFTER LISTEN
+TKSA	*=*+3           ;SEND SA AFTER TALK
+TOPMEM	*=*+3           ;READ/SET TOP OF MEMORY
+MEMBOT	*=*+3           ;READ/SET BOTTOM OF MEMORY
+KSCNKY	*=*+3           ;SCAN KEYBOARD
+KSETMO	*=*+3           ;SET TIMEOUT IN IEEE
+ACPTR	*=*+3           ;HAND SHAKE IEEE BYTE IN
+CIOUT	*=*+3           ;HAND SHAKE IEEE BYTE OUT
+UNTLK	*=*+3           ;SEND UNTALK OUT
+UNLSN	*=*+3           ;SEND UNLISTEN OUT
+LISTN	*=*+3           ;SEND LISTEN OUT
+TALK	*=*+3           ;SEND TALK OUT
+;
+KRDST	*=*+3           ;RETURN I/O STATUS BYTE
+SETLFS	*=*+3           ;SET LA, FA AND SA
+SETNAM	*=*+3           ;SET LENGTH AND FILENAME ADR
+KOPEN	*=*+3           ;OPEN LOGICAL FILE
+KCLOSE	*=*+3           ;CLOSE  -      -
+KCHKIN	*=*+3           ;OPEN CHANNEL IN
+KCHOUT	*=*+3           ;OPEN   -     OUT
+;
+CLRCH	*=*+3           ;CLOSE I/O CHANNEL
+KBASIN	*=*+3           ;INPUT FROM  -
+KBSOUT	*=*+3           ;OUTPUT -    -
+KLOAD	*=*+3           ;LOAD FROM FILE
+KSAVE	*=*+3           ;SAVE TO    -
+SETTIM	*=*+3           ;SET INTERNAL CLOCK
+RDTIM	*=*+3           ;READ   -      -
+KSTOP	*=*+3           ;SCAN STOP KEY (BREAK)
+KGETIN	*=*+3           ;GET CHAR FROM QUEUE
+KCLALL	*=*+3           ;CLOSE ALL FILES
+UDTIM	*=*+3           ;INCREMENT CLOCK
+SCRORG	*=*+3           ;RETURN SCREEN ORIGIN
+PLOT	*=*+3           ;READ/SET .X,.Y COORDS
+IOBASE	*=*+3           ;RETURN BASE ADDRESS OF I/O
+.END

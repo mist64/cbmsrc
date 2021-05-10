@@ -1,0 +1,71 @@
+.PAG 'TIME 11/12/81'
+;----------------------------------------
+;
+; TIME AND ALARM ROUTINES FOR 6526
+;      RSR 11/12/81
+;
+;----------------------------------------
+;----------------------------------------
+; RDTIM - READ THE TIME
+;  .Y = (BIT7=PM,BIT6/5=T8/T4,BITS4-0 HRS)
+;  .X = (BIT7=T2,BITS6-0 MINUTES)
+;  .A = (BIT7=T1,BITS6-0 SECONDS)
+;----------------------------------------
+RDTIM	LDA CIA+TOD10
+	PHA             ;SAVE FOR LATER
+	PHA
+	ASL A           ;SHIFT TO ADD TO TODHRS
+	ASL A
+	ASL A
+	AND #$60        ;BIT POSISTIONS 5,6
+	ORA CIA+TODHR
+	TAY             ;RETURN IN .Y
+	PLA
+	ROR A           ;SHIFT TO ADD TO TODSEC
+	ROR A
+	AND #$80
+	ORA CIA+TODSEC
+	STA SAL         ;SAVE FOR LATER
+	ROR A           ;SHIT TO ADD TO TODMIN
+	AND #$80
+	ORA CIA+TODMIN
+	TAX             ;RETURN IN .X
+	PLA
+	CMP CIA+TOD10   ;WATCH OUT FOR ROLLOVER
+	BNE RDTIM       ;...IT CHANGED DO AGAIN...
+	LDA SAL
+	RTS
+.SKI 3
+;----------------------------------------
+; SETTIM - SET TOD AND ALARM
+;  C-SET => SET ALARM
+;  C-CLR => SET TOD
+;  REGISTERS SAME AS RDTIM
+;
+;----------------------------------------
+SETTIM	PHA             ;SAVE FOR LATER
+	PHA
+	ROR A           ;SET BIT 8
+	AND #$80
+	ORA CIA+CRB
+	STA CIA+CRB
+	TYA             ;GET BITS FROM TODHRS
+	ROL A
+	ROL A
+	ROL SAL         ;BIT T8 (DON'T NEED TO CLEAR SAL)
+	ROL A
+	ROL SAL         ;BIT T4
+	TXA             ;GET BIT FROM TODMIN
+	ROL A
+	ROL SAL         ;BIT T2
+	PLA             ;GET BIT FROM TODSEC
+	ROL A
+	ROL SAL         ;BIT T1
+	STY CIA+TODHR
+	STX CIA+TODMIN
+	PLA
+	STA CIA+TODSEC
+	LDA SAL
+	STA CIA+TOD10
+	RTS
+.END

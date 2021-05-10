@@ -1,0 +1,297 @@
+.PAG 'CHANNEL I/O'
+;*****************************************
+;* GETIN -- GET CHARACTER FROM CHANNEL   *
+;*      CHANNEL IS DETERMINED BY DFLTN.  *
+;* IF DEVICE IS 0, KEYBOARD QUEUE IS     *
+;* EXAMINED AND A CHARACTER REMOVED IF   *
+;* AVAILABLE.  DEVICES 1,3-31 ADVANCE TO *
+;* BASIN.                                *
+;*                                       *
+;* EXIT:  .A = CHARACTER                 *
+;*        CY = 1, STOP KEY ERROR FOR CAS-*
+;*                CASSETES AND RS232     *
+;*           = 0, OTHERWISE.             *
+;*        Z  = 1, IF KBD AND QUEUE EMPTY.*
+;*****************************************
+;
+NGETIN	LDA DFLTN       ;CHECK DEVICE
+	BNE GN10        ;NOT KEYBOARD
+;
+	LDA NDX         ;QUEUE INDEX
+	ORA KYNDX       ;CHECK FUNCTION KEY QUE
+	BEQ GN20        ;NOBODY THERE...EXIT
+;
+	SEI
+	JSR LP2         ;GO REMOVE A CHARACTER
+	CLC
+	RTS
+;
+GN10	CMP #2          ;IS IT RS-232
+	BEQ GN232
+	JMP BASIN       ;NO...USE BASIN
+;
+GN232	STY XSAV        ;SAVE .Y...
+	STX SAVX        ;..AND .X
+	LDY RIDBS       ;GET LAST BYTE ADDRESS
+	CPY RIDBE       ;SEE IF BUFFER EMPTYY
+	BNE GN15        ;RS232 BUFFER NOT EMPTY...
+;
+	LDA ACIA+CDR    ;MAKE SURE RECEIVER IS ON
+	AND #$FD
+	ORA #$01        ;BITS(10) = 01 NOW
+	STA ACIA+CDR
+	LDA RSSTAT      ;SET EMPTY INPUT BUFFER CONDITION
+	ORA #$10
+	STA RSSTAT
+	LDA #0          ;RETURN A NULL BYTE
+	BEQ GNEXIT      ;ALWAYS
+;
+GN15	LDA RSSTAT      ;CLEAR EMPTY BUFFER STATUS
+	AND #$EF
+	STA RSSTAT
+	LDX I6509
+	LDA RIBUF+2
+	STA I6509       ; POINT AT BUFFER
+	LDA (RIBUF)Y    ;GET LAST CHAR
+	STX I6509       ; RESTORE
+	INC RIDBS       ;INC TO NEXT POSISTION
+	BIT SA          ;CHECK FOR ASCII FLAG
+	BPL GNEXIT      ;NOT ON...
+	JSR TOCBM       ;CONVERT TO CBM CODE
+GNEXIT	LDY XSAV        ;RESTORE .Y
+	LDX SAVX
+GN20	CLC             ;GOOD RETURN
+	RTS
+.PAG 'CHANNEL I/O'
+;***************************************
+;* BASIN-- INPUT CHARACTER FROM CHANNEL*
+;*     INPUT DIFFERS FROM GET ON DEVICE*
+;* #0 FUNCTION WHICH IS KEYBOARD. THE  *
+;* SCREEN EDITOR MAKES READY AN ENTIRE *
+;* LINE WHICH IS PASSED CHAR BY CHAR   *
+;* UP TO THE CARRIAGE RETURN.  NOTE,   *
+;* RS232 USES GETIN TO GET EACH CHAR.  *
+;* OTHER DEVICES ARE:                  *
+;*      0 -- KEYBOARD                  *
+;*      1 -- CASSETTE #1               *
+;*      2 -- RS232                     *
+;*      3 -- SCREEN                    *
+;*   4-31 -- IEEE   BUS                *
+;*                                     *
+;* EXIT: CY=1, STOP KEY ERROR FOR CAS- *
+;*             SETTES AND RS232.       *
+;*       CY=0, OTHERWISE.              *
+;*                                     *
+;*       ALL OTHER ERRORS MUST BE DE-  *
+;*       TECTED BY CHECKING STATUS !   *
+;***************************************
+;
+NBASIN	LDA DFLTN       ;CHECK DEVICE
+	BNE BN10        ;IS NOT KEYBOARD...
+;
+;INPUT FROM KEYBOARD
+;
+	LDA PNTR        ;SAVE CURRENT...
+	STA LSTP        ;... CURSOR COLUMN
+	LDA TBLX        ;SAVE CURRENT...
+	STA LSXP        ;... LINE NUMBER
+	JMP BN15        ;BLINK CURSOR UNTIL RETURN
+;
+BN10	CMP #3          ;IS INPUT FROM SCREEN?
+	BNE BN20        ;NO...
+;
+	STA CRSW        ;FAKE A CARRIAGE RETURN
+	LDA SCRT        ;SAY WE ENDED...
+	STA INDX        ;...UP ON THIS LINE
+BN15	JSR LOOP5       ;PICK UP CHARACTERS
+	CLC
+	RTS
+;
+BN20	BCS BN30        ;DEVICES >3
+	CMP #2          ;RS232?
+	BEQ BN50
+;
+;INPUT FROM CASSETTE BUFFERS
+;
+	STX XSAV
+	JSR JTGET
+	BCS JTG37       ;STOP KEY/ERROR
+	PHA
+	JSR JTGET
+	BCS JTG36       ;STOP KEY/ERROR
+	BNE JTG35       ;NOT AN END OF FILE
+	LDA #64         ;TELL USER EOF
+	JSR UDST        ;IN STATUS
+JTG35	DEC BUFPT
+	LDX XSAV        ;.X PRESERVED
+	PLA             ;CHARACTER RETURNED
+;C-CLEAR FROM JTGET
+	RTS             ;ALL DONE
+;
+JTG36	TAX             ;SAVE ERROR INFO
+	PLA             ;TOSS DATA
+	TXA             ;RESTORE ERROR
+JTG37	RTS             ;ERROR RETURN C-SET FROM JTGET
+.SKI 3
+;GET A CHARACTER FROM APPROPRIATE
+;CASSETTE BUFFER
+;
+JTGET	JSR JTP20       ;BUFFER POINTER WRAP?
+	BNE JTG10       ;NO...
+	JSR RBLK        ;YES...READ NEXT BLOCK
+	BCS BN33        ;STOP KEY PRESSED
+	LDA #0
+	STA BUFPT       ;POINT TO BEGIN.
+	BEQ JTGET       ;BRANCH ALWAYS
+;
+JTG10	JSR TAPERY      ;GET CHAR FROM BUFFER
+	CLC             ;GOOD RETURN
+	RTS
+.SKI 3
+;INPUT FROM IEEE   BUS
+;
+BN30	LDA STATUS      ;STATUS FROM LAST
+	BEQ BN35        ;WAS GOOD
+BN31	LDA #$D         ;BAD...ALL DONE
+BN32	CLC             ;VALID DATA
+BN33	RTS
+;
+BN35	JSR ACPTR       ;GOOD...HANDSHAKE
+	CLC
+	RTS
+;
+;INPUT FROM RS232
+;
+BN50	JSR GETIN       ;GET DATA
+	BCS BN33        ;ERROR RETURN
+	CMP #00         ;NON-NULL MEANS GOOD DATA ALWAYS
+	BNE BN32        ;HAVE VALID DATA
+	LDA RSSTAT      ;CHECK FOR VALID NULL BYTE
+	AND #$10
+	BEQ BN32        ;OK
+	LDA RSSTAT      ;BUFFER EMPTY, CHECK FOR ERRORS IN DSR, DCD
+	AND #DSRERR+DCDERR
+	BNE BN31        ;HAVE ERROR...SEND C/R'S
+	JSR STOP        ;CHECK FOR STOP KEY DEPRESSED
+	BNE BN50        ;NO, STAY IN LOOP 'TIL WE GET SOMETHING
+	SEC             ;.A=0, STOP KEY ERROR
+	RTS
+.PAG 'CHANNEL OUTPUT'
+;***************************************
+;* BSOUT -- OUT CHARACTER TO CHANNEL   *
+;*     DETERMINED BY VARIABLE DFLTO:   *
+;*     0 -- INVALID                    *
+;*     1 -- CASSETTE #1                *
+;*     2 -- RS232                      *
+;*     3 -- SCREEN                     *
+;*  4-31 -- IEEE   BUS                 *
+;*                                     *
+;* EXIT:  CY=1, STOP KEY ERROR FOR CAS-*
+;*              SETTES AND RS232.      *
+;*        CY=0, OTHERWISE.             *
+;*                                     *
+;*       NOTE, OTHER ERRORS MUST BE DE-*
+;*       TECTED BY CHECKING STATUS !   *
+;***************************************
+;
+NBSOUT	PHA             ;PRESERVE .A
+	LDA DFLTO       ;CHECK DEVICE
+	CMP #3          ;IS IT THE SCREEN?
+	BNE BO10        ;NO...
+;
+;PRINT TO CRT
+;
+	PLA             ;RESTORE DATA
+	JSR PRT         ;PRINT ON CRT
+	CLC
+	RTS
+;
+BO10
+	BCC BO20        ;DEVICE 1 OR 2
+;
+;PRINT TO IEEE   BUS
+;
+	PLA
+	JSR CIOUT
+	CLC
+	RTS
+;
+;PRINT TO CASSETTE DEVICES
+;
+BO20	CMP #2          ;RS232?
+	BEQ BO50
+;
+	PLA
+CASOUT	STA T1
+;
+;PRESERVE REGISTERS
+;
+	PHA
+	TXA
+	PHA
+	TYA
+	PHA
+;
+	JSR JTP20       ;CHECK BUFFER POINTER
+	BNE JTP10       ;HAS NOT REACHED END
+	JSR WBLK        ;WRITE FULL BUFFER
+	BCS RSTOR       ;ABORT ON STOP KEY
+;
+;PUT BUFFER TYPE BYTE
+;
+	LDA #BDF
+	JSR TAPZWY      ;WRITE TO BUFFER BEGINNING
+;
+;RESET BUFFER POINTER
+;
+	INY             ;MAKE .Y=1
+	STY BUFPT       ;BUFPT=1
+;
+JTP10	LDA T1
+	JSR TAPEWY      ;DATA TO BUFFER
+;
+;RESTORE .X AND .Y
+;
+	CLC             ;GOOD RETURN
+RSTOR	PLA
+	TAY
+	PLA
+	TAX
+RSTBO	PLA             ;RESTORE .A (ERROR EXIT FOR 232)
+	BCC RSTOR1      ;NO ERROR
+	LDA #00         ;STOP ERROR IF C-SET
+RSTOR1	RTS
+;
+;OUTPUT TO RS232
+;
+BO50	STX T1          ;PUT IN A TEMP
+	STY T2
+;
+BO55	LDA RSSTAT      ;CHECK FOR DSR,DCD ERRORS
+	AND #$60
+	BNE BO90        ;BAD....
+;
+BO70	PLA             ;RESTORE DATA
+	BIT SA          ;CHECK FOR CBM TO ASCII CONVERSION
+	BPL BO80        ;NONE
+	JSR TOASCI      ;CONVERT CBM TO ASCII
+BO80	STA ACIA+DRSN   ;SENDING DATA
+	PHA
+;
+BO60	LDA RSSTAT
+	AND #$60        ;DCD,DSR ERRORS?
+	BNE BO90        ;YES...
+BO64	LDA ACIA+SRSN
+	AND #$10        ;TRANSMIT BUFFER EMPTY?
+	BNE BO90        ;YES, TRANSMIT DONE!
+	JSR STOP        ;CHECK FOR STOP KEY
+	BNE BO60        ;TRY AGAIN
+BO66	SEC             ;STOP KEY/ERROR RETURN
+	BCS RSTBO       ;EXIT....
+;
+BO90	PLA
+	LDX T1          ;GO RESTORE
+	LDY T2
+	CLC
+	RTS
+.END

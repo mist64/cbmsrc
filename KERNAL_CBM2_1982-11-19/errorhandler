@@ -1,0 +1,73 @@
+.PAG 'ERROR HANDLER'
+;************************************
+;*                                  *
+;* ERROR HANDLER                    *
+;*  RESTORES I/O CHANNELS TO DEFAULT*
+;*  PRINTS KERNAL ERROR MESSAGE IF  *
+;*  BIT 6 OF MSGFLG SET.  RETURNS   *
+;*  WITH ERROR # IN .A AND CARRY.   *
+;*                                  *
+;************************************
+;
+ERROR1	LDA #1          ;TOO MANY FILES
+	.BYT $2C
+ERROR2	LDA #2          ;FILE OPEN
+	.BYT $2C
+ERROR3	LDA #3          ;FILE NOT OPEN
+	.BYT $2C
+ERROR4	LDA #4          ;FILE NOT FOUND
+	.BYT $2C
+ERROR5	LDA #5          ;DEVICE NOT PRESENT
+	.BYT $2C
+ERROR6	LDA #6          ;NOT INPUT FILE
+	.BYT $2C
+ERROR7	LDA #7          ;NOT OUTPUT FILE
+	.BYT $2C
+ERROR8	LDA #8          ;MISSING FILE NAME
+	.BYT $2C
+ERROR9	LDA #9          ;BAD DEVICE #
+;
+ERRORX	PHA             ;ERROR NUMBER ON STACK
+	JSR CLRCH       ;RESTORE I/O CHANNELS
+;
+	LDY #MS1-MS1
+	BIT MSGFLG      ;ARE WE PRINTING ERROR?
+	BVC EREXIT      ;NO...
+;
+	JSR MSG         ;PRINT "CBM I/O ERROR #"
+	PLA
+	PHA
+	ORA #$30        ;MAKE ERROR # ASCII
+	JSR BSOUT       ;PRINT IT
+;
+EREXIT	PLA
+	SEC
+	RTS
+.PAG 'ERROR HANDLER'
+;***************************************
+;* STOP -- CHECK STOP KEY FLAG AND     *
+;* RETURN Z FLAG SET IF FLAG TRUE.     *
+;* ALSO CLOSES ACTIVE CHANNELS AND     *
+;* FLUSHES KEYBOARD QUEUE.             *
+;* ALSO RETURNS KEY DOWNS FROM LAST    *
+;* KEYBOARD ROW IN .A.                 *
+;***************************************
+NSTOP	LDA STKEY       ;VALUE OF LAST ROW
+	AND #$01        ;CHECK STOP KEY POSITION
+	BNE STOP2       ;NOT DOWN
+	PHP
+	JSR CLRCH       ;CLEAR CHANNELS
+	STA NDX         ;FLUSH QUEUE
+	PLP
+STOP2	RTS
+.SKI 3
+;---------------------------------------
+; UDTIM - UPDATE THE STOP KEY LOCATION
+;   EXPECTS KEYBOARD OUTPUTS SET TO
+;   DEFAULT VALUE. BIT 0 OF STKEY =0
+;   FOR STOP KEY DOWN.
+;---------------------------------------
+UDTIM	LDA TPI2+PC     ;CHECK KEYBOARD
+	STA STKEY
+	RTS
+.END

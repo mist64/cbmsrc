@@ -1,0 +1,60 @@
+.PAG 'CLALL 11/05/81'
+;******************************************
+;* NCLALL -- CLOSE ALL LOGICAL FILES      *
+;*      DELETES ALL TABLE ENTRIES AND     *
+;* RESTORES DEFAULT I/O CHANNELS          *
+;* AND CLEARS IEEE PORT DEVICES           *
+;******************************************
+;
+;------------------------------------------
+; NEW NCALL
+;  CLOSES ALL FILES UNTILL DONE OR AN
+;  ERROR OCCURS.
+;  ENTRY:
+;    C-CLR => CLOSE ALL FILES
+;    C-SET => .A = FA (DEVICE TO BE CLOSED)
+;------------------------------------------
+NCLALL	ROR XSAV        ;SAVE CARRY
+	STA SAVX        ;SAVE .A
+NCL010	LDX LDTND       ;SCAN INDEX
+NCL020	DEX
+	BMI NCL040      ;ALL DONE...
+	BIT XSAV        ;CHECK FOR FIXED FA
+	BPL NCL030      ;NONE...
+	LDA SAVX
+	CMP FAT,X
+	BNE NCL020      ;NO MATCH...
+NCL030	LDA LAT,X       ;CLOSE THIS LA
+	JSR CLOSE
+	BCC NCL010      ;
+;
+NCL040	LDA #0          ;ORIGINAL ENTRY FOR NCLALL
+	STA LDTND       ;FORGET ALL FILES
+.SKI 3
+;********************************************
+;* NCLRCH -- CLEAR CHANNELS                 *
+;*   UNLISTEN OR UNTALK IEEE DEVICES, BUT   *
+;* LEAVE OTHERS ALONE.  DEFAULT CHANNELS    *
+;* ARE RESTORED.                            *
+;********************************************
+;
+NCLRCH	LDX #3
+	CPX DFLTO       ;IS OUTPUT CHANNEL IEEE?
+	BCS JX750       ;NO...
+;
+	JSR UNLSN       ;YES...UNLISTEN IT
+;
+JX750	CPX DFLTN       ;IS INPUT CHANNEL IEEE?
+	BCS CLALL2      ;NO...
+;
+	JSR UNTLK       ;YES...UNTALK IT
+;
+;RESTORE DEFAULT VALUES
+;
+;
+CLALL2	LDX #3
+	STX DFLTO       ;OUTPUT CHAN=3=SCREEN
+	LDA #0
+	STA DFLTN       ;INPUT CHAN=0=KEYBOARD
+	RTS
+.END

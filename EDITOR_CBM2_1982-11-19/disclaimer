@@ -1,0 +1,40 @@
+;***************************************
+;*                                     *
+;* EEEEE DDD   IIIII TTTTT  OOO  RRRR  *
+;* E     D  D    I     T   O   O R   R *
+;* E     D   D   I     T   O   O R   R *
+;* EEE   D   D   I     T   O   O RRRR  *
+;* E     D   D   I     T   O   O R R   *
+;* E     D  D    I     T   O   O R  R  *
+;* EEEE  DDD   IIIII   T    OOO  R   R *
+;*                                     *
+;***************************************
+;
+;***************************************
+;* CBM KERNAL  PROTOTYPE #BC2.1        *
+;*   MEMORY AND I/O DEPENDENT ROUTINES *
+;* DRIVING THE HARDWARE OF THE         *
+;* FOLLOWING CBM MODELS:               *
+;*   CBM P2  CBM BC2                   *
+;* COPYRIGHT (C) 1980 BY               *
+;* COMMODORE BUSINESS MACHINES (CBM)   *
+;***************************************
+.SKI 3
+;*****LISTING DATE --18:00  19 NOV 1982
+.SKI 3
+;***************************************
+;* THIS SOFTWARE IS FURNISHED FOR USE  *
+;* USE IN THE CBM P2/BC2 COMPUTERS.    *
+;*                                     *
+;* COPIES THEREOF MAY NOT BE PROVIDED  *
+;* OR MADE AVAILABLE FOR USE ON ANY    *
+;* OTHER SYSTEM.                       *
+;*                                     *
+;* THE INFORMATION IN THIS DOCUMENT IS *
+;* SUBJECT TO CHANGE WITHOUT NOTICE.   *
+;*                                     *
+;* NO RESPONSIBILITY IS ASSUMED FOR    *
+;* RELIABILITY OF THIS SOFTWARE.       *
+;*                                RSR  *
+;***************************************
+.END

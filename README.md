@@ -102,13 +102,15 @@ The PET 2001 BASIC source (V2, 1978).
 * On the PET, this was called BASIC V2, Microsoft called it V1.1.
 * It includes the "WAIT6502,1" easter egg (symbol "ZSTORDO").
 
-## BASIC_CBM2&#x5f;{A|B}, KERNAL_CBM2&#x5f;{A|B}, EDITOR_CBM2
+## BASIC_CBM2_*, KERNAL_CBM2_*, EDITOR_CBM2_*
 
-The CBM2 BASIC, EDITOR and KERNAL sources (1983/1984). The A version is from [David Viner](https://www.davidviner.com/cbm9.html), and the B version is from disks 67/68 of the [CBUG](http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/) library. The files have been converted to LF line breaks and LST-style indenting.
+The CBM2 BASIC, EDITOR and KERNAL sources in different versions (1982-1984).
 
-* The B version of BASIC contains two patches.
-* The B version of the KERNAL contains minor modifications, and comes with alternate versions of some files as well as additional (test) sources.
-* Except for file naming, the editor sources A and B were identical.
+* The *_1982-11-19 version is from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip).
+* The *_1983-05-31 version is from [David Viner](https://www.davidviner.com/cbm9.html).
+* KERNAL_1983-07-07 and BASIC_1984-01-04 are from disks 67/68 of the [CBUG](http://www.zimmers.net/anonftp/pub/cbm/b/CBUG/) library.
+
+The files have been converted to LF line breaks and LST-style indenting.
 
 ## MONITOR_C64
 
@@ -138,7 +140,7 @@ The CBM 8250/8050/1001/4040 DOS V2.7 source (1981). Extracted from old-dos-sourc
 
 ## DOS_8280
 
-The CBM 8280 V3.1 source (1981). Extracted from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/8280DOS.D80) and converted to LF line breaks and LST-style indenting.
+The CBM 8280 V3.1 source (1981). Extracted from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
 
 ## DOS_8060_REC
 

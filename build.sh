@@ -72,13 +72,15 @@ build2 KERNAL_C128_03 kernal
 build2 KERNAL_C128_05 kernal
 build2 KERNAL_C128_06 kernal
 
-build1 KERNAL_CBM2_A kernal
-build1 KERNAL_CBM2_B kernal
+build1 KERNAL_CBM2_1982-11-19 newkernal
+build1 KERNAL_CBM2_1983-05-31 kernal
+build1 KERNAL_CBM2_1983-07-07 kernal
 
 build2 EDITOR_C128 editor
 build2 EDITOR_C128_DIN editor
 
-build1 EDITOR_CBM2 sced.lib
+build1 EDITOR_CBM2_1982-11-19 sced.lib
+build1 EDITOR_CBM2_1983-05-31 sced.lib
 
 build1 BASIC_VIC basic
 
@@ -90,8 +92,9 @@ build2 BASIC_TED basic
 
 build2 BASIC_C128 basic
 
-build1 BASIC_CBM2_A cbm256 # or cbm128
-build1 BASIC_CBM2_B cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
+build1 BASIC_CBM2_1982-11-19 bas256 # or bas64 bas128 bas192 bas256
+build1 BASIC_CBM2_1983-05-31 cbm256 # or cbm128
+build1 BASIC_CBM2_1984-01-04 cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
 
 build1 MONITOR_KIM kim.asm
 build1 MONITOR_C64 micii4
