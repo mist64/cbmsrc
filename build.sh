@@ -103,8 +103,6 @@ build1 BASIC_CBM2_1984-01-04 cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 p
 build1 MONITOR_C64 micii4
 build2 MONITOR_C128 monitor
 
-build2 ASSEMBLER_TED assembler
-
 build1 CONTROLLER_8250 lib
 build1 CONTROLLER_1001 single.src
 
@@ -141,3 +139,6 @@ build2 DOS_1541C_03 serlib
 #   build2 RAMDOS a
 
 build1 PRINTER_8023P us.ptr.src
+
+build2 ASSEMBLER_TED assembler
+build1 DISK_MONITOR mon.lib

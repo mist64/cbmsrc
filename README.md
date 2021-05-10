@@ -120,10 +120,6 @@ The "CBM 8032 EURO SCREEN EDITOR 4V2E (E-901474-03)" ROM. Extracted from UNKN008
 
 The C64 monitor program. Extracted from ml-monitor-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting. The symbol `WALKON` in the file `micii4` was changed from `1` to `0` so the source builds.
 
-## ASSEMBLER_TED
-
-A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
-
 ## DOS_4040
 
 The CBM 4040/2040 DOS V2.1 source (1980). Extracted from 4040-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks.
@@ -240,6 +236,14 @@ The CBM 8023P printer source code (1980). Extracted from 8023p-printer-source.d6
 The [CBM 8023P](http://www.zimmers.net/anonftp/pub/cbm/firmware/printers/8023P-MPP1361/index.html) is a dot matrix printer with an IEEE-488 connection, a 6502/6532/6522-based controller, and a Brother M82 machanism. The source contains references to Epson Model 3110/3210 mechanisms which seem to have been used in earlier printers.
 
 The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII character/graphics set.
+
+## DISK_MONITOR
+
+"DISK MONITOR 2040 V1.0", an extension to the PET monitor for disk commands (see mon.cmd). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
+## ASSEMBLER_TED
+
+A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
 
 ## MONITOR_KIM
 

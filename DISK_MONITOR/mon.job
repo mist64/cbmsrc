@@ -1,0 +1,193 @@
+.PAGE 'MON.JOB'
+;
+;
+;
+;   JOB UTILITY CONTROL
+;
+;
+;  *DOIT
+;  INPUTS: JOB#, JOB, DRIVE, TRACK
+;          SECTOR
+;
+;
+;  1. SETHDR(TRACK,SECTOR)
+;
+;  2. SETTRK(TRACK)
+;
+;  3. DOJOB(JOB,DRIVE)
+;
+;
+DOIT	STA JOB         ;SAVE JOBCODE
+	JSR SETMW       ; PREPARE MEMORY WRITE
+	LDA JOBNUM      ; GET HEADER POINTER
+	JSR GETHDR
+;
+	CLC             ; TRACK,SECTOR AT +2
+	ADC #2
+	STA BUF+3
+	STX BUF+4       ; STORE LOW,HI ADDRESS
+;
+	LDA #2
+	STA BUF+5       ; NUMBER OF BYTES SENT
+;
+	LDA TRACK       ; SET DATA(TRACK,SECTOR)
+	STA BUF+6
+	LDA SECTOR
+	STA BUF+7
+;
+	LDX #7          ; SEND 7 CHAR IN BUF
+	JSR SNDCMD
+;
+;
+	LDA JOBNUM      ; GET POINTER TO TRKS
+	JSR GETTRK
+;
+	STA BUF+3
+	STX BUF+4
+;
+	LDA #1          ; NUMBER OF DATA BYTES TO SEND
+	STA BUF+5
+;
+	LDA TRACK       ; SET DATA(TRACK)
+	STA BUF+6
+;
+	LDX #6          ; SEND 6 CHARS IN BUF
+	JSR SNDCMD
+;
+;
+DOJOB	LDA JOBNUM      ; GET JOB ADDRESS
+	JSR GETJOB
+	STA BUF+3       ;LOW BYTE
+;
+	STX BUF+4       ;HI BYTE
+;
+	LDA #1          ; NUMBER OF BYTES
+	STA BUF+5
+;
+	LDA DRIVE       ; JOB=JOB+(DRIVEAND1)
+	AND #1
+	ORA JOB
+	STA BUF+6
+;
+	LDX #6          ; SEND THE BUFFER
+	JSR SNDCMD
+;
+           ; WAIT OF JOB
+	JSR WAIT
+;
+	CMP #1          ; TEST OK JOB RESULT
+	BNE DOERR       ; NOPE,JOB ERROR
+;
+	RTS             ;OK, RETURN
+;
+;
+DOERR	JSR JOBERR      ; PRINT ERROR #
+;
+	DEC RECOV       ; TEST FOR REATTEMPT
+	BPL DOJOB       ; DO IT AGAIN SAM
+;
+	JMP STRT        ; NO MORE HARRY
+;
+;
+;
+;   *GETHDR
+;
+;   RETURN POINTER TO HEADER
+;   .A LOW BYTE
+;   .X HI BYTE
+;
+;
+GETHDR	ASL A           ; POINTER=$1000+8*JOBNUM+$21
+	ASL A
+	ASL A
+;
+	CLC
+	ADC #$21
+;
+	LDX #$10
+	RTS
+;
+;
+;
+;  *GETTRK
+;
+;  RETURN TRKS POINTER
+;
+;  .A LOW BYTE
+;  .X HI BYTE
+;
+;
+GETTRK	CLC
+	ADC #$12        ;OFFSET
+;
+	LDX #$10
+	RTS
+;
+;
+;
+;  *WAIT
+;
+;  WAIT FOR JOB(.X) TO FINISH
+;
+;  RETURN JOB RESULT IN .A
+;
+;
+WAIT	JSR SETMR       ; PREPARE FOR M-R
+;
+	LDA JOBNUM
+	JSR GETJOB      ; POINTER TO JOB
+;
+	STA BUF+3
+	STX BUF+4
+;
+WAIT10	JSR SNDCMD      ; SEND M-RLH
+;
+	JSR RDCMD       ; GET RETURN
+;
+	ORA #0          ; TEST IF MINUS
+	BMI WAIT10
+;
+	RTS
+;
+;
+;
+;
+;   *JOBERR
+;
+; PRINT CRLF ERROR #
+;
+JOBERR	PHA             ;SAVE ERROR #
+;
+	JSR CRLF
+;
+	PLA
+	JMP WROB
+;
+;
+;
+SETMR	LDA #'M         ; STORE M-R IN BUF
+	STA BUF
+	LDA #'-
+	STA BUF+1
+	LDA #'R
+	STA BUF+2
+	RTS
+;
+;
+;
+SETMW	JSR SETMR       ; STORE M-W IN BUF
+	LDA #'W
+	STA BUF+2
+	RTS
+;
+;
+;
+GETJOB	CLC             ; POINTER TO JOB QUE
+	ADC #3
+;
+	LDX #$10
+	RTS
+;
+;
+;
+.END

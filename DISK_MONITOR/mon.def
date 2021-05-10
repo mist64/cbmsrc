@@ -1,0 +1,77 @@
+.PAGE 'MON.DEF'
+;
+;
+;  DEFS FOR DISK MON 1.0
+;
+;
+;  EXTERNAL ROUTINES
+;
+CIOUT	=$F19E          ; CHAR OUT PUT IEEE
+RDOC	=$D798          ; GET CHAR  IEEE
+WROC	=$F266          ; CHAR OUT TO PET
+WROB	=$D722          ; WRITE OUT HEX BYTE
+RDOB	=$D763          ; READ HEX BYTE
+ERROR	=$D7A4          ;BAD SYNTAX ERROR
+RDOA	=$D754          ; READ HEX ADDRESS
+SECND	=$F143          ; SEND SA ON IEEE
+WRTWO	=$D731          ; WRITE 2 CHAR
+STRT	=$D4BA          ; TOP OF MONITOR
+BASIN	=$F215          ; GET CHAR FROM OS
+SA	=$D3            ; SECONDARY ADDRESS
+FA	=$D4            ; PRIMARY ADDRESS
+ERRJMP	=$03FA          ; INDIRECT ERROR JMP
+CRLF	=$D534          ; PRINT CRLF
+SPACE	=$D531          ; PRINT SPACE OUT
+UNLSN	=$F1B9          ; UNLISTEN LISTENER
+TMPO	=$FB
+;
+;
+;
+; IEEE CONTROL ROUTINES
+;
+TALK	=$F0D2          ; TALK ADDRESS
+LISTN	=$F0D5
+TKSA	=$F193
+ACPTR	=$F1C0
+;
+;
+;
+;   CONSTANTS
+;
+;
+SPC	=$20            ;SPACE CHAR
+CR	=$0D            ; CARRIAGE RETURN
+NUMCMD	=11             ; NUMBER OF MON COMMANDS
+NUMPRM	=5 ; NUMBER OF PARMS
+VARBLK	=$0
+RDJOB	=$80            ; CONTROLLER READ JOB
+WRTJOB	=$90            ; CONTROLLER WRITE JOB
+SEEK	=$B0            ; SEEK JOB
+;
+;
+;
+;  VARIABLES
+;
+;
+	* =VARBLK
+;
+VAL	*=*+2           ; EVALUATION RETURN
+LEN	*=*+1           ; LEN OF BUFFER
+BUF	*=*+40          ; CMD BUF
+DEVNUM	*=*+1           ; IEEE DEVICE #
+ADR1	*=*+2           ; POINTER
+ADR2	*=*+2           ; POINTER
+ADR3	*=*+2           ; POINTER
+ADR4	*=*+2           ; TEMP POINTER
+JOB	*=*+1           ; JOB CODE
+TRACK	*=*+1           ;
+SECTOR	*=*+1
+DRIVE	*=*+1
+JOBNUM	*=*+1
+RECOV	*=*+1
+PRMPTR	*=*+1           ; POINTER TO PARM
+;
+;
+;
+	*= $6000
+.END
