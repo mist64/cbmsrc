@@ -243,6 +243,10 @@ The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII charact
 
 "DISK MONITOR 2040 V1.0", an extension to the PET monitor for disk commands (see mon.cmd). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
 
+## MATHPACK
+
+A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manual](http://www.zimmers.net/anonftp/pub/cbm/programming/b/Commodore_700_Reference_Manual.pdf). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
 ## ASSEMBLER_TED
 
 A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
@@ -254,6 +258,7 @@ The KIM-1 "monitor" ROM (1975) from the [zimmers.net archive](http://www.zimmers
 ## KIMATH
 
 The KIM-1 "KIMATH" math package (1976). Generated from the [original LST printout](http://retro.hansotten.nl/uploads/files/kimath.ZIP), and the .asm reconstruction by C. Bond from the same package.
+
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com

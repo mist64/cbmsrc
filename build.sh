@@ -142,3 +142,4 @@ build1 PRINTER_8023P us.ptr.src
 
 build2 ASSEMBLER_TED assembler
 build1 DISK_MONITOR mon.lib
+build1 MATHPACK mathpack
