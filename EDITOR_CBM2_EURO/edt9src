@@ -1,0 +1,394 @@
+      .PAGE  'FRENCH KEYBOARD'
+;
+; ******* IDENTIFIER ********
+;
+; (MUST BE 5 CHARACTERS LONG)
+;
+ID1=$46 ; F   7 V 3
+ID2=$20 ; --- -   -
+ID3=$20 ;
+ID4=07 ;
+ID5=03 ;
+;
+	*=BEGIN+$0E85
+;
+; ************ MUST START AT $EE85 *************
+;
+VWLTBL	.BYT $01        ; 'A'
+	.BYT $05        ; 'E'
+	.BYT $09        ; 'I'
+	.BYT $0F        ; 'O'
+	.BYT $15        ; 'U'
+	.BYT $61        ; VERTICAL CENTER LINE
+	.BYT $66        ; HORIZONTAL CENTER LINE
+VWLTBX	.BYT $20        ; SPC
+.SKIP 2
+ACCTBL	.BYT $40        ; ACCENT GRAVE
+	.BYT $6D        ; ACCENT AIGU
+	.BYT $6E        ; ACCENT CIRCONFLEX
+	.BYT $6F        ; ACCENT TREMA
+	.BYT $61        ; VERTICAL CENTERLINE
+ACCTBX	.BYT $66        ; HORIZONTAL CENTERLINE
+	.BYT $9D        ; CURSOR LEFT
+;
+	*=VWLTBL+24     ; ROOM FOR 24 SYMBOLS
+;
+.SKIP2
+;
+VWLPTN	.BYT %00001101  ; A-MATCH
+	.BYT %00001111  ; E-MATCH
+	.BYT %00001101  ; I-MATCH
+	.BYT %00001101  ; O-MATCH
+	.BYT %00001101  ; U-MATCH
+	.BYT %00100000  ; VERTICAL LINE MATCH
+	.BYT %00010000  ; HORIZONTAL LINE MATCH
+	.BYT %00001111  ; SPC-MATCH
+;
+	*=VWLPTN+16     ; 16 VOWELS TO COMBINE
+;
+.SKIP 2
+;
+MNACTL	.BYT %00001111  ; A "1" ASSIGNS AN ACCENT
+DDACTL	.BYT %00001111  ; A "1" ASSIGNS A DEAD ACCENT
+;
+ACCMSK	.BYT %00000001  ; GRAVE MATCH
+	.BYT %00000010  ; AIGU MATCH
+	.BYT %00000100  ; CIRCONFLEX MATCH
+	.BYT %00001000  ; TREMA MATCH
+	.BYT %00010000  ; VERTICAL LINE MATCH
+	.BYT %00100000  ; HORIZONTAL LINE MATCH
+VSET	.BYT %01000000  ; SET V FLAG
+	.BYT %10000000  ; UNUSED
+;
+.SKIP 2
+;
+ACHREF	.BYT AACHR-CHRTBL ; REFERENCE
+	.BYT EACHR-CHRTBL ; TO SPECIAL
+	.BYT IACHR-CHRTBL ; CHARACTERS
+	.BYT OACHR-CHRTBL ; IN THE
+	.BYT UACHR-CHRTBL ; ACCENTUATED
+	.BYT CROSS-CHRTBL ; CHARACTER
+	.BYT CROSS-CHRTBL ; TABLE
+	.BYT ACNTS-CHRTBL ;
+;
+	*=ACHREF+16     ; 16 CHARACTERS TO COMBINE
+;
+.SKIP 2
+;
+CHRTBL
+AACHR	.BYT $71+$80    ; A-GRAVE (NON DISASSEMBLEBLE)
+	.BYT $76        ; A-CIRCONFLEX
+	.BYT $7B        ; A-TREMA
+EACHR	.BYT $72+$80    ; E-GRAVE (NON DISASSEMBLEMBLE)
+	.BYT $7F+$80    ; E-AIGU (NON DISASSEMBLEBLE)
+	.BYT $77        ; E-CIRCONFLEX
+	.BYT $5B        ; E-TREMA
+IACHR	.BYT $73        ; I-GRAVE
+	.BYT $78        ; I-CIRCONFLEX
+	.BYT $5C        ; I-TREMA
+OACHR	.BYT $74        ; O-GRAVE
+	.BYT $79        ; O-CIRCONFLEX
+	.BYT $7C        ; O-TREMA
+UACHR	.BYT $75+$80    ; U-GRAVE (NON DISASSEMBLEBLE)
+	.BYT $7A        ; U-CIRCONFLEX
+	.BYT $7D        ; U-TREMA
+CROSS	.BYT $6B+$80    ; CROSS (NON DISASSEMBLEBLE)
+ACNTS	.BYT $40        ; GRAVE
+	.BYT $6D        ; AIGU
+	.BYT $6E        ; CIRCONFLEX
+CHRTBX	.BYT $6F        ; TREMA
+;
+	*=CHRTBL+24     ; 24 POSSIBLE COMBINATIONS
+;
+.SKIP 2
+;
+STGREF	.BYT $00        ; FILLER FOR AGRAVE
+	.BYT ACIRCN-STRGTB ;
+	.BYT ATREMA-STRGTB ;
+	.BYT $00        ; FILLER FOR E-GRAVE
+	.BYT $00        ; FILLER FOR E-AIGU
+	.BYT ECIRCN-STRGTB ;
+	.BYT ETREMA-STRGTB ;
+	.BYT IGRAVE-STRGTB ;
+	.BYT ICIRCN-STRGTB ;
+	.BYT ITREMA-STRGTB ;
+	.BYT OGRAVE-STRGTB ;
+	.BYT OCIRCN-STRGTB ;
+	.BYT OTREMA-STRGTB ;
+	.BYT $00        ; FILLER FOR UGRAVE
+	.BYT UCIRCN-STRGTB ;
+	.BYT UTREMA-STRGTB ;
+	.BYT $00        ; UNUSED ; FILLER FOR GRAPHIC CROSS
+	.BYT GRAVE-STRGTB  ;
+	.BYT AIGU-STRGTB   ;
+	.BYT CIRCNF-STRGTB ;
+	.BYT TREMA-STRGTB ;
+;
+	*=STGREF+24     ; 24 STRING REFERENCES
+;
+.SKIP 2
+;
+STRGTB	.BYT 00,34
+AGRAVE
+;
+	.BYT 00,42
+ACIRCN
+;
+	.BYT 00,46
+ATREMA
+;
+	.BYT 04,42
+ECIRCN
+;
+	.BYT 04,46
+ETREMA
+;
+	.BYT 08,34
+IGRAVE
+;
+	.BYT 08,42
+ICIRCN
+;
+	.BYT 08,46
+ITREMA
+;
+	.BYT 12,34
+OGRAVE
+;
+	.BYT 12,42
+OCIRCN
+;
+	.BYT 12,46
+OTREMA
+;
+	.BYT 16,34
+UGRAVE
+;
+	.BYT 16,42
+UCIRCN
+;
+	.BYT 16,46
+UTREMA
+;
+	.BYT 28,34
+GRAVE
+;
+	.BYT 28,38
+AIGU
+;
+	.BYT 28,42
+CIRCNF
+;
+	.BYT 28,46
+TREMA
+;
+	*=STRGTB+64     ; ROOM FOR 64 CHARACTERS
+;
+.SKIP 2
+;
+CBMASC	.BYT $9D        ; CURSOR LEFT
+	.BYT $1D        ; CURSOR RIGHT
+	.BYT $BF        ; E-AIGU
+	.BYT $AC        ; POUND SIGN
+	.BYT $B2        ; E-GRAVE
+	.BYT $B0        ; PARAGRAPH
+	.BYT $B1        ; A-GRAVE
+	.BYT $B5        ; U-GRAVE
+	.BYT $AF        ; TREMA
+	.BYT $AE        ; CIRCONFLEX
+CBMASX	.BYT $DF        ; C-CEDILLE
+;
+;
+NTLASC	.BYT $08        ; BACKSPACE
+	.BYT $20        ; SPACE
+	.BYT $3C        ; E-AIGU
+	.BYT $23        ; POUND SIGN
+	.BYT $3E        ; E-GRAVE
+	.BYT $40        ; PARAGRAPH
+	.BYT $60        ; A-GRAVE
+	.BYT $7B        ; U-GRAVE
+	.BYT $7E        ; TREMA
+	.BYT $5E        ; CIRCONFLEX
+	.BYT $5C        ; C-CEDILLE
+;
+	*=CBMASC+40     ; CROSS REF 20 CHRS LONG
+;
+.SKIP 4
+;
+;*****************************************************************
+;* CBM        FRENCH KEYBOARD   7V3     20.10.1981           HHO *
+;*****************************************************************
+;            ---- UNSHIFTED KEY LOOKUP TABLE ----       <ALTERN> ;
+;     <ASCII VAL>      <    FUNCTION    > <POS> <COORD> <C-S-AL> ;
+;=================================================================
+KEYTBL	.BYT $16        ; ERASE LINE END     00   X.XX    C   V   ;
+      .BYT $00        ; FUTURE 01          01   X.XX            ;
+      .BYT $29        ;        )           02                   ;
+      .BYT $1D        ; CURSOR RIGHT       03                   ;
+      .BYT $DF        ; C-CEDILLE          04                   ;
+      .BYT $23        ;        #           05                   ;
+      .BYT $22        ;        "           06                   ;
+      .BYT $24        ;        $           07                   ;
+      .BYT $31        ;        1           08                   ;
+      .BYT $3D        ;        =           09                   ;
+      .BYT $15        ; DELETE LINE        10                   ;
+      .BYT $13        ; HOME               11                   ;
+      .BYT $2C        ;        ,           12                   ;
+      .BYT $20        ; SPACE              13                   ;
+      .BYT $58        ;        X           14                   ;
+CONTRL	.BYT $00        ; CONTROL            15                   ;
+      .BYT $32        ;        2           16                   ;
+STOP	.BYT $03        ; STOP KEY           17                   ;
+      .BYT $0F        ; SET TOP LEFT       18                   ;
+      .BYT $30        ;        0           19                   ;
+      .BYT $3B        ;        ;           20                   ;
+      .BYT $4E        ;        N           21                   ;
+      .BYT $56        ;        V           22                   ;
+      .BYT $57        ;        W           23                   ;
+      .BYT $33        ;        3           24                   ;
+SHIFT1	.BYT $00        ; SHIFT (RIGHT)      25                   ;
+      .BYT $19        ; SCROLL UP          26                   ;
+      .BYT $2E        ;        .           27                   ;
+      .BYT $3A        ;        :           28                   ;
+      .BYT $42        ;        B           29                   ;
+      .BYT $43        ;        C           30                   ;
+SHIFT2	.BYT $00        ; SHIFT (LEFT&LOCK)  31                   ;
+      .BYT $34        ;        4           32                   ;
+      .BYT $AE        ; CIRCONFLEX         33                   ;
+      .BYT $4F        ;        O           34                   ;
+      .BYT $5D        ;        ]           35                   ;
+      .BYT $55        ;        U           36                   ;
+      .BYT $54        ;        T           37                   ;
+      .BYT $45        ;        E           38                   ;
+      .BYT $41        ;        A           39                   ;
+      .BYT $14        ; DELETE CHARACTER   40                   ;
+      .BYT $50        ;        P           41                   ;
+      .BYT $49        ;        I           42                   ;
+      .BYT $5B        ;        [           43                   ;
+      .BYT $59        ;        Y           44                   ;
+      .BYT $52        ;        R           45                   ;
+      .BYT $5A        ;        Z           46                   ;
+      .BYT $09        ; HORIZONTAL TAB     47                   ;
+      .BYT $36        ;        6           48                   ;
+      .BYT $B5        ; U-GRAVE            49                   ;
+      .BYT $4C        ;        L           50                   ;
+      .BYT $0D        ; RETURN             51                   ;
+      .BYT $4A        ;        J           52                   ;
+      .BYT $47        ;        G           53                   ;
+      .BYT $44        ;        D           54                   ;
+      .BYT $51        ;        Q           55                   ;
+      .BYT $35        ;        5           56                   ;
+      .BYT $4D        ;        M           57                   ;
+      .BYT $4B        ;        K           58                   ;
+      .BYT $5E        ;        ^           59                   ;
+      .BYT $48        ;        H           60                   ;
+      .BYT $46        ;        F           61                   ;
+      .BYT $53        ;        S           62                   ;
+      .BYT $1B        ; ESCAPE             63                   ;
+      .BYT $39        ;        9           64                   ;
+      .BYT $00        ; FUTURE 02          65                   ;
+      .BYT $DE        ; GREEK PI SYMBOL    66                   ;
+      .BYT $37        ;        7           67                   ;
+      .BYT $B1        ; A-GRAVE            68                   ;
+      .BYT $B2        ; E-GRAVE            69                   ;
+      .BYT $27        ;        '           70                   ;
+      .BYT $26        ;        &           71                   ;
+      .BYT $00        ; FUTURE 03          72                   ;
+      .BYT $0E        ; SET TEXT MODE      73                   ;
+      .BYT $11        ; CURSOR DOWN        74                   ;
+      .BYT $38        ;        8           75                   ;
+      .BYT $2D        ;        -           76                   ;
+      .BYT $21        ;        !           77                   ;
+      .BYT $28        ;        (           78                   ;
+      .BYT $BF        ; E-AIGU             79                   ;
+;                                                                ;
+;=================================================================
+;          ---- SHIFTED KEY LOOKUP TABLE ----           <ALTERN> ;
+;     <ASCII VAL>      <    FUNCTION    > <POS> <COORD> <C-S-AL> ;
+;=================================================================
+KEYTBH	.BYT $96        ; ERASE LINE BEGIN   00                   ;
+      .BYT $00        ; FUTURE S01         01                   ;
+      .BYT $5C        ;        \           02                   ;
+      .BYT $9D        ; CURSOR LEFT        03                   ;
+      .BYT $39        ;        9           04                   ;
+      .BYT $36        ;        6           05                   ;
+      .BYT $33        ;        3           06                   ;
+      .BYT $40        ;        @           07                   ;
+      .BYT $A6        ; GRAPHIC NO. 06     08                   ;
+      .BYT $2B        ;        +           09                   ;
+      .BYT $95        ; INSERT LINE        10                   ;
+      .BYT $93        ; HOME, CLEAR SCREEN 11                   ;
+      .BYT $3F        ;        ?           12                   ;
+      .BYT $A0        ; NON NULL SPACE     13                   ;
+      .BYT $D8        ;        X           14                   ;
+      .BYT $00        ; CONTROL            15                   ;
+      .BYT $A1        ; GRAPHIC NO. 01     16                   ;
+      .BYT $83        ; DISC LOAD, RUN     17                   ;
+      .BYT $8F        ; SET BOTTOM RIGHT   18                   ;
+      .BYT $AB        ; GRAPHIC NO. 11     19                   ;
+      .BYT $2E        ;        .           20                   ;
+      .BYT $CE        ;        N           21                   ;
+      .BYT $D6        ;        V           22                   ;
+      .BYT $D7        ;        W           23                   ;
+      .BYT $A7        ; GRAOHIC NO. 07     24                   ;
+      .BYT $00        ; SHIFT (RIGHT)      25                   ;
+      .BYT $99        ; SCROLL DOWN        26                   ;
+      .BYT $A9        ; GRAPHIC NO. 09     27                   ;
+      .BYT $2F        ;        /           28                   ;
+      .BYT $C2        ;        B           29                   ;
+      .BYT $C3        ;        C           30                   ;
+      .BYT $00        ; SHIFT (LEFT)       31                   ;
+      .BYT $A2        ; GRAPHIC NO. 02     32                   ;
+      .BYT $AF        ; ACCENT TREMA       33                   ;
+      .BYT $CF        ;        O           34                   ;
+      .BYT $3E        ;        >           35                   ;
+      .BYT $D5        ;        U           36                   ;
+      .BYT $D4        ;        T           37                   ;
+      .BYT $C5        ;        E           38                   ;
+      .BYT $C1        ;        A           39                   ;
+      .BYT $94        ; INSERT CHARACTER   40                   ;
+      .BYT $D0        ;        P           41                   ;
+      .BYT $C9        ;        I           42                   ;
+      .BYT $3C        ;        <           43                   ;
+      .BYT $D9        ;        Y           44                   ;
+      .BYT $D2        ;        R           45                   ;
+      .BYT $DA        ;        Z           46                   ;
+      .BYT $89        ; VERT.TAB SET/CLEAR 47                   ;
+      .BYT $A3        ; GRAPHIC NO. 03     48                   ;
+      .BYT $25        ;        %           49                   ;
+      .BYT $CC        ;        L           50                   ;
+      .BYT $8D        ; NULL RETURN        51                   ;
+      .BYT $CA        ;        J           52                   ;
+      .BYT $C7        ;        G           53                   ;
+      .BYT $C4        ;        D           54                   ;
+      .BYT $D1        ;        Q           55                   ;
+      .BYT $A4        ; GRAPHIC NO. 04     56                   ;
+      .BYT $CD        ;        M           57                   ;
+      .BYT $CB        ;        K           58                   ;
+      .BYT $5F        ;        _           59                   ;
+      .BYT $C8        ;        H           60                   ;
+      .BYT $C6        ;        F           61                   ;
+      .BYT $D3        ;        S           62                   ;
+      .BYT $1B        ; ESCAPE             63                   ;
+      .BYT $A5        ; GRAPHIC NO. 05     64                   ;
+      .BYT $00        ; FUTURE S02         65                   ;
+      .BYT $DD        ; SUPERSCRIPT 2      66                   ;
+      .BYT $A8        ; GRAPHIC NO. 08     67                   ;
+      .BYT $30        ;        0           68                   ;
+      .BYT $37        ;        7           69                   ;
+      .BYT $34        ;        4           70                   ;
+      .BYT $31        ;        1           71                   ;
+      .BYT $00        ; FUTURE S03         72                   ;
+      .BYT $0E        ; SET GRAPHIC MODE   73                   ;
+      .BYT $91        ; CURSOR UP          74                   ;
+      .BYT $AA        ; GRAPHIC NO. 10     75                   ;
+      .BYT $2A        ;        *           76                   ;
+      .BYT $38        ;        8           77                   ;
+      .BYT $35        ;        5           78                   ;
+      .BYT $32        ;        2           79                   ;
+;                                                                ;
+;*****************************************************************
+;
+CHKSMH	.BYT $00        ; CHECKSUM HIGH ($E000-$E7FF, $E900-$EFFF)
+;
+.END

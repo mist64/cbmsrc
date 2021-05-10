@@ -84,6 +84,7 @@ build2 EDITOR_C128_DIN editor
 
 build1 EDITOR_CBM2_1982-11-19 sced.lib
 build1 EDITOR_CBM2_1983-05-31 sced.lib
+build1 EDITOR_CBM2_EURO edtlist
 
 build1 BASIC_VIC basic
 

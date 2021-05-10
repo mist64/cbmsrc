@@ -112,6 +112,10 @@ The CBM2 BASIC, EDITOR and KERNAL sources in different versions (1982-1984).
 
 The files have been converted to LF line breaks and LST-style indenting.
 
+## EDITOR_CBM2_EURO
+
+The "CBM 8032 EURO SCREEN EDITOR 4V2E (E-901474-03)" ROM. Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
 ## MONITOR_C64
 
 The C64 monitor program. Extracted from ml-monitor-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting. The symbol `WALKON` in the file `micii4` was changed from `1` to `0` so the source builds.
