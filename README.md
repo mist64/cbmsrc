@@ -251,9 +251,12 @@ A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manu
 
 A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
 
-## MONITOR_KIM
+## MONITOR_KIM_*
 
-The KIM-1 "monitor" ROM (1975) from the [zimmers.net archive](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.asm), converted to LF line breaks. The missing closing `'` characters have been added to the `KIM` and `ERR` lines.
+The KIM-1 "monitor" ROM (1975), i.e. 6530-002 and 6530-003.
+
+* MONITOR_KIM_A: From the [Hans Otten reconstructed source from the KIM-1 users manual](http://retro.hansotten.nl/uploads/6502docs/usrman.htm).
+* MONITOR_KIM_B: From the [zimmers.net archive](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.asm), converted to LF line breaks. This version contains the same code, but the formatting is different. The corresponding [LST file](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.lst) was built with the MOS Cross-Assembler in 1981. To account for the assembler difference, the missing closing `'` characters have been added to the `KIM` and `ERR` lines.
 
 ## KIMATH
 
