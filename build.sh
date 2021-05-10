@@ -57,6 +57,9 @@ test_tools
 rm -rf build
 mkdir build
 
+build1 KIMATH kimath.asm
+build1 MONITOR_KIM kim.asm
+
 build1 KERNAL_VIC_04 kernal
 
 build1 KERNAL_C64_01 kernal
@@ -96,7 +99,6 @@ build1 BASIC_CBM2_1982-11-19 bas256 # or bas64 bas128 bas192 bas256
 build1 BASIC_CBM2_1983-05-31 cbm256 # or cbm128
 build1 BASIC_CBM2_1984-01-04 cbm256 # cbm128 cbm192 cbm256 cbm64 pet128 pet192 pet256 pet64
 
-build1 MONITOR_KIM kim.asm
 build1 MONITOR_C64 micii4
 build2 MONITOR_C128 monitor
 

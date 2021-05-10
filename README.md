@@ -116,10 +116,6 @@ The files have been converted to LF line breaks and LST-style indenting.
 
 The C64 monitor program. Extracted from ml-monitor-source.d64 from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/) and converted to LF line breaks and LST-style indenting. The symbol `WALKON` in the file `micii4` was changed from `1` to `0` so the source builds.
 
-## MONITOR_KIM
-
-The KIM-1 "monitor" ROM from the [zimmers.net archive](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.asm), converted to LF line breaks. The missing closing `'` characters have been added to the `KIM` and `ERR` lines.
-
 ## ASSEMBLER_TED
 
 A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
@@ -241,7 +237,13 @@ The [CBM 8023P](http://www.zimmers.net/anonftp/pub/cbm/firmware/printers/8023P-M
 
 The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII character/graphics set.
 
+## MONITOR_KIM
 
+The KIM-1 "monitor" ROM (1975) from the [zimmers.net archive](http://www.zimmers.net/anonftp/pub/cbm/src/kim-1/kim.asm), converted to LF line breaks. The missing closing `'` characters have been added to the `KIM` and `ERR` lines.
+
+## KIMATH
+
+The KIM-1 "KIMATH" math package (1976). Generated from the [original LST printout](http://retro.hansotten.nl/uploads/files/kimath.ZIP), and the .asm reconstruction by C. Bond from the same package.
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com
