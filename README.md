@@ -259,6 +259,10 @@ The KIM-1 "monitor" ROM (1975), i.e. 6530-002 and 6530-003. From the [Hans Otten
 
 The KIM-1 "KIMATH" math package (1976). Generated from the [original LST printout](http://retro.hansotten.nl/uploads/files/kimath.ZIP), and the .asm reconstruction by C. Bond from the same package.
 
+## TIM
+
+The TIM (Terminal Interface Monitor) ROM (6530-004). Reconstructed from the [manual](http://archive.6502.org/books/mos_tim_terminal_interface_monitor_manual_mar_1976.pdf) by Martin Hoffmann-Vetter.
+
 # Credits
 
 This repository is maintained by Michael Steil, mist64@mac.com
