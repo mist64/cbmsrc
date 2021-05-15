@@ -141,6 +141,7 @@ build2 DOS_1541C_03 serlib
 
 build1 PRINTER_8023P us.ptr.src
 
+build1 ASSEMBLER_C64_REC assembler
 build2 ASSEMBLER_TED assembler
 build1 DISK_MONITOR mon.lib
 build1 MATHPACK mathpack

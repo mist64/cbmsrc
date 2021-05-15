@@ -1,0 +1,117 @@
+.PAGE 'ASSEMBLER DECLARE'
+
+;   ********************************
+;   *                              *
+;   *     COMMODORE  VER-2.0       *
+;   *                              *
+;   *    PET 2-PASS ASSEMBLER      *
+;   *    FOR BASIC 2.2             *
+;   *                              *
+;   *  COPYRIGHT 13 DECEMBER, 1982 *
+;   *  COMMODORE BUSINESS MACHINES *
+;   *                              *
+;   ********************************
+
+;   LISTING DATE: AUG 02, 1982
+
+;   THE ASSEMBLER OPENS AND REFERS TO SEVEN LOGICAL FILES.
+;   IT ASSUMES A PRINTER ATTACHED AS DEVICE 4, AND A  DISK
+;   AS DEVICE 8.  AN 'N' RESPONSE TO THE QUESTION 'HARD COPY?'
+;   WILL DIRECT OUTPUT TO THE SCREEN AND NO PRINTER WILL BE
+;   REQUIRED.  A NULL RESPONSE TO WILL TERMINATE OPERATION
+;   AND RETURN TO BASIC.
+;
+;   
+;   LOGICAL FILES USED:
+;
+;        1 =CRT SCREEN
+;        2 =SOURCE FILE
+;        3 =LIBRARY FILE
+;        4 =PRINTER OUTPUT FILE
+;        5 =KEYBOARD INPUT FILE
+;        6 =OBJECT OUTPUT FILE
+;        7 =DISK COMMAND CHANNEL
+;        8 =LABEL OUTPUT FILE
+;        9 =CROSS REF OUTPUT FILE
+
+
+;  CONSTANTS FROM C64 OS
+
+;SYTBND = $30   ;END OF SYMBOL TABLE (BASIC FRETOP)
+SATUS	= $90           ;I/O STATUS BYTE
+
+TIME	= $A3           ;JIFFY CLOCK
+FNLEN	= $B7           ;FILE NAME LENGTH
+FNADR	= $BB           ;FILE NAME ADDRESS
+
+NDX	= $C6           ;NUMBER CHARS IN BUFFER
+KEYD	= $26F          ;KEYBOARD INPUT BUFFER
+
+;
+;  CONSTANTS
+;
+
+LINES	= $3A
+STPVAL	= $7F           ;VALUE FOR CHECKING STOP KEY
+STKVAL	= $FF           ;INITIAL STACK VALUE
+
+
+;   ********************
+;   * ZERO PAGE STORAGE
+;   ********************
+
+	* = $02
+
+SYMTBL	*=*+2
+SAVEY	*=*+1           ;SAVE .Y (PTCH)
+SAVEX	*=*+1           ;SAVE .X (WSW)
+
+IPC	*=*+2
+TBLPTR	*=*+2
+INPMIN	*=*+2           ;INPUT RANGE MIN
+X0C	*=*+2
+STSAVE	*=*+2           ;SYMBOL TABLE BEGIN
+T0	*=*+2           ;INDIRECT POINTER IN BASE PAGE
+USER	*=*+2           ;SAVE AREA FOR E. C. READ
+ISYEND	*=*+2
+BOTS	*=*+2           ;SYM TABLE SORT PTR
+
+MIDS	*=*+2           ;SYM TABLE SORT PTR
+
+TOPS	*=*+2           ;SYM TABLE SORT PTR
+DELS	*=*+2           ;SYM TABLE SORT PTR
+ITOPS	*=*+2           ;SYM TABLE SORT PTR
+DFLTDN	*=*+1           ;DEFAULT DRIVE
+COUNT	*=*+1           ;COUNTER FOR SYMBOL MOVE
+FIRST	*=*+1           ;BINARY SEARCH VARIABLE
+LAST	*=*+1           ;BINARY SEARCH VARIABLE
+BTEMP	*=*+1           ;BINARY SEARCH VARIABLE
+
+;*********************************
+;* DEFINITIONS CONTROLLING SFILE
+;* FOR GET CHARACTER SOURCE
+;*********************************
+
+FRMSRC	= $80           ;SOURCE FILE BIT
+FRMLIB	= $40           ;LIBRARY FILE OPEN
+FRMMAC	= $20           ;MACRO BEING SCANNED
+FRMPRM	= $10           ;EXPANDING MACRO PARAMETER
+
+
+SETMSG	=$FF90
+FILPAR	=$FFBA
+SETNAM	=$FFBD
+FOPEN	=$FFC0
+FCLOSE	=$FFC3
+CHKIN	=$FFC6
+CKOUT	=$FFC9
+CLRCH	=$FFCC
+BASIN	=$FFCF
+BSOUT	=$FFD2
+STOP	=$FFE1
+GETIN	=$FFE4
+
+BREADY	=$E386
+PRT	=$E716
+
+.END
