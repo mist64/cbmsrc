@@ -30,7 +30,7 @@ build1()
 	DIR=$1
 	SRC=$2
 	mkdir build/$DIR
-	for i in $DIR/*; do cat $i | sed -e "s/\.NLIST//" | tr '\n' '\r' | tr '\t' ' ' > build/$i; done
+	for i in $DIR/*; do cat $i | tr '\n' '\r' | tr '\t' ' ' > build/$i; done
 	cd build/$DIR
 	echo "_tmp_obj\n\n\n$SRC" | $KERNALEMU ../../$ASSEMBLER64
 	mv printer4.txt ../$1.lst
