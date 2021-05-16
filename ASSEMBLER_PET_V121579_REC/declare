@@ -5,14 +5,14 @@
 ;   *     COMMODORE  VER-2.0       *
 ;   *                              *
 ;   *    PET 2-PASS ASSEMBLER      *
-;   *    FOR BASIC 4               *
+;   *    FOR BASIC 2/4             *
 ;   *                              *
-;   *  COPYRIGHT 05 SEPTEMBER, 1980*
+;   *  COPYRIGHT 15 DECEMBER, 1979 *
 ;   *  COMMODORE BUSINESS MACHINES *
 ;   *                              *
 ;   ********************************
 
-;   LISTING DATE: SEP 05, 1980
+;   LISTING DATE: DEC 15, 1979
 
 ;   THE ASSEMBLER OPENS AND REFERS TO SEVEN LOGICAL FILES.
 ;   IT ASSUMES A PRINTER ATTACHED AS DEVICE 4, AND A  DISK
