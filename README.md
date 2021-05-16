@@ -249,7 +249,7 @@ A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manu
 
 ## ASSEMBLER_PET_V090580
 
-The PET Resident Assembler, version V090580 (7858 bytes). Reconstructed from ASSEMBLER_TED.
+The PET Resident Assembler, version V090580 (7858 bytes). Reconstructed from ASSEMBLER_TED by Martin Hoffmann-Vetter and Michael Steil.
 
 ## ASSEMBLER_C64
 
