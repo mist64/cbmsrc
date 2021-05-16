@@ -1,0 +1,10 @@
+.PAGE 'START'
+
+	*=$03FE
+
+	.WORD $0400
+	.BYTE 0
+
+	.WORD $040D,10
+	.BYTE $9E,'(1039)',0
+	.WORD 0
