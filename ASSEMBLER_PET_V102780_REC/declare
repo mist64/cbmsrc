@@ -1,0 +1,192 @@
+.PAGE 'ASSEMBLER DECLARE'
+
+;   ********************************
+;   *                              *
+;   *     COMMODORE  VER-2.0       *
+;   *                              *
+;   *    PET 2-PASS ASSEMBLER      *
+;   *    FOR BASIC 4               *
+;   *                              *
+;   *  COPYRIGHT 05 SEPTEMBER, 1980*
+;   *  COMMODORE BUSINESS MACHINES *
+;   *                              *
+;   ********************************
+
+;   LISTING DATE: SEP 05, 1980
+
+;   THE ASSEMBLER OPENS AND REFERS TO SEVEN LOGICAL FILES.
+;   IT ASSUMES A PRINTER ATTACHED AS DEVICE 4, AND A  DISK
+;   AS DEVICE 8.  AN 'N' RESPONSE TO THE QUESTION 'HARD COPY?'
+;   WILL DIRECT OUTPUT TO THE SCREEN AND NO PRINTER WILL BE
+;   REQUIRED.  A NULL RESPONSE TO WILL TERMINATE OPERATION
+;   AND RETURN TO BASIC.
+;
+;
+;   LOGICAL FILES USED:
+;
+;        1 =CRT SCREEN
+;        2 =SOURCE FILE
+;        3 =LIBRARY FILE
+;        4 =PRINTER OUTPUT FILE
+;        5 =KEYBOARD INPUT FILE
+;        6 =OBJECT OUTPUT FILE
+;        7 =DISK COMMAND CHANNEL
+;        8 =LABEL OUTPUT FILE
+;        9 =CROSS REF OUTPUT FILE
+
+
+;  CONSTANTS FROM PET OS
+
+SYTBND	= $30           ;END OF SYMBOL TABLE (BASIC FRETOP)
+SATUS	= $96           ;I/O STATUS BYTE
+STKEY	= $9B
+
+TIME	= $A3           ;JIFFY CLOCK
+FNLEN	= $D1           ;FILE NAME LENGTH
+LA	= $D2           ;LOGICAL ADDRESS
+SA 	= $D3           ;SECONDARY ADDRESS
+FA 	= $D4           ;FILE ADDRESS
+FNADR	= $DA           ;FILE NAME ADDRESS
+
+NDX	= $9E           ;NUMBER CHARS IN BUFFER
+KEYD	= $26F          ;KEYBOARD INPUT BUFFER
+
+USER	= $01           ;SAVE AREA FOR E. C. READ
+SATUS	= $96           ;I/O STATUS BYTE
+SAVEX	= $B3           ;SAVE .X (WSW)
+SAVEY	= $B8           ;SAVE .Y (PTCH)
+
+;
+;  CONSTANTS
+;
+
+LINES	= $3A
+STPVAL	= $EF           ;VALUE FOR CHECKING STOP KEY
+STKVAL	= $FF           ;INITIAL STACK VALUE
+
+
+;   ********************
+;   * ZERO PAGE STORAGE
+;   ********************
+
+	* = $42
+
+SYMTBL	*=*+2
+TOPPNT	*=*+2
+
+IPC	*=*+2
+TBLPTR	*=*+2
+PNT1	*=*+2
+PNT2	*=*+2
+STSAVE	*=*+2           ;SYMBOL TABLE BEGIN
+	*=*+4
+ISYEND  *=*+2
+BOTS	*=*+2           ;SYM TABLE SORT PTR
+
+MIDS	*=*+2           ;SYM TABLE SORT PTR
+
+TOPS	*=*+2           ;SYM TABLE SORT PTR
+DELS	*=*+2           ;SYM TABLE SORT PTR
+ITOPS	*=*+2           ;SYM TABLE SORT PTR
+XREF	*=*+1           ;CROSS REF FLAG,0 NONE
+
+;
+;  NON ZERO PAGE STORAGE
+;
+
+	*=$027A
+
+CHAN	*=*+1           ;CURRENT I/O CHANNEL
+ISRC	*=*+16           ;ORIGINAL SOURCE FILE
+ISRCLN	*=*+1           ;SOURCE NAME LENGTH
+LCHAR	*=*+1           ;LAST CHARACTER GOT
+	*=*+1
+NOSYM	*=*+2           ;# SYMBOLS IN SYMTBL
+LPGCT	*=*+2
+JOPBAS	*=*+1           ;BASE OPCODE (PASS 1)
+JOPTEM	*=*+1           ;OPCODE TEMPLATE
+KNVAL	*=*+2           ;INTERMED VAL IN EVAL
+KOP	*=*+1           ;NXT OPER FOR EVAL
+KLEN	*=*+1           ;LENGTH OF STR TO PACK
+RETURN	*=*+1           ;RTN CODE FROM EVAL
+KBASE	*=*+1           ;BASE OF # TO EVAL
+LTLLEN	*=*+1           ;TITLE LENGTH
+J	*=*+1           ;GENERAL COUNTER
+LERCT	*=*+2           ;TOTAL ERROR COUNT
+JOPTYP	*=*+1           ;OPERAND TYPE (PASS 1)
+JNOPV	*=*+1           ;FLAG FOR NO OPER VAL
+LEROR	*=*+1           ;ERROR NUMBER (PASS 2)
+JERCOL	*=*+1           ;ERROR COLUMN
+ILSST	*=*+1           ;START OF A LABEL
+LCDPT	*=*+1           ;MULTIPLE LINES FLAG
+
+JLABL	*=*+1
+JORG	*=*+1
+JBYWOR	*=*+1           ;ASM DIRECTIVE WORD
+PASS	*=*+1
+ICRDNO	*=*+2           ;CURRENT CARD NUMBER
+ICSB	*=*+1           ;CURRENT STRING BEGIN
+ICSE	*=*+1           ;CURRENT STRING END
+ICSL	*=*+1           ;CURRENT STRINT LENGTH
+IEXP	*=*+2           ;VALUE OF EXPR EVAL
+ICOLP	*=*+1           ;CURRENT COLUMN
+LNCT	*=*+1
+JOPLEN	*=*+1           ;OPERAND LENGTH
+IERR	*=*+1           ;ERROR CODE
+LBOTH	*=*+1           ;LIST TO SCR & PRNTER
+NOPRIN	*=*+1           ;NO HARD COPY FLAG
+IFLAGS	*=*+2           ;SET OF FLAGS
+
+
+;   NOGEN 128 = DON'T GENERATE STRINGS
+;   NOSYM 64  = DON'T GEN SYMBOL TABLEW
+;   OPCNT 32  = DO AN OPCODE COUNT
+;   NOERR 16  = ERROR ONLY LISTING
+;   INTER 8   = CREATE INTERFACE FILE
+;   LIST  4   = CREATE OUTPUT LISTING
+;   EXP   2   = EXPAND MACROS
+
+
+COLCNT	*=*+1           ;COLUMN COUNT
+IMAXCL	*=*+1           ;MAX COLUMNS ON CARD
+KLOW	*=*+1           ;< FLAG
+KHIGH	*=*+1           ;> FLAG
+CHAR	*=*+1
+TEMP	*=*+2
+TEMB	*=*+2           ;WORK AREA
+SFILE	*=*+1
+
+;
+;  INPUT BUFFER AREA
+;
+
+ICRD	*=*+80          ;INPUT BUFFER (MOVE TO $0200 ??)
+
+LTLBUF	*=*+50          ;TITLE BUFFER (E.C.)
+LTAB	*=*+6
+ISYM	*=*+16
+
+;
+;  OBJECT FILE BUILD AREA
+;
+
+OBJMAP	*=*+40          ;MEMORY MAP
+
+CKSUML	*=*+1           ;RECORD CHECKSUM
+CKSUMH	*=*+1
+LADDL	*=*+1           ;LAST ADDRESS
+LADDH	*=*+1
+RECNTL	*=*+1           ;RECORD COUNT
+RECNTH	*=*+1
+
+MAXBYT	=24             ;MAXIMUM BYTES/RECORD
+BYTCNT	=*              ;RECORD BYTE COUNT
+
+OBJBUF	*=*+MAXBYT+3    ;OBJ OUT BUF
+OBJFIL	*=*+18          ;OBJECT FILE NAME
+OBJLEN	*=*+1           ;FILE NAME LENGTH
+
+NOBJ	*=*+1           ;NO OBJ FILE FLAG
+IFFLAG	*=*+1           ;FLAG FOR COND ASMB
+
+.END

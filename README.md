@@ -247,9 +247,13 @@ The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII charact
 
 A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manual](http://www.zimmers.net/anonftp/pub/cbm/programming/b/Commodore_700_Reference_Manual.pdf). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
 
-## ASSEMBLER_PET_V090580
+## ASSEMBLER_PET_*_REC
 
-The PET Resident Assembler, version [V090580 (7858 bytes)](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg). Reconstructed from ASSEMBLER_TED by Martin Hoffmann-Vetter and Michael Steil.
+Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_TED, based on work by Martin Hoffmann-Vetter.
+
+* [ASSEMBLER_PET_V090580_REC (1980-09-05, 7858 bytes)](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg)
+* [ASSEMBLER_PET_V102780_REC (1980-10-27, 8049 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V102780_pet.prg)
+
 
 ## ASSEMBLER_C64
 

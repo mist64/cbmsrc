@@ -9,4 +9,6 @@
 	.BYTE $9E,'(1039)',0
 	.WORD 0
 
+        JMP PASS1
+
 .END

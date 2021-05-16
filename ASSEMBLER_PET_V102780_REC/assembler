@@ -1,0 +1,85 @@
+
+.LIB DECLARE
+.LIB START
+.LIB INTERFACE
+.LIB MAIN
+.LIB DIRECTIVE
+.LIB OPERAND
+.LIB EVAL
+.LIB NUMSYMS
+.LIB ASMPRINT
+.LIB ASMTABLE
+.LIB ASMIEEE
+
+L22E0   BRK
+L22E1   LDA     $22E0
+        CMP     #$00
+        BEQ     $22EA
+        CLC
+        RTS
+L22EA   LDA     #$FF
+        STA     $22E0
+        LDX     #$03
+L22F1   LDA     $FFFC,X
+        CMP     $2301,X
+        BNE     $2305
+        DEX
+        BPL     $22F1
+        LDA     #$02
+        JMP     $2334
+L2301   CMP     ($FC),Y
+        .BYTE   $1B
+        .BYTE   $E6
+L2305   LDX     #$03
+L2307   LDA     $FFFC,X
+        CMP     $2329,X
+        BNE     $2332
+        DEX
+        BPL     $2307
+        LDA     #$00
+        STA     $8000
+        STA     $8400
+        LDA     #$FF
+        STA     $8000
+        CMP     $8400
+        BNE     L232D
+        LDA     #$04
+        JMP     $2334
+L2329   ASL     $FD,X
+        .BYTE   $42
+        .BYTE   $E4
+L232D   LDA     #$08
+        JMP     $2334
+L2332   SEC
+        RTS
+L2334   STA     $0412
+        CMP     #$02
+        BNE     $2346
+        LDX     #$23
+L233D   LDA     $2348,X
+        STA     $0413,X
+        DEX
+        BPL     $233D
+L2346   CLC
+        RTS
+
+SYTBST	*=*
+
+L2348   JMP     $F524
+        JMP     $F2AE
+        JMP     $F770
+        JMP     $F7BC
+        JMP     $F272
+        JMP     $F1E1
+        JMP     $F232
+        JMP     $F1D1
+        JMP     $E7F7
+        JMP     $F301
+        JMP     $E3D8
+        JMP     $C389
+        TAX
+        TAX
+        TAX
+        TAX
+
+.END
