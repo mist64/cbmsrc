@@ -256,6 +256,7 @@ Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_T
 * ASSEMBLER_PET_V090580_A_REC (1980-09-05, [7858 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg))
 * ASSEMBLER_PET_V090580_B_REC (1980-09-05, [7938 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_pet.prg); and with `LINES=$40`: 1980-09-05, [7822 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt_pet.prg))
 * ASSEMBLER_PET_V102780_REC (1980-10-27, [8049 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V102780_pet.prg))
+* ASSEMBLER_PET_V26MAR82RR_REC (1982-03-26, [7982 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V26MAR82RR_pet.prg)); non-mainline
 
 ## ASSEMBLER_C64
 
