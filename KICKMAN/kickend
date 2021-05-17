@@ -1,0 +1,7 @@
+.PAGE 'KICKEND'
+
+	*=$FFFA
+
+	.WORD $E000,$E000,IRQINT
+
+.END

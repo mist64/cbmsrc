@@ -138,6 +138,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
 | [WIZARD](WIZARD)                                             | 1982 | Wizard of Wor Ultimax Game |
+| [KICKMAN](KICKMAN)                                           | 1982 | Kickman Ultimax Game |
 
 ## Descriptions
 
@@ -418,6 +419,10 @@ The TIM (Terminal Interface Monitor) ROM (6530-004). Reconstructed from the [man
 ## WIZARD
 
 The game "Wizard of Wor" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
+
+## KICKMAN
+
+The game "Kickman" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
 
 # Credits
 

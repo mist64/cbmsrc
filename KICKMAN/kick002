@@ -1,0 +1,480 @@
+.PAGE 'KICK002'
+;*--------------------------------------------------*
+;*     GAME  START  INITIALIZE                      *
+;*--------------------------------------------------*
+
+GMINIT
+	LDA #00         ;SCORE CLEAR
+	STA SCORE
+	STA SCORE+1
+	STA SCORE+2
+
+GMI000	LDA #$00
+	STA EXTCOL
+	STA BGCOL0
+
+	STA XTRA        ;EXTRA SHIP FLAG OFF
+
+	STA ROUND       ;ROUND NUMBER CLEAR
+
+	LDA #$FF
+	STA NUMENM      ;ENEMY ALL DONE
+
+	RTS
+
+
+;*--------------------------------------------------*
+;*     ROUND  INITIALIZE                            *
+;*--------------------------------------------------*
+
+RDINIT
+	LDA #$7F
+	STA CIAICR      ;CIA INTERRUPT DESABLE
+	LDA CIAICR      ;CIA INTERRUPT CLEAR
+	LDA #$A5        ;FARST INT. POSISION
+	STA RASTER
+	LDA #$FF        ;INTERRUPT CLARE
+	STA VICIRQ
+	LDA #$01        ;MASK SET
+	STA IRQMSK
+	STA IRQCNT      ;COUNTER INIT
+
+	LDA NUMENM      ;ENEMY ALL DONE?
+	BPL *+4         ;NO
+	INC ROUND       ;NEXT ROUND NUMBER
+	LDX ROUND
+	CPX #$07        ;PAST 7 ROUND ?
+	BCC *+4         ;NO
+	LDX #$08
+	LDA ENMCNT-1,X  ;GET NUMBER OF ENEMIES
+	STA NUMENM      ;SET IT
+	LDA EN2TIM      ;GET ENEMY2 MOVE WAITE TIME
+	STA EN2WTF      ;SET IT
+
+	LDA #01
+	STA EN2WTV      ;
+
+	LDA #$C0
+	STA EN1WTV      ;DOWN START WAITE 3 SEC
+
+	LDA ROUND
+	CMP #08
+	BCC *+4
+	LDA #08
+	ASL A           ;SET ENYMIES 2 TABLE
+	TAY
+	LDA EN2TB-2,Y
+	STA WK0
+	LDA EN2TB-1,Y
+	STA WK1
+	LDY #23
+RDI010
+	LDA (WK0),Y
+	STA ENMY2A,Y
+	DEY
+	BPL RDI010
+	LDY #00         ;SET ENEMIES 2 TABLE
+RDI040
+	LDA EN2BGN,Y
+	STA EN2YP,Y     ;EN2YP(24),EN2XPL(24),EN2XPH(24)
+	INY
+	CPY #24+24+24
+	BNE RDI040
+;
+;----- KILL ALL SPRITE FUNCTION
+
+	LDY #08-1
+	LDA #$FF
+RDI058
+	STA SPRITA,Y
+	DEY
+	BPL RDI058
+
+	LDY #24-1
+	LDA #01
+RDI060
+	STA SPRITB,Y
+	DEY
+	BPL RDI060
+;
+;-----  SET SPRITE FUNCTION
+
+	LDA #00
+	STA MSIGX
+	STA SPRITA+0    ;SET SPRITE 0 SHIP
+	STA SPRITA+1
+	LDA #170
+	STA SP0X
+	STA SP1X
+	LDA #250-24-22
+	STA SP0Y
+	LDA #250-24
+	STA SP1Y
+
+	LDA #ORANGE
+	STA SP0COL
+	LDA #PURPLE
+	STA SP1COL
+
+	LDA #$01
+	STA SPRITB+0
+	STA SPRITC+0
+	LDA #$FF
+	STA SPRITW+0
+;
+;----- CLEAR ON HEAD TABLE
+
+	LDA #$FF
+	LDY #$05
+RDI070
+	STA HEADTB,Y
+	DEY
+	BPL RDI070
+	LDA #$00
+	STA HEADTB+6
+
+	LDA #$00        ;FLAGS INITIALIZE
+	STA FIRE
+	STA DFIRE
+	STA THRUST
+	STA FTIME
+	STA EN2IDX
+	STA TIMER2
+	STA TIMER3
+	STA KILLSP
+	STA KIKTIM
+	STA PACFLG
+	STA DWNCNT
+
+	LDX #$00
+RDI090
+	STA $200,X
+	STA $300,X
+	INX
+	BNE RDI090
+
+	JSR CLRCRT      ;CLEAR SCREEN
+
+	LDX #<GMSCRN    ;FLAME DISPLAY
+	LDY #>GMSCRN
+	JSR CHROUT
+
+	JSR DSPSCR      ;DISPLAY SCORE
+
+	JSR DSPHSC      ;DISPLAY HIGH SCORE
+
+	JSR DSPSHP      ;DISPLAY SHIP IN FLAME
+
+	LDA #%00000011
+	STA SPENA
+
+	LDA ROUND
+	AND #$03
+	TAY
+	LDA SNDADT,Y
+	STA ATDLY1
+	LDA SNDSRT,Y
+	STA SUREL1
+
+
+	LDA #$01        ;BGM SOUND
+	JSR SOUND
+	RTS
+;
+;----- BGM TBL.
+
+SNDADT	.BYTE $09,$00,$09,$00
+SNDSRT	.BYTE $F9,$F9,$F0,$F0
+
+
+;*--------------------------------------------------*
+;*     DISPLAY  SCORE                               *
+;*--------------------------------------------------*
+
+DSPSCR
+	LDX #<SCRN1
+	LDY #>SCRN1
+
+	STX WK0
+	STY WK1
+	LDX #0
+	LDY #5
+SCO10
+	LDA SCORE,X
+	AND #$0F
+	STA WK2
+	INC WK2
+	LDA WK2
+	STA (WK0),Y
+	DEY
+
+	LDA SCORE,X
+	LSR A
+	LSR A
+	LSR A
+	LSR A
+	STA WK2
+	INC WK2
+	LDA WK2
+	STA (WK0),Y
+	INX
+	DEY
+	BPL SCO10
+	RTS
+
+;*--------------------------------------------------*
+;*     DISPLAY  HI-SCORE                            *
+;*--------------------------------------------------*
+
+DSPHSC
+	LDX #<SCRN2
+	LDY #>SCRN2
+
+	STX WK0
+	STY WK1
+	LDX #0
+	LDY #5
+HSC10
+	LDA LSCORE,X
+	AND #$0F
+	STA WK2
+	INC WK2
+	LDA WK2
+	STA (WK0),Y
+	DEY
+
+	LDA LSCORE,X
+	LSR A
+	LSR A
+	LSR A
+	LSR A
+	STA WK2
+	INC WK2
+	LDA WK2
+	STA (WK0),Y
+	INX
+	DEY
+	BPL HSC10
+	RTS
+
+
+;*--------------------------------------------------*
+;*     DISPLAY   SHIP IN FLAME                      *
+;*--------------------------------------------------*
+
+DSPSHP
+	LDX #<SCRN3
+	LDY #>SCRN3
+	STX WK0
+	STY WK1
+
+	LDX NUMSHP
+	BEQ DSHP90
+	LDY #$00
+	LDA #$5A
+DSHP20
+	STA (WK0),Y
+	INY
+	INY
+	DEX
+	BNE DSHP20
+DSHP90
+	RTS
+
+
+;*--------------------------------------------------*
+;*   SOMETHING ON-OFF BY TIME                       *
+;*--------------------------------------------------*
+;
+;-----  FLASH FLAME CONTROL
+
+SOMONE
+;
+;----- CALL BOMB SUBROUTINE
+
+SOM100
+	JSR BMBSPR
+;
+;----- WAITE TIMER RENEW
+
+	LDA NUMSHP
+	ORA NUMENM
+	ORA SPRITA
+	BMI SOM200
+	LDA TIMER3
+	AND #$3F
+	STA TIMER3
+;
+;-----
+SOM200
+	RTS
+
+
+;*--------------------------------------------------*
+;* ENEMISE 2 MOVE                                   *
+;*--------------------------------------------------*
+
+EN2MOV
+	DEC EN2WTV      ;DISPLAY TIME ?
+	BEQ *+5         ;YES
+	JMP E2M090      ;EXIT
+
+	LDA EN2WTF
+	STA EN2WTV      ;RESET INTERVAL TIMER
+
+	INC EN2IDX      ;ENEMY 2 DISPLAY INDEX
+	LDX EN2IDX
+	CPX #24
+	BCC *+4
+	LDX #00
+	STX EN2IDX
+	LDA ENMY2A,X
+	CMP #$FF
+	BNE *+5
+	JMP E2M090      ;NONE EXIST
+
+	LDA ENMY2A,X    ;GET ENEMISE 2 DIRECTION
+	AND #$C0        ;RIGHT?
+	BNE E2M010      ;NO
+
+	LDA ENMY2A,X
+	ORA #$80
+	STA ENMY2A,X    ;CHENGE RIGHT TO LEFT
+	INC EN2XPL,X    ;INC X POINT L
+	BNE *+4
+	INC EN2XPH,X    ;INC X POINT H
+	JMP E2M080      ;GO TO DISPLAY
+E2M010
+	LDA ENMY2A,X
+	AND #$3F
+	STA ENMY2A,X    ;CHENGE LEFT TO RIGHT
+	DEC EN2XPL,X    ;DEC X POINT L
+	LDA EN2XPL,X
+	CMP #$FF
+	BNE *+4
+	DEC EN2XPH,X    ;DEC X POINT H
+
+E2M080
+	JSR EN2DSP
+
+E2M090
+	RTS
+
+
+
+;*--------------------------------------------------*
+;* DISPLAY ENEMY 2                                  *
+;*         INPUT X-REG DISPLAY ENEMY INDEX          *
+;*--------------------------------------------------*
+
+EN2DSP
+	JSR BITCHR      ;GET SCREEN ADDRESS (WK0,WK1)
+
+	CLC
+	LDA WK0
+	STA WORK+$00    ;ADS-L
+	ADC #40
+	STA WORK+$06
+	LDA WK1
+	STA WORK+$01    ;ADS-H
+	ADC #00
+	STA WORK+$07
+
+	LDA ENMY2A,X
+	AND #$03
+	TAY
+	LDA EN2COL,Y
+	STA WORK+$02    ;COLOR
+	STA WORK+$08
+
+	LDA ENMY2A,X
+	LSR A
+	LSR A
+	AND #03
+	TAY
+	LDA EN2PTN,Y
+	LDY ENMY2A,X
+	BPL E2D010
+	CLC
+	ADC #04
+E2D010
+	TAY
+	STY WORK+$03
+	INY
+	STY WORK+$04
+	INY
+	STY WORK+$09
+	INY
+	STY WORK+$0A
+	LDY #$FE
+	STY WORK+$05
+	INY
+	STY WORK+$0B
+
+	LDX #<WORK
+	LDY #>WORK
+	JSR CHROUT
+	RTS
+
+EN2COL
+	.BYTE YELLOW,RED,BLUE,GREEN
+EN2PTN
+	.BYTE $3A,$3A+8,$3A+16,$3A+24
+
+;*--------------------------------------------------*
+;*  BIT MAP ADDRESS CHANGE TO SCREEN ADDRESS        *
+;*--------------------------------------------------*
+
+BITCHR
+	LDA #<SCREEN
+	STA WK0
+	LDA #>SCREEN
+	STA WK1
+
+	LDA EN2YP,X     ;GET Y POINTER
+	SEC
+	SBC #48
+	AND #$F8        ;CUT OFF < 8
+	STA WK2
+	CLC             ;POINTER/8*40=POINTER/8*8*5
+	ADC WK0
+	STA WK0
+	LDA WK1
+	ADC #00
+	STA WK1
+
+	LDA #00
+	ASL WK2
+	ROL A
+	ASL WK2
+	ROL A
+	CLC
+	ADC WK1
+	STA WK1
+	CLC
+	LDA WK2
+	ADC WK0
+	STA WK0
+	LDA WK1
+	ADC #00
+	STA WK1         ;(WK0,WK1)=(WK0,WK1)+(YPOINT-48)/8*40
+
+	LDA EN2XPH,X    ;X POINT HIGH
+	LSR A           ;CARRY  = X POINT HIGH
+	LDA EN2XPL,X    ;X POINT LOW
+	ROR A
+	LSR A
+	LSR A           ;/8
+	SEC
+	SBC #03
+
+	CLC
+	ADC WK0
+	STA WK0
+	LDA WK1
+	ADC #00
+	STA WK1         ;(WK0,WK1)=(WK0,WK1)+(XPOINT-24)/8
+
+	RTS
+
+.END

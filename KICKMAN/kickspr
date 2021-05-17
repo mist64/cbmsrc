@@ -1,0 +1,387 @@
+.PAGE 'KICKSPR'
+;==============================================
+;=                SPRAIT SETTING                =
+;==============================================
+
+	*=$FC00           ;SPRAIT SETTING
+
+	.BYTE $00,$04,$00    ;PIERO 1
+	.BYTE $00,$04,$00
+	.BYTE $00,$15,$00
+	.BYTE $00,$55,$40
+	.BYTE $00,$2F,$00
+	.BYTE $00,$0B,$00
+	.BYTE $00,$EB,$00
+	.BYTE $00,$EB,$00
+	.BYTE $00,$2B,$00
+	.BYTE $00,$3B,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$77,$40
+	.BYTE $00,$1D,$00
+	.BYTE $00,$5D,$40
+	.BYTE $01,$5D,$50
+	.BYTE $01,$5F,$50
+	.BYTE $01,$1F,$10
+	.BYTE $01,$1F,$10
+	.BYTE $02,$17,$20
+	.BYTE $02,$17,$20
+	.BYTE $00,$15,$00
+	.BYTE $00
+
+	.BYTE $01,$55,$00    ;PIERO 2
+	.BYTE $01,$55,$00
+	.BYTE $01,$55,$00
+	.BYTE $00,$58,$00
+	.BYTE $00,$56,$80
+	.BYTE $02,$14,$20
+	.BYTE $02,$15,$20
+	.BYTE $02,$05,$20
+	.BYTE $02,$3F,$20
+	.BYTE $08,$3F,$08
+	.BYTE $08,$08,$08
+	.BYTE $0A,$AA,$A8
+	.BYTE $0A,$AA,$A8
+	.BYTE $08,$08,$08
+	.BYTE $08,$08,$08
+	.BYTE $02,$08,$20
+	.BYTE $02,$08,$20
+	.BYTE $02,$08,$20
+	.BYTE $02,$08,$20
+	.BYTE $00,$AA,$80
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$15,$00  ;PIERO 3
+	.BYTE $00,$15,$00
+	.BYTE $00,$55,$00
+	.BYTE $00,$54,$00
+	.BYTE $01,$56,$80
+	.BYTE $05,$50,$20
+	.BYTE $05,$50,$20
+	.BYTE $05,$40,$A0
+	.BYTE $01,$50,$A0
+	.BYTE $09,$52,$08
+	.BYTE $08,$52,$08
+	.BYTE $08,$58,$08
+	.BYTE $08,$18,$08
+	.BYTE $08,$12,$08
+	.BYTE $0B,$F2,$08
+	.BYTE $03,$F0,$A0
+	.BYTE $02,$80,$A0
+	.BYTE $02,$00,$20
+	.BYTE $02,$00,$20
+	.BYTE $00,$AA,$80
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$15,$00   ;PIERO 4
+	.BYTE $00,$15,$00
+	.BYTE $00,$15,$00
+	.BYTE $00,$55,$00
+	.BYTE $00,$55,$80
+	.BYTE $02,$54,$20
+	.BYTE $01,$54,$20
+	.BYTE $01,$54,$A0
+	.BYTE $01,$50,$A0
+	.BYTE $08,$56,$08
+	.BYTE $08,$55,$08
+	.BYTE $08,$15,$48
+	.BYTE $08,$05,$48
+	.BYTE $08,$21,$48
+	.BYTE $08,$2F,$C8
+	.BYTE $02,$8F,$E0
+	.BYTE $02,$80,$A0
+	.BYTE $02,$00,$20
+	.BYTE $02,$00,$20
+	.BYTE $00,$AA,$80
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$15,$00    ;PIERO 5
+	.BYTE $00,$55,$00
+	.BYTE $C1,$55,$43
+	.BYTE $C5,$55,$53
+	.BYTE $D5,$65,$57
+	.BYTE $D5,$89,$57
+	.BYTE $D5,$88,$57
+	.BYTE $D4,$88,$97
+	.BYTE $00,$88,$80
+	.BYTE $02,$22,$20
+	.BYTE $02,$22,$20
+	.BYTE $02,$88,$A0
+	.BYTE $02,$88,$A0
+	.BYTE $02,$22,$20
+	.BYTE $02,$22,$20
+	.BYTE $00,$88,$80
+	.BYTE $00,$88,$80
+	.BYTE $00,$88,$80
+	.BYTE $00,$88,$80
+	.BYTE $00,$2A,$00
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$04,$00    ;PIERO 6
+	.BYTE $00,$04,$00
+	.BYTE $00,$15,$00
+	.BYTE $00,$55,$40
+	.BYTE $00,$55,$40
+	.BYTE $00,$C8,$C0
+	.BYTE $00,$EE,$C0
+	.BYTE $00,$EE,$C0
+	.BYTE $00,$EA,$C0
+	.BYTE $00,$EE,$C0
+	.BYTE $00,$2E,$00
+	.BYTE $00,$DD,$C0
+	.BYTE $00,$77,$54
+	.BYTE $01,$77,$54
+	.BYTE $05,$77,$54
+	.BYTE $C5,$F7,$C7
+	.BYTE $C5,$F7,$C7
+	.BYTE $D4,$F7,$D7
+	.BYTE $D5,$65,$DB
+	.BYTE $D5,$65,$DB
+	.BYTE $D5,$65,$DB
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;PACMAN 1
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00,$3F,$00
+	.BYTE $00,$7F,$80
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$FF,$C0
+	.BYTE $01,$FF,$E0
+	.BYTE $01,$FF,$E0
+	.BYTE $03,$FF,$F0
+	.BYTE $03,$FF,$F0
+	.BYTE $01,$FF,$E0
+	.BYTE $01,$FF,$E0
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$7F,$80
+	.BYTE $00,$3F,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;PACMAN 2
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00,$3F,$00
+	.BYTE $00,$7F,$80
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$FF,$C0
+	.BYTE $01,$FF,$E0
+	.BYTE $01,$FF,$E0
+	.BYTE $03,$F3,$F0
+	.BYTE $03,$E1,$F0
+	.BYTE $01,$C0,$E0
+	.BYTE $01,$80,$60
+	.BYTE $00,$80,$40
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;PACMAN 3
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00,$3F,$00
+	.BYTE $00,$7F,$80
+	.BYTE $00,$3F,$C0
+	.BYTE $00,$1F,$C0
+	.BYTE $00,$0F,$E0
+	.BYTE $00,$07,$E0
+	.BYTE $00,$03,$F0
+	.BYTE $00,$03,$F0
+	.BYTE $00,$07,$E0
+	.BYTE $00,$0F,$E0
+	.BYTE $00,$1F,$C0
+	.BYTE $00,$3F,$C0
+	.BYTE $00,$7F,$80
+	.BYTE $00,$3F,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;PACMAN 4
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$80,$40
+	.BYTE $01,$80,$60
+	.BYTE $01,$C0,$E0
+	.BYTE $03,$E1,$F0
+	.BYTE $03,$F3,$F0
+	.BYTE $01,$FF,$E0
+	.BYTE $01,$FF,$E0
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$FF,$C0
+	.BYTE $00,$7F,$80
+	.BYTE $00,$3F,$00
+	.BYTE $00,$0C,$00
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;FUSEN
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$18,$00
+	.BYTE $00,$7E,$00
+	.BYTE $00,$FF,$00
+	.BYTE $01,$9F,$80
+	.BYTE $01,$9F,$80
+	.BYTE $01,$FF,$80
+	.BYTE $01,$9F,$80
+	.BYTE $01,$9F,$80
+	.BYTE $01,$9F,$80
+	.BYTE $01,$9F,$80
+	.BYTE $01,$9F,$80
+	.BYTE $00,$FF,$00
+	.BYTE $00,$7E,$00
+	.BYTE $00,$18,$80
+	.BYTE $00,$19,$40
+	.BYTE $00,$06,$20
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;OBAKE
+	.BYTE $00,$00,$00
+	.BYTE $00,$3C,$00
+	.BYTE $00,$FF,$00
+	.BYTE $01,$FF,$80
+	.BYTE $03,$FF,$C0
+	.BYTE $03,$FF,$C0
+	.BYTE $07,$FF,$E0
+	.BYTE $07,$3C,$E0
+	.BYTE $07,$3C,$E0
+	.BYTE $07,$FF,$E0
+	.BYTE $07,$FF,$E0
+	.BYTE $06,$79,$E0
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00
+
+	.BYTE $01,$04,$10    ;BAKUDAN
+	.BYTE $00,$1D,$00
+	.BYTE $04,$77,$44
+	.BYTE $00,$1D,$00
+	.BYTE $01,$F3,$D0
+	.BYTE $00,$11,$00
+	.BYTE $04,$73,$44
+	.BYTE $00,$08,$00
+	.BYTE $01,$2A,$10
+	.BYTE $00,$2A,$00
+	.BYTE $00,$BA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$AA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$BA,$80
+	.BYTE $00,$2A,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$88,$80    ;PAIN
+	.BYTE $02,$66,$60
+	.BYTE $00,$99,$80
+	.BYTE $00,$2A,$00
+	.BYTE $00,$AA,$80
+	.BYTE $02,$2A,$20
+	.BYTE $00,$AA,$80
+	.BYTE $00,$2A,$00
+	.BYTE $00,$AA,$80
+	.BYTE $02,$26,$20
+	.BYTE $00,$19,$00
+	.BYTE $00,$26,$00
+	.BYTE $00,$19,$00
+	.BYTE $00,$26,$00
+	.BYTE $00,$19,$00
+	.BYTE $00,$26,$00
+	.BYTE $00,$19,$00
+	.BYTE $00,$26,$00
+	.BYTE $00,$19,$00
+	.BYTE $00,$26,$00
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+	.BYTE $00,$00,$00    ;BAKUHATHU
+	.BYTE $00,$00,$00
+	.BYTE $00,$08,$00
+	.BYTE $00,$88,$80
+	.BYTE $04,$49,$10
+	.BYTE $02,$2A,$20
+	.BYTE $01,$2A,$40
+	.BYTE $08,$88,$88
+	.BYTE $04,$41,$10
+	.BYTE $03,$22,$60
+	.BYTE $00,$00,$00
+	.BYTE $1F,$80,$FC
+	.BYTE $00,$00,$00
+	.BYTE $03,$22,$60
+	.BYTE $04,$41,$10
+	.BYTE $08,$88,$88
+	.BYTE $01,$2A,$40
+	.BYTE $02,$2A,$20
+	.BYTE $04,$49,$10
+	.BYTE $00,$88,$80
+	.BYTE $00,$08,$00
+	.BYTE $00
+
+.PAGE
+;-------------------------------------------------
+;        INTERRUPT PROCESS
+;-------------------------------------------------
+
+IRQINT
+	PHA
+	TXA
+	PHA
+	LDA #$7F
+	STA CIAICR      ;CIA INT. INIT
+	LDA CIAICR      ;CIA INT. CLARE
+	LDA VICIRQ      ;RASTER INT. ?
+	STA VICIRQ
+	AND #$01
+	BEQ IINT99
+	INC IRQCNT      ;YES
+	LDA IRQCNT      ;
+	AND #%00000001
+	TAX
+	LDA IRSTBL,X     ;NEW RASTER DATA
+	STA RASTER
+	LDA IRQBOT,X     ;CHENG BACK GRUND COLOR
+	STA BGCOL0
+IINT99
+	PLA
+	TAX
+	PLA
+	CLI
+	RTI
+
+IRSTBL	.BYTE $00,$C9
+IRQBOT	.BYTE $0F,$00
+
+.END

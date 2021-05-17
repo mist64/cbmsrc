@@ -1,0 +1,82 @@
+.PAGE 'KICKRAM'
+
+	*=$02
+
+BEGIN	*=*+0
+
+;-----  WORKING REGISTER IN CLOSED ROUTINE
+
+WK0	*=*+1
+WK1	*=*+1
+WK2	*=*+1
+WK3	*=*+1
+WK4	*=*+1
+WK5	*=*+1
+WK6	*=*+1
+WK7	*=*+1
+WK8	*=*+1
+WK9	*=*+1
+
+KOLOR	*=*+1           ;COLOR OF SHIP & CHRACTER (DEFAULT WHITE)
+SCANF	*=*+1           ;INPUT SCAN FLAG (0=KEY 1=PADDLE 2=JOYSTIK)
+COLLSS	*=*+1           ;COLLISION SPRITE TO SPRITE
+COLLSC	*=*+1           ;COLLISION SPRITE TO CHARACTER
+TIMER1	*=*+1           ;INC. TIMER AT 16MS(ONE SYNC)
+TIMER2	*=*+1           ;INC. TIMER AT 16MS
+TIMER3	*=*+1           ;INC. TIMER AT 256 X 16MS
+CYCLE	*=*+1           ;INC. CYCLE 0 TO 7 AT 16MS
+CYCLEP	*=*+1
+WATCHR	*=*+1           ;CHRACTER DSPLAY WAITE FLAG
+LSCORE	*=*+3           ;LAST HIGH SCORE
+SCORE	*=*+3           ;PLAYER'S SCORE
+FIRE	*=*+1
+DFIRE	*=*+1
+ROTATE	*=*+1
+THRUST	*=*+1
+FTIME	*=*+1
+KIKTIM	*=*+1
+KILLSP	*=*+1           ;SHIP KILL SW TIMER
+PACIDX	*=*+1
+PACFLG	*=*+1
+HEADTB	*=*+7
+DWNCNT	*=*+1           ;DOWN COUNTER OF FUUSEN
+DWNSTP	*=*+1
+NUMSHP	*=*+1           ;PLAYER'S SHIP NUMBER
+NUMENM	*=*+1           ;ENEMIES NUMBER
+XTRA	*=*+1           ;BOUNUS CHECK FLAG
+ROUND	*=*+1           ;ROUND COUNTER
+EN1WTF	*=*+1           ;ENEMY1 MOVE WAITE TIME FIX
+EN1WTV	*=*+1           ;ENEMY1 MOVE WAITE TIME VALIABLE
+EN2WTF	*=*+1           ;ENEMY2 MOVE WAITE TIME FIX
+EN2WTV	*=*+1           ;ENEMY2 MOVE WAITE TIME VALIABLE
+ENMY2A	*=*+24          ;ENEMY2 MOVE TABLE
+EN2YP	*=*+24          ;ENEMY2 Y POINTER
+EN2XPL	*=*+24          ;ENEMYE2 X(LOW)  POINTER
+EN2XPH	*=*+24          ;ENEMY2 X(HIGH) POINTER
+EN2IDX	*=*+1           ;ENEMIES 2 DSP. INDEX
+
+SPRIDX	*=*+1           ;SPRITE INDEX
+SPRITA	*=*+8           ;SPRITE MODE (DONE=-1)
+SPRITB	*=*+8           ;SPRITE MOVE WAITE TIMER
+SPRITC	*=*+8           ;SPRITE MOVE WAITE FIXED TIMER
+SPRITD	*=*+8           ;SPRITE DIRECTION
+SPRITW	*=*+8           ;SPRITE CYCLE SKIP SPEED CNTROL
+;
+IRQCNT	*=*+1           ;INTERRUPT COUNTER
+SNDIDX	*=*+2           ;
+SNDTIM	*=*+1           ;
+LASER	*=*+1           ;
+BOMBFL	*=*+1           ;
+THRSND	*=*+1           ;THRUST SOUND FRQ.
+EXPLOD	*=*+1           ;
+EMARGE	*=*+1           ;
+KEYSAV	*=*+1           ;KEY SAVE
+SV07F8	*=*+8           ;USED DBG.
+WORK	*=*+20          ;WORKING AREA
+SCRADR	*=*+2           ;SCREEN ADDRESS
+FUSCOL	*=*+1           ;FUSEN COLOR SET
+LOOP1	*=*+1
+LOOP2	*=*+1
+FIREOF	*=*+1
+
+.END
