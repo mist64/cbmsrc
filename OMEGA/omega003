@@ -1,0 +1,814 @@
+.PAGE 'OMEGA003'
+
+;*--------------------------------------------------*
+;* ENEMIES1 MOVE BY SPRITE MODE (SP5,SP6)           *
+;*--------------------------------------------------*
+
+EN1MOV
+	LDX #05         ;FIRST ENEMY1 NUMBER
+	JSR SPRMOV      ;SPRITE POINTER UPDATE
+	LDX #05
+	JSR SPRGEN      ;SPRITE PATTERN GENERATE
+	LDX #06         ;SECOND ENEMY1 NUMBER
+	JSR SPRMOV      ;SPRITE POINTER UPDATE
+	LDX #06
+	JSR SPRGEN
+	RTS
+
+
+;*--------------------------------------------------*
+;* SPRITE PATTERN GENERATE                          *
+;*--------------------------------------------------*
+
+SPRGEN
+	LDY SPRITA,X    ;LIVE ?
+	BMI SPG090      ;NO
+
+	LDA WK4         ;TAKE MOTION ?
+	BMI SPG090      ;NO
+
+	CPY #$02        ;MODE >=2 ?
+	BCS SPG010      ;YES
+
+	INY             ;PATTERN MODE CHANGE
+	TYA
+	AND #$01
+	STA SPRITA,X    ;0-1,1-0
+	TAY
+	JSR SETEN1      ;SPRITE PATTERN SET BY Y-REG
+	JMP SPG090      ;EXIT
+
+SPG010
+	CPY #$05        ;MODE >=5 ?
+	BCS SPG020      ;YES
+
+	INY
+	CPY #$05
+	BNE *+4
+	LDY #$02
+	STY SPRITA,X    ;2-3,3-4,4-2
+	JSR SETEN0      ;SPRITE PATTERN SET BY Y-REG
+
+SPG020
+SPG090
+	RTS
+;
+;----- ENEMY1 DISPLAY
+
+SETEN1
+	LDA #$FD
+	STA WK1
+	STA WK3
+	LDA #$60
+	CPY #00
+	BNE *+4
+	LDA #$80
+	STA WK0
+	CLC
+	ADC #$10
+	STA WK2
+
+	LDA #$03
+	STA WK5
+	LDA #$40
+	CPX #05
+	BEQ *+4
+	LDA #$80
+	STA WK4
+
+	LDY #00
+	LDX #16
+SE1010
+	LDA (WK0),Y
+	STA (WK4),Y
+	INC WK4
+	LDA (WK2),Y
+	STA (WK4),Y
+	INC WK4
+	INC WK4
+	INC WK0
+	INC WK2
+	DEX
+	BNE SE1010
+	RTS
+;
+;----- ENEMY0 DISPLAY
+
+SETEN0
+	LDA #$FD
+	STA WK1
+	DEY
+	DEY             ;0,1,2
+	TYA
+	ASL A
+	ASL A
+	ASL A
+	ASL A           ;0,16,32
+	CLC
+	ADC #$30
+	STA WK0
+
+	TXA
+	ASL A
+	TAY
+	LDA SPRTBL,Y
+	ORA #$0C
+	STA WK4
+	LDA SPRTBL+1,Y
+	STA WK5
+
+	LDY #00
+	LDX #08
+SE0010
+	LDA (WK0),Y
+	STA (WK4),Y
+	INC WK0
+	INC WK4
+	LDA (WK0),Y
+	STA (WK4),Y
+	INC WK0
+	INC WK4
+	INC WK4
+	DEX
+	BNE SE0010
+	RTS
+
+
+;*--------------------------------------------------*
+;* SPRITE POINTER MOVE                              *
+;*        INPUT  X-REG  SPRITE NUMBER               *
+;*--------------------------------------------------*
+
+SPRMOV
+	LDA #$FF
+	STA WK4         ;MOTIN FLAG OFF
+	STA WK5         ;LIMIT FLAG OFF
+	LDA SPRITA,X    ;LIVE ?
+	BPL *+3         ;YES
+	RTS             ;NOT LIVE RTS
+
+	DEC SPRITB,X    ;INTERVAL TIMER ZERO?
+	BEQ *+3         ;YES
+	RTS             ;NOT MOVE TIME RTS
+
+	LDA SPRITC,X    ;GET FIXED TIMER
+	STA SPRITB,X    ;SET INTERVAL TIMER
+
+	INC WK4         ;MOTION FLAG ON
+;
+;----- MOVE BY DIRECTION
+
+	LDA SPRITD,X    ;GET DIRECTION
+	TAY
+	LDA WALKY,Y     ;GET MOVE DISTANCE
+	STA WK0         ;SAVE
+	LDA WALKX,Y     ;GET X MOVE DISTANCE
+	STA WK1         ;SAVE
+	TXA
+	ASL A
+	TAY             ;Y=INDEX OF VIC-SPRITE
+	CLC
+	LDA VIC+1,Y
+	ADC WK0
+	STA VIC+1,Y     ;RESET NEW Y POINTER
+	STA WK0         ;SAVE Y POINTER TO WK0
+	CLC
+	LDA VIC,Y
+	ADC WK1
+	STA VIC,Y       ;RESET NEW X POINTER LOW
+	STA WK1         ;SAVE X POINTER TO WK1
+	CMP #$FE        ;>=$FE?
+	BCC SPM010      ;NO
+	LDA MASKS,X     ;GET SPRITE X MSB MASK
+	EOR #$FF
+	AND MSIGX       ;OFF X POINTER MSB
+	BCS SPM020      ;JMP
+SPM010
+	CMP #$03        ;<$03?
+	BCS SPM030      ;NO
+	LDA MASKS,X     ;GET SPRITE X MSB MASK
+	ORA MSIGX       ;ON X POINTER MSB
+SPM020
+	STA MSIGX       ;SET X POINTER MSB OF VIC
+SPM030
+	LDA MSIGX
+	AND MASKS,X
+	STA WK2         ;SAVE X POINTER MSB TO WK2
+;
+;----- CHECK LIMIT OF SCREEN UP-DOWN
+
+	LDA #$FF
+	STA WK3         ;FRAME FLASH OFF
+	LDA WK0         ;GET Y POINTER
+	CMP #54         ;>= 54?
+	BCS SPM040      ;YES
+	LDA #55
+	STA VIC+1,Y
+	INC WK3         ;FLASH FRAME NUMBER     = 0
+	BEQ SPM050      ;JMP
+SPM040
+	CMP #230        ;Y POINTER < 230 ?
+	BCC SPM070      ;YES
+	LDA #229
+	STA VIC+1,Y
+	LDA #04
+	STA WK3         ;FLASH FRAME NUMBER     = 4
+SPM050
+	LDA WK2         ;X MSB ON?
+	BNE SPM060      ;YES
+	LDA WK1         ;GET X POINTER
+	CMP #170        ;<170?
+	BCC SPM090      ;YES GO TO CHANGE DIRECTION UP-DOWN
+SPM060
+	INC WK3         ;FLASH FRAME NUMBER     = 1 OR 5
+	JMP SPM090      ;GO TO CHANGE DIRECTION UP-DOWN
+
+SPM070
+	LDA WK2         ;GET X MSB ON ?
+	BNE SPM100      ;YES
+	LDA WK1         ;GET X POINTER
+	CMP #101        ;<101 ?
+	BCC SPM100      ;YES
+	CMP #248        ;>=248 ?
+	BCS SPM100      ;YES
+
+	LDA WK0         ;GET Y POINTER
+	CMP #174        ;Y POINTER      = 174?
+	BEQ SPM082      ;YES
+	CMP #173        ;Y      = 173?
+	BEQ SPM082      ;YES
+	CMP #110        ;Y      = 110?
+	BEQ SPM080      ;YES
+	CMP #111        ;Y      = 111?
+	BNE SPM100      ;NO
+SPM080
+	LDA #109        ;RESET Y POINT
+	BNE SPM084      ;JMP
+SPM082
+	LDA #175        ;RESET Y POINT
+SPM084
+	STA VIC+1,Y
+SPM090
+	SEC             ;CHANGE DIRECTION OF SPRITE
+	LDA #08         ;0-8,1-7,2-6,3-5,4-4,5-3,6-2,7-1
+	SBC SPRITD,X    ;8-0,9-F,A-E,B-D,C-C,D-B,E-A,F-9
+	AND #$0F        ;
+	STA SPRITD,X    ;SET NEW DIRECTION
+	BPL SPM200      ;JMP FRAME ON
+;
+;----- CHECK LIMIT OF SCREEN LEFT-RIGHT
+
+SPM100
+	LDA WK2         ;X POINTER MSB ON?
+	BEQ SPM110      ;ON
+	LDA WK1         ;GET X POINTER
+	CMP #69         ;>=69?
+	BCC SPM130      ;NO GO TO EXIT
+	LDA #68
+	STA VIC,Y
+	LDA #02
+	STA WK3         ;FLASH FRAME NUMBER     = 2
+	BPL SPM120      ;JMP SELECT FLASH FRAME
+SPM110
+	LDA WK1         ;GET X POINTER
+	CMP #30         ;<30?
+	BCS SPM130      ;NO
+	LDA #31
+	STA VIC,Y
+	LDA #06
+	STA WK3         ;FLASH FRAME NUMBER     = 6
+SPM120
+	LDA WK0         ;GET Y POINTER
+	CMP #142        ;< 142?
+	BCC SPM150      ;YES GO TO CHANGE DIRECTION
+	INC WK3         ;FLASH FRAME NUMBER     = 3 OR 7
+	BCS SPM150      ;JMP GO TO CHANGE DIRECTION
+
+SPM130
+	LDA WK0         ;GET Y POINTER
+	CMP #110        ;<110 ?
+	BCC SPM900      ;YES
+	CMP #175        ;>=175 ?
+	BCS SPM900      ;YES
+
+	LDA WK1         ;GET X POINTER
+	CMP #101        ;X      = 101?
+	BEQ SPM142      ;YES
+	CMP #102        ;X      = 102?
+	BEQ SPM142      ;YES
+	CMP #247        ;X      = 247?
+	BEQ SPM140      ;YES
+	CMP #248        ;X      = 248?
+	BNE SPM900      ;NO GO TO EXIT
+SPM140
+	LDA #249        ;RESET X POINTER
+	BNE SPM144      ;JMP
+SPM142
+	LDA #100        ;RESET X POINTER
+SPM144
+	STA VIC,Y
+SPM150
+	SEC             ;CHANGE DIRECTION OF SPRITE
+	LDA #00         ;0-0,1-F,2-E,3-D,4-C,5-B,6-A,7-9
+	SBC SPRITD,X    ;8-8,9-7,A-6,B-5,C-4,D-3,E-2,F-1
+	AND #$0F
+	STA SPRITD,X
+;
+;----- FLASH FRAME ON
+
+SPM200
+	CPX #00
+	BNE SPM210
+	LDA #$04
+	STA KILLSP      ;WAIT TIMER OF SHIP CONTROL
+SPM210
+	INC WK5         ;LIMIT FLAG ON
+	LDA WK3         ;GET FLASH FRAME EXIST?
+	BMI SPM900      ;NO
+	TAY
+	LDA #$0B
+	STA LINTIM,Y    ;TURN ON FRAME
+
+SPM900
+	RTS
+
+
+;*--------------------------------------------------*
+;*  ENEMY0 SET FROM ENEMY1 DATA                     *
+;*--------------------------------------------------*
+
+EN0SET
+	LDA EN0WTV      ;SET TIME OK ?
+	BNE E0S900      ;NO EXIT
+
+	LDA EN0WTF      ;GET ENEMY0 SET TIME
+	STA EN0WTV      ;SET DEC TIMER
+	LDX #05
+	LDA #01
+	CMP SPRITA,X    ;ENEMY1A LIVE ?
+	BCS E0S010      ;YES 0 OR 1
+	INX
+	CMP SPRITA,X    ;ENEMY1B LIVE ?
+	BCS E0S020      ;YES 0 OR 1
+	BCC E0S900      ;NO EXIT
+E0S010
+	LDA SPRITA+1,X  ;ALREDY ENEMY0 LIVE ?
+	JMP E0S030
+E0S020
+	LDA SPRITA-1,X
+
+E0S030
+	CMP #02         ;<2 ?
+	BCC E0S040      ;YES 0 OR 1
+	CMP #05         ;>=5 ?
+	BCS E0S040      ;YES
+
+	LDA ROUND
+	CMP #07         ;ROUND < 7 ?
+	BCC E0S900      ;YES
+E0S040
+	LDA #02
+	STA SPRITA,X    ;SET ENEMY0
+	LDA #01
+	STA SPRITB,X
+	STA SPRITC,X
+
+	JSR SPRCLR      ;SPRITE PATTERN CLEAR
+
+E0S900
+	RTS
+
+
+;*---------------------------------------------------*
+;* SPRITE PATTERN CLEAR BY X-REG.                    *
+;*---------------------------------------------------*
+
+SPRCLR
+	STX WK0         ;X=SPRITE NUMBER 0---7
+	LDA #00
+	STA WK1
+	LDY #05
+SPC010
+	ASL WK0
+	ROL WK1
+	DEY
+	BPL SPC010
+	INC WK1
+	INC WK1
+
+	LDY #63
+	LDA #00
+SPC020
+	STA (WK0),Y
+	DEY
+	BPL SPC020
+
+	RTS
+
+
+;*--------------------------------------------------*
+;* ENEMY1 SET                                       *
+;*--------------------------------------------------*
+
+EN1SET
+	LDX #05
+	LDA #$FF
+	CMP SPRITA,X    ;ENEMY1A DONE ?
+	BEQ E1S010      ;YES
+	INX
+	CMP SPRITA,X    ;ENEMY1B DONE ?
+	BNE E1S900      ;NO EXIT
+
+E1S010
+	LDY #11-1       ;LOOK ENEMY2 LIVE TABLE
+E1S020
+	LDA ENMY2A,Y    ;LIVE ?
+	CMP #$FF
+	BNE E1S030      ;YES
+	DEY
+	BPL E1S020
+	BMI E1S900      ;EXIT
+;
+;-----  CHANGE ENEMY2 TO ENEMY1
+
+E1S030
+	TXA
+	ASL A
+	TAX
+	LDA #$FF
+	STA ENMY2A,Y    ;KILL ENEMY2
+	LDA EN2YP,Y     ;GET ENEMY2 Y POINT
+	STA SP0Y,X      ;SET ENEMY1 Y POINT
+	LDA EN2XPL,Y    ;GET ENEMY2 X POINT L
+	STA SP0X,X      ;SET ENEMY1 X POINT
+	TXA
+	LSR A
+	TAX
+	LDA EN2XPH,Y    ;GET ENEMY2 X POINT H
+	BEQ E1S040
+	LDA MASKS,X
+	ORA MSIGX
+	BNE E1S050
+E1S040
+	LDA MASKS,X
+	EOR #$FF
+	AND MSIGX
+E1S050
+	STA MSIGX       ;SET ENEMY1 X POINT MSB
+
+	LDA #01
+	STA SPRITA,X    ;SET ENEMY1 MODE
+	STA SPRITB,X    ;SET DEC TIME
+	LDA EN1WTF
+	STA SPRITC,X    ;SET FIX TIME
+	LDA RANDOM
+	STX WK0
+	LSR WK0
+	CLC
+	ORA WK0
+	AND #$0F
+	STA SPRITD,X    ;SET DIRECTION
+
+	LDA SPENA
+	ORA MASKS,X
+	STA SPENA       ;SPRITE ENABLE
+;
+;----- CLEAR ENEMY 2
+
+	TYA
+	TAX             ;X=ENEMEY2 INDEX
+	JSR BITCHR      ;GET SCREEN ADDRESS (WK0,WK1)
+	LDA #00
+	TAY
+	STA (WK0),Y
+	INY
+	STA (WK0),Y
+	INY
+	STA (WK0),Y
+	LDY #40
+	STA (WK0),Y
+	INY
+	STA (WK0),Y
+	INY
+	STA (WK0),Y
+	LDY #80
+	STA (WK0),Y
+	INY
+	STA (WK0),Y
+E1S900
+	RTS
+
+
+;*--------------------------------------------------*
+;* ENEMY3 SET                                       *
+;*--------------------------------------------------*
+
+EN3SET
+	LDA EN3WTV      ;SET TIME OK ?
+	BNE E3S900      ;NO EXIT
+
+	LDA EN3WTF      ;GET ENEMY3 DISPLAY WAIT FIX TIME
+	STA EN3WTV      ;SET IT DEC TIME
+
+	LDA RANDOM
+	AND #$02
+	BNE E3S900      ;EXIT
+
+	LDX #05
+	LDA SPRITA,X    ;ENEMY1A LIVE ?
+	BPL E3S010      ;YES
+	INX
+	LDA SPRITA,X    ;ENEMY1B LIVE ?
+	BMI E3S900      ;EXIT
+E3S010
+	LDY #07
+E3S020
+	LDA ENMY3A,Y
+	CMP #$FF        ;ALLREDY USED ?
+	BEQ E3S030      ;NO
+	DEY
+	BPL E3S020
+	BMI E3S900      ;EXIT FULL
+E3S030
+	LDA RANDOM
+	AND #01
+	STA ENMY3A,Y    ;SET DISPLAY MODE
+	STX WK0         ;SAVE X-REG
+	TXA
+	ASL A
+	TAX
+	CLC
+	LDA SP0Y,X
+	ADC #08
+	AND #$F8
+	STA EN3YP,Y     ;SET Y POINTER
+	CLC
+	LDA SP0X,X
+	ADC #08
+	AND #$F8
+	STA EN3XPL,Y    ;SET X POINT L
+	LDX WK0         ;GET SPRITE NUMBER
+	LDA #00
+	STA EN3XPH,Y    ;SET X POINT H
+	BCS E3S040
+	LDA MSIGX
+	AND MASKS,X
+	BEQ E3S900
+E3S040
+	TYA
+	TAX
+	INC EN3XPH,X
+E3S900
+	RTS
+
+
+;*--------------------------------------------------*
+;*  SHIP MOVE                                       *
+;*--------------------------------------------------*
+
+SHPMOV
+	LDA SPRITA      ;GET SHIP MODE
+	BPL *+3         ;SHIP LIVE?
+	RTS             ;NO
+
+	JSR READSW      ;PLAYER'S SW READ
+
+	LDX THRUST      ;THRUST?
+	BPL SHM030      ;NO
+	LDA KILLSP      ;SHIP MOVE KILL TIME=0?
+	BEQ SHM010      ;YES
+	DEC KILLSP
+	BNE SHM020
+SHM010
+	LDA ACSSEL      ;ALREDY START?
+	BEQ SHM015      ;NO
+	LDA #$03        ;THRUST SOUND ON
+	JSR SOUND
+
+	LDX SPRITD      ;GET NOW DIRECTION
+	LDY ROTATE      ;GET NEW DIRECTION
+	CLC             ;MAKE NEW X VECTOL
+	LDA WALKX,X
+	ADC WALKX,Y
+	CMP #$FE
+	BCS SHM011
+	CMP #$03
+	BCC SHM011
+	LDA WALKX,Y
+SHM011
+	STA WK0         ;SAVE NEW X VECTOL
+
+	CLC             ;MAKE NEW Y VECTOL
+	LDA WALKY,X
+	ADC WALKY,Y
+	CMP #$FE
+	BCS SHM012
+	CMP #$03
+	BCC SHM012
+	LDA WALKY,Y
+SHM012
+	STA WK1         ;SAVE NEW Y VECTOL
+
+	LDX #$0F
+SHM013
+	LDA WALKX,X
+	CMP WK0
+	BNE SHM014
+	LDA WALKY,X
+	CMP WK1
+	BEQ SHM016
+SHM014
+	DEX
+	BPL SHM013
+SHM015
+	LDX ROTATE
+SHM016
+	STX SPRITD      ;SET NEW DIRECTION
+
+	LDY #$01
+	STY SPRITC      ;SET TOP SPEARD
+	STY ACSSEL      ;ACSSEL ON
+SHM020
+	LDA #$10        ;THRUST SELECT BIT ON
+	BNE SHM040
+SHM030
+	LDA #$83        ;THRUST SOUND OFF
+	JSR SOUND
+	LDA #$00
+SHM040
+	ORA ROTATE      ;GET NOW SHIP DIRECTION
+	STA SPRITA      ;SET SHIP MODE
+
+	JSR SHPDSP      ;SHIP DISPLAY
+
+	LDY SPRITC
+	DEY             ;TOP SPEARD?
+	BNE SHM060      ;NO
+	LDA CYCLE       ;MOTION WAIT CHECK
+	AND #$03
+	BEQ SHM090
+SHM060
+	LDA ACSSEL
+	BEQ SHM090
+SHM070
+	LDX #00
+	JSR SPRMOV      ;SHIP MOVE
+	LDA WK5         ;LIMIT ARIVE?
+	BMI SHM090      ;NO
+	LDY SPRITC
+	CPY #03         ;LOW SPEARD?
+	BEQ SHM090      ;YES
+	INC SPRITC      ;SPEARD DOWN
+SHM090
+	RTS
+
+
+;*--------------------------------------------------*
+;*  READ SW,  JMP USED DEVICE                       *
+;*--------------------------------------------------*
+
+READSW
+	LDA SCANF
+	BNE *+5
+	JMP RDKEY
+	JMP RDPAD
+
+
+;*--------------------------------------------------*
+;*  SHIP DISPLAY                                    *
+;*--------------------------------------------------*
+
+SHPPTN	= $F500
+
+SHPDSP
+	LDA SPRITA      ;SHIP LIVE?
+	BMI SPD090      ;NO
+
+	AND #$1F
+	ASL A
+	ASL A
+	ASL A
+	STA WK2         ;SAVE *8
+	ASL A
+	STA WK0         ;STOR *16
+	LDA #>SHPPTN
+	ADC #00
+	STA WK1
+	CLC
+	LDA WK0
+	ADC WK2
+	STA WK0
+	LDA WK1
+	ADC #00
+	STA WK1
+
+	LDY #00
+	LDX #00
+SPD010
+	LDA (WK0),Y     ;PATTERN
+	STA $206,X      ;IT SET TO RAM
+	INY
+	INX
+	LDA (WK0),Y
+	STA $206,X
+	INY
+	INX
+	INX
+	CPY #$18
+	BNE SPD010
+SPD090
+	RTS
+
+
+;*--------------------------------------------------*
+;*  SHIP'S MISSLE SET BY FIRE BUTTON                *
+;*--------------------------------------------------*
+
+MSLPTN	=$FF00
+
+MSLSET
+	LDA SPRITA      ;SHIP LIVE?
+	BMI MSL090      ;NO
+
+	LDA DFIRE       ;FIRE OK?
+	BEQ MSL090      ;NO
+
+	LDX #04         ;MISSLE FULL?
+MSL010
+	LDA SPRITA,X    ;GET MODE
+	CMP #$FF        ;DONE?
+	BEQ MSL020      ;YES
+	DEX
+	BNE MSL010
+	STX DFIRE       ;CLEAR FIRE BIT
+	BEQ MSL090      ;FULL EXIT
+;
+;-----  SET MISSLE DIRECTION
+
+MSL020
+	LDA #00
+	STA DFIRE       ;CLEAR FIRE BIT
+	STA SPRITA,X    ;MODE=0 BIGEN MISSLE
+	LDA ROTATE      ;GET DIRECTION
+	STA SPRITD,X    ;GET IT
+	LDA #$02        ;MISSLE SOUND ON
+	JSR SOUND       ;
+;
+;-----  SET MISSLE ADDRESS POINT
+
+	LDA MSIGX
+	AND MASKS
+	BEQ MSL030
+	LDA MSIGX
+	ORA MASKS,X
+	STA MSIGX       ;SET MISSLE X POINTER MSB
+MSL030
+	TXA
+	ASL A
+	TAY             ;Y=X*2
+	LDA SP0X
+	STA SP0X,Y      ;SET MISSLE X POINTER
+	LDA SP0Y
+	STA SP0Y,Y      ;SET MISSLE Y POINTER
+;
+;----- AFTER MODULE CALL BY ENEMY'S MISSLE ROUTINE
+
+MSLBGN
+;
+;-----  SET MISSLE PATTERN
+
+	LDA SPENA
+	ORA MASKS,X
+	STA SPENA       ;SET SPRITE ENABLE BIT
+
+	LDA SPRITD,X
+	AND #$07
+	ASL A
+	ASL A
+	ASL A           ;*8
+	TAX             ;PATTERN INDEX
+	LDA SPRTBL,Y
+	STA WK0
+	LDA SPRTBL+1,Y
+	STA WK1
+	LDY #$15
+MSL050
+	LDA MSLPTN,X
+	STA (WK0),Y
+	INX
+	INY
+	LDA MSLPTN,X
+	STA (WK0),Y
+	INX
+	INY
+	INY
+	CPY #$21
+	BNE MSL050
+
+MSL090
+	RTS
+
+SPRTBL	.WORD $0200,$0240,$0280,$02C0
+	.WORD $0300,$0340,$0380,$03C0
+
+.END

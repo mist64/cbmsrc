@@ -1,0 +1,592 @@
+.PAGE 'OMEGA001'
+
+;1--------------------------------------------------1
+;1  POWER-ON START                                  1
+;1--------------------------------------------------1
+
+	*=$E000
+
+START
+	SEI             ;IRQ DISABLE
+	CLD
+	LDX #$FF
+	TXS             ;STACK INITIALIZE
+
+IOINIT
+;
+;-----  VIC INITIALIZE
+
+	LDX #47
+SETVIC
+	LDA VICTBL-1,X
+	STA VIC-1,X
+	DEX
+	BNE SETVIC
+;
+;-----  SID INITIALIZE
+
+	LDX #25
+SETSID
+	LDA SIDTBL-1,X
+	STA SID-1,X
+	DEX
+	BNE SETSID
+;
+;-----  ZERO,2,3 PAGE INITIALIZE
+
+	TXA
+RAMINI
+	STA $0002,X
+	STA $0200,X
+	STA $0300,X
+	INX
+	BNE RAMINI
+
+	LDA #BLUE       ;SHIP DEFAULT COLOR
+	STA KOLOR
+	LDA #WHITE      ;BACK DEFAULT COLOR
+	STA KOLOR+1
+
+	LDA #$1F
+	STA KEYSAV      ;INITIALIZE KEY SAVE
+
+;*--------------------------------------------------*
+;*  ATTRACT MODE                                    *
+;*--------------------------------------------------*
+
+ATTRAC
+	JSR CLRCRT
+
+	LDX #<TITLE     ;LOW ADDRESS
+	LDY #>TITLE     ;HIGH ADDRESS
+	JSR CHROUT
+
+	LDX #07         ;SET SPRITE COLOR
+ATR010
+	LDA KOLOR
+	STA SP0COL,X
+	DEX
+	BPL ATR010
+
+ATR020
+	JSR RDFKEY      ;READ KEYBORD F1(Y=1),F3(Y=2),F5(Y=3),F7(Y=4)
+	DEY
+	BMI ATR030      ;NONE SELECT
+	CPY #03-1       ;F5 SHIP COLOR CHANGE?
+	BNE ATR024      ;NO, SELECT F1 OR F3 OR F5
+;
+;----- SHIP COLOR CHANGE
+
+ATR022	JSR RDFKEY
+	TYA
+	BNE ATR022      ;OFF WAIT
+	INC KOLOR
+	LDA KOLOR
+	AND #$0F
+	STA KOLOR
+	BPL ATTRAC      ;JMP
+ATR024	CPY #04-1       ;F7 SCREEN COLOR CHANGE?
+	BNE ATR050      ;NO, SELECT F1 OR F3
+;
+;----- SCREEN COLOR CHANGE
+
+ATR026	JSR RDFKEY
+	TYA
+	BNE ATR026      ;OFF WAIT
+	INC KOLOR+1
+	LDA KOLOR+1
+	AND #$0F
+	STA KOLOR+1
+	STA EXTCOL
+	STA BGCOL0
+	BPL ATR020      ;JMP
+
+ATR030
+	JSR RDPAD       ;READ PADDLE
+	LDY #01
+	LDA FIRE        ;PUSH ?
+	BEQ ATR020      ;NO
+ATR050
+	STY SCANF       ;INPUT SCAN MODE (0:KEY OR JOY 1:PAD)
+
+	LDA #03
+	STA NUMSHP      ;SHIP COUNTER   = 3
+
+	LDA #$1F
+	STA SIGVOL      ;TURN SOUNDS ON
+
+;*--------------------------------------------------*
+;*   M A I N   P R O C E D U R E .                  *
+;*--------------------------------------------------*
+
+MAIN
+	JSR GMINIT      ;GAME INITIALIZE
+MAIN10
+	JSR RDINIT      ;ROUND INITIALIZE
+
+;*----- IN GAME LOOP -------------------------------*
+;
+
+MAIN20
+	LDA SCROLY
+	BPL MAIN20      ;SYNC WITH RASTER
+
+	JSR SET7F8      ;USED DBG.
+
+	LDA SPSPCL      ;GET COLLISION
+	STA COLLSS
+	LDA SPBGCL
+	STA COLLSC
+;
+;-----  USED TIMER COUNTER UP DOWN
+
+	INC TIMER1
+	LDA TIMER1
+	AND #$3F
+	BNE MAIN30
+	DEC EN0WTV      ;DEC AT ONE SECOND
+	DEC EN3WTV      ;DEC AT ONE SECOND
+MAIN30
+	INC TIMER2
+	BNE *+4
+	INC TIMER3
+	INC CYCLEP
+	LDA CYCLEP
+	AND #$0F
+	STA CYCLEP      ;CYCLE 0 TO F
+	AND #$07
+	STA CYCLE       ;CYCLE 0 TO 7
+;
+;-----  CALL PARTS SUBROUTINE
+
+	JSR SHPMOV      ;PLAYER SHIP UPDATE
+
+	JSR MSLSET      ;MISSLE SETUP
+
+	JSR MSLMOV      ;MISSLE UPDATE
+
+	JSR EN1MOV      ;ENEMIES1 UPDATE
+
+	JSR EN2MOV      ;ENEMIES2 UPDATE
+
+	JSR EN3MOV      ;ENEMIES3 UPDATE
+
+	JSR EN0SET      ;ENEMY0 BIGEN
+
+	JSR EN1SET      ;ENEMY1 BIGEN
+
+	JSR EN3SET      ;ENEMY3 BIGEN
+
+	JSR SOMONE      ;FLAME ON-OFF BY TIME
+
+	JSR SOUNDM      ;SOUND ON-OFF BY TIME
+;
+;-----  CHECK GAME OVER
+
+	LDA NUMSHP      ;ALL PLAYER SHIPS GONE ?
+	AND TIMER3      ;AFTER WAIT
+	BMI GMOVER      ;YES
+
+	LDA SNDDAT      ;CLARE SOUND OFF ?
+	BNE MAIN40      ;NO
+	LDA NUMENM      ;ALL ENEMIES KILL ?
+	AND TIMER3      ;AFTER WAIT
+	BMI MAIN10      ;YES
+MAIN40
+	LDA SPRITA      ;ONE SHIP GONE ?
+	AND TIMER3      ;AFTER WAIT
+	BMI MAIN10      ;YES
+
+	JMP MAIN20      ;IN GAME LOOP
+;
+;-----  CHECK AFTER GAME OVER
+
+GMOVER
+	LDX #02
+GMOV10
+	LDA LSCORE,X
+	CMP SCORE,X     ;HI-SCORE ?
+	BCC GMOV20      ;YES
+	BNE GMOV30      ;NO
+	DEX
+	BPL GMOV10
+GMOV20
+	LDA SCORE       ;SAVE THE HIGH SCORE
+	STA LSCORE
+	LDA SCORE+1
+	STA LSCORE+1
+	LDA SCORE+2
+	STA LSCORE+2
+	JSR DSPHSC      ;DISPLAY HIGH-SCORE
+GMOV30
+	LDA #00
+	STA SIGVOL      ;TURN SOUNDS OFF
+
+	INC WATCHR      ;CHRACTER DISPLAY WAIT FLAG ON
+	LDX #<OVERMS    ;GAME OVER MESSAGE
+	LDY #>OVERMS
+	JSR CHROUT
+	LDX #$FF
+	JSR WAIT        ;WAIT AFTER DISPLAY
+	JMP ATTRAC
+
+	RTS
+
+
+;*--------------------------------------------------*
+;* CLEAR SCREEN & COLOR                             *
+;*--------------------------------------------------*
+
+CLRCRT
+	LDX #0
+CLR010
+	LDA KOLOR       ;GET SHIP COLOR
+	STA COLRAM,X
+	STA COLRAM+$100,X
+	STA COLRAM+$200,X
+	STA COLRAM+$300-24,X
+	LDA #$00        ;SPACE
+	STA SCREEN,X
+	STA SCREEN+$100,X
+	STA SCREEN+$200,X
+	STA SCREEN+$300-24,X
+	INX
+	BNE CLR010
+
+	LDA KOLOR+1
+	STA EXTCOL
+	STA BGCOL0
+
+	STX SPENA       ;DISABLE SPRITE
+
+CLR020
+	LDX #8
+CLR030
+	LDA STABLE-1,X
+	STA SV07F8-1,X
+	STA $07F8-1,X
+	DEX
+	BNE CLR030
+
+	RTS
+
+STABLE	.BYTE $08,$09,$0A,$0B,$0C,$0D,$0E,$0F
+
+SET7F8
+	LDX #8
+S7F010
+	LDA SV07F8-1,X
+	STA $07F8-1,X
+	DEX
+	BNE S7F010
+	LDX #8
+S7F020
+	LDA SV07F8-1,X
+	CMP $07F8-1,X
+	BNE SET7F8
+	DEX
+	BNE S7F020
+	RTS
+
+
+;*--------------------------------------------------*
+;*  CHROUT  : CHRACTER OUT  .X(LOW) .Y(HIGH)        *
+;*--------------------------------------------------*
+
+CHROUT
+	STX WK0
+	STY WK0+1
+CHR010
+	LDY #00
+	STY WK5         ;OUT CHR. INDEX
+	LDA (WK0),Y
+	STA WK2         ;OUT ADDRESS LOW
+	INY
+	LDA (WK0),Y
+	STA WK3         ;OUT ADDRESS HIGH
+CHR020
+	INY
+	LDA (WK0),Y
+	CMP #$FF
+	BEQ CHR090      ;EXIT
+	CMP #$FE
+	BEQ CHR030      ;CHANGE OUT ADDRESS
+	CMP #$FD
+	BEQ CHR040      ;SELECT NEXT LINE
+	STY WK4         ;Y SAVE
+	LDY WK5         ;CHR. OUT INDEX
+	STA (WK2),Y     ;CHR. OUT
+	INC WK5
+	LDY WK4         ;Y GET
+	LDA WATCHR      ;DISPLAY WAIT?
+	BEQ CHR020      ;NO
+	LDX #10
+	JSR WAIT
+	JMP CHR020
+
+CHR030
+	INY
+	CLC             ;(WK0,WK0+1)=Y+(WK0,WK0+1)
+	TYA
+	ADC WK0
+	STA WK0
+	LDA WK0+1
+	ADC #0
+	STA WK0+1
+	JMP CHR010
+
+CHR040
+	CLC
+	LDA WK2
+	ADC #40
+	STA WK2
+	LDA WK3
+	ADC #00
+	STA WK3
+	LDA #00
+	STA WK5
+	BEQ CHR020      ;JMP
+CHR090
+	LDA #00
+	STA WATCHR
+	RTS
+
+
+;*--------------------------------------------------*
+;* KEYBORD DATA (F1,F3,F5,F7) READ ROUTINE          *
+;*--------------------------------------------------*
+
+RDFKEY
+	LDX #$FF
+	STX CIDDRA      ;SET DATA DIRECTION A
+	INX             ;X=0
+	STX CIDDRB      ;SET DATA DIRECTION B
+
+	LDY #01
+	LDX #$FE        ;COLUMN 0
+	JSR RDROW
+	CPX #$EF        ;ROW 4  F1 ?
+	BEQ RDF090      ;YES
+
+	LDY #$03        ;Y=3
+	CPX #$BF        ;ROW 6  F5 ?
+	BEQ RDF090      ;YES
+
+	LDY #$02        ;Y=2
+	CPX #$DF        ;ROW 5  F3 ?
+	BEQ RDF090      ;YES
+
+	LDY #$04        ;Y=4
+	CPX #$F7        ;ROW 3  F7 ?
+	BEQ RDF090      ;YES
+
+	LDY #00         ;NONE KEY
+RDF090
+	RTS
+
+
+;*--------------------------------------------------*
+;* KEYBORD DATA (A,S,L,;) READ                      *
+;*--------------------------------------------------*
+
+RDKEY
+	LDX #$FF
+	STX CIDDRA      ;SET DATA DIRECTION A
+	INX             ;X=0
+	STX CIDDRB      ;SET DATA DIRECTION B
+
+	LDA #$1F        ;MAKE BIT A-REG SAME JOYSTIK
+	LDX #$FD        ;COLUMN 1
+	JSR RDROW
+	CPX #$FB        ;ROW 2  A ?
+	BNE RDK010      ;NO
+	AND #$FB        ;RIGHT BIT ON
+	BPL RDK090
+
+RDK010	LDX #$FB        ;COLUMN 2
+	JSR RDROW
+	CPX #$FB        ;ROW 2  D ?
+	BNE RDK020      ;NO
+	AND #$F7        ;LEFT BIT ON
+
+RDK020	LDX #$DF        ;COLUMN 5
+	JSR RDROW
+	CPX #$FB        ;ROW 2  L ?
+	BNE RDK030      ;NO
+	AND #$EF        ;FIRE BIT ON
+
+RDK030	LDX #$BF        ;COLUMN 6
+	JSR RDROW
+	CPX #$FB        ;ROW 2          ;?
+	BNE RDK040      ;NO
+	AND #$FE        ;THRUST BIT ON
+
+RDK040
+RDK090	STA KEYSAV
+	JMP RDJOY       ;AFTER SAME JOYSTIK
+
+
+;*--------------------------------------------------*
+;* KEYBORD ROW READ TO (X-REG)                      *
+;*--------------------------------------------------*
+
+RDROW
+	STX CIAPRA      ;COLUMN OUT
+RDR010
+	LDX CIAPRB      ;ROW INPUT
+	CPX CIAPRB
+	BNE RDR010
+	RTS
+
+
+;*--------------------------------------------------*
+;* JOYSTIK DATA READ ROUTINE                        *
+;*--------------------------------------------------*
+
+RDJOY
+	LDX #00
+	STX CIDDRA
+	STX CIDDRB      ;SET DATA DIRECTION
+RDJOY0
+	LDA CIAPRB
+	CMP CIAPRB
+	BNE RDJOY0
+	AND KEYSAV
+	AND #$1F
+RDJ010
+	TAY             ;SAVE BIT DATA
+	AND #$10        ;FIRE PRESSED?
+	BNE RDJ020      ;NO
+	LDX #$80
+	BNE RDJ040
+RDJ020
+	BIT FIRE
+	BPL RDJ030
+	LDX #$80
+	STX DFIRE
+RDJ030
+	LDX #00
+RDJ040
+	STX FIRE
+
+	LDA CYCLE
+	AND #$03
+	BNE RDJ070
+	LDX #00
+	TYA
+	AND #$04        ;LEFT?
+	BNE RDJ050      ;NO
+	DEC ROTATE
+	JMP RDJ060
+RDJ050
+	TYA
+	AND #$08        ;RIGHT?
+	BNE RDJ060      ;NO
+	INC ROTATE
+RDJ060
+	LDA ROTATE
+	AND #$0F
+	STA ROTATE
+
+RDJ070
+	LDX #00
+	TYA
+	AND #01         ;UP?
+	BNE RDJ080      ;NO
+	LDX #$80        ;YES
+RDJ080
+	STX THRUST
+	RTS
+
+
+;*--------------------------------------------------*
+;* PADDLE DATA READ ROUTINE                         *
+;*--------------------------------------------------*
+
+RDPAD
+	LDX #$80
+	STX CIDDRA      ;SET DATA DIRECTION
+	LDX #$00
+	STX CIDDRB
+RDPAD0
+	LDX #16
+	LDA POTX
+RDP010
+	CMP PADTBL,X
+	BCS RDP020      ;IT IS GREATER
+	DEX
+	BPL RDP010
+	BMI RDP030
+RDP020
+	DEX
+	TXA
+	EOR #$FF
+	AND #$0F        ;MASK OFF EXTRA BIT
+	STA ROTATE
+RDP030
+	LDA CIAPRB
+	AND #$04        ;FIRE PRESSED?
+	BEQ RDP060      ;YES
+
+	LDA #$00        ;BUTTON ISN'T PRESSED
+	STA THRUST      ;JUST IN CASE
+	LDA FIRE        ;WAS BUTTON PRESSED BEFORE?
+	BEQ RDP040      ;NO
+
+	LDA FTIME
+	CMP CYCLEP      ;WAS IT WITHIN THE LIMITS
+	BEQ RDP050      ;NO
+	LDA #$80        ;IT WAS A FIRE COMMAND
+	STA DFIRE
+RDP040
+	LDA CYCLEP      ;RESET THINGS NOW
+	STA FTIME
+RDP050
+	LDA #$00
+	STA FIRE
+	BEQ RDP090      ;EXIT
+
+RDP060
+	LDA THRUST      ;IF THRUSTING, KEEP GOING
+	BMI RDP090      ;EXIT
+	LDA FIRE        ;WAS BUTTIN PUSHED BEFORE?
+	BEQ RDP070      ;NO
+	LDA FTIME
+	CMP CYCLEP      ;WAS IT HELD DOWN LONG ENOUGH
+	BNE RDP090      ;NOT YET
+
+	LDA #$00
+	STA FIRE
+	LDA #$80
+	STA FTIME
+	STA THRUST
+	BNE RDP090      ;EXIT
+
+RDP070
+	LDA #$80
+	STA FIRE
+	LDA CYCLEP
+	STA FTIME
+RDP090
+	RTS
+
+PADTBL
+	.BYTE 0,15,30,45,60,75,90,105
+	.BYTE 120,135,150,165,180,195,210,225,240
+
+
+;*--------------------------------------------------*
+;* WAIT A FEW SEC.  (16MS * X)                     *
+;*--------------------------------------------------*
+
+WAIT
+	LDA SCROLY      ;GET SYNC
+	BPL WAIT
+WAIT10
+	LDA SCROLY      ;
+	BMI WAIT10
+	DEX
+	BNE WAIT
+	RTS
+
+.END

@@ -1,0 +1,7 @@
+.PAGE 'OMEGAEND'
+
+	*=$FFFA
+
+	.WORD $E000,$E000,$E000
+
+.END

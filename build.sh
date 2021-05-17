@@ -152,5 +152,6 @@ build2 ASSEMBLER_TED assembler
 build1 DISK_MONITOR mon.lib
 build1 MATHPACK mathpack
 
-build1 WIZARD wizard
 build1 KICKMAN kickman
+build1 OMEGA omega
+build1 WIZARD wizard
