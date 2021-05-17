@@ -1,0 +1,152 @@
+.PAGE 'WESTTL'
+;================================================================
+;=                                                              =
+;=      PROGRAM-ID.             WIZARD OF WOR                   =
+;=                                                              =
+;=      AUTHOR.                 TAKAHIRO-YONEOKA.               =
+;=      EDITOR.                 TAKAHIRO-YONEOKA.               =
+;=      DATE-WRITTEN.           1982-05-17.                     =
+;=      LAST-EDITED.            1982-09-28.                     =
+;=                                                              =
+;================================================================
+;
+;       PRODUCTS OF COMMODORE JAPAN CO.,LTD.
+;
+;       TARGET-CPU  6510.
+;       VIDEO-CHIP  6566. (VIC)
+;       SOUND-CHIP  6581. (SID)
+;       I/O  -CHIP  6526. (CIA)
+;
+;-----  MEMORY MAP CONFIGURATION  ------------------------------;
+;                                                               ;
+;       0000-00FF       : ZERO PAGE RAM.                        ;
+;       0100-01BF       : WORKING RAM.                          ;
+;       01C0-01FF       : STACK.                                ;
+;       0200-03FF       : WORKING RAM.                          ;
+;       0400-07F7       : SCREEN RAM OF CHARACTER INDEX.        ;
+;       07F8-07FF       : SCREEN RAM OF SPRITE    INDEX.        ;
+;       8000-9FFF       : CARTRIDGE ROM.                        ;
+;       D000-D3FF       : 6566. (VIC)                           ;
+;       D400-D7FF       : 6581. (SID) SYNTHESIZER CHIP.         ;
+;       D800-DBFF       : SCREEN RAM OF CHARACTER COLOR.        ;
+;       DC00-DCFF       : 6526. (CIA) I/O CHIP.                 ;
+;                                                               ;
+;---------------------------------------------------------------;
+;
+.PAGE
+;
+;-----  D000-D3FF 6556. (VIC)  ---------------------------------;
+;                                                               ;
+;D000                   SPRITE 0 X CMP                          ;
+;D001                   SPRITE 0 Y CMP                          ;
+;D002                   SPRITE 1 X CMP                          ;
+;D003                   SPRITE 1 Y CMP                          ;
+;D004                   SPRITE 2 X CMP                          ;
+;D005                   SPRITE 2 Y CMP                          ;
+;D006                   SPRITE 3 X CMP                          ;
+;D007                   SPRITE 3 Y CMP                          ;
+;D008                   SPRITE 4 X CMP                          ;
+;D009                   SPRITE 4 Y CMP                          ;
+;D00A                   SPRITE 5 X CMP                          ;
+;D00B                   SPRITE 5 Y CMP                          ;
+;D00C                   SPRITE 6 X CMP                          ;
+;D00D                   SPRITE 6 Y CMP                          ;
+;D00E                   SPRITE 7 X CMP                          ;
+;D00F                   SPRITE 7 Y CMP                          ;
+;D010                   SPRITE X CMP (MSB OF COORD.)            ;
+;D011           BIT 7   RASTER COMPARE                          ;
+;               BIT 6   EXTENDED COLOR MODE                     ;
+;               BIT 5   BIT MAP MODE                            ;
+;               BIT 4   UNUSED                                  ;
+;               BIT 3   24/25 ROW SELECT (1=25 ROWS)            ;
+;               BIT 2-0 SCROLL IN Y POSITION                    ;
+;D012   (R/O)           RASTER READ (RASTER CMP IRQ WRITE)      ;
+;D013   (R/O)           LIGHT PEN LATCH X                       ;
+;D014   (R/O)           LIGHT PEN LATCH Y                       ;
+;D015                   SPRITE DISABLE (1=SPRITE ENABLED)       ;
+;D016           BIT 7-5 UNUSED                                  ;
+;               BIT 4   MULTI-COLOR MODE                        ;
+;               BIT 3   38/40 COLUM SELECT (1=40 COL.)          ;
+;               BIT 2-0 SCROLL IN X POSITION                    ;
+;D017                   SPRITE EXPAND IN "Y"                    ;
+;D018           BIT 7-4 VIDEO MATRIX BASE                       ;
+;               BIT 3-1 CHARACTER SPACE BASE                    ;
+;D019           BIT 7   FOLLOWING IRQ LINE                      ;
+;               BIT 2   IRQ FOR SPRITE TO SPRITE COLLISION      ;
+;               BIT 1   IRQ FOR SPRITE TO BACKGROUND COLLISION  ;
+;               BIT 0   RASTER CMP IRQ                          ;
+;D01A                   IRQ MASK REGISTER (0=INTERRUPT DISABLED);
+;D01B                   BACKGROUND TO SPRITE PRIORITY           ;
+;D01C                   MULTI-COLOR SPRITE SELECT               ;
+;D01D                   SPRITE EXPAND IN "X"                    ;
+;D01E                   SPRITE TO SPRITE COLLISION DETECT       ;
+;D01F                   SPRITE TO BACKGROUND COLLISION DETECT   ;
+;       COLOR REGISTERS (BIT 3-0)                               ;
+;D020                   BORDER COLOR                            ;
+;D021                   BACKGROUND COLOR 0                      ;
+;D022                   BACKGROUND COLOR 1                      ;
+;D023                   BACKGROUND COLOR 2                      ;
+;D024                   BACKGROUND COLOR 3                      ;
+;D025                   SPRITE MULTI-COLOR REGISTER 0           ;
+;D026                   SPRITE MULTI-COLOR REGISTER 1           ;
+;D027                   SPRITE 0 COLOR                          ;
+;D028                   SPRITE 1 COLOR                          ;
+;D029                   SPRITE 2 COLOR                          ;
+;D02A                   SPRITE 3 COLOR                          ;
+;D02B                   SPRITE 4 COLOR                          ;
+;D02C                   SPRITE 5 COLOR                          ;
+;D02D                   SPRITE 6 COLOR                          ;
+;D02E                   SPRITE 7 COLOR                          ;
+;                                                               ;
+;---------------------------------------------------------------;
+.PAGE
+;
+;-----  D400-D7FF 6581. (SID) SYNTHSIZER CHIP  -----------------;
+;                                                               ;
+;D400                   FREQUENCY LO                            ;
+;D401                   FREQUENCY HI                            ;
+;D402                   PULSE WIDTH LO                          ;
+;D403           BIT 7-4 UNUSED                                  ;
+;               BIT 3-0 PULSE WIDTH HI                          ;
+;D404           CONTROL REGISTER VOICE 1                        ;
+;               BIT 7   NOISE                                   ;
+;               BIT 6   PULSE                                   ;
+;               BIT 5   SAWTOOTH                                ;
+;               BIT 4   TRIANGLE                                ;
+;               BIT 3   TEST BIT                                ;
+;               BIT 2   RING MOD                                ;
+;               BIT 1   SYNC                                    ;
+;               BIT 0   GATE                                    ;
+;D405           BIT 7-4 ATTACK REGISTER                         ;
+;               BIT 3-0 DECAY REGISTER                          ;
+;D406           BIT 7-4 SUSTAIN REGISTER                        ;
+;               BIT 3-0 RELEASE RESISTER                        ;
+;D407-D40D      CONTROL REGISTER VOICE 2                        ;
+;       (FUNCTIONALLY IDENTICAL TO D400-D406)                   ;
+;D40E-D414      CONTROL REGISTER VOICE 3                        ;
+;       (FUNCTIONALLY IDENTICAL TO D400-D406)                   ;
+;D415                   CUTOFF FREQUENCY LO                     ;
+;D416                   CUTOFF FREQUENCY HI                     ;
+;D417           BIT 7-4 RESONANCE OF FILTER                     ;
+;               BIT 3-0 SELECT SIGNALS TO BE ROUTED THROUGH     ;
+;                       FILTER BIT SET TO ZERO APPEAR DIRECTLY  ;
+;                       AT AUDIO OUTPUT, BITS SET TO 1 WILL BE  ;
+;                       PROCESSED THROUGH FILTER.               ;
+;               BIT 3   EXTERNAL INPUT                          ;
+;               BIT 2   VOICE 3                                 ;
+;               BIT 1   VOICE 2                                 ;
+;               BIT 0   VOICE 1                                 ;
+;D418           BIT 7-4 SELECT FILTER MODE AND OUTPUT OPTIONS.  ;
+;               BIT 7   OFF                                     ;
+;               BIT 6   HIGH PASS                               ;
+;               BIT 5   BAND PASS                               ;
+;               BIT 4   LOW  PASS                               ;
+;               BIT 3-0 OUTPUT VOLUME                           ;
+;D419                   POT X                                   ;
+;D41A                   POT Y                                   ;
+;D41B                   OSCILLATOR 3/RANDAM NUMBER GENERATOR.   ;
+;D41C                   ENVELOPE 3                              ;
+;                                                               ;
+;---------------------------------------------------------------;
+
+.END

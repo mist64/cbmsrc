@@ -66,7 +66,7 @@ build1 KERNAL_VIC_04 kernal
 build1 KERNAL_C64_01 kernal
 build1 KERNAL_C64_02 kernal
 build1 KERNAL_C64_03 kernal
-build2 KERNAL_C64_03_VAX kernal
+build2 KERNAL_C64_03_BSO kernal
 build2 KERNAL_C64GS console
 
 build2 KERNAL_TED_04 kernal
@@ -90,7 +90,7 @@ build1 EDITOR_CBM2_EURO edtlist
 build1 BASIC_VIC basic
 
 build1 BASIC_C64 basic
-build2 BASIC_C64_VAX basic
+build2 BASIC_C64_BSO basic
 build2 BASIC_C64GS basic
 
 build2 BASIC_TED basic
@@ -151,3 +151,5 @@ build1 ASSEMBLER_C64_REC assembler
 build2 ASSEMBLER_TED assembler
 build1 DISK_MONITOR mon.lib
 build1 MATHPACK mathpack
+
+build1 WIZARD wizard

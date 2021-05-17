@@ -133,6 +133,12 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [ASSEMBLER_C64_REC](ASSEMBLER_C64_REC/)                      | 1982 | "C64 Macro Assembler", adds `.MAC` |
 | [ASSEMBLER_TED](ASSEMBLER_TED)                               | 1984 | TED version, adds `.OPT LON`, `.OPT MLI` |
 
+## Software: Games
+
+| Directory                                                    | Year | Comments    |
+|--------------------------------------------------------------|------|-------------|
+| [WIZARD](WIZARD)                                             | 1982 | Wizard of Wor Ultimax Game |
+
 ## Descriptions
 
 ### BASIC_VIC
@@ -408,6 +414,10 @@ The KIM-1 "KIMATH" math package (1976). Generated from the [original LST printou
 ### TIM
 
 The TIM (Terminal Interface Monitor) ROM (6530-004). Reconstructed from the [manual](http://archive.6502.org/books/mos_tim_terminal_interface_monitor_manual_mar_1976.pdf) by Martin Hoffmann-Vetter.
+
+## WIZARD
+
+The game "Wizard of Wor" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
 
 # Credits
 

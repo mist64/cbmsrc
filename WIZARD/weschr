@@ -1,0 +1,705 @@
+.PAGE 'WESCHR'
+	.BYTE $C0,$C0,$C0,$C0,$C0,$C0,$C0,$C0           ;YOKO KABE  $2A
+	.BYTE $0,$0,$0,$0,$0,$0,$0,$FF                  ;SHITA KABE  $2B
+	.BYTE $C0,$C0,$C0,$C0,$C0,$C0,$C0,$FF           ;KADO KABE   $2C
+	.BYTE $FF,$0,$0,$0,$0,$0,$0,$0                  ;UE KABE     $2D
+
+VICTBL	.BYTE $00,$00,$00,$00,$00,$00,$00,$00           ;VIC 00-07
+	.BYTE $00,$00,$00,$00,$00,$00,$00,$00           ;VIC 08-0F
+	.BYTE $00,$1B,$00,$00,$00,$00,$0B,$00           ;VIC 10-17
+	.BYTE $1D,$FF,$00,$00,$FF,$00,$00,$00           ;VIC 18-1F
+	.BYTE $06,$00,$00,$00,$00,$02,$07,$06           ;VIC 20-27
+	.BYTE $06,$06,$06,$06,$06,$06,$06               ;VIC 28-2E
+
+SIDTBL	.BYTE $00,$20,$00,$00,$20,$00,$F9               ;SID V1
+	.BYTE $00,$60,$00,$00,$80,$00,$FA               ;SID V2
+	.BYTE $FF,$FF,$00,$00,$80,$00,$FA               ;SID V3
+	.BYTE $FF,$FF,$07,$1F                           ;SID CTRL
+
+
+SCREN1
+	.BYTE  $1A,$1C,$19,$1C,$19,$19,$1C,$19,$19,$1C,$19,$1C,$18
+	.BYTE  $1C,$1C,$1C,$18,$1C,$19,$19,$19,$1C,$1C,$19,$1C,$1C
+	.BYTE  $19,$1C,$18,$1C,$1A,$1C,$1C,$1C,$19,$18,$19,$1C,$1A
+	.BYTE  $1C,$1C,$1C,$18,$19,$19,$18,$1A,$19,$1C,$19,$1C,$1C
+	.BYTE  $1A,$1C,$1A,$1C,$1C,$18,$19,$1C,$18,$1C,$1C,$18,$1A
+	.BYTE  $1C,$19,$19,$1C,$18,$1C,$19,$19,$1C,$18,$1A,$1C,$1C
+	.BYTE  $1A,$1C,$1C,$1C,$1A,$1C,$1C,$1C,$1C,$1A,$1C,$1C,$1A
+SCREN2
+	.BYTE  $18,$1C,$18,$19,$1C,$19,$1C,$19,$1C,$19,$19,$1C,$1C
+	.BYTE  $1A,$1C,$1C,$1C,$18,$1A,$1C,$19,$18,$18,$19,$1C,$1A
+	.BYTE  $1C,$19,$1C,$18,$1C,$1C,$19,$1C,$1C,$1C,$18,$19,$1C
+	.BYTE  $1A,$1C,$19,$19,$18,$18,$19,$1C,$18,$1A,$19,$1C,$1A
+	.BYTE  $1C,$1C,$19,$1C,$1C,$1C,$19,$1C,$1C,$1C,$19,$1C,$1C
+	.BYTE  $1A,$1C,$1A,$1C,$1C,$18,$1C,$1C,$18,$1C,$1A,$1C,$18
+	.BYTE  $1C,$1C,$1C,$1C,$1C,$1A,$1C,$1C,$1C,$1A,$1C,$1C,$1C
+SCREN3
+	.BYTE  $18,$1C,$18,$19,$1C,$19,$1C,$19,$1C,$19,$19,$19,$1C
+	.BYTE  $18,$1C,$19,$18,$1C,$1C,$1C,$1C,$1C,$1C,$1A,$1C,$19
+	.BYTE  $19,$1C,$19,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$19,$1C,$19
+	.BYTE  $18,$1C,$1C,$1A,$19,$19,$1C,$19,$19,$19,$1A,$1C,$1C
+	.BYTE  $1A,$1C,$1C,$1C,$1C,$19,$1C,$19,$1C,$1C,$19,$1C,$19
+	.BYTE  $18,$19,$1C,$1C,$18,$1C,$19,$1C,$1C,$18,$19,$1C,$19
+	.BYTE  $1A,$1C,$1C,$1A,$1C,$1C,$1C,$1C,$1C,$1A,$1C,$1C,$1C
+SCREN4
+	.BYTE  $1A,$1C,$19,$1C,$18,$19,$1C,$19,$1C,$18,$19,$1C,$18
+	.BYTE  $1C,$1C,$19,$19,$1C,$18,$19,$1C,$18,$19,$19,$1C,$1C
+	.BYTE  $1C,$19,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$19,$19,$1C
+	.BYTE  $1A,$1C,$19,$18,$18,$18,$18,$18,$18,$18,$19,$1C,$18
+	.BYTE  $18,$1C,$1C,$1C,$1C,$1A,$1C,$19,$18,$1C,$19,$1C,$18
+	.BYTE  $1C,$1A,$1C,$1C,$18,$1C,$1C,$1C,$1C,$18,$1C,$1C,$1C
+	.BYTE  $1C,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$1C,$1A,$1C,$1C,$1C
+
+CIPL	.BYTE 1,1,3,2,2,1,1,1,1
+
+;
+; -----------  SCREEN DATA  -------------
+TITLE
+	.WORD SCREEN                                    ;LEFT  DOWN  LINE
+	.BYTE $2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD
+	.BYTE $2A,$FD,$2A,$FD,$FD,$FD,$FD,$2A,$FD,$2A
+	.BYTE $FD,$2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD,$2A
+	.BYTE $FD,$2A,$FD,$2A,$FD,$2A,$FD,$2C
+	.BYTE $2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B
+	.BYTE $2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B
+	.BYTE $2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B
+	.BYTE $2B,$2B,$2B,$2B,$2B,$2B,$2B,$2B,$FE
+
+	.WORD SCREEN+39                                 ;RIGHT LINE
+	.BYTE $2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD
+	.BYTE $2A,$FD,$2A,$FD,$FD,$FD,$FD,$2A,$FD,$2A
+	.BYTE $FD,$2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD
+	.BYTE $2A,$FD,$2A,$FD,$2A,$FD,$2A,$FD
+	.BYTE $2A,$FD,$2A,$FE
+
+	.WORD SCREEN+880+2                              ;SCORE
+	.BYTE $1D,$0D,$19,$1C,$0F,$00,$00,$00,$00
+	.BYTE $12,$13,$27,$1D,$0D,$19,$1C,$0F,$FE
+
+	.WORD SCREEN+26+880                             ;PLAYER
+	.BYTE $1A,$16,$0B,$23,$0F,$1C,$FF
+
+
+TITBL
+	.WORD SCREEN+80+2                               ;PUSH (F1) OR
+	.BYTE $1A,$1F,$1D,$12,$00,$25,$10,$02,$26,$00,$19,$1C,$FE
+	.WORD SCREEN+160+2                              ;BUTTON
+	.BYTE $0C,$1F,$1E,$1E,$19,$18,$00,$19,$18
+	.BYTE $00,$14,$19,$23,$1D,$1E,$13,$0D,$15,$FE
+	.WORD SCREEN+240+2                              ;TO START.
+	.BYTE $1E,$19,$00,$1D,$1E,$0B,$1C,$1E,$29,$FE
+	.WORD SCREEN+360+2                              ;(A)-FIRE
+	.BYTE $25,$0B,$26,$27,$10,$13,$1C,$0F,$FE
+	.WORD SCREEN+440+2                              ;(L)-LEFT
+	.BYTE $25,$16,$26,$27,$16,$0F,$10,$1E,$FE
+	.WORD SCREEN+520+2                              ;(;)-RIGHT
+	.BYTE $25,$28,$26,$27,$1C,$13,$11,$12,$1E,$FE
+	.WORD SCREEN+600+2                              ;(P)-UP
+	.BYTE $25,$1A,$26,$27,$1F,$1A,$FE
+	.WORD SCREEN+680+2                              ;(.)-DOWN
+	.BYTE $25,$29,$26,$27,$0E,$19,$21,$18,$FE
+	.WORD SCREEN+80+25                              ;- SCORE -
+	.BYTE $27,$00,$1D,$0D,$19,$1C,$0F,$00,$27,$FE
+	.WORD SCREEN+200+31                             ;100 PTS.
+	.BYTE $02,$01,$01,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+320+31                             ;200 PTS.
+	.BYTE $03,$01,$01,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+440+31                             ;300 PTS.
+	.BYTE $04,$01,$01,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+560+31                             ;400 PTS.
+	.BYTE $05,$01,$01,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+680+27                             ;MYSTERY PTS.
+	.BYTE $17,$23,$1D,$1E,$0F,$1C,$23,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+800+23                             ;EXTRA BONUS
+	.BYTE $0F,$22,$1E,$1C,$0B,$00,$0C,$19
+	.BYTE $18,$1F,$1D,$FE
+	.WORD SCREEN+840+25                             ;FOR 20000 PTS.
+	.BYTE $10,$19,$1C,$00,$03,$01,$01,$01,$01,$00,$1A,$1E,$1D,$29,$FE
+	.WORD SCREEN+880+8                              ;1982 BY COMMODORE LTD
+	.BYTE $02,$0A,$09,$03,$00,$0C,$23,$00,$0D
+	.BYTE $19,$17,$17,$19,$0E,$19,$1C,$0F
+	.BYTE $00,$16,$1E,$0E,$FE
+	.WORD SCREEN+920+8                              ;1981 BY BALLY-MIDWAY
+	.BYTE $02,$0A,$09,$02,$00,$0C,$23,$00,$0C,$0B,$16
+	.BYTE $16,$23,$27,$17,$13,$0E,$21,$0B,$23,$00
+	.BYTE $00,$00,$20,$01,$04,$FF
+
+
+	*=$F940
+
+;   ---------------  SPRITE DATA ---------------
+;
+	.BYTE   $00,%00101010,$00               ;PLAYER RIGHT
+	.BYTE   $00,%00101001,$00               ;    $E5
+	.BYTE   $00,%00101010,$00
+	.BYTE   $00,%00101010,$00
+	.BYTE   $00,%00101010,$00
+	.BYTE   $00,%00001000,$00
+	.BYTE   $02,%00101010,$00
+	.BYTE   $02,%10101001,$00
+	.BYTE   $02,%01101001,$08
+	.BYTE   $02,%01101001,%01011001
+	.BYTE   $02,%01101001,%01001000
+	.BYTE   $02,%10101000,$00
+	.BYTE   $02,%00101000,$00
+	.BYTE   $00,%00101010,$00
+	.BYTE   $00,%10100010,$00
+	.BYTE   $00,%10100010,$80
+	.BYTE   $02,%10000000,$80
+	.BYTE   $02,%10000000,%10100000
+	.BYTE   $0A,$00,$30
+	.BYTE   $0A,$00,$30
+	.BYTE   $00,$00,$00
+	.BYTE   $00
+
+	.BYTE   $00,$0A,$80                     ;PLAYER LEFT
+	.BYTE   $00,$06,$80                     ;   $E6
+	.BYTE   $00,$0A,$80
+	.BYTE   $00,$0A,$80
+	.BYTE   $00,$0A,$80
+	.BYTE   $00,$02,$00
+	.BYTE   $00,$0A,$88
+	.BYTE   $00,$06,$A8
+	.BYTE   $02,$06,$98
+	.BYTE   $06,$56,$98
+	.BYTE   $02,$16,$98
+	.BYTE   $00,$02,$A8
+	.BYTE   $00,$02,$88
+	.BYTE   $00,$0A,$80
+	.BYTE   $00,$08,$A0
+	.BYTE   $00,$28,$A0
+	.BYTE   $00,$20,$28
+	.BYTE   $00,$A0,$28
+	.BYTE   $00,$80,$0A
+	.BYTE   $02,$00,$0A
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$00,$01                     ;PLAYER LOW
+	.BYTE   $00,$00,$0A                     ;   $E7
+	.BYTE   $00,$00,$0A
+	.BYTE   $00,$0A,$8A
+	.BYTE   $00,$09,$A8
+	.BYTE   $00,$0A,$A8
+	.BYTE   $0A,$8A,$A8
+	.BYTE   $0A,$8A,$A0
+	.BYTE   $0A,$AA,$A0
+	.BYTE   $09,$AA,$80
+	.BYTE   $09,$85,$A8
+	.BYTE   $00,$85,$AA
+	.BYTE   $00,$01,$0A
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$0A,$00
+	.BYTE   $00,$0A,$00
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$01,$00                     ;PLAYER HIGH
+	.BYTE   $00,$01,$00                     ; $E8
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$0A,$00
+	.BYTE   $00,$0A,$00
+	.BYTE   $00,$01,$00
+	.BYTE   $00,$01,$02
+	.BYTE   $00,$01,$0A
+	.BYTE   $09,$85,$AA
+	.BYTE   $09,$85,$A8
+	.BYTE   $09,$AA,$80
+	.BYTE   $0A,$AA,$80
+	.BYTE   $0A,$8A,$A0
+	.BYTE   $0A,$8A,$A0
+	.BYTE   $00,$09,$A8
+	.BYTE   $00,$08,$A8
+	.BYTE   $00,$0A,$8A
+	.BYTE   $00,$00,$0A
+	.BYTE   $00,$00,$0A
+	.BYTE   $00,$00,$02
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$A0,$00
+	.BYTE   $00,$28,$00
+	.BYTE   $A0,$2A,$00
+	.BYTE   $A0,$AD,$80
+	.BYTE   $A0,$2D,$80
+	.BYTE   $A0,$20,$00
+	.BYTE   $20,$AA,$00
+	.BYTE   $28,$A8,$00
+	.BYTE   $08,$A8,$00
+	.BYTE   $08,$A8,$00
+	.BYTE   $08,$A8,$00
+	.BYTE   $08,$A8,$00
+	.BYTE   $0A,$A8,$00
+	.BYTE   $02,$AA,$80
+	.BYTE   $0A,$AA,$80
+	.BYTE   $0A,$02,$80
+	.BYTE   $08,$00,$A0
+	.BYTE   $28,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$A0,$00             ;WOLF LEFT
+	.BYTE   $02,$80,$00             ;  $EA
+	.BYTE   $0A,$80,$A0
+	.BYTE   $2B,$A0,$A0
+	.BYTE   $2B,$80,$A0
+	.BYTE   $00,$80,$A0
+	.BYTE   $0A,$A0,$80
+	.BYTE   $02,$A2,$80
+	.BYTE   $02,$A2,$00
+	.BYTE   $02,$A2,$00
+	.BYTE   $02,$A2,$00
+	.BYTE   $02,$A2,$00
+	.BYTE   $02,$AA,$00
+	.BYTE   $02,$A8,$00
+	.BYTE   $02,$AA,$00
+	.BYTE   $28,$0A,$00
+	.BYTE   $20,$02,$00
+	.BYTE   $A0,$02,$80
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $0A,$00,$00                     ;WOLF LOW
+	.BYTE   $0A,$00,$00                     ;   $EB
+	.BYTE   $0A,$A0,$08
+	.BYTE   $0A,$A0,$08
+	.BYTE   $00,$2A,$28
+	.BYTE   $00,$2A,$A2
+	.BYTE   $00,$02,$A0
+	.BYTE   $00,$02,$A0
+	.BYTE   $22,$2A,$A0
+	.BYTE   $22,$2A,$A0
+	.BYTE   $22,$2A,$80
+	.BYTE   $22,$2A,$80
+	.BYTE   $2A,$AA,$A0
+	.BYTE   $0C,$AA,$A0
+	.BYTE   $0C,$AA,$A8
+	.BYTE   $22,$80,$28
+	.BYTE   $08,$80,$08
+	.BYTE   $08,$80,$08
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $08,$80,$08                     ;WOLF HIGH
+	.BYTE   $08,$80,$08                     ;   $EC
+	.BYTE   $28,$80,$28
+	.BYTE   $38,$2A,$A8
+	.BYTE   $38,$2A,$A8
+	.BYTE   $2A,$AA,$A0
+	.BYTE   $2A,$AA,$80
+	.BYTE   $22,$2A,$80
+	.BYTE   $22,$2A,$A0
+	.BYTE   $22,$2A,$A0
+	.BYTE   $00,$02,$20
+	.BYTE   $00,$02,$20
+	.BYTE   $00,$2A,$28
+	.BYTE   $00,$2A,$28
+	.BYTE   $0A,$A0,$08
+	.BYTE   $0A,$A0,$08
+	.BYTE   $0A,$00,$00
+	.BYTE   $0A,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$00,$00                     ;KABA RIGHT
+	.BYTE   $00,$00,$00                     ;  $ED
+	.BYTE   $30,$0F,$C0
+	.BYTE   $30,$0D,$C0
+	.BYTE   $30,$3D,$F0
+	.BYTE   $30,$FD,$FC
+	.BYTE   $30,$FF,$FC
+	.BYTE   $30,$FF,$00
+	.BYTE   $30,$FF,$FC
+	.BYTE   $30,$FF,$F0
+	.BYTE   $33,$FF,$C0
+	.BYTE   $3F,$FF,$00
+	.BYTE   $3F,$FF,$00
+	.BYTE   $3F,$FF,$FC
+	.BYTE   $0F,$FF,$FC
+	.BYTE   $03,$FF,$CC
+	.BYTE   $03,$FF,$00
+	.BYTE   $03,$0F,$00
+	.BYTE   $0F,$03,$00
+	.BYTE   $3F,$03,$C0
+	.BYTE   $3F,$03,$C0,$00
+
+	.BYTE   $00,$00,$00                     ;KABA LEFT
+	.BYTE   $00,$00,$00                     ;   $EE
+	.BYTE   $03,$E0,$0C
+	.BYTE   $03,$E0,$0C
+	.BYTE   $0D,$EC,$0C
+	.BYTE   $3D,$FF,$0C
+	.BYTE   $3F,$FF,$0C
+	.BYTE   $00,$FF,$0C
+	.BYTE   $3F,$FF,$0C
+	.BYTE   $0F,$FF,$0C
+	.BYTE   $03,$FF,$CC
+	.BYTE   $00,$FF,$FC
+	.BYTE   $00,$FF,$FC
+	.BYTE   $3F,$FF,$FC
+	.BYTE   $3F,$FF,$F0
+	.BYTE   $33,$FF,$C0
+	.BYTE   $00,$FF,$C0
+	.BYTE   $00,$F0,$C0
+	.BYTE   $00,$C0,$F0
+	.BYTE   $03,$C0,$FC
+	.BYTE   $03,$C0,$FC,$00
+
+	.BYTE   $00,$00,$00                     ;KABA LOW
+	.BYTE   $30,$00,$00                     ;  $EF
+	.BYTE   $3C,$3F,$F0
+	.BYTE   $3C,$30,$00
+	.BYTE   $0F,$30,$00
+	.BYTE   $0F,$FC,$00
+	.BYTE   $0F,$FF,$00
+	.BYTE   $03,$FF,$C0
+	.BYTE   $03,$FF,$C0
+	.BYTE   $03,$FF,$C0
+	.BYTE   $03,$FF,$F0
+	.BYTE   $0F,$FF,$F0
+	.BYTE   $0F,$FF,$70
+	.BYTE   $3F,$FF,$70
+	.BYTE   $3F,$3F,$F0
+	.BYTE   $33,$33,$F0
+	.BYTE   $30,$33,$F0
+	.BYTE   $00,$03,$C0
+	.BYTE   $00,$03,$C0
+	.BYTE   $00,$03,$C0
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$00,$00                     ;KABA HIGH
+	.BYTE   $0F,$00,$00                     ;  $F0
+	.BYTE   $0F,$00,$00
+	.BYTE   $0F,$00,$00
+	.BYTE   $3F,$30,$30
+	.BYTE   $3F,$33,$30
+	.BYTE   $3F,$F3,$F0
+	.BYTE   $37,$FF,$F0
+	.BYTE   $37,$FF,$C0
+	.BYTE   $3F,$FF,$C0
+	.BYTE   $3F,$FF,$00
+	.BYTE   $3F,$FF,$00
+	.BYTE   $0F,$FF,$00
+	.BYTE   $0F,$FF,$00
+	.BYTE   $03,$FF,$C0
+	.BYTE   $00,$FF,$C0
+	.BYTE   $00,$FF,$C0
+	.BYTE   $00,$33,$F0
+	.BYTE   $FF,$30,$F0
+	.BYTE   $00,$F0,$20
+	.BYTE   $00,$00,$00,$00
+
+	.BYTE   $00,$00,$00                     ;THREE FOOT RIGHT
+	.BYTE   $0A,$80,$A8                     ;   $F1
+	.BYTE   $0A,$80,$A8
+	.BYTE   $08,$02,$80
+	.BYTE   $08,$02,$80
+	.BYTE   $08,$2A,$A0
+	.BYTE   $08,$2B,$E0
+	.BYTE   $2A,$AB,$E8
+	.BYTE   $2A,$AA,$A8
+	.BYTE   $2A,$A2,$A8
+	.BYTE   $2A,$A0,$00
+	.BYTE   $2A,$A0,$00
+	.BYTE   $2A,$AA,$A8
+	.BYTE   $2A,$AA,$A8
+	.BYTE   $2A,$AA,$A0
+	.BYTE   $2A,$AA,$A0
+	.BYTE   $08,$20,$80
+	.BYTE   $08,$20,$80
+	.BYTE   $08,$20,$80
+	.BYTE   $0A,$28,$A0
+	.BYTE   $0A,$28,$A0,$00
+
+	.BYTE $00,$00,$00               ;THREE FOOT LEFT
+	.BYTE $2A,$02,$A0               ;  $F2
+	.BYTE $2A,$02,$A0
+	.BYTE $02,$80,$20
+	.BYTE $02,$80,$20
+	.BYTE $0A,$A8,$20
+	.BYTE $0B,$E8,$20
+	.BYTE $2B,$EA,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $2A,$8A,$A8
+	.BYTE $00,$0A,$A8
+	.BYTE $00,$0A,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $0A,$AA,$A8
+	.BYTE $0A,$AA,$A8
+	.BYTE $02,$08,$20
+	.BYTE $02,$08,$20
+	.BYTE $02,$08,$20
+	.BYTE $0A,$28,$A0
+	.BYTE $0A,$28,$A0,$00
+
+	.BYTE $00,$28,$00               ;THREE FOOT LOW
+	.BYTE $00,$AA,$00               ;  $F3
+	.BYTE $00,$AA,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $2A,$AA,$08
+	.BYTE $20,$AA,$08
+	.BYTE $00,$AA,$08
+	.BYTE $00,$AA,$80
+	.BYTE $2A,$AA,$80
+	.BYTE $2A,$AA,$A0
+	.BYTE $20,$A2,$A0
+	.BYTE $20,$A2,$A0
+	.BYTE $20,$A2,$E0
+	.BYTE $00,$A2,$E0
+	.BYTE $00,$A2,$E8
+	.BYTE $2A,$A2,$E8
+	.BYTE $2A,$A2,$A8
+	.BYTE $20,$A2,$88
+	.BYTE $20,$A2,$88
+	.BYTE $00,$22,$08
+	.BYTE $00,$22,$08,$00
+
+	.BYTE $20,$88,$00               ;THREE FOOT HIGH
+	.BYTE $20,$88,$00               ;    $F4
+	.BYTE $22,$8A,$08
+	.BYTE $22,$8A,$08
+	.BYTE $2A,$8A,$A8
+	.BYTE $2B,$8A,$A8
+	.BYTE $2B,$8A,$00
+	.BYTE $0B,$8A,$00
+	.BYTE $0B,$8A,$08
+	.BYTE $0A,$8A,$08
+	.BYTE $0A,$AA,$A8
+	.BYTE $0A,$AA,$A8
+	.BYTE $0A,$AA,$00
+	.BYTE $20,$AA,$00
+	.BYTE $20,$AA,$08
+	.BYTE $20,$AA,$08
+	.BYTE $20,$AA,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $2A,$AA,$00
+	.BYTE $00,$AA,$00
+	.BYTE $00,$28,$00,$00
+
+	.BYTE $00,$00,$00               ;GA
+	.BYTE $0C,$00,$30               ; $F5
+	.BYTE $03,$00,$C0
+	.BYTE $00,$C3,$00
+	.BYTE $00,$41,$00
+	.BYTE $01,$55,$40
+	.BYTE $33,$69,$CC
+	.BYTE $3F,$69,$FC
+	.BYTE $3F,$AA,$FC
+	.BYTE $3F,$95,$FC
+	.BYTE $3F,$95,$FC
+	.BYTE $3F,$95,$FC
+	.BYTE $0F,$95,$F0
+	.BYTE $03,$AA,$C0
+	.BYTE $03,$AA,$C0
+	.BYTE $00,$AA,$00
+	.BYTE $00,$AA,$00
+	.BYTE $02,$AA,$80
+	.BYTE $02,$AA,$80
+	.BYTE $2A,$00,$A8
+	.BYTE $2A,$00,$A8,$00
+
+	.BYTE $00,$00,$00               ;BAKUHATU 1
+	.BYTE $00,$00,$00               ;   $F6
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$30,$00
+	.BYTE $00,$3C,$00
+	.BYTE $03,$3C,$00
+	.BYTE $03,$FF,$C0
+	.BYTE $00,$FF,$00
+	.BYTE $00,$FF,$00
+	.BYTE $00,$FF,$C0
+	.BYTE $03,$FF,$C0
+	.BYTE $0F,$FF,$C0
+	.BYTE $0F,$FF,$F0
+	.BYTE $03,$0F,$C0
+	.BYTE $00,$00,$C0
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,$00
+
+	.BYTE $00,$00,$00               ;BAKUHATU 2
+	.BYTE $00,$28,$00               ;   $F7
+	.BYTE $20,$28,$20
+	.BYTE $00,$2A,$00
+	.BYTE $0C,$AA,$80
+	.BYTE $00,$AA,$A8
+	.BYTE $02,$BE,$A8
+	.BYTE $2A,$BF,$A0
+	.BYTE $2A,$BE,$80
+	.BYTE $2F,$FE,$80
+	.BYTE $2B,$FF,$8C
+	.BYTE $0B,$FF,$80
+	.BYTE $0A,$FF,$A0
+	.BYTE $02,$FF,$E0
+	.BYTE $02,$FA,$E8
+	.BYTE $32,$EA,$B8
+	.BYTE $02,$A0,$A8
+	.BYTE $0A,$80,$28
+	.BYTE $0A,$00,$08
+	.BYTE $28,$08,$00
+	.BYTE $20,$00,$00,$00
+
+	.BYTE $00,$00,$00               ;BAKUHATU 3
+	.BYTE $00,$00,$00               ;  $F8
+	.BYTE $00,$00,$00
+	.BYTE $0C,$20,$00
+	.BYTE $03,$00,$C0
+	.BYTE $00,$03,$00
+	.BYTE $00,$0C,$0C
+	.BYTE $02,$00,$30
+	.BYTE $00,$80,$C0
+	.BYTE $00,$00,$00
+	.BYTE $00,$08,$00
+	.BYTE $28,$00,$30
+	.BYTE $00,$20,$00
+	.BYTE $00,$C2,$00
+	.BYTE $00,$00,$A0
+	.BYTE $08,$00,$0C
+	.BYTE $00,$30,$00
+	.BYTE $00,$C2,$00
+	.BYTE $03,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,$00
+
+	.BYTE $00,$08,$00               ;BARSAN RIGHT
+	.BYTE $00,$28,$00               ;  $F9
+	.BYTE $00,$2C,$00
+	.BYTE $00,$2C,$00
+	.BYTE $00,$2C,$00
+	.BYTE $00,$2C,$00
+	.BYTE $00,$28,$00
+	.BYTE $00,$AA,$50
+	.BYTE $00,$AA,$40
+	.BYTE $00,$A8,$00
+	.BYTE $00,$A8,$00
+	.BYTE $00,$A0,$00
+	.BYTE $00,$A0,$00
+	.BYTE $00,$A0,$00
+	.BYTE $00,$A0,$00
+	.BYTE $00,$A8,$00
+	.BYTE $00,$A8,$00
+	.BYTE $00,$A8,$00
+	.BYTE $00,$AA,$00
+	.BYTE $02,$AA,$80
+	.BYTE $02,$AA,$80,$00
+
+	.BYTE $00,$20,$00               ;BARSAN LEFT
+	.BYTE $00,$28,$00               ;  $FA
+	.BYTE $00,$38,$00
+	.BYTE $00,$38,$00
+	.BYTE $00,$38,$00
+	.BYTE $00,$38,$00
+	.BYTE $00,$28,$00
+	.BYTE $05,$AA,$00
+	.BYTE $01,$AA,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$0A,$00
+	.BYTE $00,$0A,$00
+	.BYTE $00,$0A,$00
+	.BYTE $00,$0A,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$2A,$00
+	.BYTE $00,$AA,$00
+	.BYTE $02,$AA,$80
+	.BYTE $02,$AA,$80,$00
+
+	.BYTE $00,$00,$00               ;BARSAN LOW
+	.BYTE $00,$00,$00               ;$FB
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $20,$00,$00
+	.BYTE $20,$00,$00
+	.BYTE $2A,$A8,$00
+	.BYTE $2A,$AA,$80
+	.BYTE $2A,$AA,$A0
+	.BYTE $2A,$AA,$A8
+	.BYTE $2A,$2A,$A8
+	.BYTE $28,$0A,$F8
+	.BYTE $28,$02,$30
+	.BYTE $20,$02,$00
+	.BYTE $20,$02,$00
+	.BYTE $20,$01,$00
+	.BYTE $00,$01,$00
+	.BYTE $00,$01,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,$00
+
+	.BYTE $00,$00,$00               ;BARSAN HIGH
+	.BYTE $00,$00,$00               ; $FC
+	.BYTE $00,$00,$00
+	.BYTE $00,$40,$00
+	.BYTE $00,$40,$00
+	.BYTE $00,$40,$08
+	.BYTE $00,$80,$08
+	.BYTE $00,$80,$08
+	.BYTE $0C,$80,$28
+	.BYTE $2F,$A0,$28
+	.BYTE $2A,$A8,$A8
+	.BYTE $2A,$AA,$A8
+	.BYTE $0A,$AA,$A8
+	.BYTE $02,$AA,$A8
+	.BYTE $00,$2A,$A8
+	.BYTE $00,$00,$08
+	.BYTE $00,$00,$08
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,00
+
+	.BYTE $00,$00,$00               ;BEEM   YOKO
+	.BYTE $00,$00,$00               ; $FD
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$FF,$00
+	.BYTE $00,$FF,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,00
+
+	.BYTE $00,$00,$00               ;BEEM   TATE
+	.BYTE $00,$00,$00               ;$FE
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$03,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00
+	.BYTE $00,$00,$00,00
+
+.END

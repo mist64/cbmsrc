@@ -1,0 +1,5 @@
+.PAGE 'WESEND'
+	*=$FFFA
+
+	.WORD $E000,$E000,$E000
+.END
