@@ -132,6 +132,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [ASSEMBLER_PET_V26MAR82RR_REC](ASSEMBLER_PET_V26MAR82RR_REC) | 1982 | based on V090580_B, LST output changes, non-mainline |
 | [ASSEMBLER_C64_REC](ASSEMBLER_C64_REC/)                      | 1982 | "C64 Macro Assembler", adds `.MAC` |
 | [ASSEMBLER_TED](ASSEMBLER_TED)                               | 1984 | TED version, adds `.OPT LON`, `.OPT MLI` |
+| [LOADER_PET](LOADER_PET)                                     | 1979 | OBJ Loader |
 | [LOADER_C64](LOADER_C64)                                     | 1986 | OBJ Loader |
 
 ## Software: Games
@@ -406,9 +407,13 @@ The C64 Macro Assembler (a version of the Commodore Resident Assembler). Reconst
 
 A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
 
+### LOADER_PET
+
+The PET OBJ Loader, version V121379. Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz) and converted to uppercase and LST-style indenting. File loload.4 added.
+
 ### LOADER_C64
 
-The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz), converted to uppercase and LST-style indenting.
+The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz) and converted to uppercase and LST-style indenting.
 
 ### MONITOR_KIM
 
