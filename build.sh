@@ -149,6 +149,8 @@ build1 ASSEMBLER_PET_V102780_REC assembler
 build1 ASSEMBLER_PET_V26MAR82RR_REC assembler
 build1 ASSEMBLER_C64_REC assembler
 build2 ASSEMBLER_TED assembler
+build1 LOADER_C64 loload
+
 build1 DISK_MONITOR mon.lib
 build1 MATHPACK mathpack
 
