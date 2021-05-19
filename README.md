@@ -4,11 +4,12 @@ This repository collects the *original* source code of various Commodore Busines
 
 Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://github.com/mist64/cbm6502asm), almost all source in this repo can be built from the UNIX command line. To build everything, run `build.sh` from the Unix command line, on a case-insensitive filesystem.
 
-## KIM-1
+## KIM-1/AIM-65
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
 | [MONITOR_KIM](MONITOR_KIM)                                   | 1975 | KIM-1 ROM (6530-002, 6530-003) |
+| [MONITOR_AIM65](MONITOR_AIM65)                               | 1978 | AIM-65 monitor |
 | [TIM](TIM)                                                   | 1976 | TIM ROM (6530-004) |
 
 ## PET
@@ -418,6 +419,10 @@ The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_
 ### MONITOR_KIM
 
 The KIM-1 "monitor" ROM (1975), i.e. 6530-002 and 6530-003. From the [Hans Otten reconstructed source from the KIM-1 users manual](http://retro.hansotten.nl/uploads/6502docs/usrman.htm).
+
+### MONITOR_AIM65
+
+The AIM-65 "monitor" ROM (1978), i.e. R3222 and R3223-11. From the [reconstructed source](http://retro.hansotten.nl/uploads/files/aimmon_tasm.zip) from the [monitor listing printout](http://retro.hansotten.nl/uploads/files/aim65_monitor.pdf). Corrected and fixed up to match the LST.
 
 ### KIMATH
 

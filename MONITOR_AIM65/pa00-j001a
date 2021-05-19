@@ -1,0 +1,263 @@
+
+
+;***************************************************
+;***************************************************
+;**                                               **
+;**                               PL-PA00-J001A   **
+;**                                               **
+;**     ROCKWELL R6500 MICROCOMPUTER SYSTEM       **
+;**                                               **
+;**               AIM 65 MONITOR                  **
+;**                                               **
+;**              PROGRAM LISTING                  **
+;**                                               **
+;**   REVISION A                   AUG 27, 1978   **
+;**                                               **
+;***************************************************
+;***************************************************
+
+;ROCKWELL INTERNATIONAL
+;MICROELECTRONIC DEVICES
+;3310 MIRALOMA AVENUE
+;P. O. BOX 3669
+;ANAHEIM CA U.S.A. 92803
+.PAGE 'USER 6522 I/O'
+;       **************************************
+;       *  USER 6522 ADDRESSES (A000-A00F)   *
+;       **************************************
+	*=$A000
+UDRB	*=*+1            ;DATA REG B
+UDRAH	*=*+1            ;DATA REG A
+UDDRB	*=*+1            ;DATA DIR REG B
+UDDRA	*=*+1            ;DATA DIR REG A
+UT1L	*=*+1            ;TIMER 1 COUNTER LOW
+UT1CH	*=*+1            ;TIMER 1 COUNTER HIGH
+UT1LL	*=*+1            ;TIMER 1 LATCH LOW
+UT1LH	*=*+1            ;TIMER 1 LATCH HIGH
+UT2L	*=*+1            ;TIMER 2 LATCH & COUNTER LOW
+UT2CH	*=*+1            ;TIMER 2 COUNTER HIGH
+USR	*=*+1            ;SHIFT REGISTER
+UACR	*=*+1            ;AUX CONTROL REGISTER
+UPCR	*=*+1            ;PERIPHERAL CONTROL REGISTER
+UIFR	*=*+1            ;INTERRUPT FLAG REGISTER
+UIER	*=*+1            ;INTERRUTP ENABLE REGISTER
+UDRA	*=*+1            ;DATA REGISTER A
+.PAGE 'MONITOR VARIABLES'
+ASSEM	=$D000           ;ASSEMBLER ENTRY
+BASIEN	=$B000           ;BASIC ENTRRY (COLD)
+BASIRE	=$B003           ;BASIC REENTRY (WARM)
+
+;        MONITOR RAM
+;TEXT EDITOR EQUATES (PAG 0)
+;OVERLAPS IABUF2+50 (TAPE OUTPUT BUFFER $AD-$FF)
+	*=$00DF
+NOWLN	*=*+2            ;CURENT LINE
+BOTLN	*=*+2            ;LAST ACTIVE , SO FAR
+TEXT	*=*+2            ;LIMITS OF BUFFER (START)
+END	*=*+2            ;LIMITS OF BUFFER (END)
+SAVE	*=*+2            ;USED BY REPLACE
+OLDLEN	*=*+1            ;ORIG LENGTH
+LENGTH	*=*+1            ;NEW LENGTH
+STRING	*=*+20           ;FIND STRING
+
+	*=$0100
+;BREAKPOINTS AND USER I/O HANDLERS
+BKS	*=*+8            ;.BRK LOCATIONS
+UIN	*=*+2            ;USER INPUT HANDLER (VECTOR)
+UOUT	*=*+2            ;USER OUTPUT HANDLER (VECTOR)
+
+;UNUSED KEYS TO GO TO USER ROUTINE
+KEYF1	*=*+3            ;USER PUTS A JMP INSTRUCTION TO...
+KEYF2	*=*+3            ;GO TO HIS TOURINE ON EITHER KEY..
+KEYF3	*=*+3            ;ENTRY
+
+;EQUATES FRO DISASSEMBLER (PAG 1)
+	*=$0116          ;SAME AS TAPE BUFFER I/O (TARBUFF)
+FORMA	*=*+1
+LMNEM	*=*+1
+RMNEM	*=*+14
+
+;EQUATES FOR MNEMONIC ENTRY
+MOVAD	*=*+8
+TYPE	*=*+2
+TMASK1	=MOVAD
+TMASK2	=MOVAD+1
+CH	*=*+3
+ADFLD	*=*+20
+HISTM	=$A42E           ;SHARE WITH NAME & HIST
+BYTESM	=HISTM+1
+TEMPX	=HISTM+3
+TEMPA	=HISTM+5
+OPCODE	=HISTM+6
+CODFLG	=HISTM+9
+
+;      **********************************
+;      *  6532 ADDRESSES (A400-A7FF)    *
+;      **********************************
+	*=$A400
+MONRAM	*=*+0
+;JUMP VECTORS
+IRQV4	*=*+2            ;IRQ AFTER MONITOR (NO BRK)
+NMIV2	*=*+2            ;NMI
+IRQV2	*=*+2            ;IRQ
+
+;I/O DEVICES
+DILINK	*=*+2            ;DISPL LINKAGE (TO ECHO TO DISP)
+TSPEED	*=*+1            ;TAPE SPEED (C7,5B,5A)
+GAP	*=*+1            ;TIMING GAP BETWEEN BLOCK
+;END OF USER ALTERABLE LOCATIONS
+NPUL	*=*+1            ;# OF HALF PULSES...
+TIMG	*=*+3            ;FOR TAPE
+REGF	*=*+1            ;REGS FLG FOR SINGLE STEP MODE
+DISFLG	*=*+1            ;DISASSEM FLG FOR SINGLE STEP MODE
+BKFLG	*=*+1            ;ENABLE OR DIS BREAKPOINTS
+PRIFLG	*=*+1            ;ENABLE OR DIS PRINTER
+INFLG	*=*+1            ;INPUT DEVICE
+OUTFLG	*=*+1            ;OUTPUT DEVICE
+HISTP	*=*+1            ;HISTORY PTR (SINGLE STEP) (Y)
+CURPO2	*=*+1            ;DISPLAY POINTER
+CURPOS	*=*+1            ;PRINTER POINTER
+CNTH30	*=*+1            ;BAUD RATE & ...
+CNTL30	*=*+1            ;DELAY FOR TTY
+COUNT	*=*+1            ;# OF LINES (0-99)
+S1	*=*+2            ;START ADDRESS
+ADDR	*=*+2            ;END ADDRESS
+CKSUM	*=*+2            ;CHECKSUM
+S2	=BKS+6           ;VERTICAL COUNT (ONLY ON DUMP)
+
+;MONITOR REGISTERS
+SAVPS	*=*+1            ;STATUS
+SAVA	*=*+1            ;ACCUM
+SAVX	*=*+1            ;X REG
+SAVY	*=*+1            ;Y REG
+SAVS	*=*+1            ;STACK POINTER
+SAVPC	*=*+2            ;PROGR COUNTER
+
+;WORK AREAS FOR PAGE ZERO SIMULATION
+;SIMULATE LDA (NNNN),Y ,WHERE NNNN IS ABSOLUTE
+STIY	*=*+3            ;STA NM,Y
+CPIY	*=*+3            ;CMP NM,Y   OR  LDA NM,Y
+	*=*+1            ;RTS
+LDIY	=CPIY
+
+;VARIABLES FOR TAPE
+NAME	*=*+6            ;FILE NAME
+TAPIN	*=*+1            ;IN FLG (TAPE 1 OR 2)
+TAPOUT	*=*+1            ;OUT FLG (TAPE 1 OR 2)
+TAPTR	*=*+1            ;TAPE BUFF POINTER
+TAPTR2	*=*+1            ;TAPE OUTPUT BUFF PTR
+HIST	=NAME            ;FOUR LAST ADDR + NEXT (SINGL STEP)
+BLK	=$0115           ;BLOCK COUNT
+TABUFF	=$0116           ;TAPE BUFFER (I/O)
+BLKO	=$0168           ;OUTPUT BLOCK COUNT
+TABUF2	=$00AD           ;OUTPUT BUFF WHEN ASSEMB (PAG0)
+DIBUFF	*=*+40           ;DISPLAY BUFFER
+
+;VARIABLES USED IN PRINTING
+IBUFM	*=*+20           ;PRINTER BUFFER
+IDIR	*=*+1            ;DIRECTION == 0=>+ , FF=>-
+ICOL	*=*+1            ;COLUMN  LEFTMOST=0,RIGHTMOST=4
+IOFFST	*=*+1            ;OFFSET  0=LEFT DGT,1=RIGHT DGT
+IDOT	*=*+1            ;# OF LAST DOT ENCOUNTERED
+IOUTL	*=*+1            ;LOWER 8 OUTPUTS(9 COLS ON RIGHT)
+IOUTU	*=*+1            ;UPPER 2 DIGITS
+IBITL	*=*+1            ;1BIT MSK FOR CURRENT OUTPUT
+IBITU	*=*+1
+IMASK	*=*+1            ;MSK FOR CURRENT ROW
+JUMP	*=*+2            ;INDIR AND ADDR OF TABL FOR CURR ROW
+
+;VARIABLES FOR KEYBOARD
+ROLLFL	*=*+1            ;SAVE LAST STROBE FOR ROLLOVER
+KMASK	=CPIY            ;TO MASK OFF CTRL OR SHIFT
+STBKEY	=CPIY+1          ;STROBE KEY (1-8 COLUMNS)
+
+;                       I/O ASSIGNMENT
+	*=$A480
+DRA2	*=*+1                    ;DATA REG A
+DDRA2	*=*+1                    ;DATA DIR REG A
+DRB2	*=*+1                    ;DATA REG B
+DDRB2	*=*+1                    ;DATA DIR REG B
+
+;  WRITE EDGE DETECT CONTROL (NOT USED BECAUSE OF KB)
+	*=$A484
+DNPA7	*=*+1            ;DISABLE PA7 INT .NEG EDGE DET
+DPPA7	*=*+1            ;DIS PA7 INT ,POS EDGE DETE
+ENPA7	*=*+1            ;ENA PA7 INT ,NEG EDGE DET
+EPPA7	*=*+1            ;ENA PA7 INT ,POS EDG DET
+
+;               READ AND CLEAR INTERRUPT
+	*=$A485
+RINT	*=*+1            ;BIT 7=TIMER FLG , NBIT 6=PA7 FLG
+
+;                       TIMER INPTERRUPT
+	*=$A494
+;WRITE COUNT TO INTERVAL TIMER
+;INTERRUPT DISABLE FOR THESE ADDRS
+DIV1	*=*+1            ;DIV BY 1 (DISABLE);ADD 8 TO ENA
+DIVB	*=*+1            ;DIV BY 8 (DIS) ; ADD 8 TO ENA
+DIV64	*=*+1            ;DIV BY 64 (DIS) ; ADD 8 TO ENA
+DI1024	*=*+1            ;DIV BY 1024 (DIS) ; ADD 8 TO ENA
+
+;       **********************************************
+;       *       6522 ADDRESSES (MONIT) (A800-ABFF)     *
+;       **********************************************
+	*=$A800
+DRB	*=*+1            ;DATA REG B
+DRAH	*=*+1            ;DATA REG A
+DDRB	*=*+1            ;DATA DIR REG B
+DDRA	*=*+1            ;DATA DIR REG B
+T1L	*=*+1            ;TIMER 1 COUNTER LOW
+T1CH	*=*+1            ;TIMAER 1 COUNTER HIGH
+T1LL	*=*+1            ;TIMER 1 LATCH LOW
+T1LH	*=*+1            ;TIMER 1 LATCH HIGH
+T2L	*=*+1            ;TIMER 2 LATCH & COUNTER LOW
+T2H	*=*+1            ;TIEMR 2 COUNTER HIGH
+SR	*=*+1            ;SHIFT REGISTER
+ACR	*=*+1            ;AUX CONTROL REGISTER
+PCR	*=*+1            ;PERIPHERAL CONTROL REGISTER
+IFR	*=*+1            ;INTERRUPT FLAG REGISTER
+IER	*=*+1            ;INTERRUPT ENABLE REGISTER
+DRA	*=*+1            ;DATA REGISTER A
+
+;DEFINE I/O CONTROL FOR PGR (CA1,CA2,CB1,CB2)
+DATIN	=$0E             ;DATA IN CA2=1
+DATOUT	=$0C             ;DATA OUT DA2=0
+PRST	=$00             ;PRINT START (CB1) ,NEG DETEC
+SP12	=$01             ;STROBE P1,P2 (CA1) ,POS DETEC
+MON	=$C0             ;MOTOR ON (CB2 = 0)
+MOFF	=$E0
+;MSKS TO OBTAIN EACH INTERRUPT
+MPRST	=$10             ;INT FLG FOR DB1
+MSP12	=$02             ;INT FLG FRO CA1
+MT2	=$20             ;INT FLAG FOR T2
+
+;DEFINE I/O CONTROL FOR ACR (TIMERS,SR)
+PRTIME	=1700            ; PRINTING TIME =1.7 MSEC
+DEBTIM	=5000            ; DEBOUNCE TIME (5 MSEC)
+T2I	=$00             ;T2 AS ONE SHOT (PRI,KB,TTY,TAPE)
+T1I	=$00             ;T1 AS ONE SHOT ,PB7 DIS (TAPES)
+T1FR	=$C0             ;T1 IN FREE RUNNING (TAPE)
+
+;       ******************************
+;       *    DISPLAY   (AC00-AFFF)   *
+;       ******************************
+; REGISTERS FOR DISPLAY (6520)
+	*=$AC00
+RA	*=*+1            ;REGISTER A
+CRA	*=*+1            ;CONTROL REG A
+RB	*=*+1            ;REGISTER B
+CRB	*=*+1            ;CONTROL REG B
+
+;CHR 00-03 ENA BY $AC04-AC07
+;CHR 04-07 ENA BY $AC08-AC0B
+;CHR 08-11 ENA BY $AC10-AC13
+;CHR 12-15 ENA BY $AC20-AC23
+;CHR 16-20 ENA BY $AC40-AC43
+
+NULLC	=$FF
+CR	=$0D
+LF	=$0A
+ESCAPE	=$1B
+RUB	=$08
+EQS	=$BD
+.FILE A1

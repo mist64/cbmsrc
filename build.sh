@@ -58,6 +58,7 @@ rm -rf build
 mkdir build
 
 build1 MONITOR_KIM kim.asm
+build1 MONITOR_AIM65 pa00-j001a
 build1 TIM tim.asm
 build1 KIMATH kimath.asm
 
