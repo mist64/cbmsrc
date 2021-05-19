@@ -1,0 +1,154 @@
+.PAGE 'ASSEMBLER DECLARE'
+
+;   ********************************
+;   *                              *
+;   *     COMMODORE  VER-2.0       *
+;   *                              *
+;   *    PET 2-PASS ASSEMBLER      *
+;   *    FOR BASIC 4               *
+;   *                              *
+;   *  COPYRIGHT 05 SEPTEMBER, 1980*
+;   *  COMMODORE BUSINESS MACHINES *
+;   *                              *
+;   ********************************
+
+;   LISTING DATE: SEP 05, 1980
+
+;   THE ASSEMBLER OPENS AND REFERS TO SEVEN LOGICAL FILES.
+;   IT ASSUMES A PRINTER ATTACHED AS DEVICE 4, AND A  DISK
+;   AS DEVICE 8.  AN 'N' RESPONSE TO THE QUESTION 'HARD COPY?'
+;   WILL DIRECT OUTPUT TO THE SCREEN AND NO PRINTER WILL BE
+;   REQUIRED.  A NULL RESPONSE TO WILL TERMINATE OPERATION
+;   AND RETURN TO BASIC.
+;
+;
+;   LOGICAL FILES USED:
+;
+;        1 =CRT SCREEN
+;        2 =SOURCE FILE
+;        3 =LIBRARY FILE
+;        4 =PRINTER OUTPUT FILE
+;        5 =KEYBOARD INPUT FILE
+;        6 =OBJECT OUTPUT FILE
+;        7 =DISK COMMAND CHANNEL
+;        8 =LABEL OUTPUT FILE
+;        9 =CROSS REF OUTPUT FILE
+
+
+;  CONSTANTS FROM AIM-65 MONITOR
+
+UIN	=$0108
+
+HISTM	=$A42E
+INFLG	=$A412
+OUTFLG	=$A413
+ADDR	=$A41C
+CKSUM	=$A41E
+
+COMIN	=$E1A1
+LOADTA	=$E32F
+DU11	=$E50A
+OUTCK1	=$E53B
+TOGTA1	=$E6BD
+TOGTA2	=$E6CB
+FROM	=$E7A3
+TO	=$E7A7
+WHEREI	=$E848
+WHEREO	=$E871
+RCHEK	=$E907
+REDOUT	=$E973
+INALL	=$E993
+OUTALL	=$E9BC
+CRLF	=$E9F0
+WRAX	=$EA42
+NUMA	=$EA46
+OUTDP1	=$EF02
+TOPNO	=$F8BC
+
+DRB	=$A800
+
+;
+;  CONSTANTS
+;
+
+STKVAL	= $FF           ;INITIAL STACK VALUE
+
+
+;   ********************
+;   * ZERO PAGE STORAGE
+;   ********************
+
+	* = $04
+
+LTAB	*=*+5
+L09	*=*+2
+
+NOSYM	*=*+2           ;# SYMBOLS IN SYMTBL
+TBLPTR	*=*+2
+JOPBAS	*=*+1           ;BASE OPCODE (PASS 1)
+JOPTEM	*=*+1           ;OPCODE TEMPLATE
+TOPPNT	*=*+2
+KNVAL	*=*+2           ;INTERMED VAL IN EVAL
+KOP	*=*+1           ;NXT OPER FOR EVAL
+KLEN	*=*+1           ;LENGTH OF STR TO PACK
+KBASE	*=*+2           ;BASE OF # TO EVAL
+J	*=*+1           ;GENERAL COUNTER
+LERCT	*=*+2           ;TOTAL ERROR COUNT
+JOPTYP	*=*+1           ;OPERAND TYPE (PASS 1)
+JNOPV	*=*+1           ;FLAG FOR NO OPER VAL
+L1E	*=*+1
+L1F	*=*+1
+JLABL	*=*+1
+JORG	*=*+1
+JBYWOR	*=*+1           ;ASM DIRECTIVE WORD
+L23	*=*+1
+ICSB	*=*+1           ;CURRENT STRING BEGIN
+ICSE	*=*+1           ;CURRENT STRING END
+ICSL	*=*+1           ;CURRENT STRINT LENGTH
+IEXP	*=*+2           ;VALUE OF EXPR EVAL
+ICOLP	*=*+1           ;CURRENT COLUMN
+ISYM	*=*+6
+JOPLEN	*=*+1           ;OPERAND LENGTH
+IERR	*=*+1           ;ERROR CODE
+IPC	*=*+2
+L34	*=*+1
+IMAXCL	*=*+1           ;MAX COLUMNS ON CARD
+K	*=*+1           ;< FLAG
+IFLAGS	*=*+2           ;SET OF FLAGS
+
+
+;   NOGEN 128 = DON'T GENERATE STRINGS
+;   NOSYM 64  = DON'T GEN SYMBOL TABLEW
+;   OPCNT 32  = DO AN OPCODE COUNT
+;   NOERR 16  = ERROR ONLY LISTING
+;   INTER 8   = CREATE INTERFACE FILE
+;   LIST  4   = CREATE OUTPUT LISTING
+;   EXP   2   = EXPAND MACROS
+
+
+CHAR	*=*+1
+STSAVE	*=*+2           ;SYMBOL TABLE BEGIN
+SYMTBL	*=*+2
+ISYEND	*=*+2          ;* END OF SYMBOL TABLE
+L40	*=*+1
+L41	*=*+1
+L42	*=*+1
+L43	*=*+1
+L44	*=*+1
+L45	*=*+1
+ICRD	*=*+60          ;INPUT BUFFER (MOVE TO $0200 ??)
+TEMP	*=*+2
+L84	*=*+1
+L85	*=*+2
+L87	*=*+1
+L88	*=*+1
+L89	*=*+1
+L8A	*=*+2
+L8C	*=*+27
+LA7	*=*+5
+
+	* = $0170
+L0170	*=*+19
+
+
+.END

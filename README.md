@@ -125,6 +125,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
+| [ASSEMBLER_AIM65](ASSEMBLER_AIM65)                           | 1978 | 4 KB, heavily optimized |
 | [ASSEMBLER_PET_V112779_REC](ASSEMBLER_PET_V112779_REC)       | 1979 | ROM 2 only |
 | [ASSEMBLER_PET_V121579_REC](ASSEMBLER_PET_V121579_REC)       | 1979 | ROM 2/4, adds `.IFN`/`.IFE` |
 | [ASSEMBLER_PET_V090580_A_REC](ASSEMBLER_PET_V090580_A_REC)   | 1980 | adds XREF support |
@@ -388,6 +389,12 @@ The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII charact
 ### MATHPACK
 
 A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manual](http://www.zimmers.net/anonftp/pub/cbm/programming/b/Commodore_700_Reference_Manual.pdf). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
+### ASSEMBLER_AIM65
+
+The AIM-65 version of the resident assembler (ROM R3224; 1978). Reconstructed from ASSEMBLER_TED.
+
+This is a reconstruction of the oldest known version of the Resident Assembler. It's a 4 KB ROM that interfaces with the AIM-65 monitor. It is heavily optimized and outputs to RAM instead of OBJ files. It is probably based on the (lost) 6 KB KIM-1 resident assembler ("KIM-5"). The later PET versions are not based on this (optimizations did not carry over), but the original (also lost) MDT650 version.
 
 ### ASSEMBLER_PET_*_REC
 
