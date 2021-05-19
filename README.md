@@ -118,7 +118,8 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 |--------------------------------------------------------------|------|-------------|
 | [KIMATH](KIMATH)                                             | 1976 | KIM-1 Math Package |
 | [MATHPACK](MATHPACK)                                         | 1979 | CBM2 Math Package |
-| [MONITOR_C64](MONITOR_C64)                                   | 1982 | RAM-based Monitor for C64 |
+| [MONITOR_PET_ADDON](MONITOR_PET_ADDON)                       | 1981 | RAM-based monitor for PET 8x92 |
+| [MONITOR_C64](MONITOR_C64)                                   | 1982 | RAM-based monitor for C64 |
 | [DISK_MONITOR](DISK_MONITOR)                                 | 1980 | Monitor extension for PET |
 | [FIG](FIG)                                                   | 1980 | fig-FORTH |
 
@@ -261,6 +262,10 @@ The files have been converted to LF line breaks and LST-style indenting.
 ### EDITOR_PET_EURO
 
 The "CBM 8032 EURO SCREEN EDITOR 4V2E (E-901474-03)" ROM. Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
+### MONITOR_PET_ADDON
+
+The PET 8096/80196 memory expansion addon monitor (1981). Corrected and fixed-up from the [OCRed version](http://www.zimmers.net/anonftp/pub/cbm/src/pet/ADD-ON-MON.txt), which is based on the [LST printout](ftp://www.zimmers.net/pub/cbm/manuals/pet/MemExpansion/CBM_Expansion_Memory_Board_Add-on-Mon.pdf)
 
 ### MONITOR_C64
 

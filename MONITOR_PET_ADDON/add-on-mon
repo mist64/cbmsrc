@@ -1,0 +1,1211 @@
+;*****************************************
+;*                                       *
+;*  AAA  DDDD  DDDD       000  N   N     *
+;* A   A D   D D   D     O   0 NN  N     *
+;* A   A D   D D   D *** O   0 N N N     *
+;* AAAAA D   D D   D *** O   O N N N     *
+;* A   A D   D D   D     O   O N  NN     *
+;* A   A DDDD  DDDD       OOO  N   N     *
+;*                                       *
+;*       M   M  OOO  N   N               *
+;*       MM MM O   O NN  N               *
+;*  ***  M M M O   O N N N               *
+;*  ***  M   M O   O N N N               *
+;*       M   M O   O N  NN               *
+;*       M   M  OOO  N   N               *
+;*                                       *
+;****************************************
+.SKIP
+;*****************************************
+;*                                       *
+;*  64K-ADD-ON MONITOR                   *
+;*                                       *
+;*  THIS PROGRAM ALLOWS A USER TO        *
+;*  EXAMINE, MODIFY, AND RUN PROGRAMS    *
+;*  WITH BREAKPOINTS IN THE 64K ADD-ON   *
+;*  MEMORY. IT IS FUNCTIONALLY THE SAME  *
+;*  AS THE PET RESIDENT MONITOR.         *
+;*                                       *
+;*  29JAN81 RJF         29JUL81 RJF      *
+;*                                       *
+;*  CBM PART # 8032118 - 01 REV B        *
+;*                                       *
+;*****************************************
+.PAGE
+;
+;VIRTUAL REGISTERS
+;
+PCH	*=*+1           ;PROGRAM COUNTER
+PCL	*=*+1
+FLGS	*=*+1           ;PROCESSOR STATUS
+ACC	*=*+1           ;ACCUMULATOR
+XR	*=*+1           ;X INDEX
+YR	*=*+1           ;Y INDEX
+SP	*=*+1           ;STACK POINTER
+INVH	*=*+1           ;USER  IRQ VECTOR
+INVL	*=*+1
+MEMMAP	*=*+1           ;ADD-ON CONTROL REG
+;
+;INDIRECT POINTERS
+;
+STAL	*=*+1           ;SAVE STORE POINTER
+STAH	*=*+1
+;
+SAL	*=*+1           ;LOAD/SAVE START
+SAH	*=*+1
+;
+EAL	*=*+1           ;LOAD/SAVE END
+EAH	*=*+1
+;
+TMP0	*=*+2           ;MONITOR INDIRECTS
+;
+TMP2	*=*+2
+;
+;WORKING VARIABLES
+;
+TMPC	*=*+1
+SAVX	*=*+1
+WRAP	*=*+1           ;WRAP FLAG FOR DISPLYM
+;
+TMPA	*=*+1           ;.A SAVE FOR IRQ
+TMPPS	*=*+1           ;.P SAVE FOR IRQ
+.PAGE
+;.
+CINV	=$90
+CBINV	=$92
+BUF	=$200
+FNADR	=$DA
+FNLEN	=$D1
+CR	=$D
+BAD	=$100
+STATUS	=$96
+FA	=$D4
+SA	=$D3
+RCLRCH	=$F2A6
+RLISTN	=$F0D5
+RSECND	=$F143
+RCIOUT	=$F19E
+RUNLSN	=$F1B9
+RTALK	=$F0D2
+RTKSA	=$F193
+RACPTR	=$F1C0
+RUNTLK	=$F1AE
+ROPENI	=$F4A5
+STKEY	=$9B
+NDX	=$9E
+.PAGE
+;
+	* =1024
+SYS	=158            ;BASIC TOKEN VALUE
+;
+;ENTER COMPILED BASIC TEXT
+;
+	.BYT 0
+	.WOR INIT-2
+	.WOR $10
+	.BYT SYS
+	.BYT '(1039)',0,0,0
+;
+;INITIALIZE INTERRUPT PROCESS
+;
+INIT	SEI
+	LDA #%10000000
+	STA MEMMAP
+	STA $FFF0
+	JSR SETIRQ
+	LDA #%10001000
+	STA $FFF0
+	JSR SETIRQ
+	LDA MEMMAP
+	STA $FFF0
+;
+	CLI
+	JMP TIMC
+.PAGE
+SETIRQ	LDA #<IRQ
+	STA $FFFE
+	LDA #>IRQ
+	STA $FFFF
+	LDA #<NMI
+	STA $FFFA
+	LDA #>NMI
+	STA $FFFB
+	RTS
+.SKIP
+;PROCESS IRQ
+;
+IRQ	STA TMPA        ;PRESERVE A
+;
+	PLA
+	PHA
+	STA TMPPS
+;
+	LDA #%00000000
+	STA $FFF0
+;
+;PUSH RETURN FROM INTERRUPT ADDRESS
+;
+	LDA  #>RTIP
+	PHA
+	LDA  #<RTIP
+	PHA
+;
+	LDA TMPPS
+	PHA             ;PUSH DUMMY STATUS
+;
+	LDA TMPA        ;RESTORE A
+;
+;GO TO ROM IRQ SERVICE
+;
+	JMP ($FFFE)
+.SKIP
+;PROCESS NMI
+;
+;PROCESS NMI
+;
+NMI	STA TMPA        ;PRESERVE A
+;
+	PLA
+	PHA
+	STA TMPPS
+;
+;
+	LDA #%00000000
+	STA $FFF0
+;
+;PUSH RETURN FROM INTERRUPT ADDRESS
+;
+	LDA #>RTIP
+	PHA
+	LDA #<RTIP
+	PHA
+;
+	LDA TMPPS
+	PHA             ;PUSH DUMMY STATUS
+;
+	LDA TMPA
+;
+;G0 TO ROM IRQ SERVICE
+;
+	JMP  ($FFFA)
+.SKIP
+;RETURN FROM INTERRUPT PROCESS
+;
+RTIP	PHA
+;
+;MAP BACK TO ORIGINAL RAM
+;
+	LDA MEMMAP
+	STA $FFF0
+;
+;RESTORE OLD .A
+;
+	PLA
+;
+;BACK TO USER
+;
+	RTI
+.PAGE 'MONITOR'
+;************************************************
+;*                                              *
+;* KERNAL MONITOR                               *
+;*                                              *
+;* ENTRY VIA CALL (JMP) OR BREAKPOINT (BRK)     *
+;* --- FUNCTIONS---                             *
+;* <:> ALTER MEMORY                             *
+;* <;> ALTER REGISTERS                          *
+;* <R> DISPLAY REGISTERS                        *
+;* <M> DISPLAY MEMORY                           *
+;* <G> START EXECUTION OF CODE                  *
+;* <L> LOAD MEMORY                              *
+;* <S> SAVE MEMORY                              *
+;* <@> DISK COMMAND                             *
+;* <*> ADD-ON CONTROL REGISTER                  *
+;* <OTHER> LOAD AND EXECUTE FROM DISK           *
+;*                                              *
+;* FOR SYNTAX & SEMANTICS SEE CBM KERNAL MANUAL *
+;* COPYRIGHT (C) 1980 BY CBM                    *
+;************************************************
+.PAGE
+;*****CALL ENTRY*****
+;
+TIMC
+	LDA #<TIMB
+	STA CBINV
+	LDA #>TIMB
+	STA CBINV+1
+	LDA #MS34-MS1   ;CALL ENTRY
+	STA TMPC
+	BNE B3          ;BRANCH ALWAYS
+;
+;*****BREAK ENTRY*****
+;
+TIMB	JSR CLRCH       ;CLR CHANNELS
+	LDA #MS36-MS1   ;BREAK ENTRY
+	STA TMPC
+	CLD
+;
+;SAVE .Y,.X,.A,FLAGS, AND PC
+;
+	LDX #5
+B1	PLA
+	STA PCH,X
+	DEX
+	BPL B1
+;
+B3	LDA CINV
+	STA INVL        ;SAVE IRQ LOW
+	LDA CINV+1
+	STA INVH        ;SAVE IRQ HIGH
+;
+	TSX
+	STX SP          ;SAVE ORIGINAL SP
+	CLI             ;CLEAR INTS
+;
+B5	LDY TMPC        ;MESSAGE CODE
+	JSR MSG         ;PRINT BREAK/CALL
+;
+	LDA #'R         ;DISPLAY REGS ON ENTRY
+	BNE SO          ;BRANCH ALWAYS
+;
+;*****ERROR ENTRY*****
+;
+ERROPR	JSR OUTQST
+	PLA
+	PLA
+;
+;*****COMMAND INTERPRETER ENTRY*****
+;
+STRTM1=*-1
+	LDX #<BUF       ;PLACE TO PUT FILE NAME
+	LDY #>BUF
+	STX FNADR
+	STY FNADR+1
+	JSR CRLF
+;
+ST1	JSR BASIN       ;READ COMMAND
+	CMP #$20
+	BEQ ST1         ;SPAN BLANKS
+;
+;COMMAND INTERPRETER
+;
+SO	LDX #0
+	STX WRAP
+	STX FNLEN
+	TAY             :SAVE CURRENT COMMAND
+;
+;PUT RETURN ADDRESS FOR COMANDS ON STACK
+;
+	LDA #>STRTM1
+	PHA
+	LDA #<STRTM1
+	PHA
+;
+	TYA             ;CURRENT COMMAND IN .A
+;
+S1	CMP CMDS,X      ;IS IT THIS ONE?
+	BNE S2          ;NOTIT
+;
+	STA SAVX        ;SAVE CURRENT COMMAND
+;
+;INDIREKT JMP FROM TABLE
+;
+	LDA CMDS+1,X
+	STA TMP0
+	LDA CMDS+2,X
+	STA TMP0+1
+	JMP (TMP0)
+;
+;EACH TABLE ENTRY IS 3 LONG---SKIP TO NEXT
+;
+S2	INX
+	INX
+	INX
+	CPX #CMDEND-CMDS
+	BCC S1          ;LOOP F0R ALL COMMANDS
+;
+;COMMAND NOT IN TABLE.,.LOOK ON DISK.
+;COMMAND NAME CAN BE ANY LENGTH AND
+;HAVE PARAMETERS.
+;
+	LDY #0          ;LENGTH TO ZERO
+S3	CMP #$D         ;END OF NAME?
+	BEQ S4          ;YES...
+	CMP #$20        ;BLANK?
+	BEQ S4          ;YES
+	STA BUF,X
+	JSR BASIN       ;GET NEXT
+	INX             ;COUNT CHAR
+	BNE S3          ;AND CONTINUE
+;
+S4	STA TMPC
+	TXA             ;COUNT
+	BEQ S6          ;IS ZERO
+;
+	STA FNLEN
+	LDA #8
+	STA FA          ;WILL USE DEVICE #8
+	JSR LOAD        ;TRY TO LOAD COMMAND
+	BCS S6          ;BAD LOAD...
+;
+	LDA TMPC        ;PASS LAST CHARACTER
+	JMP (STAL)      ;GO DO IT
+;
+S6	RTS
+.SKIP
+CMDS	.BYT ':'        ;ALTER MEMORY
+	.WOR ALTM
+	.BYT ';'        ;ALTER REGISTERS
+	.WOR ALTR
+	.BYT 'R'        ;DISPLAY REGISTEPS
+	.WOR DSPLYR
+	.BYT 'M'        ;DISPLAY MEMORY
+	.WOR DSPLYM
+	.BYT 'G'        ;START EXECUTION
+	.WOR GO
+	.BYT 'L'        ;LOAD MEMORY
+	.WOR LD
+	.BYT 'S'        ;SAVE MEMORY
+	.WOR LD
+	.BYT '*'        ;MAP MEMORY
+	.WOR MAPPER
+	.BYT '@'        ;DISK COMMAND (ALTERNATE)
+	.WOR DISK
+CMDEND
+.SKIP
+PUTP	LDA TMP0        ;MOVE TMP0 TO PCH,PCL
+	STA PCL
+	LDA TMP0+1
+	STA PCH
+	RTS
+.SKIP
+SETR	LDA #<FLGS      ;SET TO ACCESS REGS
+	STA TMP0
+	LDA #>FLGS
+	STA TMP0+1
+	LDA #5
+	RTS
+.SKIP
+;PRINTS ':' OR ';' BEFORE DATA TO PERMIT
+;ALTER AFTER 'M' OR 'R' COMMAND
+;
+ALTRIT	PHA             ;PRESERVE ALTER CHARACTER
+	JSR CRLF
+	PLA
+	JSR BSOUT
+.SKIP
+SPACE	LDA #$20        ;OUTPUT A SPACF
+	.BYT $2C        ;SKIP TWO BYTES
+OUTQST	LDA #'?'        ;OUTPUT QUESTION
+	.BYT $2C        ;SKIP TWO BYTES
+CRLF	LDA #$D         ;DO CARRIAGE RETURN
+	JMP BSOUT
+.SKIP
+;DATA FOR REGISTER DISPLAY HEADING
+;
+REGK	.BYT CR,$20,$20 ;3 SPACES
+	.BYT ' PC ',' IRQ ',' SR AC XR YR SP'
+.SKIP
+;DISPLAY REGISTER FUNCTION
+;
+DSPLYR	LDX  #0
+D2	LDA REGK,X
+	JSR BSOUT       ;PRINT HEADING
+	INX
+	CPX #DSPLYR-REGK ;MAX LENGTH
+	BNE D2
+	LDA #';'
+	JSR ALTRIT      ;ALLOW ALTER AFTER DISPLAY
+	LDX PCH
+	LDY PCL
+	JSR WROA        ;PRINT PROGRAM CMMTER
+	JSR SPACE
+	LDX INVH
+	LDY INVL
+	JSR WROA        ;PRINT IRQ VECTOR
+	JSR SETR        ;SET TO PRINT .P,.A,.X,.Y,.S
+;
+;DISPLAY MEMORY SUBROUTINE
+;
+DM	STA TMPC        ;BYTE COUNT
+	LDY #0          ;INDIRECT INDEX
+DM1	JSR SPACE       ;SPACE TWEEN BYTES
+	LDA (TMP0),Y
+	JSR WROB        ;WRITE BYTE OF MEMORY
+;
+;INCREMENT INDIRECT
+;
+	INC TMP0
+	BNE DM2
+	INC TMP0+1
+	BNE DM2
+	INC WRAP
+;
+DM2	DEC TMPC        ;COUNT BYTES
+	BNE DM1         ;UNTIL ZERO
+	RTS
+.SKIP
+;DISPLAY MEMORY FUNCTION
+;
+DSPLYM	JSR RDOA        ;READ START ADR
+	BCS ERRS1       ;ERR IF NO SA
+	JSR T2T2        ;SA TO TMP2
+;
+;ALLOW USER TO TYPE JUST ONE ADDRESS
+;
+	JSR RDOA        ;READ END ADR
+	BCC DSP10       ;GOOD.. NO DEFAULT
+;
+	LDA TMP2
+	STA TMP0        ;DEFAULT LOW BYTE
+	LDA TMP2+1
+	STA TMP0+1      ;DEFAULT HI BYTE
+;
+DSP10	JSR T2T2        ;SA TO TMP0, EA TO TMP2
+DSP1	JSR STOP        ;STOP KEY?
+	BEQ BEQS1       ;YES...BREAK LIST
+;
+	LDA #':'
+	JSR ALTRIT      ;ALLOW ALTER
+	LDX TMP0+1
+	LDY TMP0
+	JSR WROA        ;WRITE START ADDRESS
+	LDA #8          ;COUNT OF BYTES
+	JSR DM          ;DISPLAY BYTES
+	LDA WRAP
+	BNE BEQS1
+;
+;CHECK FOR END OF DISPLAY
+;
+	SEC
+	LDA TMP2
+	SBC TMP0
+	LDA TMP2+1
+	SBC TMP0+1
+	BCS DSP1        ;END >= START
+;
+BEQS1	RTS             ;A.O.K. EXIT
+;
+ERRS1	JMP ERROPR      ;SYNTAX ERROR
+.SKIP
+;ALTER REGISTER FUNCTION
+;
+ALTR	JSR RDOA        ;READ NEW PC
+	BCS ERRS1       ;ERROR... NO ADORESS
+;
+	JSR PUTP        ;ALTER PC
+;
+	JSR RDOA        ;READ NEW IRQ
+	BCS ERRS1       ;ERROR...NO ADDRESS
+;
+	LDA TMP0
+	STA INVL        ;ALTER IRQ VECTOR
+	LDA TMP0+1
+	STA INVH
+;
+	JSR SETR        ;SET TO ALTER R'S
+	BNE A4          ;BRANCH ALWAYS
+.SKIP
+;ALTER MEMORY - READ ADR AND DATA
+;
+ALTM	JSR RDOA        ;READ ALTER ADR
+	BCS ERRS1       ;IF SPACE,ERR
+;
+	LDA #8          ;ALLOW EIGHT BYTES CHANGE
+;
+;COMMON CODE FOR ':' AND ';'
+;
+A4	STA TMPC        ;NUMBER OF BYTES TO CHANGE
+;
+A5	JSR RDOB        ;READ BYTE
+	BCS A9          ;NONE...END OF LINE
+;
+	LDX #0
+	STA (TMP0,X)    ;STORE IT AWAY
+;
+;INCREMENT STORE ADDRESS
+;
+	INC TMP0
+	BNE A6
+	INC TMP0+1
+;
+A6	DEC TMPC        ;COUNT BYTE
+	BNE A5          ;UNTIL ZERO
+;
+A9	RTS
+.SKIP
+;MAP MEMORY
+;
+MAPPER	JSR RDOB
+	STA MEMMAP
+	RTS
+.SKIP
+;START EXECUTION FUNCTION
+;
+GO	JSR RDOC        ;SEE IF DEFAULT
+	BEQ G1          ;YES... PC IS ADDRESS
+;
+	JSR RDOA        ;N0.. GET NEW ADDR
+	BCS ERRL        ;ERROR.. ADDRESS SCREWED UP
+;
+	JSR PUTP        ;MOVE ADDR TO P.C.
+;
+G1	LDX SP
+	TXS             ;ORIG OR NEW SP VALUE TO SP
+;
+	SEI             ;PREVENT DISASTER
+;
+	LDA INVH
+	STA CINV+1      ;SET UP IRQ VECTOR
+	LDA INVL
+	STA CINV
+;
+;GET FLAGS,PCH,PCL,.A,.X,.Y
+;
+	LDX #0
+G2	LDA PCH,X
+	PHA             ;EVERYBODY ON SIACK
+	INX
+	CPX #6
+	BNE G2
+;
+;INTERRUPT RETURN SETS EVERYBODY UP
+;FROM DATA ON STACK
+;
+PREND	PLA
+	TAY
+	PLA
+	TAX
+	PLA
+	RTI
+.SKIP
+ERRL	JMP ERROPR      ;SYNTAX ERROR JUMP
+.SKIP
+;LOAD RAM FUNCTION
+;
+LD	LDY #1
+	STY FA          ;DEFAULT DEVICE #1
+	DEY             ;.Y=0 TO COUNT NAME LENGTH
+;
+L1	JSR RDOC        ;DEFAULT?
+	BEQ L5          ;YES...TRY LOAD
+;
+	CMP #' 
+	BEQ L1          ;SPAN BLANKS
+;
+	CMP #'"         ;STRING NEXT?
+L2	BNE ERRL        ;N0 FILE NAME
+;
+L3	JSR RDOC        ;GET CHARACTER OF NAME
+	BEQ L5          ;END...ASSSUME LOAD
+;
+	CMP #'"         ;END OF STRING?
+	BEQ L8          ;YES...COULD STILL BE 'L' OR
+;
+	STA (FNADR)Y    ;STORE NAME
+	INC FNLEN
+	INY
+	CPY #16         ;MAX FILF NAME LENGTH
+;
+L4	BEQ ERRL        ;FILE NAME TOD LONG
+	BNE L3          ;BRANCH ALWAYS
+;
+;SEE IF WE GOT A LOAD
+;
+L5	LDA SAVX        ;GET LAST COMMAND
+	CMP #'L
+	BNE L2          ;NO..NOT A LOAD..ERROR
+;
+	JMP LOAD        ;YES...DO LOAD
+;
+L8	JSR RDOC        ;MORE STUFF?
+	BEQ L5          ;NO... DEFUALT LOAD
+;
+	CMP #',         ;DELEIMETER?
+L9	BNE L2          ;ND...BAD SYNTAX
+;
+	JSR RDOB        ;YES...GET NEXT PARM
+	BCS L15         ;NOT GOOD
+;
+	STA FA
+;
+	JSR RDOC        ;MORE PARMS?
+	BEQ L5          ;NO... DEFAULT LOAD
+;
+	CMP #',         ;DELIMETER?
+L12	BNE L9          ;NO...BAD SYNTAX
+;
+	JSR RDOA        ;START ADDRESS?
+	BCS L15         ;NO...BAD
+;
+	JSR T2T2        ;PRESERVE START
+	JSR BASIN       ;DELIMETER?
+	CMP #',
+L13	BNE L12         ;NO...
+	JSR RDOA        ;TRY TO READ END
+	BCS L15         ;NONE...ERROR
+;
+;SET UP END SAVE ADDRESS
+;
+	LDA TMP0
+	STA EAL
+	LDA TMP0+1
+	STA EAH
+	JSR T2T2
+;
+L20	JSR BASIN
+	CMP #$20        ;SPAN BLANKS
+	BEQ L20
+;
+	CMP #CR
+L14	BNE L13         ;MISSING CR AT END
+	LDA SAVX        ;WAS COMMAND SAVE?
+	CMP #'S
+	BNE L14         ;NO...LOAD CAN'T HAVE PARMS
+	JMP SAVE
+;
+L15	JMP ERROPR
+.SKIP
+;WRITE ADR FROM TMP0 STORES
+;
+WROA	TXA             ;HI-BYTE
+	JSR WROB
+	TYA             ;LOW--BYTE
+.SKIP
+;WRITE BYTE --- A = BYTE
+;UNPACK BYTE DATA INTO TWO ASCII
+;CHARACTERS. A=BYTE; X,A=CHARS
+WROB	PHA
+	LSR A
+	LSR A
+	LSR A
+	LSR A
+	JSR ASCII             ;CONVERT TO ASCII
+	TAX
+	PLA
+	AND #$0F
+.SKIP
+;CONVERT NYBBLE IN A TO ASCII AND
+;PRINT IT
+;
+ASCII	CLC
+	ADC #$F6
+	BCC ASC1
+	ADC #$06
+ASC1	ADC #$3A
+	JMP BSOUT
+.SKIP
+;EXCHANGE TEMPOPARIES
+;
+T2T2	LDX #2
+T2T21	LDA TMP0-1,X
+	PHA
+	LDA TMP2-1,X
+	STA TMP0-1,X
+	PLA
+	STA TMP2-1,X
+	DEX
+	BNE T2T21
+	RTS
+.SKIP
+;READ HEX ADR,RETURN HI IN TMP0,
+;LO IN TMP0+1,AND CY=1
+;IF SP CY=0
+;
+RDOA	JSR RDOB              ;READ 2-CHAR BYTE
+	BCS RDOA2             ;SPACE
+	STA TMP0+1
+	JSR RDOB
+	STA  TMP0
+RDOA2	RTS
+;READ HEX BYTE AND RETURN IN A
+;AND CY=0 IF SP CY=1
+RDOB	LDA #0                ;SPACE
+	STA BAD               ;READ NEXT CHAR
+	JSR RDOC
+	BEQ RDOB4             ;FAIL ON CR
+	CMP #'                ;BLANK?
+	BEQ RDOB              ;SPAN BLANKS...
+;
+	JSR HEXIT             ;CONVERT TO HEX NYBBLE
+	ASL A
+	ASL A
+	ASL A
+	ASL A
+	STA BAD
+	JSR RDOC              ;2ND CHAR ASSUMED HEX
+	BEQ RDOB4             ;FAIL ON CR
+	JSR HEXIT
+	ORA BAD
+;
+RDOB4	RTS
+.SKIP
+;CONVERT ASCII CHAR TO HEX NYBBLE
+;
+HEXIT	CMP #$3A
+	PHP                   ;SAVE FLAGS
+	AND #$0F
+	PLP
+	BCC HEX09             ;0-9
+	ADC #8                ;ALPHA ADD 8+CY=9
+HEX09	RTS
+.SKIP
+;GET CHARACTER AND TEST FOR CR
+;
+RDOC	JSR BASIN
+	CMP #$0D              ;IS IT A CR
+	RTS                   ;RETURN WITH FLAGS
+.SKIP
+;SEND DISK COMMAND OR READ STATUS
+;
+DISK	LDA #0                ;CLEAR STATUS @ I/0 BEGIN
+	STA STATUS
+;
+	JSR RDOC              ;SEE IF STATUS CHECK
+	BEQ DISK20            ;YES
+;
+	PHA
+	LDA #8                ;FLOPPY IS DEVICE #8
+	JSR LISTN             ;TELL FLOPPY TO RECEIVE
+	LDA #15+$60
+	JSR SECND             ;ON COMMAND CHANNEL
+;
+	PLA
+	LDX STATUS            ;ERROR?
+	BPL DISK15            ;NO... OK
+;
+DISK5	JMP ERROR5            ;DEVICE NOT PRESENT
+;
+DISK10	JSR BASIN             ;GET A CHARACTER
+DISK15	CMP #$D               ;SEE IF END
+	PHP                   ;SAVE FOR LATER
+	JSR CIOUT             ;OUT TO FLOPPY
+	PLP                   ;END?
+	BNE DISK10            ;NO,..CONTINUE
+;
+	JMP UNLSN             ;YES... FLOPPY DONE
+;
+DISK20	JSR CRLF
+	LDA #8                ;FLOPPY IS DEVICE #8
+	JSR TALK              ;TELL FLOPPY TO SPEAK
+	LDA #15+$60
+	JSR TKSA              ;FROM ERROR CHANNEL
+;
+	LDA STATUS            ;AN ERROR?
+	BMI DISK5             ;YES...
+;
+DISK25	JSR ACPTR             ;GET A CHARACTER
+	CMP #$D               ;SEE IF END
+	PHP                   ;TEST LATER
+	JSR BSOUT             ;OUT TO SCREEN
+	PLP                   ;END?
+	BNE DISK25            ;N0 ..
+	JMP UNTLK             ;YES,. FLOPBPY DONE
+.PAGE 'LOAD FUNCTION'
+;**********************************
+;* LOAD RAM FUNCTION              *
+;*                                *
+;* LOADS FROM CASSETTE 1 OR 2, OR *
+;* IEEE BUS DEVICES >=4 TO 31 AS  *
+;* DETERMINED BY CONTENTS OF      *
+;* VARIABLE FA. VERIFY FLAG IN .A *
+;* HIGH LOAD RETURN IN X,Y.       *
+;* .A=0 PERFORMS LOAD,<> IS VERIFY*
+;*                                *
+;**********************************
+.SKIP
+LOAD
+	LDA #0
+	STA STATUS
+;
+	LDA FA                ;CHECK DEVICE NUMBER
+	CMP #4
+	BCS LD20
+;
+LD10	JMP ERROR9            ;BAD DEVICE #
+;
+LD20
+;
+;LOAD FROM CBM IEEE DEVICE
+;
+	LDA #$60              ;SPECIAL LOAD COMMAND
+	STA SA
+;
+	LDY FNLEN             ;MUST HAVE I@ILE NAME
+	BNE LD25              ;YES...OK
+;
+	JMP ERROR8            ;MISSING FILE NAME
+;
+LD25	JSR LUKING            ;TELL USER LOOKING
+	JSR OPENI             ;OPEN THE FILE
+;
+	LDA FA
+	JSR TALK              ;ESTABLISH THE CHANNEL
+	LDA SA
+	JSR TKSA              ;TELL IT TO LOAD
+;
+	JSR ACPTR             ;GET FIRST BYTE
+	STA EAL
+	STA STAL
+;
+	LDA STATUS            ;TEST STATUS FOR ERROR
+	LSR A
+	LSR A
+	BCS LD90              ;FILE NOT F0UND...
+	JSR ACPTR
+	STA EAH
+	STA STAH
+;
+	JSR LODING            ;TELL USER LOADING
+;
+LD40	LDA #$FD              ;MASK OFF TIMEOUT
+	AND STATUS
+	STA STATUS
+;
+	JSR STOP              ;STOP KEY?
+	BNE LD45              ;NO...
+;
+	JMP BREAK             ;STOP KEY PRESSED
+;
+LD45	JSR ACPTR             ;GET BYTE OFF IEEE
+	TAX
+	LDA STATUS            ;WAS THERE A TIMEOUT?
+	LSR A
+	LSR A
+	BCS LD40              ;YES...TRY AGAIN
+	TXA
+	LDY #0
+	STA (EAL)Y
+LD60	INC EAL               ;TNCREMENT STORE ADDR
+	BNE LD64
+	INC EAH
+LD64	BIT STATUS            ;EOI?
+	BVC LD40              ;NO...CONTINUE LOAD
+;
+	JSR UNTLK             ;CLOSE CHANNEL
+	JSR CLSEI             ;CLOSE THE FILE
+	BCC LD180             ;BRANCH ALWAYS
+;
+LD90	JMP ERROR4            ;FILE NOT FOUND
+;
+;
+LD180	CLC                   ;GOOD EXIT
+;
+;SET UP END LOAD ADDRESS
+;
+	LDX EAL
+	LDX EAH
+;
+LD190	RTS
+.SKIP
+;SUBRDOUTINE TO PRINT TO CONSOLE:
+;
+;SEARCHING [FOR NAME]
+;
+LUKING
+	LDY #MS5-MS1          ;"SEARCHING"
+	JSR MSG
+	LDA FNLEN
+	BEQ LD115
+	LDY #MS6-MS1          ;"FOR"
+	JSR MSG
+.SKIP
+;SUBROUTINE TO OUTPUT FILE NAME
+;
+OUTFN
+	LDY #0
+LD110	LDA (FNADR)Y
+	JSR BSOUT
+	INY
+	CPY FNLEN
+	BNE LD110
+;
+LD115	RTS
+.SKIP
+;SUBROUTINE TO PRINT:
+;
+;LOADING/VERIFING
+;
+LODING	LDY #MS10-MS1         ;ASSUME 'LOADING'
+LD410	JMP SPMSG
+.PAGE 'SAVE FUNCTION'
+;***********************************
+;* SAVE                            *
+;*                                 *
+;* SAVES TO CASSETTE 1 OR 2, OR    *
+;* IEEE DEVICES 4>=N>=31 AS SELECT-*
+;* ED BY VARIABLE FA.              *
+;*                                 *
+;* START OF SAVE IS MEMSTR...END OF*
+;* SAVE IS .X,.Y                   *
+;***********************************
+.SKIP
+SAVE	LDA FA  ***MONITOR ENTRY
+	CMP #4
+	BCS SV20
+;
+SV10	JMP ERROR9            ;BAD DEVICE
+;
+SV20
+	LDA #$61
+	STA SA
+	LDY FNLEN
+	BNE SV25
+;
+	JMP ERROR8            ;MISSING FILE NAME
+;
+SV25	JSR OPENI
+	JSR SAVING
+	LDA FA
+	JSR LISTN
+	LDA SA
+	JSR SECND
+	LDY #0
+	LDA STAH
+	STA SAH
+	LDA STAL
+	STA SAL
+	JSR CIOUT
+	LDA SAH
+	JSR CIOUT
+SV30	SEC
+	LDA SAL
+	SBC EAL
+	LDA SAH
+	SBC EAH
+	BCS SV50              ;HAVE REACHED END
+	LDA (SAL)Y
+	JSR CIOUT
+	JSR STOP
+	BNE SV40
+
+BREAK	JSR CLSEI
+	LDA #0
+	SEC
+	RTS
+;
+SV40	INC SAL
+	BNE INCR
+	INC SAH
+INCR
+	BNE SV30
+SV50	JSR UNLSN
+.SKIP
+CLSEI	BIT SA
+	BMI CLSEI2
+	LDA FA
+	JSR LISTN
+	LDA SA
+	AND #$EF
+	ORA #$E0
+	JSR SECND
+	JSR UNLSN
+;
+CLSEI2	CLC
+	RTS
+.SKIP
+.SKIP
+;SUBROUTINE TO OUTPUT:
+;'SAVING <FILE NAME>'
+;
+SAVING
+;
+	LDY #MS11-MS1         ;'SAVING'
+	JSR MSG
+	JSR OUTFN             ;<FILE NAME>
+;
+SAV100	RTS
+.PAGE 'ERROR HANDLER'
+;***************************************
+;* STOP -- CHECK STOP KEY FLAG AND     *
+;* RETURN Z FLAG SET IF FLAG TRUE.     *
+;* ALSO CLOSES ACTIVE CHANNELS AND     *
+;* FLUSHES KEYBDARD QUEUE.             *
+;* ALSO RETURNS KEY DOWNS FROM LAST    *
+;* KEYBOARD ROW IN .A.                 *
+;***************************************
+STOP	LDA STKEY             ;VALUE OF LAST ROW
+	CMP #$EF              ;CHECK SIOP KEY POSITION
+	BNE STOP2             ;NOT DOWN
+	PHP
+	JSR CLRCH             ;CLEAR CHANNELS
+	LDA #0
+	STA NDX               ;FLUSH GUEUE
+	PLP
+STOP2	RTS
+.SKIP
+;***********************************
+;*                                 *
+;* ERROR HANDLER                   *
+;*                                 *
+;* WITH ERROR # IN A AND CARRY.    *
+;*                                 *
+;***********************************
+;
+ERROR1	LDA #1                ;TOO MANY FILES
+	.BYT $2C
+ERROR2	LDA #2                ;FILE OPEN
+	.BYT $2C
+ERROR3	LDA #3                ;FILE NOT OPEN
+	.BYT $2C
+ERROR4	LDA #4                ;FILE NOT FOUND
+	.BYT $2C
+ERROR5	LDA #5                ;DEVICE NOT PRESENT
+	.BYT $2C
+ERROR6	LDA #6                ;NOT INPUT FILE
+	.BYT $2C
+ERROR7	LDA #7                ;NOT OUTPUT FILE
+	.BYT $2C
+ERROR8	LDA #8                ;MISSING FILE NAME
+	.BYT $2C
+ERROR9	LDA #9                ;BAD DEVICE #
+;
+	PHA                   ;ERROR NUMBER ON STACK
+	JSR  CLRCH            ;RESTORE I/0 CHANNELS
+;
+	LDY  #MS1-MS1
+;
+	JSR  MSG              ;PRINT "CBM I/0 ERROR #"
+	PLA
+	PHA
+	ORA #$30              ;MAKE ERROR ASCII
+	JSR BSOUT             ;PRINT IT
+;
+EREXIT	PLA
+	SEC
+	RTS
+.PAGE 'MESSAGES'
+MS1	.BYT $D,'I/O ERROR ',$A3
+MS5	.BYT $D,'SEARCHING',$A0
+MS6	.BYT 'FOR',$A0
+MS7	.BYT $D,'PRESS PLAY',$A0
+MS8	.BYT '& RECORD',$A0
+MS9	.BYT 'ON TAPE ',$A3
+MS10	.BYT $D,'LOADIN',$C7
+MS11	.BYT $D,'SAVING',$A0
+MS21	.BYT $D,'VERIFYIN',$C7
+MS17	.BYT $D,'FOUND',$A0
+MS18	.BYT $D,'OK',$8D
+MS34	.BYT $D,'***CBM MONITOR 1.0***',$8D
+MS36	.BYT $D,'BREA',$CB
+.SKIP
+;PRINT MESSAGE TO SCREEN ONLY IF
+;OUTPUT ENABLED
+;
+SPMSG
+MSG	LDA MS1,Y
+	PHP
+	AND #$7F
+	JSR BSOUT
+	INY
+	PLP
+	BPL MSG
+MSG10	CLC
+	RTS
+.SKIP
+;
+BASIN
+	LDA #0
+	STA $FFF0
+	JSR $FFCF
+	PHA
+	LDA MEMMAP
+	STA $FFF0
+	PLA
+	RTS
+.SKIP
+BSOUT
+	PHA
+	LDA #0
+	STA $FFF0
+	PLA
+	JSR $FFD2
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+CLRCH	LDA #0
+	STA $FFF0
+	JSR RCLRCH
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+LISTN	STA FA
+	LDA #0
+	STA $FFF0
+	JSR RLISTN
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+SECND	PHA
+	LDA #0
+	STA $FFF0
+	PLA
+	JSR RSECND
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+CIOUT	PHA
+	LDA #0
+	STA $FFF0
+	PLA
+	JSR RCIOUT
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+UNLSN
+	LDA #0
+	STA $FFF0
+	JSR RUNLSN
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+TALK	STA FA
+	LDA #0
+	STA $FFF0
+	JSR RTALK
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+TKSA	PHA
+	LDA #0
+	STA $FFF0
+	PLA
+	JSR RTKSA
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+ACPTR
+	LDA #0
+	STA $FFF0
+	JSR RACPTR
+	PHA
+	LDA MEMMAP
+	STA $FFF0
+	PLA
+	RTS
+.SKIP
+UNTLK
+	LDA #0
+	STA $FFF0
+	JSR RUNTLK
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.SKIP
+OPENI	PHA
+	LDA #0
+	STA $FFF0
+	PLA
+	JSR ROPENI
+	LDA MEMMAP
+	STA $FFF0
+	RTS
+.END
