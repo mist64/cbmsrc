@@ -1,0 +1,1099 @@
+.SKIP
+;
+;       Through the courtesy of
+;
+;        FORTH INTEREST GROUP
+;           P. O. Box 1105
+;      San Carlos, CA 94070
+;
+;             Release 1.1
+;       With compiler security
+;               and
+;       variable length names
+;
+; Further distribution must include the above notice
+; The FIG Installation Manual is required as it
+; contains the model of FORTH and glossary of the system.
+; Available from FIG at the above address for $10.00 postpai
+;
+; Translated from the FIG Model by W. F. Ragsdale
+; with input-output given for the Rockewell System-65.
+; Transportation to other systems only requires
+; alteration of: XEMIT, XKEY, XQTER, XCR, and RSLW.
+;
+.PAGE
+;
+;   Equates giving memory assigments, machine
+;   registers, and disk parameters.
+;
+;
+SSIZE	=128   sector size in bytes
+NBUF	=8              ; number of buffers desired in ram
+;                    (SSIZE*NBUF >= 1024 bytes)
+SECTR	=800    sectors per drive
+;                        forcing hi drive to Screen #100
+SECTL	=1600     sector limit for 2 drives
+;                of 800 sectors per drive
+BMAG	=1056    total buffer magnitude, in bytes
+;                    expressed by SSIZE+4*NBUF
+;
+BOS	=$20        bottom of data stack, in z-page.
+TOS	=$9E        top of data stack, in z-page.
+N	=TOS+8      xXxxxxxxx    scratch workspace
+IP	=N+8         Xx          interpretive pointer
+W	=IP+3       xXx          code field pointer
+UP	=W+2         Xx          user area pointer
+XSAVE	=UP+2        X           temporary for X register
+;
+TIBX	=$0100      terminal input buffer of 84 bytes.
+ORIG	=$0200      origin of FORTH's dictionary.
+MEM	=$4000      top of assigned memory+1 byte.
+UAREA	=MEM-128    128 bytes of user area
+DAREA	=UAREA-BMAG disk buffer area
+;
+;      Monitor calls for terminal support
+;
+OUTCH	=$D2C1          ; output one ASCII character to termina
+INCH	=$D1DC          ; input one ASCII character from termina
+TCR	=$D0F1          ; terminal return and line feed
+;
+;
+;   From DAREA downward to the top of the dictionary is free
+;   space where the user's applications are compiled.
+;
+.PAGE
+;
+;     Boot up parameters. This area provide jump vectors
+;     to bootup code, and parameters describing the system
+;
+	*=ORIG
+ENTER	NOP               User cold entry point
+	JMP COLD+2          vector to COLD entry
+REENTR	NOP             ; User warm entry point
+	JMP WARM            vector to WARM entry
+	.WORD $0004       6502 encoded in radix-36
+	.WORD $5ED2
+	.WORD NTOP       Name address of MON
+	.WORD $7F         Backspace character
+	.WORD UAREA      Initial user area
+	.WORD TOS         Initial top of stack
+	.WORD $1FF        Initial top of return stack
+	.WORD TIBX        Initial terminal input buffer
+	.WORD 31          Initial name field width
+	.WORD 0           0=no disk 1=disk
+	.WORD TOP         Initial fence address
+	.WORD TOP         Initial top of dictionary
+	.WORD VL0         Initial vocabulary link pointer
+;
+;     The following offset adjusts all code fields
+;     to avoid an address ending $xxFF.  This must
+;     be checked and altered on any alteration, for
+;     the indirect jump at W-1 to operate!!!
+;
+;
+	*=*+2
+;
+.PAGE
+;
+;                             LIT
+;
+;                             SCREEN 13 LINE 1
+;
+L22	.BYTE $83,'LI',$D4    <--- name field
+;  <--- link field
+	.WORD 00            Last link is marked by zero
+LIT	.WORD *+2   <--- code address field
+	LDA (IP),Y   <--- start of parameter field
+	PHA
+	INC IP
+	BNE L30
+	INC IP+1
+L30	LDA (IP),Y
+L31	INC IP
+	BNE PUSH
+	INC IP+1
+;
+PUSH	DEX
+	DEX
+;
+PUT	STA 1,X
+	PLA
+	STA 0,X
+;
+;     NEXT is the address interpreter that moves from
+;     machine level word to word.
+;
+NEXT	LDY #1
+	LDA (IP),Y    Fetch code field address pointed
+	STA W+1       to by IP
+	DEY
+	LDA (IP),Y
+	STA W
+	JSR TRACE   Remove this when all is well
+	CLC           Increment IP by two
+	LDA IP
+	ADC #2
+	STA IP
+	BCC L54
+	INC IP+1
+L54	JMP W-1     Jump to an indirect jump (W)
+;               which vectors to code pointed by a code fiel
+;
+;    CLIT pushes next inline byte to data stack
+;
+L35	.BYTE $84,'CLI',$D4
+	.WORD L22      LINK TO LIT
+CLIT	.WORD *+2
+	LDA (IP),Y
+	PHA
+	TYA
+	BEQ L31     a forced branch into LIT
+;
+;     This is a temporary trace routine, to be used
+;     until FORTH is generally operating.  Then NOP
+;     the terminal query "JSR ONEKEY".  This will allow
+;     user input to the text interpreter.  When crashes
+;     occur, the display shows IP,  W, and the word
+;     locations of offending code.  When all is well,
+;     remove:  TRACE,  TCOLON,  PRNAM,  DECNP and the
+;              following monitor/register equates.
+;
+;
+;   Monitor routines needed to trace
+;
+XBLANK	=$D0AF    Print one blank
+CRLF	=$D0D2    Print a carriage return and line feed
+HEX2	=$D2CE    Print accum as two hex numbers
+LETTER	=$D2C1    Print accumulator as one ASCII character
+ONEKEY	=$D1DC    Wait for keystroke, into accum.
+XW	=$12      Scratch register to next code field address
+NP	=$14    Another scratch register pointing to name
+;
+TRACE	STX XSAVE
+	JSR CRLF
+	LDA IP+1
+	JSR HEX2
+	LDA IP
+	JSR HEX2   Print IP, the interpretive pointer
+	JSR XBLANK
+;
+	LDY #0
+	LDA (IP),Y
+	STA XW
+	STA NP    Fetch the next code field pointer
+	INY
+	LDA (IP),Y
+	STA XW+1
+	STA NP+1
+	JSR PRNAM  Print dictionary name
+;
+	LDA XW+1
+	JSR HEX2   Print code field address
+	LDA XW
+	JSR HEX2
+	JSR XBLANK
+;
+	LDA XSAVE     Print stack location in z-page
+	JSR HEX2
+	JSR XBLANK
+;
+	LDA #1        Print return stack bottom in Page 1
+	JSR HEX2
+	TSX
+	INX
+	TXA
+	JSR HEX2
+	JSR XBLANK
+;
+	JSR ONEKEY    Wait for operator keystroke
+	LDX XSAVE       just to pinpoint early problems.
+	LDY #0
+	RTS
+;
+;    TCOLON is called from DOCOLON to label each
+;    point where FORTH 'nests' one level.
+;
+TCOLON	STX XSAVE
+	LDA W
+	STA NP    Locate the name of the called
+	LDA W+1
+	STA NP+1
+	JSR CRLF
+	LDA #':
+	JSR LETTER
+	JSR XBLANK
+	JSR PRNAM
+	LDX XSAVE
+	RTS
+;
+;     Print name by its code field address in NP
+;
+PRNAM	JSR DECNP
+	JSR DECNP
+	JSR DECNP
+	LDY #0
+PN1	JSR DECNP
+	LDA (NP),Y    loop till D7 in name set
+	BPL PN1
+PN2	INY
+	LDA (NP),Y
+	JSR LETTER    print letters of name field
+	LDA (NP),Y
+	BPL PN2
+	JSR XBLANK
+	LDY #0
+	RTS
+;
+;     Decrement name field pointer
+;
+DECNP	LDA NP
+	BNE DECNP1
+	DEC NP+1
+DECNP1	DEC NP
+	RTS
+;
+;
+SETUP	ASL A
+	STA N-1
+L63	LDA 0,X
+	STA N,Y
+	INX
+	INY
+	CPY N-1
+	BNE L63
+	LDY #0
+	RTS
+;
+;                             EXECUTE
+;                             SCREEN 14 LINE 11
+;
+L75	.BYTE $87,'EXECUT',$C5
+	.WORD L35           ;  LINK TO CLIT
+EXEC	.WORD *+2
+	LDA 0,X
+	STA W
+	LDA 1,X
+	STA W+1
+	INX
+	INX
+	JMP W-1         To JMP (W) in z-page
+;
+;                             BRANCH
+;                             SCREEN 15 LINE 1
+;
+L89	.BYTE $86,'BRANC',$C8
+	.WORD L75           ;  LINK TO EXECUTE
+BRAN	.WORD *+2
+	CLC
+	LDA (IP),Y
+	ADC IP
+	PHA
+	INY
+	LDA (IP),Y
+	ADC IP+1
+	STA IP+1
+	PLA
+	STA IP
+	JMP NEXT+2
+;
+;                             0BRANCH
+;                             SCREEN 15 LINE 6
+;
+L107	.BYTE $87,'0BRANC',$C8
+	.WORD L89           ;  LINK TO BRANCH
+ZBRAN	.WORD *+2
+	INX
+	INX
+	LDA $FE,X
+	ORA $FF,X
+	BEQ BRAN+2
+;
+BUMP	CLC
+	LDA IP
+	ADC #2
+	STA IP
+	BCC L122
+	INC IP+1
+L122	JMP NEXT
+;
+;                             (LOOP)
+;                             SCREEN 16 LINE 1
+;
+L127	.BYTE $86,'(LOOP',$A9
+	.WORD L107          ;  LINK TO 0BRANCH
+PLOOP	.WORD L130
+L130	STX XSAVE
+	TSX
+	INC $101,X
+	BNE PL1
+	INC $102,X
+;
+PL1	CLC
+	LDA $103,X
+	SBC $101,X
+	LDA $104,X
+	SBC $102,X
+;
+PL2	LDX XSAVE
+	ASL A
+	BCC BRAN+2
+	PLA
+	PLA
+	PLA
+	PLA
+	JMP BUMP
+;
+;                             (+LOOP)
+;                             SCREEN 16 LINE 8
+;
+L154	.BYTE $87,'(+LOOP',$A9
+	.WORD L127 LINK TO (LOOP)
+PPLOO	.WORD *+2
+	INX
+	INX
+	STX XSAVE
+	LDA $FF,X
+	PHA
+	PHA
+	LDA $FE,X
+	TSX
+	INX
+	INX
+	CLC
+	ADC $101,X
+	STA $101,X
+	PLA
+	ADC $102,X
+	STA $102,X
+	PLA
+	BPL PL1
+	CLC
+	LDA $101,X
+	SBC $103,X
+	LDA $102,X
+	SBC $104,X
+	JMP PL2
+;
+;                             (DO)
+;                             SCREEN 17 LINE 2
+;
+L185	.BYTE $84,'(DO',$A9
+	.WORD L154          ;  LINK TO (+LOOP)
+PDO	.WORD *+2
+	LDA 3,X
+	PHA
+	LDA 2,X
+	PHA
+	LDA 1,X
+	PHA
+	LDA 0,X
+	PHA
+;
+POPTWO	INX
+	INX
+;
+POP	INX
+	INX
+	JMP NEXT
+;
+;                             I
+;                             SCREEN 17 LINE 9
+;
+L207	.BYTE $81,$C9
+	.WORD L185          ;  LINK TO (DO)
+I	.WORD R+2           Share the code for R
+;
+;                             DIGIT
+;                             SCREEN 18 LINE 1
+;
+L214	.BYTE $85,'DIGI',$D4
+	.WORD L207          ;  LINK TO I
+DIGIT	.WORD *+2
+	SEC
+	LDA 2,X
+	SBC #$30
+	BMI L234
+	CMP #$A
+	BMI L227
+	SEC
+	SBC #7
+	CMP #$A
+	BMI L234
+L227	CMP 0,X
+	BPL L234
+	STA 2,X
+	LDA #1
+	PHA
+	TYA
+	JMP PUT         ; exit true with converted value
+L234	TYA
+	PHA
+	INX
+	INX
+	JMP PUT         ; exit false for bad conversion
+;
+;                             (FIND)
+;                             SCREEN 19 LINE 1
+;
+L243	.BYTE $86,'(FIND',$A9
+	.WORD L214          ;  LINK TO DIGIT
+PFIND	.WORD *+2
+	LDA #2
+	JSR SETUP
+	STX XSAVE
+L249	LDY #0
+	LDA (N),Y
+	EOR (N+2),Y
+	AND #$3F
+	BNE L281
+L254	INY
+	LDA (N),Y
+	EOR (N+2),Y
+	ASL A
+	BNE L280
+	BCC L254
+	LDX XSAVE
+	DEX
+	DEX
+	DEX
+	DEX
+	CLC
+	TYA
+	ADC #5
+	ADC N
+	STA 2,X
+	LDY #0
+	TYA
+	ADC N+1
+	STA 3,X
+	STY 1,X
+	LDA (N),Y
+	STA 0,X
+	LDA #1
+	PHA
+	JMP PUSH
+L280	BCS L284
+L281	INY
+	LDA (N),Y
+	BPL L281
+L284	INY
+	LDA (N),Y
+	TAX
+	INY
+	LDA (N),Y
+	STA N+1
+	STX N
+	ORA N
+	BNE L249
+	LDX XSAVE
+	LDA #0
+	PHA
+	JMP PUSH     exit false upon reading null link
+;
+;                             ENCLOSE
+;                             SCREEN 20 LINE 1
+;
+L301	.BYTE $87,'ENCLOS',$C5
+	.WORD L243          ;  LINK TO (FIND)
+ENCL	.WORD *+2
+	LDA #2
+	JSR SETUP
+	TXA
+	SEC
+	SBC #8
+	TAX
+	STY 3,X
+	STY 1,X
+	DEY
+L313	INY
+	LDA (N+2),Y
+	CMP N
+	BEQ L313
+	STY 4,X
+L318	LDA (N+2),Y
+	BNE L327
+	STY 2,X
+	STY 0,X
+	TYA
+	CMP 4,X
+	BNE L326
+	INC 2,X
+L326	JMP NEXT
+L327	STY 2,X
+	INY
+	CMP N
+	BNE L318
+	STY 0,X
+	JMP NEXT
+;
+;                             EMIT
+;                             SCREEN 21 LINE 5
+;
+L337	.BYTE $84,'EMI',$D4
+	.WORD L301          ;  LINK TO ENCLOSE
+EMIT	.WORD XEMIT            Vector to code for EMIT
+;
+;                             KEY
+;                             SCREEN 21 LINE 7
+;
+L344	.BYTE $83,'KE',$D9
+	.WORD L337          ;  LINK TO EMIT
+KEY	.WORD XKEY             Vector to code for KEY
+;
+;                             ?TERMINAL
+;                             SCREEN 21 LINE 9
+;
+L351	.BYTE $89,'?TERMINA',$CC
+	.WORD L344          ;  LINK TO KEY
+QTERM	.WORD XQTER            Vector to code for ?TERMINA
+;
+;                             CR
+;                             SCREEN 21 LINE 11
+;
+L358	.BYTE $82,'C',$D2
+	.WORD L351          ;  LINK TO ?TERMINAL
+CR	.WORD XCR              Vector to code for CR
+;
+;                             CMOVE
+;                             SCREEN 22 LINE 1
+;
+L365	.BYTE $85,'CMOV',$C5
+	.WORD L358      ;  LINK TO CR
+CMOVE	.WORD *+2
+	LDA #3
+	JSR SETUP
+L370	CPY N
+	BNE L375
+	DEC N+1
+	BPL L375
+	JMP NEXT
+L375	LDA (N+4),Y
+	STA (N+2),Y
+	INY
+	BNE L370
+	INC N+5
+	INC N+3
+	JMP L370
+;
+;                             U*
+;                             SCREEN 23 LINE 1
+;
+L386	.BYTE $82,'U',$AA
+	.WORD L365          ;  LINK TO CMOVE
+USTAR	.WORD *+2
+	LDA 2,X
+	STA N
+	STY 2,X
+	LDA 3,X
+	STA N+1
+	STY 3,X
+	LDY #16     for 16 bits
+L396	ASL 2,X
+	ROL 3,X
+	ROL 0,X
+	ROL 1,X
+	BCC L411
+	CLC
+	LDA N
+	ADC 2,X
+	STA 2,X
+	LDA N+1
+	ADC 3,X
+	STA 3,X
+	LDA #0
+	ADC 0,X
+	STA 0,X
+L411	DEY
+	BNE L396
+	JMP NEXT
+;
+;                             U/
+;                             SCREEN 24 LINE 1
+;
+L418	.BYTE $82,'U',$AF
+	.WORD L386          ;  LINK TO U*
+USLAS	.WORD *+2
+	LDA 4,X
+	LDY 2,X
+	STY 4,X
+	ASL A
+	STA 2,X
+	LDA 5,X
+	LDY 3,X
+	STY 5,X
+	ROL A
+	STA 3,X
+	LDA #16     for 16 bits
+	STA N
+L433	ROL 4,X
+	ROL 5,X
+	SEC
+	LDA 4,X
+	SBC 0,X
+	TAY
+	LDA 5,X
+	SBC 1,X
+	BCC L444
+	STY 4,X
+	STA 5,X
+L444	ROL 2,X
+	ROL 3,X
+	DEC N
+	BNE L433
+	JMP POP
+;
+;                             AND
+;                             SCREEN 25 LINE 2
+;
+L453	.BYTE $83,'AN',$C4
+	.WORD L418          ;  LINK TO U/
+ANDD	.WORD *+2
+	LDA 0,X
+	AND 2,X
+	PHA
+	LDA 1,X
+	AND 3,X
+;
+BINARY	INX
+	INX
+	JMP PUT
+;
+;                             OR
+;                             SCREEN 25 LINE 7
+;
+L469	.BYTE $82,'O',$D2
+	.WORD L453          ;  LINK TO AND
+OR	.WORD *+2
+	LDA 0,X
+	ORA 2,X
+	PHA
+	LDA 1,X
+	ORA 3,X
+	INX
+	INX
+	JMP PUT
+;
+;                             XOR
+;                             SCREEN 25 LINE 11
+;
+L484	.BYTE $83,'XO',$D2
+	.WORD L469          ;  LINK TO OR
+XOR	.WORD *+2
+	LDA 0,X
+	EOR 2,X
+	PHA
+	LDA 1,X
+	EOR 3,X
+	INX
+	INX
+	JMP PUT
+;
+;                             SP@
+;                             SCREEN 26 LINE 1
+;
+L499	.BYTE $83,'SP',$C0
+	.WORD L484          ;  LINK TO XOR
+SPAT	.WORD *+2
+	TXA
+;
+PUSH0A	PHA
+	LDA #0
+	JMP PUSH
+;
+;                             SP!
+;                             SCREEN 26 LINE 5
+;
+L511	.BYTE $83,'SP',$A1
+	.WORD L499          ;  LINK TO SP@
+SPSTO	.WORD *+2
+	LDY #6
+	LDA (UP),Y  load data stack pointer (X-reg)
+	TAX         silent user variable S0.
+	JMP NEXT
+;
+;                             RP!
+;                             SCREEN 26 LINE 8
+;
+L522	.BYTE $83,'RP',$A1
+	.WORD L511          ;  LINK TO SP!
+RPSTO	.WORD *+2
+	STX XSAVE    load return stack pointer
+	LDY #8       (machine stack pointer) from
+	LDA (UP),Y   silent user variable R0.
+	TAX
+	TXS
+	LDX XSAVE
+	JMP NEXT
+;
+;                             ;S
+;                             SCREEN 26 LINE 12
+;
+L536	.BYTE $82,';',$D3
+	.WORD L522          ;  LINK TO RP!
+SEMIS	.WORD *+2
+	PLA
+	STA IP
+	PLA
+	STA IP+1
+	JMP NEXT
+;
+;                             LEAVE
+;                             SCREEN 27 LINE 1
+;
+L548	.BYTE $85,'LEAV',$C5
+	.WORD L536          ;  LINK TO ;S
+LEAVE	.WORD *+2
+	STX XSAVE
+	TSX
+	LDA $101,X
+	STA $103,X
+	LDA $102,X
+	STA $104,X
+	LDX XSAVE
+	JMP NEXT
+;
+;                             >R
+;                             SCREEN 27 LINE 5
+;
+L563	.BYTE $82,'>',$D2
+	.WORD L548          ;  LINK TO LEAVE
+TOR	.WORD *+2
+	LDA 1,X      move high byte
+	PHA
+	LDA 0,X      then low byte
+	PHA          to return stack
+	INX
+	INX          popping off data stack
+	JMP NEXT
+;
+;                             R>
+;                             SCREEN 27 LINE 8
+;
+L577	.BYTE $82,'R',$BE
+	.WORD L563          ;  LINK TO >R
+RFROM	.WORD *+2
+	DEX          make room on data stack
+	DEX
+	PLA          high byte
+	STA 0,X
+	PLA          then low byte
+	STA 1,X      restored to data stack
+	JMP NEXT
+;
+;                             R
+;                             SCREEN 27 LINE 11
+;
+L591	.BYTE $81,$D2
+	.WORD L577          ;  LINK TO R>
+R	.WORD *+2
+	STX XSAVE
+	TSX          address return stack.
+	LDA $101,X   copy bottom value
+	PHA          to data stack.
+	LDA $102,X
+	LDX XSAVE
+	JMP PUSH
+;
+;                             0=
+;                             SCREEN 28 LINE 2
+;
+L605	.BYTE $82,'0',$BD
+	.WORD L591          ;  LINK TO R
+ZEQU	.WORD *+2
+	LDA 0,X
+	ORA 1,X
+	STY 1,X
+	BNE L613
+	INY
+L613	STY 0,X
+	JMP NEXT
+;
+;                             0<
+;                             SCREEN 28 LINE 6
+;
+L619	.BYTE $82,'0',$BC
+	.WORD L605          ;  LINK TO 0=
+ZLESS	.WORD *+2
+	ASL 1,X
+	TYA
+	ROL A
+	STY 1,X
+	STA 0,X
+	JMP NEXT
+;
+;
+;                             +
+;                             SCREEN 29 LINE 1
+;
+L632	.BYTE $81,$AB
+	.WORD L619          ;  LINK TO V-ADJ
+PLUS	.WORD *+2
+	CLC
+	LDA 0,X
+	ADC 2,X
+	STA 2,X
+	LDA 1,X
+	ADC 3,X
+	STA 3,X
+	INX
+	INX
+	JMP NEXT
+;
+;                             D+
+;                             SCREEN 29 LINE 4
+;
+L649	.BYTE $82,'D',$AB
+	.WORD L632          ;  LINK TO +
+DPLUS	.WORD *+2
+	CLC
+	LDA 2,X
+	ADC 6,X
+	STA 6,X
+	LDA 3,X
+	ADC 7,X
+	STA 7,X
+	LDA 0,X
+	ADC 4,X
+	STA 4,X
+	LDA 1,X
+	ADC 5,X
+	STA 5,X
+	JMP POPTWO
+;
+;                             MINUS
+;                             SCREEN 29 LINE 9
+;
+L670	.BYTE $85,'MINU',$D3
+	.WORD L649          ;  LINK TO D+
+MINUS	.WORD *+2
+	SEC
+	TYA
+	SBC 0,X
+	STA 0,X
+	TYA
+	SBC 1,X
+	STA 1,X
+	JMP NEXT
+;
+;                             DMINUS
+;                             SCREEN 29 LINE 12
+;
+L685	.BYTE $86,'DMINU',$D3
+	.WORD L670          ;  LINK TO MINUS
+DMINU	.WORD *+2
+	SEC
+	TYA
+	SBC 2,X
+	STA 2,X
+	TYA
+	SBC 3,X
+	STA 3,X
+	JMP MINUS+3
+;
+;                             OVER
+;                             SCREEN 30 LINE 1
+;
+L700	.BYTE $84,'OVE',$D2
+	.WORD L685          ;  LINK TO DMINUS
+OVER	.WORD *+2
+	LDA 2,X
+	PHA
+	LDA 3,X
+	JMP PUSH
+;
+;                             DROP
+;                             SCREEN 30 LINE 4
+;
+L711	.BYTE $84,'DRO',$D0
+	.WORD L700          ;  LINK TO OVER
+DROP	.WORD POP
+;
+;                             SWAP
+;                             SCREEN 30 LINE 8
+;
+L718	.BYTE $84,'SWA',$D0
+	.WORD L711          ;  LINK TO DROP
+SWAP	.WORD *+2
+	LDA 2,X
+	PHA
+	LDA 0,X
+	STA 2,X
+	LDA 3,X
+	LDY 1,X
+	STY 3,X
+	JMP PUT
+;
+;                             DUP
+;                             SCREEN 30 LINE 12
+;
+L733	.BYTE $83,'DU',$D0
+	.WORD L718          ;  LINK TO SWAP
+DUP	.WORD *+2
+	LDA 0,X
+	PHA
+	LDA 1,X
+	JMP PUSH
+;
+;                             +!
+;                             SCREEN 31 LINE 2
+;
+L744	.BYTE $82,'+',$A1
+	.WORD L733          ;  LINK TO DUP
+PSTOR	.WORD *+2
+	CLC
+	LDA (0,X)    fetch 16-bit value addressed
+	ADC 2,X      by bottom of stack, adding to
+	STA (0,X)    second item on stack, and
+	INC 0,X      return to memory.
+	BNE L754
+	INC 1,X
+L754	LDA (0,X)
+	ADC 3,X
+	STA (0,X)
+	JMP POPTWO
+;
+;                             TOGGLE
+;                             SCREEN 31 LINE 7
+;
+L762	.BYTE $86,'TOGGL',$C5
+	.WORD L744          ;  LINK TO + !
+TOGGL	.WORD *+2
+	LDA (2,X)    complement bits in memory address
+	EOR 0,X      second on stack, by pattern
+	STA (2,X)    on bottom of stack.
+	JMP POPTWO
+;
+;                             @
+;                             SCREEN 32 LINE 1
+;
+L773	.BYTE $81,$C0
+	.WORD L762          ;  LINK TO TOGGLE
+AT	.WORD *+2
+	LDA (0,X)
+	PHA
+	INC 0,X
+	BNE L781
+	INC 1,X
+L781	LDA (0,X)
+	JMP PUT
+;
+;                             C@
+;                             SCREEN 32 LINE 5
+;
+L787	.BYTE $82,'C',$C0
+	.WORD L773          ;  LINK TO @
+CAT	.WORD *+2
+	LDA (0,X)    fetch byte addressed by bottom
+	STA 0,X      of stack to stack, zeroing
+	STY 1,X      the high byte.
+	JMP NEXT
+;
+;                             !
+;                             SCREEN 32 LINE 8
+;
+L798	.BYTE $81,$A1
+	.WORD L787          ;  LINK TO C@
+STORE	.WORD *+2
+	LDA 2,X
+	STA (0,X)    store second 16-bit value on stack
+	INC 0,X      to memory as addresses by
+	BNE L806
+	INC 1,X      bottom of stack.
+L806	LDA 3,X
+	STA (0,X)
+	JMP POPTWO
+;
+;                             C!
+;                             SCREEN 32 LINE 12
+;
+L813	.BYTE $82,'C',$A1
+	.WORD L798          ;  LINK TO !
+CSTOR	.WORD *+2
+	LDA 2,X
+	STA (0,X)
+	JMP POPTWO
+;
+;                             :
+;                             SCREEN 33 LINE 2
+;
+L823	.BYTE $C1,$BA
+	.WORD L813          ;  LINK TO C!
+COLON	.WORD DOCOL
+	.WORD QEXEC
+	.WORD SCSP
+	.WORD CURR
+	.WORD AT
+	.WORD CON
+	.WORD STORE
+	.WORD CREAT
+	.WORD RBRAC
+	.WORD PSCOD
+;
+DOCOL	LDA IP+1
+	PHA
+	LDA IP
+	PHA
+	JSR TCOLON     Mark the start of a traced : def.
+	CLC
+	LDA W
+	ADC #2
+	STA IP
+	TYA
+	ADC W+1
+	STA IP+1
+	JMP NEXT
+;
+;
+;                             ;
+;                             SCREEN 33 LINE 9
+;
+L853	.BYTE $C1,$BB
+	.WORD L823          ;  LINK TO :
+	.WORD DOCOL
+	.WORD QCSP
+	.WORD COMP
+	.WORD SEMIS
+	.WORD SMUDG
+	.WORD LBRAC
+	.WORD SEMIS
+;
+;
+;                             CONSTANT
+;                             SCREEN 34 LINE 1
+;
+L867	.BYTE $88,'CONSTAN',$D4
+	.WORD L853          ;  LINK TO ;
+CONST	.WORD DOCOL
+	.WORD CREAT
+	.WORD SMUDG
+	.WORD COMMA
+	.WORD PSCOD
+;
+DOCON	LDY #2
+	LDA (W),Y
+	PHA
+	INY
+	LDA (W),Y
+	JMP PUSH
+;
+;                             VARIABLE
+;                             SCREEN 34 LINE 5
+;
+L885	.BYTE $88,'VARIABL',$C5
+	.WORD L867          ;  LINK TO CONSTANT
+VAR	.WORD DOCOL
+	.WORD CONST
+	.WORD PSCOD
+;
+DOVAR	CLC
+	LDA W
+	ADC #2
+	PHA
+	TYA
+	ADC W+1
+	JMP PUSH
+;
+;
+;
+.FILE FOR2-1
+; LINK TO NEXT FILE

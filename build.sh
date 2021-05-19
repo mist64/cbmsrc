@@ -161,3 +161,4 @@ build1 MATHPACK mathpack
 build1 KICKMAN kickman
 build1 OMEGA omega
 build1 WIZARD wizard
+build1 FIG FOR1-1

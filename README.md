@@ -120,6 +120,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [MATHPACK](MATHPACK)                                         | 1979 | CBM2 Math Package |
 | [MONITOR_C64](MONITOR_C64)                                   | 1982 | RAM-based Monitor for C64 |
 | [DISK_MONITOR](DISK_MONITOR)                                 | 1980 | Monitor extension for PET |
+| [FIG](FIG)                                                   | 1980 | fig-FORTH |
 
 ## Software: Resident Assembler
 
@@ -439,6 +440,12 @@ The KIM-1 "KIMATH" math package (1976). Generated from the [original LST printou
 
 The TIM (Terminal Interface Monitor) ROM (6530-004). Reconstructed from the [manual](http://archive.6502.org/books/mos_tim_terminal_interface_monitor_manual_mar_1976.pdf) by Martin Hoffmann-Vetter.
 
+## FIG
+
+fig-FORTH for 6502, Rel 1.1 (1980) for various platforms. Converted from the [LST](https://ksquiggle.neocities.org/ff6502.htm).
+
+This is not MOS/Commodore source code, but it was developed with some version of the Resident Assembler.
+
 ## KICKMAN
 
 The game "Kickman" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
@@ -450,7 +457,6 @@ The game "Omega Race" (1982) for the Ultimax. Reconstructed from the [BSO-format
 ## WIZARD
 
 The game "Wizard of Wor" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
-
 
 # Credits
 
