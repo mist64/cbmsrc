@@ -62,6 +62,11 @@ build1 MONITOR_AIM65 pa00-j001a
 build1 TIM tim.asm
 build1 KIMATH kimath.asm
 
+build1 KERNAL_PET_1.0_REC ossrc
+build1 KERNAL_PET_2.0_REC ossrc
+build1 KERNAL_PET_4.0_1979-10-23 ossrc
+build1 KERNAL_PET_4.0_REC ossrc
+
 build1 KERNAL_VIC_04 kernal
 
 build1 KERNAL_C64_01 kernal
@@ -88,6 +93,14 @@ build1 EDITOR_CBM2_1982-11-19 sced.lib
 build1 EDITOR_CBM2_1983-05-31 sced.lib
 
 build1 EDITOR_PET_EURO edtlist
+
+build1 BASIC_PET_V1_REC bassrc
+build1 BASIC_PET_V1_REC bassrc
+build1 BASIC_PET_V1R_REC bassrc
+build1 BASIC_PET_V2_REC bassrc
+build1 BASIC_PET_V4_1979-07-23 bassrc
+build1 BASIC_PET_V4_REC bassrc
+build1 BASIC_PET_V4R_REC bassrc
 
 build1 BASIC_VIC basic
 

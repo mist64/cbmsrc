@@ -16,7 +16,17 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
-| [BASIC_PET2001](BASIC_PET2001)                               | 1978 | Microsoft BASIC V2 (MACRO-11) |
+| [BASIC_PET_V1_REC](BASIC_PET_V1_REC)                         | 1977 |
+| [BASIC_PET_V1R_REC](BASIC_PET_V1R_REC)                       | 1977 |
+| [BASIC_PET_V2_MICROSOFT](BASIC_PET_V2_MICROSOFT)             | 1978 | Microsoft BASIC V2 (MACRO-11) |
+| [BASIC_PET_V2_REC](BASIC_PET_V2_REC)                         | 1978 |
+| [BASIC_PET_V4_1979-07-23](BASIC_PET_V4_1979-07-23)           | 1979 |
+| [BASIC_PET_V4_REC](BASIC_PET_V4_REC)                         | 1980 |
+| [BASIC_PET_V4R_REC](BASIC_PET_V4R_REC)                       | 1980 |
+| [KERNAL_PET_1.0_REC](KERNAL_PET_1.0_REC)                     | 1977 |
+| [KERNAL_PET_2.0_REC](KERNAL_PET_2.0_REC)                     | 1978 |
+| [KERNAL_PET_4.0_1979-10-23](KERNAL_PET_4.0_1979-10-23)       | 1979 |
+| [KERNAL_PET_4.0_REC](KERNAL_PET_4.0_REC)                     | 1980 |
 | [EDITOR_PET_EURO](EDITOR_PET_EURO)                           | 1981 | European editor for CBM 8032 |
 
 ## CBM2
@@ -149,6 +159,23 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 ## Descriptions
 
+### BASIC_PET_*, KERNAL_PET_*
+
+The PET BASIC and KERNAL sources in different versions (197-1980). Reconstructed by Martin Hoffmann-Vetter.
+
+* BASIC_PET_V4_1979-07-23 and KERNAL_PET_4.0_1979-10-23 were OCRed and reconstructed from the [LST printouts](https://www.retro-commodore.eu/pet-tech/) of a pre-V4 version.
+* The other versions were reconstructed from this to match the corresponding binaries:
+	* BASIC_PET_V1_REC: 901439-01, 901439-05, 901439-02, 901439-06, 901439-03
+	* BASIC_PET_V1R_REC: 901439-09, 901439-05, 901439-02, 901439-06, 901439-03
+	* BASIC_PET_V2_REC: 901465-01, 901465-02, 901447-24
+	* BASIC_PET_V4_REC: 901465-19, 901465-20, 901465-21
+	* BASIC_PET_V4R_REC: 901465-23, 901465-20, 901465-21
+	* KERNAL_PET_1.0_REC: 901439-03, 901439-04, 901439-07
+	* KERNAL_PET_2.0_REC: 901447-24, 901465-03
+	* KERNAL_PET_4.0_REC: 901465-21, 901447-29, 901465-22
+
+Note that BASIC V1, V1R and V2 were built by Microsoft (see BASIC_PET_V2_MICROSOFT), and the binary was sent to Commodore. After that, Commodore moved BASIC development in-house and converted Microsoft's V2 source into MDT650 Resident Assembler format. These reconstructed versions of V1 and V1R in "Resident Assembler" format therefore never existed and have only been produced to allow for comparisons against BASIC V2, V4 and V4R (which were built by Commodore with the Resident Assembler).
+
 ### BASIC_VIC
 
 The Commodore VIC-20 BASIC source (901486-01). Extracted from basic.src from [vic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/vic20/vic_src.tar.gz) and formatted the same as the C64 BASIC source.
@@ -241,13 +268,14 @@ The Commodore 128 BASIC 7.0, KERNAL, EDITOR and MONITOR sources (1985/1986). Sou
 * KERNAL_C128_06 is 318020-06, $FF80 = 2. This version seems to have been unreleased.
 * EDITOR_C128 is the US version (318020-05), EDITOR_C128_DIN the German version (315078-03).
 
-### BASIC_PET2001
+### BASIC_PET_V2_MICROSOFT
 
-The PET 2001 BASIC source (V2, 1978).
+The PET BASIC V2 source (1978) as built by Microsoft.
 
 * This is Microsoft's original source that can also build BASIC for other systems, like OSI and Apple.
+* Microsoft built all versions up this one with its own tools and sent the binary (together with the LST) to Commodore.
 * On the PET, this was called BASIC V2, Microsoft called it V1.1.
-* It includes the "WAIT6502,1" easter egg (symbol "ZSTORDO").
+* It includes the "WAIT6502,1" easter egg (symbol `ZSTORDO`).
 
 ### BASIC_CBM2_*, KERNAL_CBM2_*, EDITOR_CBM2_*
 
@@ -338,6 +366,8 @@ These are the respective directories:
 * DOS_1541C_01[_REC] is 251968-01 (1984, shipped with the 1541C)
 * DOS_1541C_02[_REC] is 251968-02 (1986, [release notes](http://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541C.251968-02.txt))
 * DOS_1541C_03[_REC] is 251968-03 (shipped with the 1541-II)
+
+(Commodore used the PET Resident Assembler to build the 1541 DOS until "&#x5f;03", and switched to the BSO assembler afterwards. All original source that has been preserved is in BSO format. To allow for better comparisons, all "&#x5f;REC" source has been formatted in the PET Resident Assembler format. So note that the "&#x5f;REC" source after "&#x5f;03" never existed in this format.)
 
 ### DOS_1551
 

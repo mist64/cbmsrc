@@ -1,0 +1,191 @@
+;**********************************
+;*                                *
+;* PET 2001 OPERATING SYSTEM      *
+;*                                *
+;* VERSION 2.0  AUGUST 2,1978     *
+;* VERSION 1.0  AUGUST 8,1977     *
+;*                                *
+;* ROMS PRODUCED: 901447-24       *
+;*                901465-03       *
+;* RECONSTR.: M.HOFFMANN-VETTER   *
+;*                                *
+;**********************************
+.SKI
+OFFSET	=$8000          ;FOR *** HARD MACHINE ***
+.SKI
+; LISTING DATE ??/??/??
+.SKI
+	* =$8D
+TIME	*=*+3           ;24 HR CLOCK IN 1/60 SEC
+CINV	*=*+2           ;IRQ RAM VECTOR
+CBINV	*=*+2           ;BRK INSTR RAM VECTOR
+NMINV	*=*+2           ;NMI RAM VECTOR
+SATUS	*=*+1           ;OPERATION STATUS BYTE
+LSTX	*=*+1           ;INDEX TO CHAR IN KEYSCAN
+SFST	*=*+1           ;KEYBOARD SHIFT FLAG
+CRFAC	*=*+2           ;CORRECTION FACTOR TIME
+STKEY	*=*+1           ;STOP KEY FLAG
+SVXT	*=*+1           ;TEMPORARY
+VERCK	*=*+1           ;LOAD OR VERIFY FLAG
+NDX	*=*+1           ;INDEX TO KEYD QUEUE
+RVS	*=*+1           ;REVERSE FIELD ENABLED
+C3P0	*=*+1           ;CASSETTE SERVQ CONSTANT
+INDX	*=*+1           ;
+SNSW	*=*+1           ;CASSETTE....
+LSXP	*=*+1           ;START GF SCREEN INPUT
+LSTP	*=*+1
+BSOUR	*=*+1           ;CHAR BUFFER FOR IEEE
+SFDX	*=*+1           ;SHIFT MODE FOR PRINT
+BLNSW	*=*+1           ;CURSOR BLINK ENABLE
+BLNCT	*=*+1           ;COUNTER TO FLIP CURSORBREAK
+GDBLN	*=*+1           ;O0LD CHAR BEFORE BLINK
+BLNON	*=*+1           ;ON/OFF BLINK FLAG
+SYNO	*=*+1           ;CASSETTE SYNC #
+CRSW	*=*+1           ;INPUT/GET FLAG
+XSAV	*=*+1           ;TEMP FOR BASIN
+LDTND	*=*+1           ;INDEX TO LOGICAL FILE
+DFLTN	*=*+1           ;DEFAULT INPUT DEVICE #
+DFLTO	*=*+1           ;DEFAULT QUTPUT DEVICE #
+PRTY	*=*+1           ;CASSETTE PARITY
+DPSW	*=*+1           ;CASSETTE DIPOLE SWITCH
+WSW	*=*+1           ;CASSETE WRITE ENABLE
+SAVX
+T1	*=*+1           ;TEMPORARY 1
+RCNT
+TMPC
+T2	*=*+1           ;TEMPORARY 2
+TMPC2
+T3	*=*+1           ;TEMPORARY 3
+PCNTR	*=*+1           ;CASSETTE STUFF
+PTCH	*=*+1
+FIRT	*=*+1
+CNTDN	*=*+1           ;CASSETTE SYNC CQUNTDOWN
+BUFPT	*=*+2           ;POINTER TO ACTIVE CASSETTE BUFFE
+SHCNL	*=*+1           ;CASSETTE SHORT COUNT
+RER	*=*+1           ;CASSETTE READ ERROR
+REZ	*=*+1           ;CASSETE READING ZEROES
+PTR1	*=*+1           ;CASSETTE ERROR PASS1
+PTR2	*=*+1           ;CASSETTE ERROR PASS2
+RDFLG	*=*+1           ;CASSETTE READ MODE
+SHCNH	*=*+1           ;CASSETTE SHORT CNT
+PNT	*=*+1
+POINT	*=*+1
+PNTR	*=*+1
+SAL	*=*+1
+SAH	*=*+1
+EAL	*=*+1
+EAH	*=*+1
+CMP0	*=*+1
+TEMP	*=*+1
+QTSW	*=*+1
+SNSW1	*=*+1
+DIFF	*=*+1
+PRP	*=*+1
+FNLEN	*=*+1           ;LENGTH CURRENT FILE N STR
+LA	*=*+1           ;CURRENT FILE LOGICAL ADDR
+SA	*=*+1           ;CURRENT FILE 2ND ADDR
+FA	*=*+1           ;CURRENT FILE PRIMARY ADDR
+LNMX	*=*+1
+TBUF	*=*+2
+TBLX	*=*+1
+DATA	*=*+1
+FNADR	*=*+2           ;ADDR CURRENT FILE NAME STR
+INSRT	*=*+1
+OCHAR	*=*+1
+WRAP
+FSBLK	*=*+1           ;CASSETTE READ BLOCK COUNT
+MYCH	*=*+1
+LDTB1	*=*+25
+CAS1	*=*+1
+CAS2	*=*+1
+TMP0
+STAL	*=*+1
+STAH	*=*+1
+TMP2	*=*+2
+	*=$100
+BAD	*=*+1
+	*=$200
+BUF	;BASIC INPUT BUFFER
+;VIRTUAL REGS FOR MACHINE LANGUAGE MONITOR
+PCH	*=*+1
+PCL	*=*+1
+FLGS	*=*+1
+ACC	*=*+1
+XR	*=*+1
+YR	*=*+1
+SP	*=*+1
+SAVNAM	;BUFFER
+INVH	*=*+1           ;USER MODIFIABLE IRQ
+INVL	*=*+1
+	*=*+72
+;TABLES FOR OPEN FILES
+LAT	*=*+10          ;LOGICAL FILE NUMBERS
+FAT	*=*+10          ;PRIMARY DEVICE NUMBERS
+SAT	*=*+10          ;SECONDARY ADDRESSES
+KEYD	*=*+10
+	*=*+1
+TAPE1	*=*+192
+TAPE2	*=*+192         ;192 BYTES RESERVED
+;RAM VECTOR FOR USER INTERP OF MONITOR CMDS
+USRCMD	*=*+2
+	*=$E810
+PIAL	*=*+1
+PIAL1	*=*+1
+PIAK	*=*+1
+PIAS	*=*+1
+	*=$E820
+IEEI	*=*+1
+IEEIS	*=*+1
+IEEO	*=*+1
+IEEOS	*=*+1
+	*=$E840
+PIA	*=*+1
+SYNC	*=*+1
+P2DB	*=*+1
+P2DA	*=*+1
+TIL	*=*+1
+TIH	*=*+1
+TILL	*=*+1
+TILH	*=*+1
+T2L	*=*+1
+T2H	*=*+1
+SR	*=*+1
+ACR	*=*+1
+PCR	*=*+1
+IFR	*=*+1
+IER	*=*+1
+SYNC1	*=*+1
+.SKI 5
+;CONSTANTS FROM BASIC
+CHANL	=$000E
+READY	=$C389+OFFSET-$8000
+INIT	=$E116+OFFSET-$8000
+FRMNUM	=$CC8B+OFFSET-$8000
+GETADR	=$D6D2+OFFSET-$8000
+LINNUM	=$0011
+TXTPTR	=$0077
+FINI	=$C439+OFFSET-$8000
+STXTPT	=$C5A7+OFFSET-$8000
+FLOAD	=$C590+OFFSET-$8000
+VARTAB	=$002A
+GETBYT	=$D678+OFFSET-$8000
+SNERR	=$CE03+OFFSET-$8000
+CHRGOT	=$0076
+TYPERR	=$C377+OFFSET-$8000
+CHKCOM	=$CDF8+OFFSET-$8000
+FRESTR	=$D57D+OFFSET-$8000
+FRMEVL	=$CC9F+OFFSET-$8000
+CHRGET	=$0070
+BSTOP	=$C73F+OFFSET-$8000 ;BASIC SYMB STOP
+INDEX1	=$001F
+TXTTAB	=$0028
+LASTWR	=$E1DE+OFFSET-$8000
+.SKI 5
+;TAPE BLOCK TYPES
+EOT=5
+BLF=1
+BDF=2
+BDFH=4
+BUFSZ=192
+CR	=$D
+.FILE OA1SRC
