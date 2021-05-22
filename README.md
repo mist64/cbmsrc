@@ -69,6 +69,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [BASIC_TED](BASIC_TED)                                       | 1984 | 318006-01 |
 | [KERNAL_TED_04](KERNAL_TED_04)                               | 1984 | 318004-04 (PAL), 318005-04 (NTSC) |
 | [KERNAL_TED_05](KERNAL_TED_05)                               | 1984 | 318004-05 (PAL), 318005-05 (NTSC) |
+| [CHARSET_TED](CHARSET_TED)                                   | 1984 |  |
 
 ## C128
 
@@ -81,7 +82,8 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [KERNAL_C128_03](KERNAL_C128_03)                             | 1985 | 318020-03 |
 | [KERNAL_C128_05](KERNAL_C128_05)                             | 1985 | 318020-05 |
 | [KERNAL_C128_06](KERNAL_C128_06)                             | 1988 | 318020-06 |
-| [MONITOR_C128](MONITOR_C128)                                 | 1985 |
+| [MONITOR_C128](MONITOR_C128)                                 | 1985 | |
+| [CHARSET_C128_NATIONAL](CHARSET_C128_NATIONAL)               | 1985 | |
 
 ## Disk Drives
 
@@ -295,6 +297,14 @@ The files have been converted to LF line breaks and LST-style indenting.
 ### EDITOR_PET_EURO
 
 The "CBM 8032 EURO SCREEN EDITOR 4V2E (E-901474-03)" ROM. Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
+### CHARSET_TED
+
+The Character ROM for the TED series (Plus/4, C16 and C116; 1984). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
+
+### CHARSET_C128_NATIONAL
+
+The set of national Character ROMs for the C128 (1985): Denmark (325175-01), Finland/Sweden (325181-01), France/Belgium/Italy (325167-01), Germany/Belgium (315079-01), Norway (325178-01), Spain (325171-01), Switzerland (325173-01).
 
 ### MONITOR_PET_ADDON
 
