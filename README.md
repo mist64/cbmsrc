@@ -137,8 +137,8 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
-| [ASSEMBLER_AIM65](ASSEMBLER_AIM65)                           | 1978 | 4 KB, heavily optimized |
-| [ASSEMBLER_PET](ASSEMBLER_PET)                               | 197? | ROM 2 only (undated) |
+| [ASSEMBLER_AIM65_REC](ASSEMBLER_AIM65_REC)                   | 1978 | 4 KB, heavily optimized |
+| [ASSEMBLER_PET_REC](ASSEMBLER_PET_REC)                       | 197? | ROM 2 only (undated) |
 | [ASSEMBLER_PET_V112779_REC](ASSEMBLER_PET_V112779_REC)       | 1979 | ROM 2 only, adds mul/div, error messages |
 | [ASSEMBLER_PET_V121579_REC](ASSEMBLER_PET_V121579_REC)       | 1979 | ROM 2/4, adds `.IFN`/`.IFE` |
 | [ASSEMBLER_PET_V090580_A_REC](ASSEMBLER_PET_V090580_A_REC)   | 1980 | adds XREF support |
@@ -427,7 +427,7 @@ The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII charact
 
 A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manual](http://www.zimmers.net/anonftp/pub/cbm/programming/b/Commodore_700_Reference_Manual.pdf). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
 
-### ASSEMBLER_AIM65
+### ASSEMBLER_AIM65_REC
 
 The AIM-65 version of the resident assembler (ROM R3224; 1978). Reconstructed from ASSEMBLER_TED.
 
@@ -437,7 +437,7 @@ This is a reconstruction of the oldest known version of the Resident Assembler. 
 
 Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_TED, based on work by Martin Hoffmann-Vetter.
 
-* ASSEMBLER_PET (undated, [6696 bytes](docs/cbmasm/resident_assembler_Vxxxxxx_pet.prg)); for BASIC 2
+* ASSEMBLER_PET_REC (undated, [6696 bytes](docs/cbmasm/resident_assembler_Vxxxxxx_pet.prg)); for BASIC 2
 * ASSEMBLER_PET_V112779_REC (1979-11-27, [7426 bytes](docs/cbmasm/resident_assembler_V112779_pet.prg)); for BASIC 2
 * ASSEMBLER_PET_V121579_REC (1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_pet.prg) for BASIC 4; and with `BASIC4=0`: 1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_alt_pet.prg) for BASIC 2)
 * ASSEMBLER_PET_V090580_A_REC (1980-09-05, [7858 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg))
