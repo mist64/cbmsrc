@@ -437,11 +437,11 @@ This is a reconstruction of the oldest known version of the Resident Assembler. 
 
 Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_TED, based on work by Martin Hoffmann-Vetter.
 
-* ASSEMBLER_PET_REC (undated, [6696 bytes](docs/cbmasm/resident_assembler_Vxxxxxx_pet.prg)); for BASIC 2
-* ASSEMBLER_PET_V112779_REC (1979-11-27, [7426 bytes](docs/cbmasm/resident_assembler_V112779_pet.prg)); for BASIC 2
-* ASSEMBLER_PET_V121579_REC (1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_pet.prg) for BASIC 4; and with `BASIC4=0`: 1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_alt_pet.prg) for BASIC 2)
-* ASSEMBLER_PET_V090580_A_REC (1980-09-05, [7858 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg))
-* ASSEMBLER_PET_V090580_B_REC (1980-09-05, [7938 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_pet.prg); and with `LINES=$40`: 1980-09-05, [7822 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt_pet.prg))
+* ASSEMBLER_PET_REC (undated, [6696 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_Vxxxxxx_pet.prg)); for BASIC 2
+* ASSEMBLER_PET_V112779_REC (1979-11-27, [7426 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V112779_pet.prg)); for BASIC 2
+* ASSEMBLER_PET_V121579_REC (1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_BASIC4_pet.prg) for BASIC 4; and with `BASIC4=0`: 1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_BASIC2_pet.prg) for BASIC 2)
+* ASSEMBLER_PET_V090580_A_REC (1980-09-05, [7858 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_a_pet.prg))
+* ASSEMBLER_PET_V090580_B_REC (1980-09-05, [7938 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_b1_pet.prg); and with `LINES=$40`: 1980-09-05, [7822 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_b2_pet.prg))
 * ASSEMBLER_PET_V102780_REC (1980-10-27, [8049 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V102780_pet.prg))
 * ASSEMBLER_PET_V26MAR82RR_REC (1982-03-26, [7982 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V26MAR82RR_pet.prg)); hacked V090580_B, non-mainline
 
