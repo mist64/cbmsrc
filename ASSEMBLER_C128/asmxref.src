@@ -1,0 +1,402 @@
+	.page
+	.subttl  asmxref
+
+;	*********************************
+;	*				*
+;	*	cross  reference	*
+;	*				*
+;	*********************************
+
+
+cross	lda #0		;xref start
+	sta inpmax
+	sta inpmax+1
+
+	ldy #xn21-1	;symbol file prep
+10$	lda xnref+1,y
+	sta wrkfnm,y
+	dey
+	bpl 10$
+
+	jsr clear_io
+	jsr page_xr	;start a new page
+
+	ldx xunit	;open disk xref file #8 (input)
+	lda #8		;la
+	tay		;sa
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>xnlab1
+	ldx #<xnlab1
+	lda #xn111
+	jsr setnam
+	jsr open
+	jsr fitest	;test for input
+
+xrf100	lda inpmax	;reset input address area
+	ldy inpmax+1
+	sta inpmin
+	sty inpmin+1
+	clc
+	lda inpmin
+	adc #<wrksiz
+	sta inpmax
+	lda inpmin+1
+	adc #>wrksiz
+	sta inpmax+1
+	lda #<worka
+	ldy #>worka
+	sta baspnt
+	sty baspnt+1
+	lda #<workb
+	ldy #>workb
+	sta toppnt
+	sty toppnt+1
+
+	lda baspnt	;clear up work area
+	ldy baspnt+1
+	sta pnt1
+	sty pnt1+1
+
+	ldy #0
+10$	tya
+	sta (pnt1),y
+	inc pnt1
+	bne 20$
+	inc pnt1+1
+20$	lda pnt1+1
+	cmp toppnt+1
+	bne 10$
+	lda pnt1
+	cmp toppnt
+	bne 10$
+
+	ldy #xn21-1	;set new filename
+30$	lda wrkfnm,y
+	sta wflnm1,y
+	dey
+	bpl 30$
+
+	lda #'R'
+	sta wflnm1+17	;Read
+	ldx #4
+40$	inc wrkfnm+5,x
+	lda wrkfnm+5,x
+	cmp #':'
+	bne 50$
+	lda #'0'
+	sta wrkfnm+5,x
+	dex
+	bne 40$
+
+50$	ldx xunit	;open disk xref file #9 (input)
+	lda #9		;la
+	tay		;sa
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>wflnm1
+	ldx #<wflnm1
+	lda #xn21-1
+	jsr setnam
+	jsr open
+	jsr fitest	;test for input
+
+	ldx xunit	;open disk xref file #10 (output)
+	lda #10		;la
+	tay		;sa
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>wrkfnm
+	ldx #<wrkfnm
+	lda #xn21-1
+	jsr setnam
+	jsr open
+	jsr fdtest	;test for output
+
+	lda #0
+	sta stsave
+inpbgn	ldx #9
+	jsr chkin_x
+	jsr basin
+	sta zbuf
+	jsr basin
+	sta zbuf+1
+	jsr basin
+	sta zbuf+2
+	jsr basin
+	sta zbuf+3
+	lda status
+	sta stsave
+	sec
+	lda zbuf
+	sbc inpmin
+	lda zbuf+1
+	sbc inpmin+1
+	bcc 10$
+	lda zbuf
+	sbc inpmax
+	lda zbuf+1
+	sbc inpmax+1
+	bcc sort
+
+10$	jsr clear_io	;range over
+	ldx #10
+	stx chan
+	jsr ckout
+	lda zbuf
+	jsr bsout	;symbol # (low)
+	lda zbuf+1
+	jsr bsout	;symbol # (high)
+	lda zbuf+2
+	jsr bsout	;line # (low)
+	lda zbuf+3
+	jsr bsout	;line # (high)
+	jmp sort10
+
+; sort
+
+sort	sec
+	lda zbuf
+	sbc inpmin
+	sta pnt1
+	lda zbuf+1
+	sbc inpmin+1
+	asl pnt1
+	rol a
+	asl pnt1
+	rol a
+	sta pnt1+1
+	clc
+	lda pnt1
+	adc baspnt
+	sta pnt1
+	lda pnt1+1
+	adc baspnt+1
+	sta pnt1+1
+	ldy #1
+	lda (pnt1),y
+	bne 10$
+	dey
+	lda toppnt
+	sta (pnt1),y
+	iny
+	lda toppnt+1
+	sta (pnt1),y
+	iny
+	lda toppnt
+	sta (pnt1),y
+	iny
+	lda toppnt+1
+	sta (pnt1),y
+	bne 20$
+
+10$	dey
+	lda (pnt1),y
+	sta pnt2
+	iny
+	lda (pnt1),y
+	sta pnt2+1
+	lda toppnt+1
+	sta (pnt1),y
+	sta (pnt2),y
+	dey
+	lda toppnt
+	sta (pnt1),y
+	sta (pnt2),y
+20$	ldy #1
+	lda #0
+	sta (toppnt),y
+	iny
+	lda zbuf+2
+	sta (toppnt),y
+	iny
+	lda zbuf+3
+	sta (toppnt),y
+	clc
+	lda toppnt
+	adc #4
+	sta toppnt
+	bcc sort10
+	inc toppnt+1
+sort10	lda stsave
+	bne 10$
+	jmp inpbgn
+
+10$	lda #9
+	jsr close
+	lda #10
+	jsr close
+
+outedt	ldy #1		;edit & output xref
+	lda (baspnt),y
+	ldy #3
+	cmp (baspnt),y
+	bne 10$
+	ldy #0
+	lda (baspnt),y
+	ldy #2
+	cmp (baspnt),y
+	bne 10$
+	lda #'*'	;unreferenced symbol
+	.byte $2c
+
+10$	lda #space
+	jsr output
+	jsr blank
+
+	ldy #6
+20$	jsr xrefin	;print symbol name
+	jsr output
+	dey
+	bne 20$
+
+	jsr outcl3	;3 spaces
+	lda #'$'
+	jsr output	;print symbol value as 4-digit hex value
+	jsr xrefin
+	jsr numa
+	jsr xrefin
+	ldx status
+	stx stsave
+	jsr numa
+	jsr outcl2	;2 spaces
+
+	ldy #2
+	lda (baspnt),y
+	tax
+	iny
+	lda (baspnt),y
+	stx pnt1
+	sta pnt1+1
+	lda #0
+	sta xrfsav
+	sta xrfsav+1
+	beq 70$		;bra
+
+30$	ldy #2
+	lda (pnt1),y
+	iny
+	tax
+	cmp xrfsav
+	bne 40$
+	lda (pnt1),y
+	cmp xrfsav+1
+	beq 50$		;equal to last one
+40$	lda (pnt1),y	;output ref.
+	stx xrfsav
+	sta xrfsav+1
+
+	jsr blank	;1 space
+	ldx xrfsav
+	lda xrfsav+1
+	jsr outdec	;print line# referenced as 5-digit decimal value
+	dec ladcnt
+50$	ldy #1
+	lda (pnt1),y
+	tax
+	beq 80$
+	dey
+	lda (pnt1),y
+	sta pnt1
+	stx pnt1+1
+	lda ladcnt
+	bne 30$
+	jsr crout
+
+	ldx #7
+60$	jsr blank
+	jsr blank
+	dex
+	bne 60$
+
+70$	ldy #10
+	sty ladcnt
+	bne 30$		;bra
+
+80$	jsr crout
+	lda stsave
+	bne 110$
+	clc
+	lda baspnt
+	adc #4
+	sta baspnt
+	bcc 90$
+	inc baspnt+1
+90$	sec
+	lda baspnt
+	sbc #<workb
+	lda baspnt+1
+	sbc #>workb
+	bcs 100$
+	jmp outedt
+
+100$	jsr clear_io
+	jmp xrf100
+
+
+
+110$	lda #8		;end of cross reference listing
+	jsr close
+	jmp clear_io
+
+
+
+xrefin	ldx #8		;read xrll0000
+	jsr chkin_x
+	jmp basin
+
+
+; output decimal value.    x=lower, a=upper
+
+outdec	stx pnt3
+	sta pnt3+1
+	lda #0
+	sta zspflg
+	ldx #4
+	stx outcnt
+10$	ldx outcnt
+	ldy #'0'
+	bne 30$
+20$	iny
+	sty zspflg
+30$	sec
+	lda pnt3
+	sbc decl,x
+	sta pnt3
+	lda pnt3+1
+	sbc dech,x
+	sta pnt3+1
+	bcs 20$
+	lda pnt3
+	adc decl,x
+	sta pnt3
+	lda pnt3+1
+	adc dech,x
+	sta pnt3+1
+	tya
+	cmp #'0'
+	bne 40$
+	ldy zspflg
+	bne 40$
+	ldx outcnt	;supress leading zeros unless last digit
+	beq 40$		;...last digit
+	lda #space
+40$	jsr output
+	dec outcnt
+	bpl 10$
+crrts	rts
+
+
+; end xref line- print <cr> & check for page full
+
+crout	jsr crlf	;print <cr>
+	inc lnct
+	lda lnct	;check for page full
+	cmp #lines
+	bcc crrts	;...still room on page
+	jmp page_xr	;...page full- form feed & print xref page header
+
+;	.end

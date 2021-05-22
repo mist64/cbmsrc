@@ -1,0 +1,782 @@
+	.page
+	.subttl  directive
+; equate and orgin processing
+
+h102	lda #$ff	;-1
+	sta jorg
+	inc icolp
+	stx ilsst	;save start of string
+	jsr nfndnb	;if rest field blank
+	bcs 20$		;non-blank found
+10$	jmp h99
+
+20$	lda icrd,x	;equate or org
+	cmp #'='
+	bne 10$
+
+h121	inc icolp	;look for operand after '='
+	jsr nfndnb
+	bcs 20$		;...got something
+	jmp h99		;...EOL: report error
+
+20$	jsr eval	;eval operand field
+	dec return
+	bmi 40$
+	bne 30$
+	lda #$11
+	ldy #3
+	jmp lts1
+
+30$	lda #$13
+	ldy #3
+	jmp lts1
+
+40$	lda jorg	;equ or org
+	beq 60$
+	lda #1		;org, expression ok
+	and overflow
+	beq 50$		;expression is >=0
+
+	ldx #0		;reset PC & wrap flag
+	stx ipc
+	stx ipc+1
+	stx wrap
+	ldx icsb	;bad expr - flag
+	lda #$21	;PC overflow error
+	ldy #$ff
+	jsr ltins
+	jmp endln
+
+50$	ldx #0
+	txa
+	tay
+	sta wrap
+	jsr ltins
+	lda iexp	;ipc = iexp
+	sta ipc+1
+	lda iexp+1
+	sta ipc
+	jmp endln
+
+; is equate
+
+60$	pla		;restore label portion
+	sta icsl	;restore length
+	ldx #5
+70$	pla
+	sta isym,x
+	dex
+	bpl 70$
+	jsr nfind
+	bcc 90$
+
+	lda knval	;see if value is the same
+	cmp iexp
+	bne 80$
+	lda knval+1
+	cmp iexp+1
+	beq 100$	;ok
+80$	ldx ilsst	;already defined
+	lda #2
+	ldy #0
+	jmp lts1
+
+90$	lda iexp
+	sta knval
+	lda iexp+1
+	sta knval+1
+	jsr nsert
+100$	jmp h990
+
+	.page
+; assembler directives *****
+; find what directive to process
+
+directive
+	lda #$14	;asm error code
+	sta ierr
+	ldx icsb	;start of directive
+	inx		;skip period
+	lda #<asmdir
+	sta tblptr
+	lda #>asmdir
+	sta tblptr+1
+	lda #3		;get length
+	sta klen
+	jsr consym	;build directive
+	dex
+
+10$	inx
+	lda icrd,x	;look for end of directive
+	beq 30$		;...EOL
+	cmp #space
+	bne 10$		;...loop until blank or EOL
+
+30$	stx icolp	;pntr to char after direct
+	lda #0		;init column to zero
+	sta j		;...fall thru to look for match
+
+	.page
+; search table of directives for match:
+; 
+;	if a  match --> indirect JMP made to process
+;	if no match --> pointer points to next valid directive in table.
+;
+;	search is done from back to front of table.
+;	.x (numasm) --> number of directives to check
+;	   (tblptr) --> pointer to current directive in table
+
+	ldx #numasm
+h9938	ldy #2		;# characters-1 per directive
+
+10$	lda isym,y	;do compare
+	cmp (tblptr),y
+	bne 20$		;...until no match
+	dey
+	bpl 10$		;...until end of directive (match)
+
+; a match-  .X is index to directive dispatch table
+
+	txa
+	asl a		;*2 for addr table index
+	tax
+	lda asmjmp,x	;low byte addr
+	sta tblptr
+	lda asmjmp+1,x	;high byte addr
+	sta tblptr+1
+	jmp (tblptr)	;======> go process directive
+
+; no match- point to next table entry & start again.  quit if done (error).
+
+20$	lda tblptr	;low addr
+	clc
+	adc #3		;offset to next directive
+	sta tblptr
+	bcc 30$
+	inc tblptr+1
+30$	dex
+	bpl h9938	;...loop while more directives
+
+; invalid directive - error
+
+	jmp h900	;put in length table
+
+	.page
+; .MESSAGE processing **
+
+dimes	lda pass
+	beq 30$		;...only during pass 2
+	jsr nfndnb	;.MES- look for 'string' to print to console
+	bcc 30$		;...nothing- treat like a comment
+	jsr is_quote
+	bne 30$		;...not a quote
+	ldy #0
+10$	inx		;copy string into error buffer
+	lda icrd,x
+	beq 20$		;...until EOL
+	jsr is_quote
+	beq 20$		;...until end quote
+	sta doserr,y
+	iny
+	cpy #48-2
+	bcc 10$		;...until error buffer full
+
+20$	lda #cr
+	sta doserr,y	;append <cr>
+	lda #0
+	sta doserr+1,y	;terminate with a null
+	lda #>doserr
+	ldy #<doserr
+	jsr wscrn	;print the message to console
+30$	jmp h990	;print the source line to listing
+
+
+
+; .BYTE, .WORD, .DBYTE processing ***
+
+h111	lda #1		;.BYTE
+	.byte $2c
+
+h506	lda #3		;.DBYTE
+	.byte $2c
+
+h113	lda #2		;.WORD
+	sta jbywor
+	ldy #0
+	sty j		;memmap index for byte gen
+	tay
+	cpy #3		;.dbyte?
+	bne 10$		;...no
+	dey
+10$	sty char	;length of each param.
+	jsr nfndnb	;next non-blank
+	bcs h18		;non-blank found
+
+	ldx icse	;ran off eol
+	lda #7
+	jmp lts1
+
+h18	ldx icsb
+	jsr eval
+	dec return
+	bmi 40$		;return =0
+	beq 30$		;return =1
+	jmp h29		;return =2
+
+30$	lda #1		;undef'd sym
+	sta ierr
+	lda char
+	clc
+	adc j
+	tay
+	lda ierr
+	ldx icsb
+	jsr ltins
+	ldy #0
+	sty j
+	jmp h15
+
+40$	lda #4		;good return
+	sta ierr
+	ldx jbywor
+	cpx #1
+	beq 70$		;...if .byte
+	cpx #3
+	bne 50$		;...if .word
+
+	lda iexp	;is .dbyte
+	ldy j
+	jsr objout
+	inc j
+50$	lda iexp+1	;is .word
+	ldy j
+	jsr objout
+	inc j
+	ldx jbywor
+	cpx #2
+	bne 60$		;...if .dbyte
+	lda iexp
+	ldy j
+	jsr objout	;iexp in memory map
+	inc j
+60$	lda #0
+	tax
+	ldy char
+	sta j
+	jsr ltins
+	jmp h15
+
+70$	lda iexp+1	;is .byte
+	ldy j
+	jsr objout
+	inc j
+	bne h15
+
+80$	jsr nfncmp	;more parms?
+	lda iexp+1
+	bcs 90$		;more parms
+	eor #$80
+90$	ldy j
+	jsr objout
+	inc j
+
+; find next parameter
+
+h15	jsr nfncmp	;look for comma
+	bcs 10$		;...found it (maybe)
+	jmp byte15	;...no more parms
+
+10$	lda icrd,x	;get the character
+	beq 20$		;...EOL
+	inx		;point to next character
+	stx icolp
+	cmp #comma
+	bne h15		;...not comma, maybe paren
+	jsr nfndnb	;look for something after comma
+	bcc 20$
+	jmp h18		;...found chr: evaluate
+20$	jmp h99		;...found EOL: report error
+
+
+
+; expression handler bombed
+
+h29	lda j
+	beq 10$
+
+	txa		;output line (remain)
+	pha
+	ldy j
+	lda #0
+	tax
+	sta j
+	jsr ltins
+	pla
+	tax
+
+10$	lda icrd,x
+	jsr is_quote	;ascii?
+	beq 30$
+
+20$	lda #$13	;bad expression
+	ldy temp
+	jsr ltins
+	ldy #0
+	sty j
+	jmp h15
+
+; looks like ascii
+
+30$	sta delm	;save delimiter
+	cpx icsb	;first in string
+	bne 20$
+	ldy jbywor	;after a .byt
+	cpy #2
+	bcs 20$
+
+	stx icolp	;count bytes generated
+	ldy #0
+40$	inc icolp
+	ldx icolp
+50$	lda icrd,x
+	beq 80$		;...EOL (error)
+	cmp delm	;compare delimiter
+	bne 70$		;...no
+
+	inc icolp	;imbedded quote
+	ldx icolp
+60$	lda icrd,x
+	beq 130$	;...EOL (logical end of string)
+	cmp delm
+	bne 90$		;...no
+
+70$	ldy j		;convert to ascii
+	sta objmap,y	;byte to memory map
+	inc j		;count of ascii chars
+	bne 40$		;*** bra
+
+
+80$	ldy j		;EOL: report error
+	lda #7
+	jmp lts1
+
+
+;	**********************
+;	*  .BYTE expression  *
+;	**********************
+
+90$	sta kop
+	jsr endtst
+	bcs 130$
+	ldy #0
+	sty ysave
+	stx xsave
+100$	cpy j
+	beq 130$
+	lda #0
+	sta iexp
+	lda objmap,y
+	sta iexp+1
+	ldx xsave	;restore x
+	stx icolp	;restore x
+	jsr d71		;eval follows
+	dec return
+	beq 110$	;undefined symbol
+	bpl 120$	;bad expression
+
+	lda iexp+1	;expression ok
+	ldy ysave
+	sta objmap,y
+	iny
+	inc ysave
+	bne 100$	;*** bra
+
+110$	lda #1		;undefined symbol
+	.byte $2c
+
+120$	lda #$18	;bad expression
+	sta ierr	;undefed symbol
+
+130$	ldy #0		;done with ascii string
+	sty ysave
+140$	iny
+	cpy j
+	beq 150$	;last character
+	dey
+	lda objmap,y
+	jsr objout	;output object
+	inc ysave
+	ldy ysave
+	bne 140$	;*** bra
+
+150$	dey
+	lda objmap,y
+	jsr objout
+	inc ysave
+	ldy ysave
+	lda #0
+	sta j
+	tax
+	jsr ltins
+	jmp h15
+
+byte15	lda j
+	bne 10$
+	jmp endln
+
+10$	ldy j
+	lda #0
+	tax
+	jmp lts1
+
+	 .page
+; .OPT assembler directive
+;
+;	> look for parms until none left.
+;	> when done, treat line as a comment.
+;	> use search from asmb directives.
+
+h301	jsr nfndnb	;find beginning of option string
+	bcs 10$		;...ok
+	jmp h990	;...EOL: treat like comment
+
+10$	ldx icsb	;get start of parm
+	lda #3		;3 is length of parm
+	sta klen	;store for consym
+	jsr consym	;construct the parm
+	bcs 20$		;...ok
+	jmp h900	;...bad parm - error
+
+; search.  NOTE: must restore .X and the adr where the search left off.
+
+20$	lda #<optdir	;set (tblptr) to include .OPTIONS
+	sta tblptr
+	lda #>optdir
+	sta tblptr+1
+	ldx #numsav	;# of directives to search
+	jmp h9938	;go do the search, will JMP() to process if found.
+			;continue .OPT processing when done.
+
+	.page
+nhash	lda #0		;disable long labels
+	.byte $2c
+
+hash	lda #$ff	;enable long labels
+	sta fhash
+	jmp h391
+
+
+
+h311	lda optsav	 ;enable listing option (restore runtime spec)
+	and #opt_lst
+	.byte $2c
+
+h323	lda #opt_gen	 ;enable string generation
+	.byte $2c
+
+h303	lda #opt_sym	 ;enable symbol table
+	.byte $2c
+
+h307	lda #opt_err	 ;enable error messages
+	.byte $2c
+
+h309	lda #opt_mac	 ;enable object generation
+	.byte $2c
+
+h331	lda #opt_mac	 ;enable macro expansion
+
+	ora options
+	bne opt_set	 ;...bra
+
+
+
+h312	lda #$ff-opt_lst ;disable listing option
+	.byte $2c
+
+h302	lda #$ff-opt_gen ;disable string generation
+	.byte $2c
+
+h304	lda #$ff-opt_sym ;disable symbol table
+	.byte $2c
+
+h308	lda #$ff-opt_err ;disable error messages
+	.byte $2c
+
+h310	lda #$ff-opt_obj ;disable object generation
+	.byte $2c
+
+h330	lda #$ff-opt_mac ;disable macro expansion
+
+	and options
+opt_set	sta options	;update assembler options
+
+	.page
+h391	jsr nfncmp	;continue processing .OPT: look for comma
+	bcs 10$		;...comma or right paren
+	jmp h990	;...none found
+
+10$	lda icrd,x	;something follows
+	cmp #comma
+	beq 20$		;...comma
+	jmp endln	;...no
+
+20$	inx
+	stx icolp
+	jmp h301
+
+; skip ***
+
+h26	jsr nfndnb	;next non-blank
+	bcs 10$		;non-blank found
+	ldx j
+10$	lda #204
+	ldy #0
+	jmp lts1
+
+; page ***
+; has a title with it?
+
+h12	jsr nfndnb	;next nonblank
+	bcc 10$		;only blanks found
+	lda icrd,x	;next title char
+	jsr is_quote	;a quote?
+	beq 20$		;yes
+10$	ldx #0
+20$	lda #203
+	ldy #0
+	jmp lts1
+
+; end ***
+
+h10	bit sfile	;what is done?
+	bvs 20$		;...include file
+	ldx stack_ptr	;...pass
+	txs
+	ldx pass	;which pass?
+	beq 10$		;...pass 1
+
+
+	lda #2		;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  end pass 2
+	jsr close	;close source file (#2)
+	ldx #0
+	ldy #0
+	lda #205
+	jsr ltins	;print the .END
+	jmp pass3	;sort & print symbol table & xref
+
+
+10$	inc pass	;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  end pass 1
+	lda #2
+	jsr close	;close source file (#2)
+	jmp pass2	;start pass 2
+
+
+20$	lda #3		;>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  end include file
+	jsr close	;close 'included' source file (#3)
+	lda sfile
+	and #$bf	;switch control
+	sta sfile
+
+endr	ldx #0
+	stx chan
+	ldy #0
+	lda #205
+	inc lboth
+	jsr ltins
+	dec lboth
+	lda #$0d
+	sta lchar
+	jmp endln
+
+
+
+; file ***
+
+hfil	bit sfile
+	bvc 10$		;not in .LIB
+	lda #3		;close .LIB file
+	jsr close
+	jmp dlib1	;reopen .LIB as .FIL
+
+10$	lda #2		;close old file
+	jsr close
+
+	jsr nfile	;parse new file
+	lda #2		;logical file #2
+	tay
+	ldx sunit
+	jsr setlfs
+	jsr open
+	jsr ftest
+	jmp endr
+
+
+
+; common parse routine
+
+nfile	jsr nfndnb	;find beginning of name
+	bcc 20$		;...EOL: no name
+	ldy #0
+10$	lda icrd,x	;extract filename
+	beq 30$		;...until EOL
+	cmp #space
+	beq 30$		;...until blank
+	sta isym,y
+	inx
+	iny
+	cpy #16
+	bcc 10$		;...until too long
+
+20$	jsr clear_io
+	jsr primm
+	.byte cr,rvs,bell,'FILE NAME ERROR',cr,0
+	jmp done	;...abort assembly
+
+30$	lda #$0d	;flag fresh start
+	sta lchar
+	lda #comma	;append ',S' file type
+	sta isym,y
+	iny
+	lda #'S'
+	sta isym,y
+	iny
+	tya		;filename length
+	ldy #>isym	;filename address
+	ldx #<isym
+	jsr setnam	;set up file name for open
+	ldx #0
+	jmp setbnk	;set bank for name & rts
+
+
+
+; lib ***
+
+hlib	bit sfile	;cannot nest .LIB's
+	bvc dlib1	;...ok
+
+	jsr clear_io
+	jsr primm
+	.byte cr,rvs,bell,'.LIB ERROR',cr,0
+	jmp done	;...abort assembly
+
+dlib1	jsr nfile	;parse filename
+	lda #3		;la
+	tay		;sa
+	ldx sunit	;fa
+	jsr setlfs
+	jsr open	;open .LIB source file (#3)
+	jsr ftest
+	lda #$40
+	ora sfile
+	sta sfile	;flag .LIB
+	jmp endr
+
+	.page
+; .IFN and .IFE ***
+;
+; syntax for conditional assembly is as follows:
+;
+;			.IFE expr <
+;			code	
+;                       >
+;
+; where:   .IFE (or .IFN) is the directive meaning IF EQUAL (or IF NOT EQUAL)
+;          expr is a valid expression  (no forward references).
+;          <    is the start of an IF range (on same card).
+;
+; the end of IF range is marked by > character in the first column of a card in
+; the same FILE as the IF statement.
+
+
+hifn	lda #$ff	;not equal flag
+	.byte $2c
+
+hife	lda #$00	;equal flag
+	sta ifflag
+
+	jsr nfndnb	;find next non-blank
+	bcc ranoff	;ran off end of card
+	sty char
+	ldx icsb	;index into card
+	jsr eval	;evaluate expression
+	dec return	;simpler testing
+	bmi 10$		;good return
+	beq hundef	;undefined something
+	jmp noeval	;could not eval...
+
+; look for '<', test expression, execute result
+
+10$	stx icolp	;new pntr in line
+	jsr nfndnb	;skip blanks
+	bcc ranoff	;not there
+	cmp #'<'	;check for right char.
+	beq 20$		;found it
+	jmp ranoff	;bad directive
+
+20$	ldy #$ff	;set y to inverse
+	lda iexp	;get value of expr
+	ora iexp+1
+	beq 30$
+	iny		;$00
+30$	tya
+	eor ifflag	;tack in the flag
+	bne 60$		;false condition-  assemble
+
+; eat source until '>' is found
+
+40$	jsr newchr	;get a char
+	cmp #cr		;return char?
+	bne 40$		;no- loop until end of card
+	jsr newchr	;if next card starts with > then stop
+	cmp #'>'
+	bne 40$		;no- keep eating
+
+	lda #0
+	tax
+	tay
+	jsr ltins
+	inc icrdno+1
+	bne 50$
+	inc icrdno
+
+50$	lda #0
+	sta lcdpt	;clear multiple lines flag
+	lda #'>'
+	sta icrd
+	ldx #1		;card column pointer
+	jsr card1
+	jmp card0
+
+60$	jmp h990	;finished...
+
+;
+; errors and subroutines for IF's
+;
+
+hundef	lda pass	;which pass?
+	bne notdef	;...pass 2
+
+	lda #11		;foward ref error
+	.byte $2c
+
+notdef	lda #1		;not defined
+	.byte $2c
+
+ranoff	lda #7		;ran off card
+	.byte $2c
+
+noeval	lda #13		;can't eval expr...
+	ldx icse	;pointer into card
+	ldy #0		;num of bytes generated
+	jmp lts1
+
+
+
+newchr	jsr getchr	;read next character from source file
+	cmp #0
+	beq 10$		;...EOF
+	rts
+
+10$	jmp h10		;...missing .END
+
+;.end

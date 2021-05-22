@@ -1,0 +1,49 @@
+	.page
+	.subttl  start
+
+       * = $2000
+
+start	tsx
+	stx stack_ptr	;save for return to call
+	jsr clrch	;insure normal I/O
+	jsr clall	;clear all channels
+
+	sei
+	lda #config
+	sta mmucr	;configure memory
+	lda #1
+	sta $d030	;select fast (2MHz mode for debug******************)
+
+	ldx #$02	;save BASIC zero page
+10$	lda $00,x
+	sta zstore,x
+	inx
+	cpx #$90
+	bcc 10$
+
+	lda #$c0
+	sta hold_off	;kill basic irq crap
+	cli
+	jmp pass1	;start the assembly
+
+
+
+ready	jsr clall	;clear all channels
+
+	sei
+	ldx #$02	;restore zero page, BASIC IRQ crap
+20$	lda zstore,x
+	sta $00,x
+	inx
+	cpx #$90
+	bcc 20$
+
+	lda #0
+	sta mmucr	;restore system memory configuration
+
+	cli
+	ldx stack_ptr
+	txs
+	rts		;return to call
+
+;	.end

@@ -1,0 +1,34 @@
+	.page
+	.subttl  asm.last
+
+; *****************
+; *   ram usage   *
+; *****************
+
+zstore	= $0b00		;zero page save area
+
+
+	* = $5000
+
+sytbst			;symbol table area
+worka			;for xref
+workb	= worka+$400
+
+
+	* = $a000	;macro area
+
+syend	= *-1
+mactab			;macro definition area
+
+
+	* = $b800
+
+mctbnd	= *-1
+mcstck			;macro stack
+
+
+	* = $c000
+
+mcstnd	= *-1
+
+;.end

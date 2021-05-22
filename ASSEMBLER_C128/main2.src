@@ -1,0 +1,423 @@
+	.page
+	.subttl  main2
+;	*******************************
+;	*           pass  1           *
+;	*******************************
+
+pas1st	jsr primm
+	.byte cr,'PASS 1',cr,0
+	jsr opnsub	;open disk command channel
+	jsr sopen	;open source file
+	jsr clrttl	;clear title buffer
+	jsr ptttl0	;force page heading (do not inc pg#, no top of form)
+	jsr page_sh	;'LINE# LOC...'
+	jmp snewln	;begin assembly
+
+
+;	*******************************
+;	*  open disk command channel  *
+;	*******************************
+
+opnsub	ldx sunit	;open disk command channel #7
+	lda #7
+	ldy #15
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>10$	;command = 'I'
+	ldx #<10$
+	lda #20$-10$
+	jsr setnam
+	jsr open
+	jmp ftest	;rts
+
+10$	.byte 'INITIALIZE DISK'
+20$
+
+;	*******************************
+;	*   open disk source file     *
+;	*******************************
+
+sopen	ldx sunit	;open disk source file #2
+	lda #2
+	tay
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>isrc
+	ldx #<isrc
+	lda isrcln
+	jsr setnam
+	jsr open
+	jsr ftest
+	lda #$80	;ok
+	sta sfile
+	rts
+
+
+
+;	*******************************
+;	*           pass  2           *
+;	*******************************
+
+pass2	lda options	;doing a cross ref?
+	and #opt_xref
+	bne 10$		;yes
+	jmp pas222	;no
+
+10$	jsr clear_io	;clear open channels
+	ldx xunit	;open disk symbol file #8
+	lda #8
+	tay
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>xnlab	;'0:xrlabel,s,w'
+	ldx #<xnlab
+	lda #xn11
+	jsr setnam
+	jsr open
+	jsr fdtest
+
+	jsr clear_io	;clear open channels
+	ldx #8
+	stx chan
+	jsr ckout	;symbol file output channel
+	lda stsave	;set pointer to beginning
+	ldy stsave+1
+	sta bots
+	sty bots+1
+	lda nosym+1	;# of symbols
+	ldy nosym
+	sta dels
+	sty dels+1
+
+xsyms	ldy #0		;save a symbol
+10$	lda (bots),y
+	jsr bsout
+	iny
+	cpy #8
+	bcc 10$
+
+	lda dels	;done?
+	bne 20$		;no
+	dec dels+1
+20$	dec dels
+	lda dels
+	ora dels+1	;done?
+	beq 30$		;yes
+
+	tya		;next symbol
+	clc
+	adc bots
+	sta bots
+	bcc xsyms
+	inc bots+1
+	bne xsyms	;always
+
+30$	lda #8		;close the symbol file
+	jsr close
+
+
+	jsr clear_io	;clear open channels
+	ldx xunit	;open disk xref file #9
+	lda #9
+	tay
+	jsr setlfs
+	ldx #0
+	jsr setbnk
+	ldy #>xnref	;'@0:xref1234,s,w'
+	ldx #<xnref
+	lda #xn21
+	jsr setnam
+	jsr open
+	jsr fdtest
+	jsr clear_io	;clear open channels
+
+
+
+pas222	jsr primm
+	.byte cr,'PASS 2',cr,0
+	jsr reset
+	jsr objint
+	lda options	;object file output?
+	and #opt_obj
+	beq 10$		;...no
+
+	jsr objsuf	;add suffix to object file
+	lda objlen
+	ldy #>objfil
+	ldx #<objfil+1
+	jsr setnam
+	ldx #0
+	jsr setbnk
+	ldx ounit
+	lda #6
+	tay
+	jsr setlfs
+	jsr open 	;open object file
+	jsr fdtest
+
+10$	jsr clrttl
+	jsr sopen
+	jmp snewln
+
+
+
+reset	lda #0
+	sta ipc		;reset PC to $0000
+	sta ipc+1
+	sta wrap	;reset PC wrap flag
+	sta icrdno	;reset source line # to 00000
+	sta icrdno+1
+	sta level	;reset macro level
+
+	ldy #>mcstck
+	ldx #<mcstck
+	stx mcstpt	;reset macro stack pointer
+	sty mcstpt+1
+	stx stkfrm 	;reset stack frame pointer
+	sty stkfrm+1
+
+	lda optsav
+	sta options	;restore runtime options
+	lda #$0d
+	sta lchar	;makes clean start
+
+	ldy #3
+	lda #'0'
+10$	sta mlabel,y	;reset xref file tag
+	dey
+	bne 10$
+	lda #'L'
+	sta mlabel
+	rts
+
+
+
+wscrn	sty tblptr	;print to screen message pointed to by .a(hi) and .y(lo)
+	sta tblptr+1
+	jsr clear_io	;clear channels and enable screen
+
+	ldy #0
+10$	lda (tblptr),y	;output message
+	beq 20$
+	jsr bsout
+	iny
+	bne 10$
+20$	rts
+
+
+
+clrttl	ldy #len1-1	;fill title buffer with blanks
+	lda #space
+10$	sta ltlbuf,y
+	dey
+	bpl 10$
+
+	ldx isrcln	;put current filename there
+	dex
+	dex		;don't include drive spec (0:)
+20$	lda isrc+1,x
+	sta ltlbuf-1,x
+	dex
+	bpl 20$
+	rts
+
+	.page
+;	***********************************
+;	*                                 *
+;	*      -- scan new lines --       *
+;	*                                 *
+;	*  main logic of pass 1 & pass 2  *
+;	*                                 *
+;	***********************************
+
+snewln	jsr chkbrk
+	lda #0		;init next record
+	sta lcdpt
+	sta overflow
+	sta icsb
+	sta icse
+	sta ierr
+	sta icsl
+	sta iexp
+	sta iexp+1
+	sta ilsst
+	sta jlabl
+	sta jorg
+	sta jbywor
+	sta icolp
+	sta equflg
+	sta absflg
+	lda lchar
+	beq h8921
+	jsr cardin
+card0	bcc h87
+h8921	jmp h10		;exit on null character (no .end record)
+
+
+
+cardin	ldx #0		;read source statement from disk file
+	inc icrdno+1	;increment source line number
+	bne card1
+	inc icrdno
+
+card1	jsr getchr	;input a character
+	cmp #cr
+	beq 10$		;...end of line if <cr>: return carry clr
+	cmp #0
+	beq 20$		;...end of file if null: return carry set
+	cmp #tab
+	bne 5$
+
+	txa		;expand TABs
+	and #7
+	tay
+	lda #space
+1$	jsr buffer_it	;buffer character
+	beq 10$		;...buffer full
+	iny
+	cpy #8
+	bcc 1$		;...loop until next TAB stop
+	bcs card1
+
+5$	jsr buffer_it	;buffer character
+	jmp card1	;...loop until <cr> or null
+
+10$	clc
+	lda #0
+20$	sta icrd,x	;place null at end of buffered source line
+	rts		;...return .c=1 if EOF, else .c=0
+
+
+
+buffer_it		;buffer source line
+	sta icrd,x
+	cpx #buffer_sz	;check buffer status
+	beq 10$
+	inx
+10$	rts		;...return .c=1 if full, else .c=0
+
+;
+;  main line block
+;
+
+h87	jsr nfndnb	;find beginning of string
+	bcc 10$		;...physical or logical EOL
+	ldx icolp
+	lda icrd,x
+	cmp #'>'	;if terminator record
+	beq 10$		;yes .. listout
+	cmp #';'
+	bne 20$		;not a comment record
+10$	jmp h990	;a comment record
+
+20$	jsr nfnden	;find string end
+	ldx icsb
+	lda icrd,x	;get first character
+	cmp #'.'
+	bne 40$		;...not directive
+	jmp directive	;...process directive
+
+40$	cmp #'*'
+	bne 50$		;...not PC origin
+	jmp h102	;...ORG directive
+
+50$	ldy icsl
+	cpy #6+1	;<= 6 characters long?
+	bcc 70$		;...yes
+	ldy fhash	;long symbol names allowed?
+	bne 60$		;...yes
+	lda #9		;...symbol name too long error
+55$	ldy #3
+	jmp lts1	;...list source line in error
+
+60$	ldy #6		;use first 6 characters of symbol name
+70$	sty klen	;length of symbol
+	jsr consym	;construct the symbol
+	bcs 80$		;...good construct
+	lda #16		;...symbol name error
+	bne 55$
+
+80$	lda icsl	;length of string
+	cmp #3		;symbol or opcode?
+	bne h92		;...cannot be opcode if length <>3
+	jsr nopfnd	;lookup opcode
+	bcc h92		;...not an opcode, must be a label
+	jmp h201	;...process opcode
+
+
+; ************************
+; *   label processing
+; ************************
+
+h92	ldx icsb	;point to start of label
+	lda jlabl	;previous label on this line?
+	beq 10$		;...no
+	lda #3		;...yes: error
+	bne 20$
+
+10$	inc jlabl	;flag label on this line
+	jsr nalph	;first character must be alphabetic (A-Z)
+	bcs 30$		;...yes
+	lda #8		;...no: error
+20$	ldy #3
+	jmp lts1
+
+30$	jsr labprc	;check for reserved label name
+	bcs 20$		;...is reserved: error
+
+	stx ilsst	;save pointer to start of label
+	ldx #0
+40$	lda isym,x	;save label on stack
+	pha
+	inx
+	cpx #6
+	bcc 40$		;...loop until 6 characters on stack
+	lda icsl	;save actual label length
+	pha
+
+	lda icse	;check for equate
+	sta icolp	;set pointer to first character after symbol
+	inc icolp
+	jsr nfndnb	;get next parameter
+	bcc 50$		;...EOL
+	cmp #'='
+	bne 50$		;...is not equate
+	inc equflg	;flag equate statement
+	bne h121	;...continue equate processing
+
+50$	jsr nfind	;lookup user label in symbol table
+	bcc 90$		;...not found: new label
+	lda knval	;has label value changed?
+	cmp ipc+1
+	bne 60$		;...yes
+	lda knval+1
+	cmp ipc
+	beq 100$	;...no
+
+60$	lda knval	;is this a macro?
+	and knval+1
+	cmp #$ff
+	bne 80$		;...no
+	jsr ismac	;lookup name in macro table
+	bcc 70$		;...not found
+	jmp calmac	;call the macro
+
+70$	lda pass	;redefined only if in pass 1?
+	bne 100$
+
+80$	lda #2		;previously defined
+	ldy #3
+	ldx ilsst
+	jmp lts1
+
+90$	lda ipc+1	;put into symbol table
+	sta knval
+	lda ipc
+	sta knval+1
+	jsr nsert
+100$	jmp h87		;back to main sect
+
+;	.end

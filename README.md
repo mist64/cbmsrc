@@ -147,6 +147,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [ASSEMBLER_PET_V26MAR82RR_REC](ASSEMBLER_PET_V26MAR82RR_REC) | 1982 | based on V090580_B, LST output changes, non-mainline |
 | [ASSEMBLER_C64_REC](ASSEMBLER_C64_REC/)                      | 1982 | "C64 Macro Assembler", adds `.MAC` |
 | [ASSEMBLER_TED](ASSEMBLER_TED)                               | 1984 | TED version, adds `.OPT LON`, `.OPT MLI` |
+| [ASSEMBLER_C128](ASSEMBLER_C128)                             | 1986 | C128 version, heavily commented |
 | [LOADER_PET](LOADER_PET)                                     | 1979 | OBJ Loader |
 | [LOADER_C64](LOADER_C64)                                     | 1986 | OBJ Loader |
 
@@ -429,7 +430,7 @@ A variant of the "BCD Math Package" printed in the [Commodore 700 Reference Manu
 
 ### ASSEMBLER_AIM65_REC
 
-The AIM-65 version of the resident assembler (ROM R3224; 1978). Reconstructed from ASSEMBLER_TED.
+The AIM-65 version of the Resident Assembler (ROM R3224; 1978). Reconstructed from ASSEMBLER_TED.
 
 This is a reconstruction of the oldest known version of the Resident Assembler. It's a 4 KB ROM that interfaces with the AIM-65 monitor. It is heavily optimized and outputs to RAM instead of OBJ files. It is probably based on the (lost) 6 KB KIM-1 resident assembler ("KIM-5"). The later PET versions are not based on this (optimizations did not carry over), but the original (also lost) MDT650 version.
 
@@ -451,7 +452,11 @@ The C64 Macro Assembler (a version of the Commodore Resident Assembler). Reconst
 
 ### ASSEMBLER_TED
 
-A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
+A version of the Commodore Resident Assembler for the TED series (Plus/4, C16 and C116; 1984). Extracted from [ted_kernal_basic_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/plus4/ted_kernal_basic_src.tar.gz).
+
+### ASSEMBLER_C128
+
+The final version of the Commodore Resident Assembler, for the C128 (V022086; 1986).
 
 ### LOADER_PET
 

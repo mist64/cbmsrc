@@ -1,0 +1,576 @@
+	.page
+	.subttl  operand
+
+; operand processing *****
+; processes normal operands & determines if they are valid.
+
+h201	ldy #0
+	sty joptyp	;operand type
+	sty joplen	;bytes to generate
+	sty jnopv	;operand value flag
+
+; check for implied operand
+
+	lda joptem	;opcode template
+	cmp #20		;implied operand?
+	bne h17		;...no, skip to next section
+
+; generate opcode for implied and accumulator modes
+
+h459	ldy #0		;insert in op posit
+	lda jopbas	;op is base opcode
+	jsr objout	;put in memory map
+
+	ldx #0		;get error col
+	ldy #1		;num of bytes
+	txa
+	jmp lts1
+
+; need operand - check branch first
+
+h17	cmp #21		;branch template
+	bne 4$		;...no
+	lda #14
+	sta joptem
+	lda #7		;error code
+	sta ierr
+4$	ldx icse	;point to character after opcode
+	inx
+	stx icolp
+	jsr nfndnb	;find start of operand
+	bcs 6$		;...found it
+
+5$	lda #7		;EOL or missing operand
+	sta ierr
+	ldx icse	;point at space after opcode
+	inx
+	jmp h9933	;error- missing operand
+
+; process operand field
+
+6$	cmp #';'	;check first character of operand
+	beq 5$		;...comment (error)
+	cmp #'A'	;accumulator mode?
+	bne 9$		;...no
+	ldy icrd+1,x	;...maybe: 'A' must stand alone
+	beq 7$		;...yes (EOL)
+	cpy #space
+	beq 7$		;...yes <space> or <comment>
+	cpy #';'
+	bne 9$		;...not accumulator mode
+
+7$	ldy joptem	;.A mode - process
+	lda kltbl-1,y
+	bmi 8$		;.A mode not valid
+	clc
+	adc jopbas	;compute real opcode
+	sta jopbas
+	jmp h459	;done with this opcode
+
+8$	ldx icsb	;error column
+	ldy #3		;number of bytes to save
+	lda #5		;error code
+	jmp lts1
+
+
+
+9$	cmp #'#'	;check for immediate mode
+	beq 11$		;...yes!
+	cmp #'('	;check for indirect mode
+	bne 12$		;not indirect
+
+	lda #5		;opcode type: indirect
+	.byte $2c
+11$	lda #10		;opcode type: immediate
+	sta joptyp
+	inx
+	inc icsb	;point to symbol following '#' or '('
+
+; done parsing addressing modes. now evaluate operand.
+
+12$	jsr eval	;evaluate the operand
+	stx jercol	;error column from eval  (if any)
+	lda #19		;error type SYNTAX ERROR (if any)
+	sta ierr
+	dec return	;status from eval
+	bmi 20$		;...good return      (0)
+	beq 19$		;...undefined symbol (1)
+			;...uninterp expr    (2) 
+
+	lda joptyp	;might be #<ascii string>
+	cmp #10
+	beq 14$		;...maybe- immediate mode set
+	jmp h995	;...no- could not evaluate, report syntax error
+
+; check immediate ascii operation
+
+14$	lda icrd,x
+	jsr is_quote	;check for apostrophe or quote
+	bne 17$		;...no- error
+
+15$	txa
+	tay		;save pointer to start in .Y
+	inx
+	lda icrd,x
+	bne 16$		;...found a character
+	dex
+	lda #space	;...found EOL: pass a space character
+16$	sta iexp+1	;val of char
+	inx
+	lda icrd,x
+	beq 20$		;...ok
+	cmp #space
+	beq 20$		;...ok
+	jsr is_quote
+	beq 18$		;...ok
+
+	tya		;ascii string invalid
+	tax		;error column
+17$	ldy #2		;number of bytes
+	lda ierr	;error code
+	jmp lts1
+
+18$	inx		;ascii char expression
+	jsr d71		;eval next
+	dec return
+	bmi 20$		;evaluate ok
+	beq 19$		;undefd symbol
+	jmp h995	;bad expression
+
+	.page
+; 1 - operand has no value
+
+19$	inc jnopv	;no operand val
+	lda #2		;assumed length
+	sta joplen	;operand length
+
+; 0 - good return.  index register check.
+
+20$	jsr nfncmp	;comma or paren
+	bcc 25$		;no indexing
+
+	lda icrd,x	;get character
+	cmp #')'
+	bne 21$	;no
+
+	inc joptyp	;right paren - add to optype
+	inc joptyp
+	lda jopbas	;jump instr. test
+	cmp #$4c	;jump instr
+	beq 26$		;yes
+
+; done with paren - next char
+
+	inx		;point to next
+21$	lda icrd,x	;check for comma - indexing
+	beq 29$		;...EOL
+	cmp #comma
+	bne 22$		;no - could be y
+
+; has a comma. check for jump again.
+
+	lda jopbas	;base opcode
+	cmp #$4c	;a jump
+	beq 27$		;...yes- error-not allowed
+
+; done with comma - look for index.
+
+	inx		;point to next character
+22$	lda icrd,x	;check for index register x
+	beq 29$		;...EOL
+	cmp #'X'
+	bne 23$		;no
+
+	inc joptyp	;an x-add 1 to optype
+	jmp 32$
+29$	jmp h99		;EOL: error
+
+23$	cmp #'Y'	;check for index reg y
+	beq 24$		;yes
+
+	ldy #3		;invalid index reg - flag
+	lda #$12	;error code
+	jmp lts1
+
+24$	inc joptyp	;index reg y-add 2 to optype
+	inc joptyp
+	bne 32$
+
+25$	lda jopbas	;if a jump instruction check
+	cmp #$4c
+	bne 32$		;not a jump
+
+; a jump-see if optype is valid
+; only 2 type operands allowed: type 0 is abs, 7 is ind
+
+26$	lda joptyp
+	beq 30$		;type 0...o.k.
+	cmp #7
+	beq 28$		;type 7...o.k.
+
+; invalid oper for jmp - flag
+
+27$	lda #$18	;error code
+	sta ierr
+	jmp h980	;put in length tab
+
+28$	inx		;good optype- make sure no more
+	lda icrd,x
+	beq 30$
+	cmp #space
+	bne 27$		;no-bad jump
+
+30$	lda joptyp	;good jump-incr to base opcode
+	beq 31$		;finish jump
+	lda #32		;type 7-add to base
+
+; end of jump processing
+
+31$	ldy #2		;length of operand
+	sty joplen
+	jmp h46		;finish line process
+
+
+
+; operand processed.  see if operand valid for opcode.
+
+32$	lda jnopv	;operand value?
+	beq 33$
+	jmp h41		;no-assume extended
+
+; have operand value - check rel
+
+33$	lda joptem	;opcode template
+	cmp #14		;relative address
+	bne 38$		;not relative
+
+	clc		;relative adr- chk validity. adjust expr to get rel adr
+	lda ipc
+	adc #2
+	sta temp+1
+	lda ipc+1
+	adc #0
+	sta temp
+	lda iexp+1	;low byte of expr
+	sec
+	sbc temp+1
+	sta iexp+1
+	tay		;for later
+	lda iexp	;high byte of expr
+	sbc temp
+	sta iexp
+
+; test expr for branch too far
+; if sign bits same then o.k.
+; low byte iexp tested.
+; branch attempted to go too far
+
+	bpl 34$		;high byte +
+	tya		;high byte neg check lo byt
+	bmi 36$		;both neg-expr ok
+	bpl 35$		;differ signs-bad
+34$	tya		;hi byte pos-check lo
+	bpl 36$		;both pos-expr ok
+
+; bad rel-flag as error
+
+35$	lda #$17	;branch error
+	sta ierr	;save in ierr
+
+36$	lda iexp	;good relative-oplength at 2
+	beq 41$
+	cmp #255
+	beq 37$
+	lda #$17
+	sta ierr
+37$	lda #0
+	sta iexp
+	beq 41$		;bra
+
+; check indirect address error
+; error indicated by expr over 254
+; or optype >= 6 and <= 9
+
+38$	lda joptyp
+	cmp #6
+	bcc 41$		;no
+	cmp #9
+	beq 39$		;yes
+	bcs 41$		;not indirect
+
+39$	lda iexp	;check val of expr
+	bne 40$		;error-over 255
+	lda iexp+1
+	cmp #255
+	bne 41$		;no-ok
+
+; error on indirect
+
+40$	lda #$19	;error code
+	sta ierr
+	lda #0
+	sta iexp
+
+41$	lda #2		;one or two byte operand
+	sta joplen
+	lda joptyp	;immediate mode?
+	cmp #10
+	beq 42$		;1 byte operand
+	lda iexp
+	bne h41		;we need 2 bytes
+
+
+
+
+; 1 byte operand - check if valid
+
+42$	lda #1
+	sta joplen
+	lda joptyp
+	clc
+	adc #2
+	sta joptyp
+h50	cmp #13		;max addr mode
+	bcc h45		;yes...oper valid opcode
+	lda #$15	;bad operand-flag
+	sta ierr	;page zero invalid
+	jmp h900
+
+h41	lda joptyp	;process 2 byte operands
+	clc
+	adc #13
+	sta joptyp
+h47	cmp #15		;over 15 could be bad
+	beq h45		;good extended operand
+	bcs h49		;bad-might be a page 0
+
+; see if operand is valid for opcode.
+
+h45	tay		;first subscript
+	dey
+	lda kludg,y
+	clc
+	adc joptem	;second subscript
+	tay		;opcode base increment
+	lda kltbl,y
+	bpl h46		;pos operand type valid
+
+; operand not valid first try. try 2 byte operand.
+
+h49	lda jnopv	;an operand value
+	beq h48		;yes
+
+	lda joplen	;no operand val-try 1 byte instr
+	cmp #2
+	beq h206	;was 2 - try as 1
+
+	lda #$18	;1 byte novalue operand-flg error
+	sta ierr	;invalid operand
+	jmp h900
+
+h206	lda #1		;abs mode as page zero mode
+	sta joplen
+	lda joptyp
+	sec
+	sbc #11
+	sta joptyp	;new op type
+	jmp h50
+
+h48	lda joplen	;had an operand value
+	cmp #1		;1 byte long
+	beq h207	;yes...try 2 bytes
+
+	lda #$18	;operand 2 bytes - flag as error
+	sta ierr	;invalid operand
+	jmp h900
+
+; page 0 mode as abs
+
+h207	inc joplen	;op length to 2
+	lda joptyp
+	clc
+	adc #11
+	sta joptyp
+	jmp h47
+
+; valid operand - compute opcode and put in memory map
+
+h46	clc
+	adc jopbas	;kludge+base opcode
+	ldy #0
+	jsr objout
+
+; operand value - enter into memory map
+
+	lda jnopv	;operand value flag
+	bne h313	;no value
+
+	ldy #1		;an operand value
+	lda iexp+1	;low byte of expr
+	jsr objout
+	ldy #2
+	lda joplen
+	cmp #1		;if 1 byte then done
+	beq h9931	;yes...done
+	lda iexp	;2byt=hi-byte to memory
+	jsr objout
+
+; any operand errors
+
+h9931	lda ierr	;error code
+	cmp #$17	;rel address error?
+	beq h900r
+	cmp #$19	;ind address error?
+	beq h980	;yes
+
+; overflow or negative expr
+;
+;	lda #9		;mask overflow and sign
+;	and overflow
+;	bne h960	;error exists
+;	lda joplen
+;	cmp #1
+;	bne 		;2 bytes ok
+;	lda iexp	;see if over 1 byt
+;	bne h960	;yes...error
+;
+;end of processing
+
+	ldx #0		;error column
+	ldy joplen
+	iny		;count opcode
+	txa		;error code
+	jmp lts1
+
+h313	ldy joplen	;forward references found
+	lda joptem	;operand template
+	cmp #14		;branch--3 bytes
+	bne 10$		;not branch
+	ldy #1		;branch operand length
+10$	ldx icsb	;error column from eval
+	iny		;adjust byte count for opcode
+	lda #1		;error code
+	jmp lts1
+
+; common length table entries
+;
+; relative branch error #$17
+
+h900r	ldx icsb	;column of target
+	ldy #2		;two byte length
+	jmp lts1
+
+h99	lda #7		;ran off end of card error
+	sta ierr
+
+h900	ldx icsb	;error at start of field
+	jmp h9933
+
+h980	ldx icolp	;error at current column
+	jmp h9933
+
+h995	ldx jercol	;err at col returned by eval
+
+; enter in length table
+
+h9933	ldy #3		;save 3 bytes
+	lda ierr	;error code
+	jmp lts1
+
+;h960	ldx icsb	;invalid address err - start of field
+;	ldy joplen
+;	iny		;count opcode
+;	lda #4		;get error message
+;	jmp lts1
+
+; no error - comment or blank card
+
+h990	ldx #0		;no error column
+	txa		;no error code
+	tay		;no bytes generated
+
+
+
+lts1	jsr ltins
+endln	ldx stack_ptr	;so much for structure!
+	txs
+	jmp snewln
+
+	.page
+; find next non-blank.  carry set if non-blank found, else carry clear.
+;
+;	sets <icolp> = <icsb> = first character of string
+
+
+nfndnb1	inc icolp	;increment column pointer
+
+nfndnb	ldx icolp	;column pointer
+	lda icrd,x	;next character
+	beq 10$		;...EOL
+	cmp #space
+	beq nfndnb1	;...loop while space
+	stx icsb	;got non-blank: point to it
+	sec
+	rts
+
+10$	clc		;none found
+	rts
+
+; find end of current string starting at .X
+;
+;	sets <icse> = pointer to last character in string
+;	sets <icsl> = length of string (from <icolp> at time of call)
+
+
+nfnden	lda #$ff
+	sta icsl	;reset length
+	dex
+
+10$	inx		;pointer to next character
+	inc icsl	;count it
+	lda icrd,x	;get next character
+	beq 20$		;...string end: EOL
+	cmp #space
+	beq 20$		;...string end: space
+	cmp #'='
+	beq 20$		;...string end: equal sign
+	cmp #';'
+	bne 10$		;...end of quoted string
+
+20$	dex		;found end of string (EOL, space, '=', ';')
+	stx icse	;set pointer to end of string
+	rts
+
+	.page
+; find <comma> or <closing paren>. carry set if found.
+;
+;	ignores items between quotes.
+;	sets <icolp> = pointer to <comma>, <paren>, or terminator: <space>, EOL
+
+
+nfncmp1	inc icolp	;next character
+
+nfncmp	ldx icolp	;column pointer
+	lda icrd,x	;next character
+	beq 20$		;...EOL:   return false
+	cmp #space
+	beq 20$		;...space: return false
+	cmp #')'
+	beq 30$		;...paren: return true (.c=1)
+	cmp #comma
+	beq 30$		;...comma: return true (.c=1)
+	jsr is_quote
+	bne nfncmp1	;...loop until a find or a terminator
+
+10$	inc icolp	;skip over quoted string
+	ldx icolp	;advance pointers
+	lda icrd,x	;get next character
+	beq 20$		;...EOL:   return false
+	jsr is_quote
+	bne 10$		;...loop until closing quote or EOL
+	beq nfncmp1	;...found closing quote- resume comma hunt
+
+20$	clc
+30$	rts
+
+;	.end

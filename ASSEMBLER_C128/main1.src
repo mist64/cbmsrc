@@ -1,0 +1,517 @@
+	.page
+	.subttl  main1
+
+pass1	ldx stack_ptr
+	txs
+	cld
+	lda #0
+	sta lboth	;print only to primary output device
+	sta lnct	;assume top of page to start
+	sta chan	;screen current
+	sta pass	;set pass 1
+	sta sfile
+	sta nosym	;no symbols
+	sta nosym+1
+	sta overflow
+	sta objlen	;assume no object file
+	sta binary	;assume object format
+	sta strlen	;assume no runtime options
+	sta lerct	;reset error flag
+	sta lerct+1
+	sta fhash	;short labels is the default
+
+	sta macent
+	sta macent+1
+	sta curpnt
+	sta curpnt+1
+
+	lda #opt_err	;L,P,S,X,O,E,M,G
+	sta optsav	;set default options
+
+	lda #'S'
+	sta objfil	;for 'S0:' prefix to object file
+
+	ldy #>sytbst	;start of symbol table
+	ldx #<sytbst
+	stx stsave
+	sty stsave+1
+	ldy #0		;clear first symbol
+	tya
+	sta (stsave),y
+
+	ldy #>mactab	;start of macro table
+	ldx #<mactab
+	stx mctbpt
+	sty mctbpt+1
+
+	lda #1
+	sta lpgct	;initialize page count
+	lda #0
+	sta lpgct+1
+
+	lda #space	;initialize TITLE buffer
+	ldx #len2-1
+1$	lda cbm_title,x
+	sta title,x
+	dex
+	bpl 1$
+
+	lda #disk	;set default disk unit#
+	sta sunit
+	sta ounit
+	sta xunit
+
+	lda #4		;set default printer unit#
+	sta prunit
+
+	jsr reset
+
+	.page
+;  filename parser
+
+	jsr primm
+	.byte cr,'C/128 6502 ASSEMBLER V022086'
+	.byte cr,'(C)1986 BY COMMODORE BUSINESS MACHINES',cr,cr,0
+
+	jsr primm
+	.byte cr,'SOURCE FILE  (SYNTAX: [DRIVE:]FILENAME) ? ',esc,'Q',0
+
+	ldx #18			;16 char name + 2 char (0:) = 18 total
+	stx count		;save maximum input character count
+	jsr cursor_on		;turn on cursor
+	ldx #0			;read characters from keyboard until <cr>
+
+10$	stx sflen		;save buffer pointer
+	jsr get_key		;get a character from keyboard
+	ldx sflen		;restore buffer pointer
+	tay			;save character
+	and #$7f		;mask to 7-bits
+	cmp #cr
+	beq 40$			;...branch if <cr>
+	cmp #delete
+	bne 20$			;...branch if not <delete>
+
+	cpx #0			;delete: check buffer pointer
+	beq 25$			;...branch if at start of line (ignore <delete>)
+	dex			;decrement buffer pointer
+	bpl 30$			;...branch always (print <delete>)
+
+20$	cmp #space
+	bcc 25$			;...branch if control code (ignore)
+	tya			;restore character
+	sta buffer,x		;put character into filename buffer
+	inx			;increment buffer pointer
+	cpx count		;check buffer pointer
+	bcc 30$			;...branch if not a end of line
+
+	dex			;at end of line (ignore everything but <cr> and <delete>)
+25$	lda #bell		;substitute <bell> to warn user
+
+30$	jsr bsout		;print the character
+	jmp 10$			;loop for next character
+
+40$	jsr cursor_off		;turn off cursor
+	ldx sflen		;character input count
+	bne 50$			;...branch if name given (not null)
+	jmp done		;exit from assembler
+
+50$	jsr crlf
+	lda #comma		;append comma to filename
+	sta buffer,x
+
+	lda fcb+2	;check for drive # (0:) in filename
+	cmp #'1'
+	beq 55$
+	lda #'0'
+55$	sta dfltdn	;use it as default for all disk ops
+	sta xnlab+1	;set disk drive for xref work files
+	sta xnref+1
+	sta erswrk+1
+
+	ldx #2		;process source file name
+	jsr process_fn
+	sty isrcln	;set source filename length
+
+60$	lda fstrng,y
+	sta isrc,y
+	sta objfil+1,y	;just in case no object file name specified
+	dey
+	bpl 60$
+
+;
+;  parse & set assembler runtime options
+;
+
+	jsr input_opt
+	ldx #20		;start after the source file name
+	stx savex
+
+read_opt
+	ldx savex	;read runtime assembler options
+	lda fcb,x	;get character from option list
+	bne 1$		;...got one
+	lda options
+	sta optsav	;save for restoration between passes
+	jmp pas1st	;...start pass1
+
+1$	cmp #'O' 	; O[#|=filename]
+	bne 2$
+	jsr process_obj	;parse, validate, & prepare object filename
+	jmp next_opt
+
+2$	cmp #'L'	; L
+	bne 5$
+	lda options	;list enable
+	ora #opt_lis
+	sta options
+	jmp next_opt
+
+5$	cmp #'P'	; P[#]
+	bne 30$
+	lda options
+	ora #opt_prt
+	sta options
+	lda fcb+1,x	;hardcopy enable: check for unit# spec
+	cmp #'4'
+	beq 10$		;...valid printer units are 4 and 5
+	cmp #'5'
+	bne 20$		;...invalid unit#
+10$	sta prunit
+20$	jsr printer_on	;open printer channel
+	jmp next_opt
+
+30$	cmp #'S'	; S
+	bne 40$
+	lda options	;symbol table enable
+	ora #opt_sym
+	sta options
+	bne next_opt	;bra
+
+40$	cmp #'G'	; G
+	bne 50$
+	lda options	;generate additional lines enable
+	ora #opt_gen
+	sta options
+	bne next_opt	;bra
+
+50$	cmp #'X'	; X[#]
+	bne 60$
+	lda options
+	ora #opt_xref
+	sta options	;cross reference enable
+	lda fcb+1,x	;check for & validate xref unit spec
+	ldx #2
+	jsr process_fa
+	bcc next_opt	;...no unit specified
+	inc savex	;skip unit#
+	bne next_opt	;bra
+
+60$	cmp #'M'	; M
+	bne 70$
+	lda options	;expand macros enable
+	ora #opt_mac
+	sta options
+	bne next_opt	;bra
+
+70$	cmp #'B'	; B
+	bne 80$
+	sta binary	;binary output file enable
+	beq next_opt	;bra
+
+80$	cmp #'V'	; V
+	bne 90$
+	lda options	;view (softcopy) enable
+	ora #opt_lis
+	sta options
+	bne next_opt	;bra
+
+90$	cmp #'U'	; U[#]
+	bne 100$
+	lda fcb+1,x	;source unit# specification
+	ldx #0
+	jsr process_fa	;validate & set unit#
+	bcc next_opt	;...illegal unit
+	inc savex	;skip over the unit#
+	bne next_opt	;bra
+
+100$	cmp #'N'	; N
+	bne next_opt
+	lda options	;error message disable
+	and #$ff-opt_err
+	sta options
+
+
+next_opt
+	inc savex	;next option
+	jmp read_opt
+
+	.page
+; open logical printer file
+
+printer_on
+	lda #0		;open logical printer file #4
+	jsr setnam
+	ldx prunit	;fa: printer unit #
+	lda #4		;la
+	ldy #$ff	;sa
+	jsr setlfs
+	jsr open
+10$	ldx #4		;see if the printer is there
+	jsr ckout
+	lda status
+	bne 20$		;...no
+	lda #15
+	jsr bsout	;send CHR$(15)- puts 1011A (IBM mode) into condensed mode
+	jmp clear_io
+
+20$	jsr clear_io	;device not responding
+	jsr primm
+	.byte cr,rvs,bell,'printer not present',cr
+	jsr bing
+	bcc 10$		;bra
+
+
+
+bing	.byte ' hit <space> to retry, <stop> to cancel.  ',0
+10$	jsr get_key
+	cmp #space
+	bne 10$
+	jsr primm
+	.byte esc,'D',0
+	clc
+	rts
+
+
+process_fa
+	cmp #'8'	;validate disk unit# spec
+	beq 10$		;ok
+	cmp #'9'
+	beq 10$		;ok
+	clc
+	rts		;carry clr= ng
+
+10$	sec		;convert from ascii
+	sbc #'0'
+	sta sunit,x	;set unit per .x: source=0, object=1, xref=2
+20$	rts		;carry set= ok
+
+
+
+process_fn
+	ldy #2		;process a file name
+	lda fcb,x	;string start comes in .x
+	cmp #quote	;quote?
+	bne 10$
+	inx		;skip it
+
+10$	cmp #'0'	;valid drive number?
+	beq 20$		;yes
+	cmp #'1'
+	beq 20$		;yes
+	lda #'0'	;use 0
+	bne 30$		;always
+
+20$	inx
+	inx
+
+30$	sta fstrng	;append '0:'
+	lda #':'
+	sta fstrng+1
+
+40$	lda fcb,x
+	beq 60$		;end of option list
+	cmp #comma
+	beq 60$		;end of filename
+	cmp #quote
+	beq 50$		;skip over quote
+
+	sta fstrng,y
+	iny
+50$	inx
+	bne 40$		;always
+
+60$	dex		;back up a character
+	rts
+
+
+
+process_obj
+	lda fcb+1,x	;check for object filename spec '=filename'
+	cmp #'='
+	beq 20$		;...yes
+
+	ldx #1		;check for object unit spec & validate
+	jsr process_fa
+
+	ldy isrcln	;append '.OBJ' extension to default filename
+	cpy #12
+	bcc 10$		;...length ok
+	ldy #12		;...truncate
+10$	lda #'.'
+	sta objfil+1,y
+	iny
+	lda #'O'
+	sta objfil+1,y
+	iny
+	lda #'B'
+	sta objfil+1,y
+	iny
+	lda #'J'
+	sta objfil+1,y
+	iny
+	sty objlen
+	bne 40$		;bra
+
+20$	inx 		;process object filename (skip 'O=')
+	inx
+	jsr process_fn
+	sty objlen	;set length of object filename
+	stx savex	;set pointer to next option
+
+30$	lda fstrng,y	;move object filename from option buffer
+	sta objfil+1,y
+	dey
+	bpl 30$
+
+40$	lda options
+	ora #opt_obj
+	sta options	;object generation enable
+	rts
+
+
+
+objsuf
+	ldx #3		;append ',S,W' to object filename
+10$	ldy objlen
+	lda 30$,x
+	sta objfil+1,y
+	inc objlen
+	dex
+	bpl 10$
+
+	lda binary	;if binary output, make that ',P,W'
+	beq 20$
+	lda #'P'
+	sta objfil-1,y
+20$	rts
+
+30$	.byte 'W,S,'
+
+	.page
+get_key
+	jsr getin	;loop until keypress
+	beq get_key
+	cmp #break_key
+	beq break	;...exit if STOP key
+	rts
+
+
+
+chkbrk	jsr stop	;check for STOP key down
+	bne 40$		;...no
+
+10$	jsr clear_io	;restore normal I/O
+	jsr primm
+	.byte bell,cr,rvs,'PAUSED',esc,'O',0
+20$	jsr stop
+	beq 20$		;...loop until it's released
+
+	lda #0
+	sta chan	;flag active channel for assembler
+	sta ndx		;flush key buffer
+30$	jsr getin
+	beq 30$		;...loop until any other key down
+
+	jsr primm
+	.byte esc,'D',0
+	cmp #'B'
+	beq break	;...continue assembly unless 'B' pressed
+40$	rts		;continue assembly
+
+
+
+break	jsr primm
+	.byte bell,cr,rvs,'BREAK',cr,0
+
+done	lda #2
+	jsr close	;close source file
+	bit sfile
+	bvc 1$		;...skip if no library file
+	lda #3
+	jsr close	
+1$	lda #4
+	jsr close	;close printer
+
+	lda pass
+	beq 5$		;...done if in pass 1
+	lda options
+	and #opt_obj
+	beq 5$		;...skip if no object file
+	jsr objend	;output last record
+	lda #6
+	jsr close	;close object file
+5$	lda options
+	ora #opt_xref
+	beq 20$		;...skip if no xref
+
+	jsr clear_io
+	ldx #7
+	jsr ckout
+	ldy #0
+10$	lda erswrk,y	;scratch xref work files
+	beq 20$
+	jsr bsout
+	iny
+	bne 10$
+
+20$	jsr clear_io
+	clc		;do a real close
+	lda #7
+	jsr close	;close disk command channel
+	jmp ready	;exit
+
+	.page
+input_opt
+	jsr primm
+	.byte cr,'RUN OPTIONS  (L,V,S,O,G,M,N,B,P#,X#,U#) ? ',esc,'Q',0
+
+	ldx #24			;total allowable option string length
+	stx count		;save maximum input character count
+	jsr cursor_on		;turn on cursor
+	ldx #0			;read characters from keyboard until <cr>
+
+10$	stx strlen		;save buffer pointer
+	jsr get_key		;get a character from keyboard
+	ldx strlen		;restore buffer pointer
+	tay			;save character
+	and #$7f		;mask to 7-bits
+	cmp #cr
+	beq 40$			;...branch if <cr>
+	cmp #delete
+	bne 20$			;...branch if not <delete>
+
+	cpx #0			;delete: check buffer pointer
+	beq 25$			;...branch if at start of line (ignore <delete>)
+	dex			;decrement buffer pointer
+	bpl 30$			;...branch always (print <delete>)
+
+20$	cmp #space
+	bcc 25$			;...branch if control code (ignore)
+	tya			;restore character
+	sta buffer+18,x		;put character into option buffer
+	inx			;increment buffer pointer
+	cpx count		;check buffer pointer
+	bcc 30$			;...branch if not a end of line
+
+	dex			;at end of line (ignore everything but <cr> and <delete>)
+25$	lda #bell		;substitute <bell> to warn user
+
+30$	jsr bsout		;print the character
+	jmp 10$			;loop for next character
+
+40$	lda #0
+	sta buffer+18,x		;mark end of option string
+	jsr crlf
+	jmp cursor_off		;turn off cursor & rts
+
+;	.end

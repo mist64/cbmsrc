@@ -1,0 +1,392 @@
+	.page
+	.subttl  eval
+
+; test a character to see if alphabetic.
+;
+;	.X --> pointer to character in 'icrd'
+;	.C --> set if alpha, else clr
+
+
+nalph	lda icrd,x	;char to test
+	cmp #'A'
+	bcc nalp1	;less than alphabet
+	cmp #'Z'+1
+	bcc numr1	;in alphabet range
+nalp1	clc      	;not alpha
+	rts
+
+
+
+; test a character to see if numeric.
+;
+;	.X --> pointer to character in 'icrd'
+;	.C --> set if numeric, else clr
+
+
+numrc	lda icrd,x	;char to test
+	cmp #'0'
+	bcc nalp1 	;less than numbers
+	cmp #'9'+1
+	bcs nalp1	;not numeric
+numr1	sec
+numr2	rts
+
+	.page
+; construct a symbol.
+;
+;	.X --> pointer to start of symbol
+;	.C --> set if not a symbol, else clr
+
+
+consym	ldy #$ff	;y is a counter
+10$	iny
+	cpy #6		;maximum significant symbol length
+	bcs numr2	;...at end of name: successful construct (rts, .c=1)
+	cpy klen	;symbol < maximum length?
+	bcs 30$		;...yes, blank fill rest
+	jsr nalph	;alphabetic?
+	bcs 20$		;...yes
+	jsr numrc	;numeric?
+	bcc numr2	;...no, invalid symbol (rts, .c=0)
+
+20$	sta isym,y	;copy character to <isym>
+	inx		;next column of source
+	bne 10$		;...loop until done
+
+30$	lda #space	;fill in with blanks
+	sta isym,y
+	bne 10$		;...loop until done
+
+	.page
+; **********************************************************************
+;
+;    evaluates an expression
+;
+; reg x contains index to start of expression to be evaluated.
+; upon rtn from routine x contains pointer to first character
+; beyond end, or on error return, contains pointer to bad portion.
+;
+; return set as follows:
+;
+;	0  --  string could be evaluated (iexp = value of the string)
+;	1  --  undefined symbol
+;	2  --  expression is bad
+;
+; **********************************************************************
+
+eval	lda #0		;init expression
+	sta iexp
+	sta iexp+1
+	sta klow	;init <> flags
+	sta khigh
+	lda #$fc	;iexp & knval to plus
+	and overflow
+	sta overflow
+	jsr endtst	;end of expression?
+	bcc 22$		;...yes
+
+
+; get unary operator (if any)
+
+	ldy #'+'	;assume unary plus
+	cmp #'-'
+	bne 10$		;...yes
+	tay		;...no, unary minus
+	inx		;(skip over minus sign)
+10$	sty kop		;save operation
+
+
+; get byte <> operators (if any)
+
+20$	jsr endtst	;end of expression?
+	bcc 25$		;...no
+22$	jmp d300	;...error: cannot evaluate
+
+25$	cmp #'<'	;lower byte?
+	bne 30$		;...no
+	inc klow
+	bne d158
+30$	cmp #'>'	;higher byte?
+	bne d1580	;...no
+	inc khigh
+
+d158	inx		;get next character
+	jsr endtst	;check for '<-' or '>-'
+	bcc 10$		;...something
+	jmp d300	;...error
+10$	cmp  #'-'
+	bne d1580
+	sta kop
+	inx		;(skip over minus sign)
+
+
+; evaluate expression as constant
+
+d1580	jsr numrc	;is character numeric?
+	bcc 10$		;...no: check for radix prefix
+	ldy #10		;base 10
+	jmp 100$	;go evaluate decimal number
+
+10$	cmp #'$'	;hex?
+	bne 20$		;...no
+	ldy #16		;base 16
+	bne 90$		;get next character
+
+20$	cmp #'@'	;octal constant?
+	bne 30$		;...no
+	ldy #8		;base 8
+	bne 90$		;get next character
+
+30$	cmp #'%'	;binary constant?
+	bne 40$		;...no: must be a symbol
+	ldy #2		;base 2
+	bne 90$		;get next character
+
+
+; evaluate expression as symbol.
+;
+;	<symbol> is a string beginning with a letter and composed of
+;	up to six (32 if FHASH true> alphanumeric characters.
+
+40$	jsr nalph	;alphabetic?
+	bcc 80$		;...no
+	stx temp	;could be a symbol- save chr ptr & parse further
+	ldy #0		;symbol length
+
+50$	inx		;find symbol length. read characters until end of symbol
+	iny		;count characters
+	jsr numrc	;numeric?
+	bcs 50$		;...yes: continue
+	jsr nalph	;alpha?
+	bcs 50$		;...yes: continue
+
+	stx temp+1	;save pointer to character after name
+	sty ltemp	;save actual symbol length
+	cpy #7		;length over 6 chars?
+	bcc 60$		;...no
+	lda fhash	;long symbol names allowed?
+	beq 70$		;...no: error
+	ldy #6		;use max length !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+60$	sty klen	;logical length of symbol
+
+	ldx temp	;restore pointer to beginning of symbol name
+	jsr consym	;construct symbol
+	bcc 70$		;...bad symbol
+	jsr nfind	;look it up
+	ldx temp+1
+	bcs 120$	;...found it, .X=pointer to end of symbol
+	ldx temp
+	jmp d200	;...undefined .X=pointer to start of symbol
+
+70$	jmp d300	;error
+
+; evaluate '*' assembly counter
+
+80$	cmp #'*'
+	bne 70$		;...no- bad expression
+	lda ipc
+	sta knval+1	;substitute currect PC value
+	lda ipc+1
+	sta knval
+	inx		;(skip over '*')
+	jmp 120$
+
+
+; evaluate numeric field
+
+90$	inx		;next character
+	jsr numrc	;numeric?
+	bcs 100$	;...yes
+	jsr nalph	;alpha?
+	bcc 70$		;...no...error
+100$	sty kbase	;base of operation
+
+; get length of number
+
+	ldy #0		;starting column
+	stx temp	;save pointer to start of number
+
+110$	iny		;count digits
+	inx		;next character
+	jsr numrc	;get next character. is it numeric?
+	bcs 110$	;...yes
+	jsr nalph	;is it alpha?
+	bcs 110$	;...yes
+
+	sty klen	;length of number
+	ldx temp	;pointer to beginning of number
+	jsr number	;compute number
+	bcs 120$	;...ok
+	jmp d300	;...error
+
+
+; do arithmetic operation
+
+120$	lda kop		;what is the operation?
+	cmp #'+'	;add?
+	bne 130$	;...no
+
+	clc		;************************************* ADD ***
+	lda iexp+1	;low byte of expression
+	adc knval+1	;low byte of number
+	sta iexp+1
+	lda iexp	;high byte of expression
+	adc knval	;high byte of number
+	sta iexp
+	jmp d71		;...continue
+
+
+130$	cmp #'-'	;subtract?
+	beq 140$	;...yes
+	jmp d80		;...no
+
+140$	sec		;************************************* SUBTRACT ***
+	lda iexp+1	;low byte of expression
+	sbc knval+1	;low byte of number
+	sta iexp+1
+	lda iexp	;high byte of expression
+	sbc knval	;high byte of number
+	sta iexp
+	jmp d71		;...continue
+
+
+; do byte <> operation
+
+lohigh	lda klow	;low byte?
+	bne 10$		;...no
+	lda khigh	;high byte?
+	beq 20$		;...no
+	lda iexp
+	sta iexp+1	;move high byte to low byte
+10$	lda #0
+	sta iexp	;force high byte to zero
+20$	jmp d100	;...done evaluation
+
+
+; end of current operation.  see if anything else to do.
+
+d71	jsr endtst	;end of expression?
+	bcs lohigh	;...yes: exit via low/high check
+	sta kop		;save operator
+	jmp d158	;...continue evaluation
+
+
+; arithmetic operation (continued)
+
+d80	pha		;save operator
+	lda #0		;prepare for multiply or divide
+	sta temp
+	sta temp+1
+	pla
+
+	cmp #'*'	;multiply?
+	bne 50$		;...no
+	beq 20$		;...yes
+			;************************************* MULTIPLY ***
+10$	asl iexp+1	;shift product
+	rol iexp
+20$	lsr knval	;shift multiplier
+	ror knval+1
+	bcc 30$		;...skip add- bit is 0
+	clc
+	lda temp+1	;multiplicand+product
+	adc iexp+1
+	sta temp+1	;back to product
+	lda temp
+	adc iexp
+	sta temp	;NOTE: multiply is modulo 64K
+30$	lda knval	;stop when multiplier
+	ora knval+1
+	bne 10$		;...is zero
+
+40$	lda temp	;move product/quotient to iexp
+	sta iexp
+	lda temp+1
+	sta iexp+1
+	jmp d71		;...continue evaluation
+
+
+50$	cmp #'/'	;divide?
+	bne 70$		;...no
+60$	lda iexp+1	;...yes
+	sec		;************************************* DIVIDE ***
+	sbc knval+1
+	sta iexp+1
+	lda iexp
+	sbc knval
+	sta iexp
+	bcc 40$
+	inc temp+1
+	bne 60$
+	inc temp
+	jmp 60$
+
+
+; evaluate boolean operators
+
+70$	cmp #'&'	;and?
+	bne 80$		;...no
+	lda iexp+1	;...yes
+	and knval+1
+	sta iexp+1
+	lda iexp
+	and knval
+	sta iexp
+	jmp d71		;...eval next
+
+80$	cmp #'.'	;or?
+	bne 90$		;...no
+	lda iexp+1	;...yes
+	ora knval+1
+	sta iexp+1
+	lda iexp
+	ora knval
+	sta iexp
+	jmp d71		;...eval next
+
+90$	cmp #'!'	;xor?
+	bne d300	;no...must be error
+	lda iexp+1	;...yes
+	eor knval+1
+	sta iexp+1
+	lda iexp
+	eor knval
+	sta iexp
+	jmp d71		;...eval next
+
+
+;**************** evaluate end *******************
+
+d100	lda #0		;good return
+	.byte $2c
+
+d200	lda #1		;undefined symbol error
+	.byte $2c
+
+d300	lda #2		;syntax error
+	sta return
+	rts
+
+
+
+; test current character for the end of a string.
+;
+;	carry set if: <space>, <comma>, <right paren>, <semicolon> or EOL
+
+
+endtst	lda icrd,x	;get character
+	sec
+	beq 10$		;...EOL: return true
+	cmp #space
+	beq 10$		;...space: return true (.c=1)
+	cmp #comma
+	beq 10$		;...comma: return true (.c=1)
+	cmp #')'
+	beq 10$		;...paren: return true (.c=1)
+	cmp #';'
+	beq 10$		;...comment: return true (.c=1)
+
+	clc		;...no terminator, return false
+10$	rts
+
+;	.end

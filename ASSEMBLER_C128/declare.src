@@ -1,0 +1,280 @@
+	.page
+	.subttl  DECLARATIONS
+
+;		********************************
+;		*                              *
+;		*    C=128  65xx  ASSEMBLER    *
+;		*                              *
+;		*        by Fred Bowen         *
+;		*                              *
+;		*        copyright 1986        *
+;		*  Commodore Business Machines *
+;		*                              *
+;		********************************
+
+
+;	the assembler opens and refers to seven logical files.
+;	it assumes a printer attached as device 4, and a  disk
+;	as device 8.  the logical files used are:
+;
+;		 2 =source file
+;		 3 =library file
+;		 4 =printer output file
+;		 6 =object output file
+;		 7 =disk command channel
+;		 8 =symbol table output file
+;		 9 =cross reference output file
+
+;  constants
+
+break_key	= $03	;stop key character
+bell		= $07	;bell character
+tab		= $09	;tab character
+cr		= $0d	;carriage return character
+rvs		= $12	;reverse field character
+delete		= $14	;delete character
+esc		= $1b	;escape character
+space		= $20	;space character
+quote		= $22	;double quote character
+comma		= $2c	;comma character
+
+disk		= 8	;default la/fa/sa used for disk I/O
+lines		= 60	;lines per page for assembly listing
+			; (does NOT include 6 lines for page fold)
+
+	.page
+;  constants from C128 Kernel
+
+status		= $90	;I/O status byte
+fnlen		= $b7	;file name length
+la		= $b8	;logical I/O channel
+fnadr		= $bb	;file name address
+ndx		= $d0	;number chars in buffer
+
+icrd		= $200	;general input buffer
+buffer_sz	= 161	;size of input buffer
+hold_off	= $a04	;BASIC init status flag
+
+print		= $c00c	;EDITOR: screen output character in .a
+cursor_on	= $cd6f	;EDITOR: turn cursor on
+cursor_off	= $cd9f	;EDITOR: turn cursor off
+primm		= $ff7d	;KERNEL: print immediate utility
+setbnk		= $ff68	;KERNEL: set file name bank
+setlfs		= $ffba	;KERNEL: set la, fa, sa
+setnam		= $ffbd	;KERNEL: set file name
+open		= $ffc0	;KERNEL: open file
+close		= $ffc3	;KERNEL: close file
+chkin		= $ffc6	;KERNEL: open input channel
+ckout		= $ffc9	;KERNEL: open output channel
+clrch		= $ffcc	;KERNEL: close channels, restore defaults
+basin		= $ffcf	;KERNEL: input character
+bsout		= $ffd2	;KERNEL: output character
+stop		= $ffe1	;KERNEL: test for stop key
+getin		= $ffe4	;KERNEL: input character (keyboard)
+clall		= $ffe7	;KERNEL: clear all channels
+
+mmucr		= $ff00		;I/O: mmu memory configuration register
+config		= %00001110	;memory configuration: KERNEL, I/O, RAM-0
+
+	.page
+; zero page storage
+
+	* = $10
+
+savex		*=*+1	;save .x (wsw)
+savey		*=*+1	;save .y (ptch)
+stack_ptr	*=*+1	;save SP for return
+
+baspnt			;work area base of xref
+symtbl		*=*+2
+toppnt 		*=*+2	;word area top of xref
+
+zbuf
+ipc		*=*+2
+tblptr		*=*+2
+pnt1		*=*+2
+pnt2		*=*+2
+
+stsave		*=*+2	;symbol table begin
+pnt3		*=*+2
+inpmin			;input range min
+bots		*=*+2	;sym table sort ptr
+inpmax			;input range max
+mids		*=*+2	;sym table sort ptr
+tops		*=*+2	;sym table sort ptr
+dels		*=*+2	;sym table sort ptr
+itops		*=*+2	;sym table sort ptr
+
+t0		*=*+2	;indirect pointer in base page
+dfltdn		*=*+1	;default drive
+count		*=*+1	;counter for symbol move
+first		*=*+1	;binary search variable
+last		*=*+1	;binary search variable
+btemp		*=*+1	;binary search variable
+
+chan		*=*+1	;current i/o channel
+j		*=*+1	;general counter
+knval		*=*+2	;intermed val in eval
+icsb		*=*+1	;current string begin
+icse		*=*+1	;current string end
+iexp		*=*+2	;value of expr eval
+icolp		*=*+1	;current column
+overflow	*=*+1	;for eval
+
+optsav		*=*+1	;saves original options between passes
+options		*=*+1	;assembler runtime options
+
+opt_lis		= %10000000	;screen listing
+opt_prt		= %01000000	;printer listing
+opt_lst		= %11000000	;listing flag
+opt_sym		= %00100000	;symbol table listing
+opt_xref	= %00010000	;cross reference listing
+opt_obj		= %00001000	;object file
+opt_err		= %00000100	;error messages
+opt_mac		= %00000010	;expand macros
+opt_gen		= %00000001	;generate extra line (expand .byte strings)
+
+temp		*=*+2
+lchar		*=*+1	;last character got
+nosym		*=*+2	;# symbols in symtbl
+lpgct		*=*+2
+jopbas		*=*+1	;base opcode (pass 1)
+joptem		*=*+1	;opcode template
+kop		*=*+1	;next oper for eval
+klen		*=*+1	;length of string to pack
+return		*=*+1	;return code from eval
+delm		*=*+1	;string delimiter
+kbase		*=*+1	;base of # to eval
+wrap		*=*+1	;pc wrap flag
+lerct		*=*+2	;total error count
+joptyp		*=*+1	;operand type (pass 1)
+jnopv		*=*+1	;flag for no oper val
+leror		*=*+1	;error number (pass 2)
+jercol		*=*+1	;error column
+ilsst		*=*+1	;start of a label
+lcdpt		*=*+1	;multiple lines flag
+
+jlabl		*=*+1
+jorg		*=*+1
+jbywor		*=*+1	;asm directive word
+pass		*=*+1
+icrdno		*=*+2	;current card number
+icsl		*=*+1	;current strint length
+lnct		*=*+1
+joplen		*=*+1	;operand length
+ierr		*=*+1	;error code
+lboth		*=*+1	;list to scr & prnter
+colcnt		*=*+1	;column count
+klow		*=*+1	;< flag
+khigh		*=*+1	;> flag
+char		*=*+1
+sfile		*=*+1
+
+; definitions controlling sfile for get character source
+
+frmmac		= $20	;macro being scanned
+frmprm		= $10	;expanding macro parameter
+
+absflg		*=*+1	;absolute mode flag
+equflg		*=*+1	;equate mode flag
+xsave		*=*+1	;xr-save
+ysave		*=*+1	;yr-save
+
+ifflag		*=*+1	;flag for cond asmb
+
+ysave1		*=*+1	;yr-save for opt gen
+xrfsav		*=*+2	;xref output save
+
+cksuml		*=*+1	;record checksum
+cksumh		*=*+1
+laddl		*=*+1	;last address
+laddh		*=*+1
+recntl		*=*+1	;record count
+recnth		*=*+1
+
+binary		*=*+1	;generate an object or binary file
+
+sunit		*=*+1	;source file unit #
+ounit		*=*+1	;object file unit #
+xunit		*=*+1	;cross reference unit #
+prunit		*=*+1	;printer unit #
+
+ltemp		*=*+1
+fhash		*=*+1	;flag to allow long variables
+
+;
+;  non zero page storage
+;
+
+	* = $c00
+
+;
+;  buffers & file name passage area
+;
+
+fcb
+vpass		*=*+89	;area for variable passing
+
+; source file name and device # from editor
+; fcb+2  = source file name and device # from editor
+; fcb+20 = command string from editor
+
+strlen		= vpass		;command string length
+sflen		= vpass+1	;source file name length
+buffer		= vpass+2	;source file name buffer
+
+fstrng		*=*+32		;file name processing area
+
+len1		= 30		;title length
+len2		= 36		;header length
+ltlbuf		*=*+len1	;title buffer
+title		*=*+len2	;for page headers
+
+ltab		*=*+6
+isym		*=*+16
+isrc		*=*+20	;original source file
+isrcln		*=*+1	;source name length
+
+;
+;  object file build area
+;
+
+objmap		*=*+40	;memory map
+
+maxbyt		=24	;maximum bytes/record
+bytcnt		= *	;record byte count
+
+objbuf		*=*+maxbyt+3	;obj out buf
+objfil		*=*+20	;object file name
+objlen		*=*+1	;file name length
+
+mctbpt		*=*+2	;macro table pointer
+mcstpt		*=*+2	;macro stack pointer
+newmac		*=*+2	;pointer to start of macro entry
+maybe		*=*+2	;ptr to possible macro end
+holda		*=*+1	;temporary cell for holding acc
+xtemp		*=*+1	;temporary cell for x reg
+tmpmac		*=*+2	;temp for macro table pointer
+prmcnt		*=*+1	;paramet counter for macro call
+macent		*=*+2	;macro table entry pointer
+stkfrm		*=*+2	;frame pointer for macro stack
+curpnt		*=*+2	;current text ptr in macro scan
+mlabel		*=*+4	;generated label
+parmpt		*=*+2	;pointer for macro param text
+level		*=*+1	;macro generation level
+
+
+;-------------------------
+; work variables for xref
+;-------------------------
+
+wrksiz		= $100	;work area size
+wflnm1		*=*+18	;read filename
+wrkfnm		*=*+19	;write filename
+ladcnt		*=*+1	;line adrs count
+zspflg		*=*+1	;zero sup. flag
+outcnt		*=*+1	;out counter
+
+doserr		*=*+48	;dos error buffer
+
+;	.end

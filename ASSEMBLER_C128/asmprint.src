@@ -1,0 +1,727 @@
+	.page
+	.subttl  asmprint
+
+; make an entry in length table
+;
+;	.A contains error code (0= no error)
+;	.X contains error column
+;	.Y contains number of bytes
+
+ltins	sty ltab	;# bytes
+	stx ltab+1	;error column
+	sta ltab+4	;error code
+	lda ipc
+	sta ltab+2	;PC low
+	lda ipc+1
+	sta ltab+3	;PC high
+	lda icrdno+1
+	sta ltab+5	;card # low
+	lda icrdno
+	sta ltab+6	;card # high
+
+; adjust relative branch
+
+	tya
+	tax		;# bytes
+	cpx #$ff	;-1?
+	bne 10$		;no...
+	inx		;make x=0
+10$	cpx #4
+	bne 20$
+	lda ltab+4	;get error code
+	cmp #201
+	bne 20$
+	ldx #2
+20$	cpx #3		;check for dbyte
+	bne 30$		;only increment
+	lda ltab+4
+	cmp #202
+	bne 30$
+	ldx #2
+30$	txa
+	beq 45$
+	clc
+	adc ipc		;pc = ipc + # bytes
+	sta ipc
+	bcc 40$		;...ok
+	inc ipc+1
+	bne 40$		;...ok
+
+	lda ipc		;pc wrapped
+	bne 35$		;...byte deposited, so report error
+	dec wrap	;...no byte this time, but set flag for next
+	bne 45$		;bra
+
+34$	inc wrap	;clear previous flag
+35$	lda #33		;report PC overflow error
+	sta ltab+4
+	lda #0
+	sta ltab+1	;error column
+
+40$	lda wrap
+	bne 34$		;...flag was set previously for wrap- now report it
+45$	lda pass	;which pass?
+	bne p2pri	;...pass 2: list it
+
+; list lines with the following errors in pass 1:
+;
+;	 2 --> dupicate symbol
+;	17 --> forward reference
+
+	lda ltab+4	;get error number
+	cmp #2		;duplicate symbol?
+	beq p2pri	;...yes: list line
+	cmp #17		;forward reference?
+	beq p2pri	;...yes: list line
+	rts		;...no: don't list in pass 1
+
+p2pri	lda ltab+4	;get error code
+	bne 10$		;...analize error code
+	jmp prtln	;...print line
+
+10$	cmp #203	;.PAGE?
+	bne 20$		;...no
+	lda ltab+1	;get column for title
+	jmp skpg	;...do page (.c=1)
+
+20$	cmp #204	;.SKIP?
+	bne 60$		;...no
+	lda ltab+1	;get #lines to skip
+	beq 40$		;...no argument, skip one
+	tax
+	jsr eval	;evaluate argument
+	lda return
+	bne 50$		;...bad argument, report error
+	lda iexp+1	;get #lines to skip
+40$	clc
+	jmp skpg	;...do skip (.c=0)
+
+50$	cmp #1		;fix .skip error code
+	beq 60$		;...undefined
+	lda #19		;syntax error
+
+60$	cmp #205	;.END?
+	beq 80$		;...no
+	sta leror
+	lda pass	;which pass?
+	beq 70$		;...pass 1: print error
+	lda ltab+4	;...pass 2: get error code
+	cmp #2		;duplicate label?
+	bne 70$		;...no (normal error)
+	lda #0
+	sta ltab+4	;clear errors
+	sta ierr
+	jmp prtln
+70$	jmp errhnd
+
+80$	lda #0		;print .LIB, .FIL, .END
+	sta ierr
+	jmp prxx
+
+	.page
+; ************************
+; *                      *
+; * symbol table listing *
+; *                      *
+; ************************
+
+nstat			;print sym table
+	lda stsave	;set ptr to sym table
+	sta symtbl
+	lda stsave+1
+	sta symtbl+1
+	lda #4		;4 symbols per line
+	sta klen	;clear print counter
+	bne 15$		;start a new page always
+
+10$	lda lnct	;check for page full
+	cmp #lines
+	bcc 20$		;...not full
+15$	jsr page_st	;print page header
+
+20$	jsr outcl3	;3 spaces
+
+	ldy #0
+30$	lda (symtbl),y
+	jsr output	;print symbol name
+	iny
+	cpy #6
+	bne 30$
+
+	jsr outcl3	;3 spaces
+
+	lda (symtbl),y
+	jsr numa	;print symbol value (high byte)
+	iny
+	lda (symtbl),y
+	jsr numa	;print symbol value (low byte)
+	dec klen
+	beq 40$		;...done line
+	jsr outcl3	;...else 3 spaces between symbols
+	jmp 50$
+
+40$	lda #4		;end current line, start another
+	sta klen
+	inc lnct
+	jsr crlf
+	jsr chkbrk	;check for STOP key
+
+50$	clc		;index to next symbol
+	lda symtbl
+	adc #8
+	sta symtbl
+	bcc 60$
+	inc symtbl+1
+60$	lda nosym+1	;decrement symbol count
+	bne 70$
+	dec nosym
+70$	dec nosym+1
+	lda nosym+1
+	ora nosym
+	bne 10$		;...loop until done all symbols
+
+	lda klen	;terminate last line with <cr> if necessary
+	cmp #4
+	beq 80$		;...not necessary
+	inc lnct
+	jmp crlf	;...do a <cr> & rts
+80$	rts
+
+	.page
+;
+; page header routines
+;
+
+page_xr	jsr ptttl	;cross reference header
+	ldx #xrttl-msgs	
+	lda #6		;#<cr>
+	bne page
+
+
+page_st	jsr ptttl	;symbol table header	
+	ldx #stttl-msgs
+	lda #6		;#<cr>
+	bne page
+
+
+page_sc	jsr ptttl	;source code header
+page_sh	ldx #hd-msgs
+	lda #4		;#<cr>
+
+
+page	sta lnct	;# lines for header
+	jmp msg		;print header
+
+
+
+;
+; home feed routine
+;
+
+toppag	ldy lnct
+10$	cpy #lines+6	;output <cr> to top of next page
+	bcs 20$		;...done
+	jsr crlf
+	iny
+	bne 10$		;...loop until done
+
+20$	ldx #0
+	stx lnct	;reset line count
+	rts
+
+	.page
+;	.SKIP and .PAGE processors
+;
+;	carry set -->   PAGE,  .a = pointer to title in card (0= use old title)
+;	carry clr -->	SKIP,  .a = # lines to skip (0= skip one)
+
+skpg	pha
+	lda options	;listing enabled?
+	and #opt_lst
+	bne 10$		;...yes
+	pla		;...no, do nothing
+	rts
+10$	pla		;SKIP or PAGE?
+	bcc 50$		;...skip
+
+	tax		;process .PAGE *****************************************
+	beq page_sc	;...no title present
+	ldy #len1
+	lda #space
+20$	sta ltlbuf,y	;blank previous title buffer
+	dey
+	bne 20$
+
+30$	inx		;copy title: .x=card column, .y=title buffer pointer
+	lda icrd,x	;get character from PAGE string
+	beq page_sc	;...done (EOL)
+	jsr is_quote	;check for logical end of string
+	beq page_sc	;...done (ending quote)
+	sta ltlbuf,y	;update title buffer
+	iny
+	cpy #len1	;check maximum title length
+	bcc 30$		;...loop until done or buffer full
+	bcs page_sc	;...title buffer full: do the page
+
+			;process .SKIP *****************************************
+50$	tay		;.A = # of lines to skip
+	bne 55$		; (note: .a=0 or 1, we skip 1)
+	iny
+	sec
+55$	adc lnct	;add to current line count
+	cmp #lines	;check page overflow
+	bcs page_sc	;...start new page & ignore skips
+	sta lnct	;...continue current page
+
+60$	jsr crlf	;print blank lines per .Y
+	dey
+	bne 60$		;...loop until done
+	rts
+
+
+
+; increment page number & print title & page number
+
+ptttl	sed		;increment the page#
+	clc
+	lda lpgct
+	adc #1
+	sta lpgct
+	lda lpgct+1
+	adc #0
+	sta lpgct+1
+	cld
+	jsr toppag
+
+ptttl0	ldy #0		;print .PAGE info
+20$	lda ltlbuf,y
+	jsr output
+	iny
+	cpy #len1
+	bcc 20$
+
+	jsr blank	;2 spaces
+	jsr blank
+
+	ldy #0		;print .TITLE info
+30$	lda title,y
+	jsr output
+	iny
+	cpy #len2
+	bcc 30$
+
+	jsr blank	;2 spaces
+	jsr blank
+
+	ldx #pg-msgs	;print page# (BCD)
+	jsr msg
+	lda lpgct+1
+	jsr numa
+	lda lpgct
+	jmp numa	;rts
+
+	.page
+; ========================
+; = end of assembly code =
+; ========================
+
+pass3	lda #2
+	clc
+	jsr skpg	;skip 2 lines (if listing enabled)
+	clc
+	lda lnct	;check if 'errors/end' msg will fit on this page
+	adc #4		;#<cr>
+	cmp #lines
+	bcc 10$		;...yes
+	lda #0
+	jsr skpg	;...no- start a new page (if listing enabled)
+
+10$	inc lboth	;force message to screen & listing (if any)
+	ldx #numerr-msgs
+	jsr msg		;print 'ERRORS ='
+	ldx lerct	;error count lo
+	lda lerct+1	;error count hi
+	jsr outdec	;print decimal number
+	ldx #dnmsg-msgs
+	jsr msg		;print 'END OF ASSEMBLY'
+	clc
+	lda #4
+	adc lnct
+	sta lnct
+	dec lboth	;restore
+
+	lda options
+	and #opt_sym	;print symbol table?
+	beq 30$		;...no
+	lda nosym
+	ora nosym+1	;any symbols to print?
+	beq 30$		;...no
+	jsr nstat	;print symbol table
+
+30$	lda options	;print cross reference table?
+	and #opt_xref
+	beq 40$		;...no
+	lda #8
+	jsr close
+	lda #9
+	jsr close
+	jsr clear_io
+	jsr primm
+	.byte cr,'XREF',cr,0
+	jsr cross	;print xref list
+
+40$	jsr clear_io
+	lda options	;if hardcopy, eject last page
+	and #opt_prt
+	beq 50$		;...no
+	jsr toppag	;eject current page
+	jsr toppag	;eject one more
+50$	jmp done	;...exit assembler
+
+	.page
+; *************************
+; *
+; * prtln - print routine
+; * prints one output line
+; *
+; *************************
+
+prtln	lda ltab+4
+	sta ierr
+	lda options	;listing enabled?
+	and #opt_lst
+	beq 10$		;no, try error print
+
+	lda sfile	;macro line?
+	and #frmmac
+	beq prxx	;no, so list
+
+	lda options	;is macro expand option on?
+	and #opt_mac
+	bne prxx	;yes, so print
+	rts		;don't list line
+
+10$	lda ierr	;n0 ...error in card?
+	bne 30$		;yes...try error list
+20$	rts		;do not list this card
+
+30$	lda options
+	and #opt_err	;errors messages enabled?
+	beq 20$		;no...
+	lda #0
+	sta objmap
+	sta objmap+1
+	sta objmap+2
+
+prxx	lda ltab+2
+	sta ipc
+	lda ltab+3
+	sta ipc+1
+	lda ltab
+	ldy #0
+	sty ysave1
+
+q5	pha
+	lda ltab+5
+	pha		;save on stack
+	lda #0
+	sta colcnt
+	lda lnct	;check for page full
+	cmp #lines
+	bcc 20$		;...not full
+	jsr page_sc	;...need to page
+
+20$	lda lcdpt	;continuation line?
+	beq 25$		;...no
+	pla		;fix stack
+	ldx #4
+21$	jsr blank	;skip over line# field if continuation line
+	dex
+	bpl 21$
+	bmi 26$		;bra
+
+25$	pla		;recover line# lo
+	tax
+	lda icrdno	;line# hi
+	jsr outdec	;print decimal number
+26$	inc colcnt
+	inc colcnt
+	jsr outcl1	;print one blank
+
+	lda sfile	;printing a macro expansion?
+	and #frmmac
+	beq 30$		;no
+
+	lda #'+'
+	bne 40$		;always
+
+30$	lda #space	;print '(' if equate statement
+	ldy equflg
+	beq 40$
+	lda #'('
+40$	jsr output
+	inc colcnt
+
+	lda icrd	;skip address field if null line
+	bne 45$		;...not null
+	ldx #3
+42$	jsr blank	;...skipping
+	dex
+	bpl 42$
+	bmi 65$		;bra
+
+45$	lda ipc+1	;output upper byte
+	ldy equflg
+	beq 50$
+	lda iexp
+50$	jsr numc2
+
+	lda ipc		;output lower byte
+	ldy equflg
+	beq 60$
+	lda iexp+1
+60$	jsr numc2
+
+65$	lda #space	;print ')' if equates
+	ldy equflg
+	beq 70$
+	lda #')'
+70$	jsr output
+	inc colcnt
+
+	ldy ysave1
+	pla		;number of bytes
+	tax
+	bmi 80$
+	cmp #4
+	bmi 80$
+	ldx #3
+	sec
+	sbc #3
+	.byte $2c
+
+80$	lda #0
+	pha
+90$	dex		;dec bytes left
+	bmi 100$	;0 or more-print next
+	lda objmap,y	;get the byte
+	jsr numc2
+	jsr outcl1
+	iny
+	inc ipc
+	bne 90$
+	inc ipc+1
+	jmp 90$
+
+; print card if supposed to
+
+100$	sty ysave1
+	lda lcdpt	;print flag
+	beq 110$
+	jmp 210$
+
+; need to print the card
+
+110$	ldy colcnt
+120$	jsr blank	;print blanks for formatted listing
+	iny
+	cpy #22
+	bmi 120$	;...loop until source field
+
+	ldx #0		;x points to card
+	lda ierr
+	bne 190$	;don't tab errors
+	lda icrd
+	beq 210$	;...EOL: null line
+	cmp #';'	;don't tab comment
+	beq 190$
+
+	ldy #0
+	lda jlabl	;see if label
+	beq 150$	;...no label
+130$	lda icrd,x	;look for beginning of label
+	beq 210$	;...EOL
+	inx
+	cmp #space
+	beq 130$	;...loop until found label
+
+140$	jsr output	;print label
+	iny
+	lda icrd,x
+	beq 210$	;...EOL
+	inx
+	cmp #space
+	bne 140$	;...loop until end of label or card
+	jsr blank	;end of label- always print a blank
+	iny
+
+150$	cpy #8		;print blanks to start of opcode field
+	bcs 160$
+155$	jsr blank
+	iny
+	bne 150$
+
+160$	lda icrd,x	;look for beginning of opcode (or comment)
+	beq 210$	;...EOL
+	cmp #space
+	bne 170$	;...found something
+	inx
+	bne 160$	;...loop until something (opcode or comment)
+
+170$	lda icrd,x	;a character
+	beq 210$	;...EOL
+	cmp #space
+	beq 155$	;...found blank
+	cmp #';'
+	beq 180$	;...it was a comment
+	jsr output	;print the opcode/operand character
+	inx
+	iny
+	bne 170$	;...loop until comment or end of card
+
+180$	cpy #24		;print blanks to start of comment field
+	bcs 190$
+	jsr blank
+	iny
+	bne 180$
+190$	lda icrd,x	;get next character
+	beq 210$	;...EOL
+	jsr output	;print the comment character
+	inx
+	bne 190$	;...loop until end of card
+
+210$	jsr crlf	;end the output line- print <cr>
+	inc lnct	;increment line count
+	inc lcdpt	;flag a 2nd line
+	pla		;bytes left off stack
+	beq 240$	;none left-done
+	tax
+	lda options	;gen option?
+	and #opt_gen
+	beq 230$	;...nogen
+	txa
+	jmp q5		;get next line
+
+; nogen option, update pc
+
+230$	txa
+	clc
+	adc ipc
+	sta ipc
+	bcc 240$
+	inc ipc+1
+240$	rts
+
+
+
+numc2	inc colcnt
+	inc colcnt
+	jmp numa
+
+
+
+outcl3	jsr outcl1	;print 3 spaces
+outcl2	jsr outcl1	;print 2 spaces
+outcl1	inc colcnt	;print 1 space
+
+blank	lda #space	;print space
+	jmp output
+
+
+
+; error handler 
+
+errhnd	inc lboth
+	lda options	;error messages enabled?
+	and #opt_err
+	beq 60$		;...no
+	lda lnct	;...yes
+	cmp #lines	;page full?
+	bcc 10$		;...no
+	lda #0		;...yes: start new page
+;	sec
+	jsr skpg
+10$	jsr prtln	;print the source code line
+	ldx #0		;print the error message header
+	jsr msg
+	ldx leror
+	txa
+	and #$0f
+	cpx #$20
+	bcc 20$
+	adc #9
+20$	cpx #$10
+	bcc 30$
+	adc #9
+30$	tax
+	dex
+	txa
+	asl a
+	tax
+	lda errtab,x
+	sta fnadr
+	lda errtab+1,x
+	sta fnadr+1
+
+	ldy #0
+40$	lda (fnadr),y	;print the error message
+	jsr output
+	iny
+	cpy #23
+	bne 40$		;...loop until done (all messages same size)
+
+45$	dec ltab+1	;error column #
+	beq 50$
+	bmi 50$
+	lda #'-'	;print a line of '-' to error column-1
+	jsr output
+	jmp 45$
+
+50$	lda #$5e	;print CBM 'up arrow' in error column
+	jsr output
+	jsr crlf
+	inc lnct	;increment line count
+
+;60$	lda pass	;is it pass 1?
+;	bne 61$		;no
+;
+;	lda #$ff	;set pass 1 error flag
+;	sta p1err
+
+60$	inc lerct
+	bne 65$		;no carry
+	inc lerct+1
+65$	dec lboth
+	rts
+
+
+
+; print hex (or BCD) number in .a
+
+numa	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr 10$		;most significant digit
+	pla
+	and #$0f	;least significant digit
+
+10$	clc
+	adc #'0'
+	cmp #'9'+1
+	bmi 20$
+	clc
+	adc #7
+20$	jmp output
+
+
+
+is_quote
+	cmp #quote	;return = if quote, <> if not
+	beq 10$
+	cmp #$27	;apostrophe = quote
+10$	rts
+
+
+;	.end

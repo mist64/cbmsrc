@@ -1,0 +1,473 @@
+	.page
+	.subttl  asmieee
+;	getchr
+;
+;	subroutine to get next character of input from wherever source is
+;
+;	sfile is source flag register.
+;	if v=1 then library
+;	if minus then disk
+;
+;	returns character in .a, and a=0 if end of file.
+;	lchar has last char returned.
+
+
+getchr	sty savey
+	stx savex
+
+getch1	lda sfile
+	and #frmprm	;($10)
+	beq 10$
+	jmp fparm	;scanning a macro parameter
+
+10$	lda sfile
+	and #frmmac	;($20)
+	beq 20$
+	jmp fmac	;scanning a macro
+
+20$	bit sfile	;source?
+	bvs 30$
+	ldx #2		;...from main
+	.byte $2c
+30$	ldx #3		;...from library
+	jsr chkin_x
+	jsr basin
+	ldx status	;check for eof
+	beq getchx	;zero is ok...
+
+; not zero check for EOI, etc.
+
+	tay		;save the data
+	txa		;status into .a
+	and #$40	;EOI?
+	bne 40$		;...yes
+	jsr ftest	;bad status, read DOS error msg
+	jmp done	;...get out
+
+40$	lda #0
+	sta lchar	;set eof
+	tya		;restore the data byte
+
+
+
+getchx	ldy savey
+	ldx savex
+	rts
+
+	.page
+crlf	lda #cr
+;	jsr output
+;	lda #lf
+
+output	stx savex	;print character in .A per 'options' and 'lboth'
+	sty savey
+	pha
+	bit options	;hardcopy?
+	bvc 20$		;...no
+	ldx #4		;printer channel open?
+	jsr ckout_x
+
+10$	pla
+	pha
+	jsr bsout	;output character in .A to printer
+
+20$	pla
+	ldx options	;softcopy?
+	bmi 30$		;...yes
+	ldx lboth
+	beq 40$		;...no
+
+30$	jsr print	;output character in .A to screen
+40$	jmp getchx
+
+	.page
+fitest	jsr clear_io	;input test
+	ldx la		;get last file number used
+	stx chan
+	jsr chkin
+	bcs fterr4
+	jmp clear_io	;jsr/rts
+
+
+
+fdtest	jsr clear_io	;output test
+	ldx la		;get last file number used
+	stx chan
+	jsr ckout
+	bcs fterr4
+	jmp clear_io	;jsr/rts
+
+
+
+ftest	jsr clear_io	;read disk error channel
+	ldx #7
+	stx chan
+	jsr chkin
+	bcs fterr4	;...big problem- cannot get error channel
+
+	lda #cr
+	sta doserr
+	ldx #1
+10$	jsr basin	;read ascii error string into buffer
+	sta doserr,x
+	inx
+	cmp #cr
+	bne 10$
+	lda doserr+1	;was there an error? (look for '00,OK,00,00')
+	ora doserr+2
+	cmp #'0'
+	bne 20$		;...yes, report disk error
+	rts		;...no, simply return
+
+20$	lda #space	;form error message to be printed
+	sta doserr-1,x
+	lda #rvs
+	sta doserr,x
+	ldy #0		;append filename to error message
+30$	inx
+	lda (fnadr),y
+	sta doserr,x
+	iny
+	cpy fnlen
+	bcc 30$
+	lda #0
+	sta doserr+1,x	;null string terminator
+	lda #>doserr
+	ldy #<doserr
+fterr	jsr wscrn	;print the disk error
+	jmp done	;exit assembler
+
+
+
+fterr4	cmp #10		;error # valid?
+	bcs 10$		;...no, just say 'ERROR'
+	tax
+	lda dertbl,x	;output error message
+	tay
+	lda dertbh,x
+	jsr wscrn
+
+10$	ldy #<ioerr	;print 'ERROR'
+	lda #>ioerr
+	bne fterr	;...abort assembly
+
+
+; print stored message per 'options' and 'lboth'
+
+msg	lda msgs,x
+	beq 10$		;...done if null byte
+	jsr output
+	inx
+	bne msg		;...loop until done
+10$	rts
+
+	.page
+clear_io
+	ldx #40		;delay for 200-300 usec for disk bug
+10$	dex
+	bne 10$
+	stx chan	;reset default I/O channels (.X=0)
+	jmp clrch
+
+
+
+chkin_x
+	cpx chan	;confirm input channel per .x
+	beq 10$
+	stx la
+	jsr clear_io
+	ldx la
+	stx chan
+	jmp chkin
+10$	rts
+
+
+
+ckout_x
+	cpx chan	;confirm output channel per .x
+	beq 10$
+	pha
+	stx la
+	jsr clear_io
+	ldx la
+	stx chan
+	jsr ckout
+	pla
+10$	rts
+
+	.page
+;
+; object output routine
+;
+
+objout	stx savex
+	jsr 10$
+	ldx savex
+	rts
+
+10$	pha		;data byte
+	sta objmap,y	;save in mem map
+	lda pass
+	bne 40$		;not pass 1
+20$	pla
+30$	rts
+
+40$	lda options
+	and #opt_obj	;object file generation?
+	beq 20$		;...no
+	tya
+	clc
+	adc ipc
+	eor laddl
+	bne 50$
+	adc ipc+1
+	cmp laddh
+	beq 80$
+
+50$	lda bytcnt	;is addr consec?
+	beq 70$		;...yes (bytcnt=0 means reset)
+
+	lda binary	;can we move pc?
+	beq 60$		;...yes
+	jsr clear_io	;...no- binary object file, warn user
+	jsr primm
+	.byte cr,rvs,bell,'WARNING: NON-CONTIGUOUS BINARY OBJECT FILE',cr,0
+
+60$	jsr objwrt	;dump record
+70$	jsr obint1	;reset buffer
+
+80$	ldx bytcnt
+	pla
+	sta objbuf+3,x	;put byte
+	inc bytcnt	;inc count
+
+	clc
+	adc cksuml
+	sta cksuml
+	bcc 90$
+	inc cksumh
+
+90$	inc laddl	;inc last address
+	bne 100$
+	inc laddh
+
+100$	cpx #maxbyt-1
+	bcc 30$
+	jsr objwrt	;full buffer, dump
+	jmp obint2
+
+	.page
+objint	lda #0		;initialize for...
+	sta recntl	;...object dump
+	sta recnth
+
+obint1	lda ipc		;init for...
+	sta laddl	;...record dump
+	lda ipc+1
+	sta laddh
+
+obint2	lda #0		;init for consec...
+	sta bytcnt	;...record dump
+	sta cksumh
+	lda laddl
+	sta objbuf+2
+	sta cksuml	;init checksum
+	lda laddh
+	sta objbuf+1
+	clc
+	adc cksuml
+	sta cksuml
+	bcc 10$
+	inc cksumh
+10$	rts
+
+;
+; write out record to channel
+;
+
+objwrt	inc recntl	;inc record cnt
+	bne 10$
+	inc recnth
+
+10$	ldx #0
+	stx savex
+	lda bytcnt
+	clc
+	adc #3
+	sta savey
+
+	lda binary	;are we writing a binary file?
+	beq 50$		;no
+	bmi 20$		;we've been through it before
+
+	lda #$80	;flag it
+	sta binary
+
+	lda objbuf+2	;write out load address
+	jsr 80$
+	lda objbuf+1
+	jsr 80$
+20$	ldx #3
+	stx savex
+	cpx savey
+	beq 40$
+
+30$	ldx savex
+	lda objbuf,x
+	jsr 80$
+	inc savex
+	ldy savey
+	cpy savex
+	bne 30$
+40$	rts
+
+50$	lda #';'
+	jsr 80$
+60$	ldx savex
+	lda objbuf,x
+	jsr 70$
+	inc savex
+	ldy savey
+	cpy savex
+	bne 60$
+	lda bytcnt
+	clc
+	adc cksuml
+	pha
+	lda #0
+	adc cksumh
+	jsr 70$
+	pla
+	jsr 70$
+	lda #cr		;record terminator
+	bne 80$
+
+70$	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr ascii
+	jsr 80$
+	pla
+	and #$0f
+	jsr ascii
+80$	ldx #6
+	jsr ckout_x
+	jmp bsout
+
+
+
+objend	lda bytcnt	;last record?
+	beq 10$		;none to dump...
+	jsr objwrt
+10$	lda recntl	;dump trailer rec
+	sta laddl
+	lda recnth
+	sta laddh
+
+	jsr obint2
+	jmp objwrt
+
+
+
+ascii	clc
+	adc #$f6
+	bcc 10$
+	adc #6
+10$	adc #$3a
+	rts
+
+
+fmac	jsr macchr
+	bne 10$		;zero denotes end of scan
+	jsr popmac	;restore last scanner
+	jmp getch1
+
+10$	cmp #'?'	;is a macro parameter?
+getext	beq 20$		;yes
+	jmp getchx	;no, so exit
+
+20$	jsr macchr	;get parameter number
+	sec
+	sbc #'0'	;convert to binary
+	jsr prmpnt	;construct parameter pointer
+	ldy #0		;has parameter been defined?
+	lda (t0),y	;get low byte of pointer
+	sta parmpt	;pointer to parameter
+	iny
+	lda (t0),y	;then high byte
+	sta parmpt+1	;high byte of ptr
+	ora parmpt	;is the pointer null?
+	bne 30$
+	lda t0
+	sta newmac	;save the pointer to param
+	lda t0+1
+	sta newmac+1
+	jsr genlab	;make a new label
+	lda newmac	;reclaim the parameter pointer
+	sta t0
+	lda newmac+1
+	sta t0+1
+	ldy #0
+	lda parmpt
+	sta (t0),y
+	iny
+	lda parmpt+1
+	sta (t0),y
+30$	lda sfile
+	ora #frmprm	;tell getchr to scan parameter
+	sta sfile
+fparm	lda parmpt	;get next char
+	sta t0
+	lda parmpt+1
+	sta t0+1
+	inc parmpt	;bump pointer
+	bne 10$
+	inc parmpt+1
+10$	ldy #0
+	lda (t0),y
+	bne getext	;exit with char if not eof
+	lda sfile
+	and #$ff-frmprm	;mask out the parameter bit
+	sta sfile
+	jmp getch1	;loop for the next character
+
+macchr	lda curpnt	;get next macro char
+	sta t0
+	lda curpnt+1
+	sta t0+1
+	inc curpnt	;bump the pointer
+	bne 10$
+	inc curpnt+1
+10$	ldy #0
+	lda (t0),y
+	rts
+
+
+; generate label makes a new label, pushes it into macro stack,
+; and leaves a pointer to it in parmpt.
+
+genlab	ldx #$03
+10$	inc mlabel,x
+	lda mlabel,x
+	cmp #'9'+1	;has ascii 9 overflowed?
+	bne 20$
+	lda #'0'	;reset this digit
+	sta mlabel,x
+	dex
+	bne 10$
+20$	lda mcstpt
+	sta parmpt
+	lda mcstpt+1
+	sta parmpt+1
+	ldy #0
+30$	lda mlabel,y
+	jsr push	;copy text to macro stack
+	iny
+	cpy #4
+	bcc 30$
+	lda #0
+	jmp push	;push end-of-file char (jsr/rts)
+
+;	.end

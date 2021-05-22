@@ -1,0 +1,372 @@
+	.page
+	.subttl  asmtable
+;
+; ind tables & search tables
+;
+
+numsav	= 13		;# directives for .OPTION
+numasm	= 27		;# directives total
+
+asmjmp	.word h312	;nolist
+	.word h311	;list
+	.word h310	;nomem
+	.word h309	;mem
+	.word h308	;noerr
+	.word h307	;err
+	.word h304	;nosymbol
+	.word h303	;symbol
+	.word h302	;nogen
+	.word h323	;gen
+	.word h330	;noexpand macros
+	.word h331	;expand macros
+	.word nhash	;labels 6 chars or less
+	.word hash	;allow long labels
+
+	.word hmac 	;.macro command
+	.word hmnd 	;.mnd command
+	.word hife	;.ife command
+	.word hifn	;.ifn command
+	.word hlib	;.library command
+	.word hfil	;.file command
+	.word h301	;.option command
+	.word h10 	;.end command
+	.word h12 	;.page command
+	.word h26 	;.skip command
+	.word h506	;.dbyte command
+	.word h113	;.word command
+	.word h111	;.byte command
+	.word dimes	;.message command
+
+
+asmdir	.byte 'MES'
+	.byte 'BYT'
+	.byte 'WOR'
+	.byte 'DBY'
+	.byte 'SKI'
+	.byte 'PAG'
+	.byte 'END'
+	.byte 'OPT'
+	.byte 'FIL'
+	.byte 'LIB'
+	.byte 'IFN'
+	.byte 'IFE'
+mnd	.byte 'MND'
+	.byte 'MAC'
+
+optdir	.byte 'LON'	;allow long labels
+	.byte 'NLO'	;don't allow long labels
+	.byte 'MLI'	;expand macros
+	.byte 'NML'	;don't expand macros
+	.byte 'GEN'
+	.byte 'NOG'
+	.byte 'SYM'
+	.byte 'NOS'
+	.byte 'ERR'
+	.byte 'NOE'
+	.byte 'MEM'
+	.byte 'NOM'
+	.byte 'LIS'
+	.byte 'NOL'
+
+oprnds	.byte 'ADC'
+	.byte 'AND'
+	.byte 'ASL'
+	.byte 'BCC'
+	.byte 'BCS'
+	.byte 'BEQ'
+	.byte 'BIT'
+	.byte 'BMI'
+	.byte 'BNE'
+	.byte 'BPL'
+	.byte 'BRK'
+	.byte 'BVC'
+	.byte 'BVS'
+	.byte 'CLC'
+	.byte 'CLD'
+	.byte 'CLI'
+	.byte 'CLV'
+	.byte 'CMP'
+	.byte 'CPX'
+	.byte 'CPY'
+	.byte 'DEC'
+	.byte 'DEX'
+	.byte 'DEY'
+	.byte 'EOR'
+	.byte 'INC'
+	.byte 'INX'
+	.byte 'INY'
+	.byte 'JMP'
+	.byte 'JSR'
+	.byte 'LDA'
+	.byte 'LDX'
+	.byte 'LDY'
+	.byte 'LSR'
+	.byte 'NOP'
+	.byte 'ORA'
+	.byte 'PHA'
+	.byte 'PHP'
+	.byte 'PLA'
+	.byte 'PLP'
+	.byte 'ROL'
+	.byte 'ROR'
+	.byte 'RTI'
+	.byte 'RTS'
+	.byte 'SBC'
+	.byte 'SEC'
+	.byte 'SED'
+	.byte 'SEI'
+	.byte 'STA'
+	.byte 'STX'
+	.byte 'STY'
+	.byte 'TAX'
+	.byte 'TAY'
+	.byte 'TSX'
+	.byte 'TXA'
+	.byte 'TXS'
+	.byte 'TYA'
+
+; constant tables
+
+kludg	.byte 255,13,27,41
+	.byte 55,69,83,97
+	.byte 111,125,139,153
+	.byte 167,181,195
+
+kltbl	.byte 255,255,255,255
+	.byte 4,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 4,4,255,255,0,4,0
+	.byte 4,0,0,4,0,255,0
+	.byte 20,20,255,255,16
+	.byte 255,255,20,255,16
+	.byte 255,16,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 16,255,20,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 0,0,32,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255
+	.byte 255,255,255,255,16
+	.byte 16,255,255,255,255,255,255
+	.byte 255,255,255,255,255,255
+	.byte 8,255,255,255,255,0,255
+	.byte 0,255,255,0,255,255,255
+	.byte 12,12,0,0,8,12,8,12,8 
+	.byte 8,12,8,255,255
+	.byte 28,28,255,255,24,255,255
+	.byte 28,255,255,255,24,255,255,24
+	.byte 24,255,255,255,255,255,255
+	.byte 255,255,$1c,255,255,255
+
+ktmpl	.byte 1
+	.byte 1
+	.byte 5
+	.byte 21
+	.byte 21
+	.byte 21
+	.byte 7
+	.byte 21
+	.byte 21
+	.byte 21
+	.byte 20
+	.byte 21
+	.byte 21
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 1
+	.byte 6 
+	.byte 6
+	.byte 12
+	.byte 20
+	.byte 20
+	.byte 1 
+	.byte 12
+	.byte 20
+	.byte 20
+	.byte 3
+	.byte 4
+	.byte 1
+	.byte 11
+	.byte 8
+	.byte 5
+	.byte 20
+	.byte 1
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 5
+	.byte 5
+	.byte 20
+	.byte 20
+	.byte 1
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 2
+	.byte 9
+	.byte 10
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+	.byte 20
+
+kcode	.byte 97
+	.byte 33
+	.byte 6
+	.byte 144
+	.byte 176
+	.byte 240 
+	.byte 36
+	.byte 48
+	.byte 208
+	.byte 16
+	.byte 0
+	.byte 80 
+	.byte 112
+	.byte 24
+	.byte 216
+	.byte 88
+	.byte 184
+	.byte 193
+	.byte 224
+	.byte 192
+	.byte 198
+	.byte 202
+	.byte 136
+	.byte 65
+	.byte 230
+	.byte 232
+	.byte 200
+	.byte 76
+	.byte 32
+	.byte 161
+	.byte 162
+	.byte 160
+	.byte 70
+	.byte 234
+	.byte 1
+	.byte 72
+	.byte 8
+	.byte 104
+	.byte 40
+	.byte 38 
+	.byte $66
+	.byte 64
+	.byte 96
+	.byte 225
+	.byte 56
+	.byte 248
+	.byte 120
+	.byte 129
+	.byte 134
+	.byte 132
+	.byte 170
+	.byte 168
+	.byte 186
+	.byte 138
+	.byte 154
+	.byte 152
+
+decl	.byte <1,<10,<100,<1000,<10000
+dech	.byte >1,>10,>100,>1000,>10000
+
+	.page
+msgs	.byte '*--',0
+ioerr	.byte 'ERROR',cr,0
+
+pg	.byte 'PAGE ',0
+hd	.byte cr,cr,' LINE  ADDR  CODE        SOURCE STATEMENT',cr,cr,0
+
+stttl	.byte cr,cr,'   *** SYMBOL TABLE ***',cr,cr,'   SYMBOL   VALUE',cr,cr,0
+
+xrttl	.byte cr,cr,'  *** CROSS REFERENCE ***'
+	.byte cr,cr,'  SYMBOL   VALUE   REFERENCES',cr,cr,0
+
+numerr	.byte cr,'ERRORS =',0
+dnmsg	.byte cr,cr,'END OF ASSEMBLY',cr,0
+
+;
+; cross ref file names
+;
+
+xnlab	.byte '@0:XRLL0000.$$$,S,W'
+10$
+xn11	= 10$-xnlab
+
+xnlab1	.byte '0:XRLL0000.$$$,S,R'
+10$
+xn111	= 10$-xnlab1
+
+xnref	.byte '@0:XRFF0000.$$$,S,W'
+10$
+xn21	= 10$-xnref
+
+erswrk	.byte 'S0:????????.$$$',0
+
+;
+; error messages
+;
+
+err01	.byte 'UNDEFINED SYMBOL ------'
+err02	.byte 'DUPLICATE SYMBOL ------'
+err03	.byte 'IMPROPER OPCODE -------'
+err04	.byte 'INVALID ADDRESS -------'
+err05	.byte '.A MODE NOT ALLOWED ---'
+err07	.byte 'MISSING OPERAND -------'
+err08	.byte 'ILLEGAL SYMBOL NAME ---'
+err09	.byte 'SYMBOL NAME TOO LONG --'
+err10	.byte 'NON-ALPHANUMERIC ------'
+err11	.byte 'FORWARD REFERENCE -----'
+err12	.byte 'INDEX MUST BE X OR Y --'
+err13	.byte 'SYNTAX ERROR ----------'
+err14	.byte 'UNDEFINED DIRECTIVE ---'
+err17	.byte 'BRANCH OUT OF RANGE ---'
+err18	.byte 'ILLEGAL OPERAND TYPE --'
+err19	.byte 'INDIRECT OUT OF BOUNDS-'
+err20	.byte 'RESERVED SYMBOL NAME --'
+err21	.byte 'PC OVERFLOW -----------'
+
+errtab	.word err01,err02,err03,err04,err05,00000
+	.word err07,err08,err09,err10,err11,err12
+	.word err13,err14,00000,00000,err17,err18
+	.word err19,err20,err21
+
+derr0	.byte bell,rvs,'STOP KEY HIT ',0
+derr1	.byte bell,rvs,'TOO MANY FILES ',0
+derr2	.byte bell,rvs,'FILE OPEN ',0
+derr3	.byte bell,rvs,'FILE NOT OPEN ',0
+derr4	.byte bell,rvs,'FILE NOT FOUND ',0
+derr5	.byte bell,rvs,'DEVICE NOT PRESENT ',0
+derr6	.byte bell,rvs,'NOT INPUT FILE ',0
+derr7	.byte bell,rvs,'NOT OUTPUT FILE ',0
+derr8	.byte bell,rvs,'MISSING FILE NAME ',0
+derr9	.byte bell,rvs,'ILLEGAL DEVICE NUMBER ',0
+
+dertbl	.byte <derr0,<derr1,<derr2,<derr3,<derr4
+	.byte <derr5,<derr6,<derr7,<derr8,<derr9
+dertbh	.byte >derr0,>derr1,>derr2,>derr3,>derr4
+	.byte >derr5,>derr6,>derr7,>derr8,>derr9
+
+cbm_title
+	.byte '(C)1986  COMMODORE  ASM6502.128 V0.1'
+
+;	.end
