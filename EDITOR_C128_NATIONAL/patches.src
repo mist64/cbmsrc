@@ -1,0 +1,37 @@
+	.page
+	.subttl  editor patch file	(05/09/86)
+
+
+	* = $cf00	;-05 EDITOR PATCH AREA (FAB)
+
+.editor_patch_begin
+
+dopfky_patch
+
+;  fixes the problem of function keys overwriting previous function key
+;  string still in buffer.  Also exits via 'scnrts', as it should have.
+
+	lda kyndx	;function key buffer in use?
+	bne 3$		;...branch if active- ignore this scan
+
+	lda pkybuf,x    ;set length of new function key string
+	sta kyndx
+	lda #0    	;index to start of string
+
+	clc
+1$	dex		;pointer to string = sum(len(string(0-X)))
+	bmi 2$
+	adc pkybuf,x
+	bcc 1$		;...always
+
+2$	sta keyidx	;set pointer to active function key string
+3$	jmp scnrts	;restore scan to last column & rts
+
+
+.editor_patch_end
+
+	* = $cf80	;-05 KERNEL PATCH AREA (FAB)
+
+.kernal_patch_begin
+
+;.end

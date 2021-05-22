@@ -77,6 +77,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [BASIC_C128](BASIC_C128)                                     | 1986 |
 | [EDITOR_C128](EDITOR_C128)                                   | 1985 | 318020-05 |
 | [EDITOR_C128_DIN](EDITOR_C128_DIN)                           | 1985 | 315078-03, German |
+| [EDITOR_C128_NATIONAL](EDITOR_C128_NATIONAL)                 | 1987 |             |
 | [KERNAL_C128_03](KERNAL_C128_03)                             | 1985 | 318020-03 |
 | [KERNAL_C128_05](KERNAL_C128_05)                             | 1985 | 318020-05 |
 | [KERNAL_C128_06](KERNAL_C128_06)                             | 1988 | 318020-06 |
@@ -268,7 +269,9 @@ The Commodore 128 BASIC 7.0, KERNAL, EDITOR and MONITOR sources (1985/1986). Sou
 * KERNAL_C128_03 is 318020-03, $FF80 = 0. (It was reconstructed from listings/first_release/kernal.lis in the dump.)
 * KERNAL_C128_05 is 318020-05, $FF80 = 1.
 * KERNAL_C128_06 is 318020-06, $FF80 = 2. This version seems to have been unreleased.
-* EDITOR_C128 is the US version (318020-05), EDITOR_C128_DIN the German version (315078-03).
+* EDITOR_C128 is the US version (318020-05)
+* EDITOR_C128_DIN is the German version (315078-03). The code is the same as in EDITOR_C128_NATIONAL, but the comments are slightly different.
+* EDITOR_C128_NATIONAL contains Denmark (325174-03), Finland/Sweden (325180-03), France/Belgium (325166-03), Germany/Austria (315078-03), Italy (325168-03), Norway (325177-03), Spain (325170-03), Swiss (325172-03).
 
 ### BASIC_PET_V2_MICROSOFT
 

@@ -1,0 +1,437 @@
+	.page
+	.subttl  ed6  editor subroutines  (08/15/85)
+
+get1ch			;get a character & its color from text screen
+	ldy pntr	;get char/color index
+
+	bit mode
+	bmi get80	;...branch if from 8563 screen
+
+	lda (user),y    ;get the color
+	sta tcolor
+	lda (pnt),y     ;get the character
+	rts
+
+
+
+get80
+	jsr getusr	;setup 8563 memory address to attribute
+	jsr vdcget	;read the attribute
+	sta tcolor
+	jsr getpnt	;setup 8563 memory address to character
+	jsr vdcget	;read the character
+	rts
+
+	.page
+;  wrap table subroutines
+;
+getbit
+	ldx tblx
+getbt1
+	jsr bitpos	;get byte & bit positions
+	and bitabl,x
+	cmp #1		;make carry clear if zero
+	jmp bitout
+
+
+
+
+; putbit - set bit according to carry
+;
+putbit
+	ldx tblx
+putbt1
+	bcs setbit	;go if to mark as wrappped line
+
+
+
+
+; clrbit - clear wrap bit
+;
+clrbit
+	jsr bitpos	;get byte & bit positions
+	eor #$ff	;invert bit position
+	and bitabl,x    ;clear bit
+bitsav
+	sta bitabl,x
+bitout
+	ldx bitmsk
+	rts
+
+
+
+
+; setbit  -  set bit to mark as wrapped line
+;
+setbit
+	bit scroll	;check for line-link disable
+	bvs getbt1
+	jsr bitpos	;get byte & bit position
+	ora bitabl,x    ;set wrap bit
+	bne bitsav	;always
+
+	.page
+; bitpos - get byte & bit position of wrap bit
+;          input - x = row number
+;          output - x = byte number
+;                   a = bit mask
+
+bitpos
+	stx bitmsk
+	txa
+	and #$07	;get bit position
+	tax
+	lda bits,x	;get bit mask
+	pha
+	lda bitmsk
+	lsr a
+	lsr a		;shift to get byte position
+	lsr a
+	tax
+	pla
+	rts
+
+	.page
+; ****** move to end/start of line
+;
+fndsol
+	ldy sclf	;will move to start of line...
+	sty pntr	;set to leftmost column
+
+
+; ****** find beginning of line
+;
+fistrt
+	jsr getbit	;find start of current line
+	bcc 1$		;branch if found
+	dec tblx	;up a line
+	bpl fistrt	;always
+	inc tblx	;whoops went too far
+
+1$	jmp stupt 	;set line base adr
+
+
+; ****** find last non-blank char of line
+;
+; pntr= column #
+; tblx= line #
+
+fndend
+	inc tblx
+	jsr getbit	;is this line continued
+	bcs fndend	;branch if so
+	dec tblx	;found it - compensate for inc tblx
+	jsr stupt
+	ldy scrt	;get right margin
+	sty pntr	;point to right margin
+
+1$	jsr get1ch
+	ldx tblx	;restore .x (if 8563 mode, 'get1ch' trashes .x)
+	cmp #space
+	bne 3$		;yes
+	cpy sclf	;are we at the left margin?
+	bne 2$		;no- keep going
+	jsr getbit	;are we on a wrapped line?
+	bcc 3$		;no- get out
+
+2$	jsr bakchr
+	bcc 1$		;ok- not at top left
+
+3$	sty indx	;remember this
+	rts
+
+	.page
+; ****** move to next char
+;
+; scroll if enabled, else wrap to top
+
+nxtchr
+	pha
+	ldy pntr
+	cpy scrt	;are we at the right margin?
+	bcc 1$		;branch if not
+
+	jsr nxln	;point to next line
+	ldy sclf	;point to first char of 1st line
+	dey
+	sec		;set to show moved to new line
+1$	iny		;increment char index
+	sty pntr
+	pla
+	rts
+
+
+; ****** backup one char
+;
+; wrap up and stop a top left
+
+bakchr
+	ldy pntr
+	dey
+	bmi 1$
+	cpy sclf	;are we at the left margin
+	bcs 2$		;no - past it
+
+1$	ldy sctop
+	cpy tblx	;are we at top line last character?
+	bcs 3$		;leave with carry set
+	dec tblx	;else backup a line
+	pha
+	jsr stupt 	;set line base adr
+	pla
+	ldy scrt	;move cursor to right side
+
+2$	sty pntr
+	cpy scrt	;set z-flag if moved to new line
+	clc		;always clear
+3$	rts
+
+
+; ****** save row & column position
+;
+savpos
+	ldy pntr
+	sty sedt1
+	ldx tblx
+	stx sedt2
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  ///////// put a character on the screen \\\\\\\\\\\
+;
+;	enter 'disply' with .a= character,  .x= color
+
+
+blank	lda color	;display a blank
+	and #$8f	; (strip off rvs, underline & flash attributes)
+	tax
+	lda #space
+	.byte $2c
+
+
+
+displc	ldx color	;use current fgnd color
+	.byte $2c
+
+
+
+displt	ldx tcolor	;use saved color
+
+
+
+disply	tay		;save character to diplay
+	lda #2
+	sta blnct	;force a cursor blink
+
+	jsr scolor	;setup color pointers
+	tya		;restore character
+	ldy pntr	;get cursor position
+
+
+displ	bit mode
+	bmi disp80	;...branch if 8563 screen
+
+	sta (pnt),y	;put character on screen
+	txa		;get color
+	sta (user),y	;put the color on screen
+	rts
+
+
+disp80	pha		;save character
+	txa
+	pha		;save color
+	jsr getusr	;setup color byte pointer
+	pla
+	jsr vdcput	;put the color on the screen
+	jsr getpnt	;setup character byte pointer
+	pla
+	jmp vdcput	;put the character on the screen & rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;	SCRORG		returns current window's size (maximum row & column #)
+;
+; entry:	nothing required.
+;
+; exit:		.x = maximum column number (# columns minus 1)
+;		.y = maximum line   number (# lines   minus 1)
+;		.a = maximum screen width  (# columns minus 1)
+;
+
+
+scrorg			;return current window size  (maximum row & column #)
+	sec
+	lda scbot
+	sbc sctop
+	tay		;.y = # lines in current window - 1
+
+	sec
+	lda scrt
+	sbc sclf
+	tax		;.x = # columns in current window - 1
+
+	lda columns	;.a = # columns in current screen - 1
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+;	PLOT		reads or sets the cursor position within current window
+;
+; entry:	.c = 1	returns the cursor position (.y=column, .x=line)
+;			relative to the current window origin (NOT screen origin).
+;
+;		.c = 0	sets the cursor position (.y=column, .x=line) relative
+;			to the current window origin (NOT screen origin).
+;
+; exit:		.c = 1	error exit. the requested position was outside the
+;			current window and NO CHANGE has been made (see SCRORG). .
+;
+;		.c = 0	normal exit. the cursor has been moved to the position
+;			contained in .x & .y relative to window origin.
+;
+
+plot
+	bcs 30$		;...branch to simply read the current position
+
+	txa		;get line position relative to window origin
+	adc sctop
+	bcs 15$
+	cmp scbot
+	beq 10$		;...good if within window (position <= scbot)
+	bcs 15$		;...branch if error (.c=1)
+
+10$	pha		;save
+	clc
+	tya		;get colm position relative to window origin
+	adc sclf
+	bcs 14$
+	cmp scrt
+	beq 20$		;...good if within window (position <= scrt)
+	bcc 20$
+14$	pla
+15$	rts		;error return (.c=1)
+
+20$	sta pntr	;set column position
+	sta lstp
+	pla
+	sta tblx	;set line position
+	sta lsxp
+	jsr stupt	;position cursor there
+	jsr cursor
+
+30$	lda tblx	;read current line position
+	sbc sctop
+	tax		;return cursor line # relative to window top
+	sec
+	lda pntr	;read current column position
+	sbc sclf
+	tay		;return cursor column # relative to window left
+	clc		;normal return
+	rts
+
+	.page
+;*************************************************************************
+;
+;	KEYSET - redefine a programmable function key
+;
+;	entry:	.a= pointer to new string adr (lo,hi,bank)
+;		.x= key number (1-8)
+;		.y= length of new string
+;
+;	exit:	.c= 0 if good,  1 if no room (no change made)
+;
+;**************************************************************************
+
+keyset
+	dex
+	stx keynum	;save key number (0-7)
+	sty keysiz	;save string length
+	sta fetvec	;setup address pointer
+	tay
+	ldx $2,y	;get bank
+	jsr _config	;convert to actual mmu configuration
+	sta keybnk
+
+	ldx #pkynum	;(note: 'help' & <shft/run> strings too)
+	jsr findky	;find end of all strings
+	sta keylen	;save offset
+	ldx keynum
+	inx
+	jsr findky	;find end of function key (beginning of next)
+	sta keynxt	;save offset
+	ldx keynum
+	lda keysiz
+	sec
+	sbc pkybuf,x	;get new size - old size
+	beq keyins	;skip if the same
+	bcc 2$		;skip if new is shorter
+	clc
+	adc keylen	;get new ending offset for all keys
+	bcs keyerr	;wrapped? error if so...
+	tax		;get destination address+1
+	ldy keylen	;get source address+1
+
+1$	cpy keynxt
+	beq keyins	;done if all following keys have been moved
+	dey		;expand key area
+	dex		;move source to destination
+	lda pkydef,y
+	sta pkydef,x
+	bcs 1$
+
+
+2$	adc keynxt	;get destination offset
+	tax
+	ldy keynxt	;get source address
+
+3$	cpy keylen	;contract key area
+	bcs keyins	;exit if moved all
+	lda pkydef,y
+	sta pkydef,x
+	iny
+	inx
+	bcc 3$		;always
+
+	.page
+;  keyins  --  insert new key definition
+
+keyins
+	ldx keynum	;get key number
+	jsr findky	;get starting offset
+	tax
+	ldy keynum
+	lda keysiz	;get new size
+	sta pkybuf,y	;set new size
+	ldy #0
+
+1$	dec keysiz
+	bmi keyrts	;exit - end of string
+	stx keytmp
+	ldx keybnk
+	lda fetvec	; (already setup at 'keyset')
+	sei
+	jsr fetch	;lda (index),y:   move in new key def. from string
+	cli
+	ldx keytmp
+	sta pkydef,x
+	inx
+	iny
+	bne 1$		;...always
+
+keyrts	clc		;good return
+
+keyerr	rts
+
+
+
+
+findky
+	lda #0
+	clc
+
+1$	dex
+	bmi 2$
+	adc pkybuf,x
+	bcc 1$
+2$	rts
+
+;.end

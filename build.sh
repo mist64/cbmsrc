@@ -88,6 +88,7 @@ build1 KERNAL_CBM2_1983-07-07 kernal
 
 build2 EDITOR_C128 editor
 build2 EDITOR_C128_DIN editor
+build2 EDITOR_C128_NATIONAL german
 
 build1 EDITOR_CBM2_1982-11-19 sced.lib
 build1 EDITOR_CBM2_1983-05-31 sced.lib
