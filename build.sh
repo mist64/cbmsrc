@@ -158,6 +158,7 @@ build2 DOS_1541C_03 serlib
 build1 PRINTER_8023P us.ptr.src
 
 build1 ASSEMBLER_AIM65 assembler
+build1 ASSEMBLER_PET_REC assembler
 build1 ASSEMBLER_PET_V112779_REC assembler
 build1 ASSEMBLER_PET_V121579_REC assembler4
 build1 ASSEMBLER_PET_V090580_A_REC assembler

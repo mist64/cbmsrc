@@ -138,7 +138,8 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
 | [ASSEMBLER_AIM65](ASSEMBLER_AIM65)                           | 1978 | 4 KB, heavily optimized |
-| [ASSEMBLER_PET_V112779_REC](ASSEMBLER_PET_V112779_REC)       | 1979 | ROM 2 only |
+| [ASSEMBLER_PET](ASSEMBLER_PET)                               | 197? | ROM 2 only (undated) |
+| [ASSEMBLER_PET_V112779_REC](ASSEMBLER_PET_V112779_REC)       | 1979 | ROM 2 only, adds mul/div, error messages |
 | [ASSEMBLER_PET_V121579_REC](ASSEMBLER_PET_V121579_REC)       | 1979 | ROM 2/4, adds `.IFN`/`.IFE` |
 | [ASSEMBLER_PET_V090580_A_REC](ASSEMBLER_PET_V090580_A_REC)   | 1980 | adds XREF support |
 | [ASSEMBLER_PET_V090580_B_REC](ASSEMBLER_PET_V090580_B_REC)   | 1980 | optimizations |
@@ -436,6 +437,7 @@ This is a reconstruction of the oldest known version of the Resident Assembler. 
 
 Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_TED, based on work by Martin Hoffmann-Vetter.
 
+* ASSEMBLER_PET (undated, [6696 bytes](docs/cbmasm/resident_assembler_Vxxxxxx_pet.prg)); for BASIC 2
 * ASSEMBLER_PET_V112779_REC (1979-11-27, [7426 bytes](docs/cbmasm/resident_assembler_V112779_pet.prg)); for BASIC 2
 * ASSEMBLER_PET_V121579_REC (1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_pet.prg) for BASIC 4; and with `BASIC4=0`: 1979-12-15, [7546 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V121579_alt_pet.prg) for BASIC 2)
 * ASSEMBLER_PET_V090580_A_REC (1980-09-05, [7858 bytes](https://www.pagetable.com/docs/cbmasm/resident_assembler_V090580_alt2_pet.prg))
