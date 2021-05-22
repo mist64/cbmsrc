@@ -160,7 +160,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 ## Descriptions
 
-### BASIC_PET_*, KERNAL_PET_*
+### BASIC_PET&#x5f;&#x2a;, KERNAL_PET&#x5f;&#x2a;
 
 The PET BASIC and KERNAL sources in different versions (197-1980). Reconstructed by Martin Hoffmann-Vetter.
 
@@ -278,7 +278,7 @@ The PET BASIC V2 source (1978) as built by Microsoft.
 * On the PET, this was called BASIC V2, Microsoft called it V1.1.
 * It includes the "WAIT6502,1" easter egg (symbol `ZSTORDO`).
 
-### BASIC_CBM2_*, KERNAL_CBM2_*, EDITOR_CBM2_*
+### BASIC_CBM2&#x5f;&#x2a;, KERNAL_CBM2&#x5f;&#x2a;, EDITOR_CBM2&#x5f;&#x2a;
 
 The CBM2 BASIC, EDITOR and KERNAL sources in different versions (1982-1984).
 
@@ -433,7 +433,7 @@ The AIM-65 version of the resident assembler (ROM R3224; 1978). Reconstructed fr
 
 This is a reconstruction of the oldest known version of the Resident Assembler. It's a 4 KB ROM that interfaces with the AIM-65 monitor. It is heavily optimized and outputs to RAM instead of OBJ files. It is probably based on the (lost) 6 KB KIM-1 resident assembler ("KIM-5"). The later PET versions are not based on this (optimizations did not carry over), but the original (also lost) MDT650 version.
 
-### ASSEMBLER_PET_*_REC
+### ASSEMBLER_PET_&#x2a;_REC
 
 Different versions of the PET Resident Assembler. Reconstructed from ASSEMBLER_TED, based on work by Martin Hoffmann-Vetter.
 
