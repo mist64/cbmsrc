@@ -1,0 +1,487 @@
+	.page
+	.subttl "Input File Handlers"
+;
+;
+;	init_input	intializes input software
+;
+;	set_file	sets software to filename pointed to by x,a
+;			( pukes if too many files )
+;			attempts to open file
+;			compains if cannot be opened
+;
+;	get_byte	reaqds byte from current input (macro or file)
+;			reads a byte from the current input file.
+;			returns c=0	byte returned ( may close file id EOF )
+;				c=1	file was closed for some reason.
+;		
+;
+;	the following global variables may be read-only referenced externally
+;
+;		file_name	text for the current filename.
+;		current_input_file
+;				indicates number of currently open files.
+;
+;
+file_name_max = 12		;	        12   3456   789a  b
+	ram file_name,file_name_max+14
+;
+input_file_max = 4
+	ram current_input_file
+	zpage file_name_pntr,2
+;
+	zpage	struct_pntr,2
+;
+;	ram storbuf,256		globally declared as unusually located
+	zpage storbuf_temp	; zero page because of space
+;
+storbuf_len 		= storbuf
+storbuf_type		= storbuf+1
+storbuf_struct_pntr 	= storbuf+3
+storbuf_data		= storbuf+5
+storbuf_data_offset 	= 5
+;
+struct_type_macro 	= 0
+struct_type_file_stat	= 1
+struct_type_file_name	= 2
+;
+;
+;
+init_input
+	lda #0
+	sta current_input_file
+	lda #0
+	sta file_name
+	ldd input_pntr
+	std struct_pntr
+	rts
+;
+;	set_file	
+;		entry:	x,a point to plane file name.
+;		oper:	attempts to open the file.
+;			sets current_input_file to LFS for new file.
+;			checks disk stat to  verify files open.
+;			returns:
+;				c=0	ok
+;				c=1	.a = error code.
+;
+;
+set_file
+	std file_name_pntr	; save pointer to filename
+	lda current_input_file	;
+	cmp #input_file_max	; if	> max number allowed
+	bcc 1$
+	jsr primm_to_error_channel
+	.byte "TOO MANY FILES :",0
+	ldd file_name_pntr
+	jsr print_null_terminated_string
+	sec			;	return error
+	rts
+;
+1$	jsr push_file_name_struct	; push the old filename
+	lda #'0			; mark beginning of our copy with "0:"
+	sta file_name
+	lda #':
+	sta file_name+1
+;
+	ldy #0			; copy file name to file_name buffer
+10$	lda (file_name_pntr),y
+	sta file_name+2,y
+	beq 20$
+	iny
+	cpy #file_name_max	; only copy so many bytes....
+	bne 10$
+	lda #0			; terminate with null
+;
+20$	sta file_name+2,y	
+;
+	ldi file_name		; point pntr to our copy of filename
+	std file_name_pntr
+;
+	ldy #file_name_pntr	; if	doesn't end with .src
+	ldi 100$
+	jsr strend
+	bcc 40$
+;
+	ldi 100$		;	append ".src" to name
+	ldy #file_name_pntr
+	jsr str_append
+	bcs 90$
+;
+40$	ldi 110$		; append ",s,r" to name
+	ldy #file_name_pntr
+	jsr str_append
+	bcs 90$
+;
+	jsr open_file		; try to open
+	bcs 90$			; puke if failure
+;
+	jsr push_file_stat_struct ; push a filestat structure
+	clc			; return happy
+	rts
+;
+90$	jsr primm_to_error_channel	tell user
+	.byte "CANNOT OPEN FILE:",0
+	ldi file_name
+	jsr print_null_terminated_string_cr
+	jmp close_input_file	close the sonavabitch
+;
+100$	.byte ".SRC",0
+110$	.byte ",S,R",0
+;
+;
+;
+;	attempts to open file pointed to by file_name_pntr
+;	first on device 8 then 9 then 10 then 11
+;	if 	any succeeds return with c=0
+;	else	return with c=1
+;	pukes if filename is 0 or >255 chars
+;
+	ram open_file_unit
+;
+open_file
+	lda input_device_low		device #8
+	sta open_file_unit
+;
+10$	ldd file_name_pntr	do	a <= len of string
+	jsr strlen
+	bcs 90$
+	tya
+	beq 90$
+;
+	ldx file_name_pntr	 	y,x <= address of name
+	ldy file_name_pntr+1
+	jsr setnam		 	set the name
+	jsr 20$			 	try the open
+	bcc 80$			 	if	ok then return
+;
+	inc open_file_unit	 	device number ++
+	lda input_device_high	while	device_number =< max device number
+	cmp open_file_unit
+	bcs 10$
+90$	sec			return unhappy
+	rts
+;
+;
+20$	jsr _clrch		; clear channels
+	lda current_input_file	; setlfs
+	ora #$08
+	tay
+	ldx open_file_unit
+	jsr setlfs
+	lda #0			; setbnk
+	tax
+	jsr setbnk
+	jsr open		; do open
+;
+	bcs close_input_file	; if	 ok
+;
+	ldx open_file_unit	;	check disk for error
+	jsr dscheck		;	check with disk
+	bcs close_input_file	;	if ok
+80$	clc
+	rts
+;
+;
+close_input_file
+	jsr _clrch		; close the current input file
+	lda current_input_file
+	ora #$08
+	jsr close
+	sec
+	rts
+;
+;
+
+;**************************************************************************
+;		disk status
+;**************************************************************************
+;dscheck	read disk status on unit .x
+;		returns c=0 if ok
+;		else	returns c=1
+;			.a = 0
+ds_lfn	= 15	logical file number for ds check
+;
+	ram ds_temp,2
+;
+dscheck		; entry point for submit command
+	lda #ds_lfn
+	ldy #$6f
+	jsr setlfs	
+	lda #0		set up for error channel read
+	jsr setnam
+	jsr open
+	bcs 90$
+	jsr readss
+	bmi 90$
+	ldx #ds_lfn
+	jsr _chkin
+	bcs 90$
+	jsr readss
+	bpl 10$
+90$	jsr 80$		close the command channel
+	sec
+	rts
+;
+;				set up for status line print
+;
+10$
+;
+	lda #0
+	sta ds_temp
+	sta ds_temp+1
+;
+20$	jsr basin		do	read a char
+	cmp #cr				if	cr
+	beq 80$					quit
+	cmp #'0'			if	not '0'
+	beq 30$
+	ldx ds_temp				if	ds_temp < 2
+	cpx #2
+	bcs 30$
+	inc ds_temp+1					inc ds_temp+1
+30$	inc ds_temp			inc ds_temp
+;	jsr print			print the char ( on command line )
+	jmp 20$			enddo
+;
+80$	lda #ds_lfn
+	jsr close
+;	jsr clear_to_eol	blank rest of line
+	jsr _clrch		clear channels
+	lda ds_temp+1		return  c=0 if ds_temp == 0
+	cmp #1
+	lda #0				.A = 0 ( null error ).
+	rts
+;
+;
+;
+
+;
+;/*
+;readline()	line <= inputline
+;		return false if EOF 
+;		also returns error.
+;*/
+;
+	ram read_line_byte_count
+line_len_max = 100
+;
+read_line
+;
+	incd current_line	keep track of number of lines rea
+;
+	ldx #$ff		x <= -1
+10$	inx			do	x++
+12$	stx read_line_byte_count	cntr <= x
+	jsr get_byte			read a byte
+	ldx read_line_byte_count	x <= cntr
+	bcs 90$				puke if error
+;
+	cmp #cr				if	cr
+	beq 80$					go exit
+	cmp #tab			if	not tab
+	beq 20$
+	cmp #12					if	form-feed
+	bne 18$
+	bit pass					if	 pass2
+	bpl 10$
+	jsr top_of_form						uh.. do it.
+	lda #12
+18$	cmp #$20				if	< $20
+	bcc 12$						ignore this char
+;
+20$	sta line,x			store the char
+	cpx #line_len_max		if	no room for more
+	beq 12$					go read another
+	bne 10$				go	inc xx and read
+;
+80$	lda fatal_error
+	bne get_all_bytes
+	lda #00
+	sta line,x
+	clc
+	rts
+;
+90$	jsr 80$
+	lda fatal_error		if	error is fatal.....................
+	bne get_all_bytes		go empty the stacks
+	sec
+	rts
+;
+;
+;
+;
+;
+get_all_bytes_loop
+	jsr get_byte
+get_all_bytes
+	cmpdr input_pntr,input_top_pntr,a
+	bcc get_all_bytes_loop
+	rts
+;
+;
+;
+	ram last_byte		; byte for ensuring files end in <cr>
+;
+get_byte
+	cmpdr input_pntr,struct_pntr,y	if	not pointing to struct
+	beq 10$
+	jsr pull_byte				pull byte from input stack
+	sta last_byte				remember what it was
+	rts					return
+;
+10$	jsr pull_struct			pull the structure
+	bcc 20$
+	rts				return  error iff error
+20$	lda storbuf_type		if	macro type
+	cmp #struct_type_macro
+	bne 30$
+	dec macro_expansion_depth		dec macro expansion depth
+	jmp get_byte				go get next byte
+;
+30$	cmp #struct_type_file_stat	if	file stat type
+	bne 40$
+	lda storbuf+storbuf_data_offset
+	sta open_file_unit
+;
+	jsr push_file_stat_struct		push struct back on stact
+	jsr read_bytes_from_file		read more data ( pushed on stack )
+	bcc 38$					if	error
+	jsr pull_struct					pull struct back off again
+	lda #cr						.a <= cr
+	cmp last_byte					if	last byte <> cr
+	beq 38$
+	clc							return a cr,happy
+	rts
+;
+38$	jmp get_byte				go see whats next
+;
+;				must be filename structure
+;
+40$	ldy #$ff			copy file name from structre to filename
+50$	iny
+	lda storbuf_data,y
+	sta file_name,y
+	bne 50$
+;
+	dec current_input_file			back up a file
+	jmp get_byte				go see whats next
+;
+;
+;
+;
+;
+;
+;
+read_bytes_from_file
+	lda #0			store buf temp <= 0
+	sta storbuf_temp
+	lda current_input_file	open the channel
+	ora #$08
+	tax
+	jsr _chkin		if	not there, we must have closed..
+	bcc 10$
+	rts				return error to sender
+;
+;
+10$	jsr basin		do	read a byte
+;
+	ldy storbuf_temp		(storbuf+temp) <= .a
+	sta storbuf,y
+	inc storbuf_temp		storbuf_temp++
+	jsr readss			if	status <> 0
+	beq 20$
+	and #%10111111				if more than EOI
+	bne 90$						go fatal
+	jsr _clrch				clear channels
+	jsr close_input_file			close the file
+	jmp 80$					go exit happy
+	
+20$	lda storbuf_temp	while	temp <> 254
+	cmp #254
+	bne 10$
+;
+80$	jsr _clrch		clear channels
+	ldy storbuf_temp	shove the bytes
+	jsr shove_y_bytes
+	clc			return happy
+	rts
+;
+90$	jsr close_input_file	forget we saw this file
+	jsr error_fatal		fatal time
+;
+	.byte "FATAL READ ERROR !!!",0
+;
+
+
+;
+push_file_name_struct
+	ldy #$ff
+10$	iny
+	lda file_name,y
+	sta storbuf+storbuf_data_offset,y
+	bne 10$
+	iny				save all the bytes including null
+	inc current_input_file		allow for next input file
+	lda #struct_type_file_name	push the struct
+	jmp push_struct
+;
+push_macro_struct
+	inc macro_expansion_depth
+	lda #struct_type_macro
+	ldy #0
+	jmp push_struct
+;
+push_file_stat_struct
+	lda open_file_unit
+	sta storbuf+storbuf_data_offset
+	lda #struct_type_file_stat
+	ldy #1
+	jmp push_struct
+;
+push_struct
+	sta storbuf_type		mark type
+	tya				mark length
+	clc
+	adc #storbuf_data_offset
+	sta storbuf
+	sta storbuf_temp
+	ldd struct_pntr
+	std storbuf_struct_pntr
+;
+	ldy storbuf_temp
+	jsr shove_y_bytes
+;
+	ldd input_pntr			struct_pntr <= input_pntr
+	std struct_pntr
+	clc
+	rts
+;
+pull_struct
+	ldx #0
+10$	stx storbuf_temp
+	jsr pull_byte
+	bcc 20$			return error iff occurs
+	rts
+20$	ldx storbuf_temp
+	sta storbuf,x
+	inx
+	cpx storbuf
+	bne 10$
+	ldd storbuf_struct_pntr
+	std struct_pntr
+	clc
+	rts
+;
+shove_y_bytes
+	sty storbuf_temp	temp <= number of bytes to shove
+;
+10$	ldy storbuf_temp	while temp <> 0
+	beq 80$
+	dey 			do	temp <= y <= y-1
+	sty storbuf_temp
+	lda storbuf,y			push( buffer,y )
+	jsr push_byte			
+	jmp 10$
+;
+80$	clc			return happy
+	rts

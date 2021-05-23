@@ -1,0 +1,698 @@
+	.page
+	.subttl "Output File Handlers"
+;
+
+	zpage list_enable_main
+	ram list_enable_conditional
+	zpage list_enable_gen
+	zpage list_enable_macro
+;	ram list_line_count
+	ram list_char_count
+;	ram page_number,2
+;
+;
+directive_pag
+directive_page
+	jsr un_set_list		forget my line
+top_of_form
+	bit pass
+	bpl 80$
+	jsr flush_list		flush the listing buffer
+	lda formln		if	formln <> 0
+	beq 80$
+	lda list_line_count		if	count <> 0
+	beq 80$	
+	sec					value <= formln - count
+	lda formln
+	sbc list_line_count
+	sta value
+	beq 80$					if	not zero
+	jmp list_value_lines				list that many lines
+80$	clc			return happy no bytes used
+	rts
+;
+;
+directive_list
+	lda #$00
+	.byte $2c
+directive_nlist
+	lda #$FF
+	jsr listing_directive_flush
+	stx list_enable_main
+	rts
+;
+directive_clist
+	lda #$00
+	.byte $2c
+directive_nclist
+	lda #$ff
+	jsr listing_directive_flush
+	stx list_enable_conditional
+	rts
+;	
+directive_gen
+	lda #0
+	.byte $2c
+directive_nogen
+	lda #$ff
+	jsr listing_directive_flush
+	stx list_enable_gen
+	rts
+;
+directive_mlist
+	lda #$00
+	.byte $2c
+directive_blist
+	lda #$1
+	.byte $2c
+directive_nmlist
+	lda #$FF
+	jsr listing_directive_flush
+	stx list_enable_macro
+	rts
+;
+listing_directive_flush
+	pha
+	jsr un_set_list
+	pla
+	tax
+	clc
+	lda #0
+	rts
+;
+;
+directive_space
+directive_skip
+directive_ski
+	bit pass		if	pass 1
+	bmi 10$
+	sec				return no bytes used
+	rts				return
+10$	jsr un_set_list		forget my line
+	jsr delimit_single_arg	delimit the arg
+	bcs 40$			if	ok
+	ldd args			eval the arg
+	jsr eval
+	bcs 40$				if	ok
+	lda value				if	value <> 0
+	bne list_value_lines				go use value
+;
+40$	lda #01			value <= 1
+	sta value
+;
+list_value_lines
+	jsr flush_list		flush the listing buffer
+	jsr open_list_channel	open the list channel
+50$	jsr print_cr		do	print a cr
+	dec value			dec value
+	bne 50$			until	value == 0
+	lda #0			return no bytes used & happy
+	clc
+	rts
+;
+;
+;	outerr marks the list file with error code in .A.
+;
+;
+; current_line;
+;globalref int error_count;
+;globalref FILE *listfile;
+;
+;globalref int	list_enable;
+;globalref int 	file_line;	/* set by read_line getting from file */
+;globalref int	obj_line;	/* set by object code generated on line */
+list_data_max = 132		/* max listing line length */
+;	ram	list_data,list_data_max+1	; ram for listing line (see C65.SRC alloc)
+	ram	list_dirty	; flag for listing line dirty
+	ram	oldline,2	; line number for last line in list
+	zpage	list_pntr,2	; pntr for reading the line
+;
+;
+;
+;
+;
+;0123456789 123456789 123456789 12
+;EEEE PCPC  OO OO OO OO NNNNN+   line text............
+;
+list_error_offset = 0
+list_error_length = 5
+list_pc_offset = 6
+list_obj_offset = 11
+list_obj_length = 10
+list_line_offset = 23
+list_macro_offset = 28
+list_text_offset = 32
+list_text_length = 133-list_text_offset	/* len + 1 of text line */
+;
+line_number_init
+	ldi list_line_middle_text
+	std mid_line_pntr	set up the middle lines
+	lda #0
+	tax			xa <= 0000
+	ldy pass		if	pass one
+	bne list_enable_output
+;
+	std page_number			clear the page counter
+	sta list_line_count		clear the lines this page counter
+	sta list_char_count		clear the charecters on this line
+	std object_record_count		clear number of object records sent
+	sta o_ndata			clear object output counter
+	sta list_dirty			mark list as clean
+	lda #$FF
+	sta object_wrap_flag		output_wrap_flag <= $FF
+;
+	ldy #text_name_end-text_name-1	set up name
+10$	lda text_name,y
+	sta name,y
+	dey
+	bpl 10$
+;
+list_enable_output
+	lda #0
+	sta list_enable_main	enable all listing options
+	sta list_enable_conditional
+	sta list_enable_gen
+	sta list_enable_macro
+	rts
+;
+list_line_middle_text
+	.byte cr,"ERROR ADDR  CODE          SEQ   SOURCE STATEMENT",cr,0
+;		     123456789.123456789.123456789.123456789.
+text_name
+	.byte ".MAIN.",0
+text_name_end
+;
+;
+;
+;	outerr(.a)
+;		adds .a to error feild
+;		increments error count
+;		returns c=1
+;
+outerr_at	lda #'@	; symbol table overflow
+	.byte $2c
+outerr_question	lda #'?	; assemebler is confused
+	.byte $2c
+outerr_a	lda #'A	; addressing error ( branch too far, etc )
+	.byte $2c
+outerr_b	lda #'B	; balance ( mispaired quotes etc )
+	.byte $2c
+outerr_e	lda #'E	; expression error 
+	.byte $2c
+outerr_f	lda #'F	; feild error ( something not where expected )
+	.byte $2c
+outerr_j	lda #'J	; address space filled ( wrapped past $ffff )
+	.byte $2c
+outerr_m	lda #'M	; multiblby defined symbol
+	.byte $2c
+outerr_n	lda #'N	; nesting error ( mispaired macro/endm etc )
+	.byte $2c
+outerr_o	lda #'O	; the assembler does not support that opcode/macro.
+	.byte $2c
+outerr_p	lda #'P	; phase error, label does not have same value 
+;			during pass 2 as during pass 1.
+	.byte $2c
+outerr_q	lda #'Q	; questionable syntax
+	.byte $2c
+outerr_s	lda #'S	; symbol error, reference to multibly defined symbol.
+	.byte $2c
+outerr_u	lda #'U	; symbol undefined.
+	.byte $2c
+outerr_v	lda #'V	; assembler cannot fit 16 bit value into 8 bit slot.
+	.byte $2c
+outerr_w	lda #'W	; wasted byte ( forward zero page reference caused a
+;			byte to be wasted )
+	.byte $2c
+outerr_z	lda #'Z	; division by zero error
+;
+;
+;	ram	outerr_savex
+;	ram	outerr_savey
+;
+;
+outerr	bit pass
+	bpl 90$
+;	stx outerr_savex
+;	sty outerr_savey
+	tax
+	ldy #0
+10$	lda list_data+list_error_offset,y
+	cmp #$20
+	beq 20$
+	iny
+	cpy #list_error_length
+	bne 10$
+	dey
+	ldx #'*
+20$	txa
+	sta list_data+list_error_offset,y
+	incd error_count
+;	ldx outerr_savex
+;	ldy outerr_savey
+90$	sec
+	rts
+;
+;
+	ram output_offset
+	ram output_value,2
+;
+;	outbyte spits out an object file byte byte at PC  using Y
+;	as index past PC.
+;
+;	this routine marks both the object file, and the list file.
+;
+;	entry:	.A = byte of object code
+;		.Y = position relative to PC
+;
+;	exit:	
+;
+outbyte	bit pass
+	bpl 90$
+	sty output_offset
+	sta output_value
+	jsr out_o_byte	; write byte to object file
+;
+	jsr list_find_obj_feild	; if	cannot find room on this line
+	cpx #2
+	bcs 80$
+	jsr out_gen_check		if	should not list gen bytes here
+	bcs 90$					exit
+;
+	jsr list_force_new_line		force a new line
+;
+80$	lda output_value
+	jsr list_two_hex_chars
+90$	clc
+	rts
+;
+outword	bit pass
+	bpl 90$
+	sty output_offset
+	std output_value
+;				write low order to obj
+	jsr out_o_byte
+	ldy output_offset	write high order to obj
+	iny
+	lda output_value+1
+	jsr out_o_byte
+;
+	jsr list_find_obj_feild	if	cannot find room on line
+	cpx #4
+	bcs 80$
+	jsr out_gen_check		if	should not list gen bytes here
+	bcs 90$					exit
+	jsr list_force_new_line		scuz a newline
+;
+80$	ldd output_value	list output value
+	jsr list_four_hex_chars
+90$	clc			return happy
+	rts
+;
+;
+out_gen_check
+	bit list_enable_gen		if	nogen
+	bmi 90$					exit no
+	lda list_data+list_macro_offset	if	macro line
+	beq 80$
+	bit list_enable_macro			if	.nmlist
+	bmi 90$						exit no
+80$	clc				exit yes
+	rts
+;
+90$	sec
+	rts
+;
+;	list find obj feild
+;		if	nothing listed in object feild for data
+;			forces location counter to be listed
+;
+;		sets x to remaining number of bytes in obj feild
+;		sets y to pointer to second consecutive space in feild
+;
+list_force_new_line
+	ldi null_string			force a new null line
+	jsr set_list
+;
+list_find_obj_feild
+	lda list_data+list_obj_offset	if	nothing in object feild
+	cmp #$20
+	bne 1$
+	ldd pc					x,a <= pc + offset
+	ldy output_offset
+	jsr effective_address
+	ldy #list_pc_offset			y <= poc offset
+	jsr list_four_hex_chars			list 4 chars
+;
+1$	ldy #list_obj_offset-1
+	ldx #list_obj_length
+;
+10$	iny
+	lda list_data-1,y	
+	ora list_data,y
+	cmp #$20
+	beq 20$
+	dex
+	bne 10$
+20$	rts
+;
+;
+;
+;	list_equate
+;		prints "=XXAA" in OBJ feild on list line
+;
+list_equate
+	bit pass
+	bpl 99$
+	ldy #'=
+	sty list_data+list_obj_offset
+;
+	ldy #list_obj_offset+1
+	jmp list_four_hex_chars
+99$	clc
+	rts
+;
+;	list_pc
+;		prints PC in PC feild on list line
+;
+list_pc
+	bit pass
+	bmi 10$
+	clc
+	rts
+10$	ldd pc
+	ldy #list_pc_offset
+;
+; list_four_hex_chars
+; list_two_hex_chars
+; list_one_hex_char
+;
+;		prints hex chars for (X,A) on list line
+;		at offset specified by .y
+;		y points to next available location
+;
+;
+list_four_hex_chars
+	pha
+	txa
+	jsr list_two_hex_chars
+	pla
+list_two_hex_chars
+	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr list_one_hex_char
+	tax
+	pla
+list_one_hex_char
+	and #$0f
+	ora #$30
+	cmp #$3a
+	bcc 20$
+	adc #$06
+20$	sta list_data,y
+	iny
+	rts
+;
+;
+
+;
+;
+;
+set_list
+	bit pass
+	bpl 99$
+	phd		save address of text
+	jsr flush_list	flush the list buffer
+;
+	ldx #list_text_offset	; mark list data area with spaces
+	lda #$20
+1$	sta list_data,x
+	dex
+	bpl 1$
+;
+	pld		recall address of text
+	std list_pntr
+	ldy #0		copy line to list buffer
+10$	lda (list_pntr),y
+	sta list_data+list_text_offset,y
+	iny
+	cmp #0
+	beq 20$
+	cpy #list_text_length
+	bne 10$
+;
+	lda #0
+	sta list_data+list_text_length-1
+;
+20$	inc list_dirty		mark the list as dirty
+;
+	ldd current_line	if	this line is new input line
+	cpd oldline
+	beq 30$
+	std oldline			
+;
+	jsr format_decimal		print the line number
+	ldx #$04
+;
+25$	lda format_decimal_text,x
+	sta list_data+list_line_offset,x
+	dex
+	bpl 25$
+;
+	lda macro_expansion_depth	if	in a macro
+	beq 30$
+	ora #'@
+	sta list_data+list_macro_offset		mark list
+;
+30$
+;
+99$	clc
+	rts
+;
+;
+list_macro_call
+	lda #'+
+	sta list_data+list_macro_offset
+	clc
+	rts
+;
+;
+;
+; flush_list
+;	flushes listing line output buffer
+;
+flush_list
+	lda list_dirty		if	list line is dirty
+	beq 80$
+;
+	lda list_data+list_error_offset if	error on line
+	cmp #space
+	beq 10$
+;
+	jsr open_error_channel_if_unique	print to the error channel
+	ldi list_data
+	jsr print_null_terminated_string_cr
+	jmp 60$					also print to the listing channel
+;
+10$	bit list_enable_main		if	listing disabled
+	bmi 80$					abort
+;
+	lda list_data+list_macro_offset	if	macro line
+	cmp #$20
+	beq 60$
+;
+	cmp #'+					if	macro call
+	bne 20$
+	ldx macro_expansion_depth			if 	first level
+	dex
+	beq 60$							go print it
+;
+20$	ldx list_enable_macro			if	macro lines disabled
+	bmi 80$						abort
+;						if	always allowed
+	beq 60$						go print line
+;
+	lda list_data+list_obj_offset		if	no object code here
+	cmp #space
+	beq 80$						abort
+	cmp #'=					if	equate
+	beq 80$						abort
+;
+60$	lda list_channel		if	list channel is zero
+	beq 80$					abort
+	jsr open_list_channel		open the listing channel
+	ldi list_data			print the line in question
+	jsr print_null_terminated_string_cr
+;
+80$			;		fall through to mark list line as clean
+;	un_set_list
+;		allows directives to remove the default output caused by
+;		their line.
+;
+un_set_list
+	lda #0			clear the dirty flag
+	sta list_dirty
+	clc			return happy
+	rts
+;
+;
+list_error_count
+	jsr flush_list
+	jsr open_error_channel_if_unique
+	jsr 10$
+	jsr open_list_channel
+10$	ldd error_count
+	jsr format_decimal
+	ldi format_decimal_text
+	jsr print_null_terminated_string
+	jsr primm
+	.byte " ERRORS DETECTED",cr,0
+	rts
+;
+;
+;
+;	outobyte spits out an object file byte byte at PC  using Y
+;	as index past PC.
+;
+;	this routine marks both the object file, and the list file.
+;
+;	entry:	.A = byte of object code
+;		.Y = position relative to PC
+;
+;
+max_o_ndata = 16		; max number of data bytes per line
+	ram o_ndata		; number of data bytes
+	ram o_pc,2		; output pc
+	ram o_data,max_o_ndata	; data bytes
+	ram o_sum,2		; check sum for line
+	ram o_cpc,2		; current byte pc
+	ram object_wrap_flag	; if 0 then user just wrote byte to $FFFF
+	ram object_record_count,2	; number of records sent out obj thingy
+;
+out_o_byte
+	pha		save data on stack
+	ldd pc		calc address of byte
+	jsr effective_address
+	cpd o_cpc	if	not the next expected byte
+	bne 50$
+;
+	ldy o_ndata		if	line not empty, 
+	bne 1$
+;
+50$	phd		 		save pc
+	jsr o_flush_obj			flush the current line
+	pld				recall pc
+;
+60$	std o_pc		mark this pc
+	std o_cpc		mark next expected byte
+	ldy #0			y <= 0
+;
+1$	pla		place the data
+	sta o_data,y
+	iny		point to next location
+	sty o_ndata
+	cpy #max_o_ndata if	buffer now full
+	bcc 2$
+	jsr o_flush_obj		go flush
+;			if	wrap flag = 0 and address == 0
+2$	lda object_wrap_flag
+	ora o_cpc
+	ora o_cpc+1
+	bne 3$
+	jsr outerr_j		complain that user wrapped address space
+;				wrap_flag <= $ff
+	dec object_wrap_flag	
+;
+3$	incd o_cpc	calc next pc
+;
+	bne 4$		if	zero
+;
+	inc object_wrap_flag	wrap_flag <= zero
+;
+4$	rts		return
+;
+;
+;
+;	flush_obj
+;		causes last obj record to be sent, then the
+;		object list record terminator.
+;	o_flush_obj
+;		causes buffered obj record to be dumped
+;
+flush_obj
+	jsr o_flush_obj
+	jsr open_object_channel
+	lda #0			sum <= 0
+	sta o_sum
+	sta o_sum+1
+	lda #';			print semicolon
+	jsr print
+	lda #$00		print '00'
+	jsr o_sum_and_dump
+	ldd object_record_count	print record count
+	jsr o_sum_and_dump_word
+;
+o_print_sum_cr		;	print check sum
+	ldd o_sum
+	jsr print_hex_word
+	jmp print_cr		print cr and return
+;
+o_flush_obj
+	lda o_ndata	if	number of object file bytes <> 0
+	beq 80$
+;				if	object channel <> 0
+	lda object_channel	
+	beq 80$
+	jsr open_object_channel		open output to object channel
+	bcs 80$
+;
+	incd object_record_count
+;
+	lda #';			spit a semi colon
+	jsr print
+;
+	lda o_ndata		chgecksum <= number of bytes to send
+	ldx #0
+	std o_sum
+	jsr print_hex_byte	print hex number of bytes to send
+;
+	ldd o_pc		spit four nybbles of PC
+	jsr o_sum_and_dump_word
+;
+	ldx #0			spit the data bytes
+10$	txa
+	pha
+	lda o_data,x
+	jsr o_sum_and_dump
+	pla
+	tax
+	inx
+	cpx o_ndata
+	bne 10$
+	jsr o_print_sum_cr
+;
+;
+80$	lda #0			clear number of bytes on the line.
+	sta o_ndata
+	clc			return happy
+	rts
+;
+o_sum_and_dump_word
+	pha		; save low order
+	txa		; do high order
+	jsr o_sum_and_dump
+	pla		; do low order
+;
+o_sum_and_dump
+	pha
+	clc
+	adc o_sum
+	sta o_sum
+	bcc 80$
+	inc o_sum+1
+80$	pla
+	jmp print_hex_byte
+;
+;;

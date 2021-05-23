@@ -1,0 +1,275 @@
+
+;
+;
+;***************************************************************************
+;	directive_ife	
+;***************************************************************************
+directive_ife	
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		false iff error
+	lda value			if	value <> 0
+	ora value+1
+	bne false_conditional			false
+	beq true_conditional		go true
+;
+;***************************************************************************
+;	directive_ifn
+;***************************************************************************
+directive_ifn
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		flase iff error
+	lda value			if	== 0
+	ora value+1
+	beq false_conditional			false
+	bne true_conditional		true
+;
+;***************************************************************************
+;	directive_ifge
+;***************************************************************************
+directive_ifge
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		false iff error
+	lda value+1			if	< 0
+	bmi false_conditional			false
+	bpl true_conditional		true
+;
+;***************************************************************************
+;	directive_ifgt
+;***************************************************************************
+directive_ifgt
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		false iff error
+	lda value+1			if	< 0
+	bmi false_conditional			false
+	ora value			if	== 0
+	beq false_conditional			false
+	bne true_conditional		true
+;
+;***************************************************************************
+;	directive_ifle
+;***************************************************************************
+directive_ifle
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		false iff error
+	lda value+1			if	< 0
+	bmi true_conditional			true
+	ora value			if	<> 0
+	bne false_conditional			false
+	beq true_conditional		true
+;
+;***************************************************************************
+;	directive_iflt
+;***************************************************************************
+directive_iflt
+	jsr numeric_conditional_eval	eval
+	bcs false_conditional		false iff error
+	lda value+1			if	>= 0
+	bpl false_conditional			false
+;	bmi true_conditional		true
+;
+true_conditional
+	jmp true_1
+;
+false_conditional
+	jmp false_1
+;
+;
+;***************************************************************************
+;	directive_ifb	
+;***************************************************************************
+;
+directive_ifb
+	jsr macro_conditional_eval
+	lda nargs
+	beq true_conditional
+	ldy #0
+	lda (args),y
+	beq true_conditional
+	bne false_conditional
+;
+;***************************************************************************
+;	directive_ifnb
+;***************************************************************************
+;
+directive_ifnb
+	jsr macro_conditional_eval
+	lda nargs
+	beq false_conditional
+	ldy #0
+	lda (args),y
+	beq false_conditional
+	bne true_conditional
+;
+;***************************************************************************
+;	directive_ifdef
+;***************************************************************************
+;
+directive_ifdef
+	jsr macro_conditional_eval
+	lda nargs
+	beq false_conditional
+	ldd args
+	jsr is_symbol_defined
+	bcs false_conditional
+	bcc true_conditional
+;
+;***************************************************************************
+;	directive_ifndef
+;***************************************************************************
+directive_ifndef
+	jsr macro_conditional_eval
+	lda nargs
+	beq false_conditional
+	ldd args
+	jsr is_symbol_defined
+	bcc false_conditional
+	bcs true_conditional
+;
+;***************************************************************************
+;	directive_ifnidn
+;***************************************************************************
+directive_ifnidn
+	jsr macro_conditional_eval
+	ldx nargs
+	beq false_conditional
+	dex
+	beq true_conditional
+	jsr idn_check
+	bne true_conditional
+	beq false_conditional
+;
+;***************************************************************************
+;	directive_ifidn
+;***************************************************************************
+directive_ifidn
+	jsr macro_conditional_eval
+	ldx nargs
+	beq true_conditional
+	dex
+	beq false_conditional
+	jsr idn_check
+	beq true_conditional
+	bne false_conditional
+;
+idn_check
+	ldd args
+	phd
+	ldx #args
+	jsr string_advance
+	pld
+	ldy #args
+	jmp strcmp
+;
+;
+;
+macro_conditional_eval
+	inc conditional_depth
+	jsr macro_parse_args_for_expansion  ; copies args to macro_args
+	ldi macro_args		;	set argsto point to macro args
+	std args
+	rts
+;
+numeric_conditional_eval
+	inc conditional_depth
+	jsr comma_delimit_args
+	ldd args
+	jsr eval
+	php
+	ldd value
+	jsr list_equate
+	plp
+	rts
+;
+;
+
+;;
+;
+;******************************************************************************
+;			.endif directive
+;******************************************************************************
+;
+directive_endif
+	lda conditional_depth
+	bne 10$
+	jmp outerr_n
+;
+10$	dec conditional_depth
+;
+;****************************************************************************
+;		true conditional
+;****************************************************************************
+;
+directive_if_list_check
+true_1
+;
+	lda list_enable_conditional
+	beq 20$
+	jsr un_set_list
+20$	sec
+	rts
+;
+;******************************************************************************
+;			.else directive
+;******************************************************************************
+;
+directive_else
+	lda conditional_depth
+	bne false_1
+	jmp outerr_n
+;
+;
+;****************************************************************************
+;		false conditional
+;****************************************************************************
+;
+	ram embedded_conditional_count
+;
+false_1	jsr directive_if_list_check		unlist if not to do that
+	lda #1
+	sta embedded_conditional_count
+;
+10$	jsr read_line		do	read a line
+	bcc 20$				if	EOF
+	rts					return sec ( no bytes used )
+;
+20$	ldi line				send to lister
+	jsr set_list
+;
+	jsr directive_if_list_check		unlist if not to do that
+;
+30$	jsr delimit_label_oper		delimit the operator
+	jsr oper_toupper		force it to upper case
+;
+	ldi text_endif			if	oper == ".ENDIF"
+	ldy #oper
+	jsr strcmp
+	bne 40$
+;						dec nest count
+	dec embedded_conditional_count
+	bne 10$					if	<> 0 
+;							loop
+	dec conditional_depth			dec global endif count
+	sec					return no bytes used
+	rts
+;
+40$	ldi text_else			if	oper == ".ELSE"
+	ldy #oper
+	jsr strcmp
+	bne 50$
+	lda embedded_conditional_count		if	nest count <> 1
+	cmp #1
+	bne 10$						loop
+;
+	sec					return no bytes used
+	rts	
+;
+50$	ldi 200$			if	oper doesn;t start with ".IF"
+	ldy #oper
+	jsr strstrt
+	bcs 10$					loop
+;
+	inc embedded_conditional_count	nest count++
+	jmp 10$
+;
+200$	.byte ".IF",0
+;

@@ -1,0 +1,278 @@
+	.page
+	.subttl "Parser Utils"
+;******************************************************************************
+;			PARSER UTILS
+;******************************************************************************
+;
+	zpage parse_pntr,2
+;
+;	delimit_label_oper
+;		chops up LINE.
+;		sets LABEL to point to the label feild string or to a NULL.
+;		sets OPER to point to operaetor feild
+;		sets ARGS to point to remander of string ( comment delimited ).
+;
+;
+null_string
+	.byte 0
+;
+delimit_label_oper
+;
+	ldi null_string		label,oper,args <= null_string
+	std label
+	std oper
+	std args
+;
+	ldi line		parse_pntr <= base of line
+	std parse_pntr
+;
+	jsr 100$		a <= first char
+	bcs 80$			exit iff comment or EOS
+;
+	jsr isspace		if	not a space
+	bcc 20$
+;
+	ldd parse_pntr			mark start of label
+	std label
+;
+	jsr parse_skip_nonwhite		advance to first delimiting space
+	bcs 80$
+;
+	lda #0				terminate label string here
+	sta (parse_pntr),y
+;
+	jsr parse_advance		point to next field
+;
+20$	jsr parse_skip_white	skip_white
+	jsr 100$		exit iff comment
+	bcs 80$
+;
+	ldd parse_pntr		mark start of oper
+	std oper
+;
+	jsr parse_skip_nonwhite	advance past chars
+	bcs 80$			exit if end of string
+;
+	lda #0
+	sta (parse_pntr),y	mark end of oper string
+;
+	jsr parse_advance	point to next field
+;
+	jsr parse_skip_white	skip spaces
+	jsr 100$		exit iff comment or null
+	bcs 80$
+	ldd parse_pntr
+	std args		mark arguement base
+;
+80$	clc			return
+	rts
+;
+100$	ldy #0
+	lda (parse_pntr),y
+	beq 109$
+	cmp #';
+	bne 80$
+109$	sec
+	rts
+;
+;	oper_toupper
+;		force contents of oper to upper case
+;
+oper_toupper
+	ldy #$ff		y <= -1
+10$	iny			do	y++
+	lda (oper),y			(oper),y <= toupper( (oper),y )
+	jsr toupper
+	sta (oper),y
+	cmp #0			until	null encountered
+	bne 10$
+	clc			return
+	rts
+;
+;
+parse_skip_white
+10$	lda (parse_pntr),y
+	beq 90$
+	jsr isspace
+	bcc 20$
+	clc
+	rts
+;
+20$	jsr parse_advance
+	bne 10$
+;
+90$	sec
+	rts
+;
+parse_advance
+	incd parse_pntr
+	rts
+;
+parse_skip_nonwhite
+10$	lda (parse_pntr),y
+	beq 90$
+	jsr isspace
+	bcs 20$
+	clc
+	rts
+20$	jsr parse_advance
+	bne 10$
+;
+90$	sec
+	rts
+;
+;
+;
+;
+;	comma_delimit_args
+;
+;		chops up args string based on quotes and 
+;		commas. leaves args string as seris of 
+;		null terminated strings in args field.
+;		sets NARGS to number of args found.
+;
+comma_delimit_args
+;
+	ldy #0			y <= 0
+	sty nargs		nargs <= 0
+;
+10$	lda (args),y		while not at EOS
+	beq 80$
+	cmp #';
+	beq 80$
+	jsr isspace
+	bcc 80$
+;
+20$	inc nargs		do	inc nargs
+;					
+	dey				y--
+;
+30$	iny				do 	get next char
+33$	lda (args),y
+	beq 80$					exit iff EOS
+	jsr isspace				if	space
+	bcc 80$						exit ( no more args )
+	cmp #';					if	semicolon
+	bne 40$
+;
+	jsr 80$						terminate arg
+	jmp outerr_q					output Q error, exit
+;
+40$	cmp #''					if 	dreaded single quote
+	bne 70$
+;
+	ldd args					find range
+	jsr range_of_single_quote			ignore errors
+	dey						back up a char
+	jmp 30$						loop
+;
+70$	eor #',				until	a comma
+	bne 30$
+	sta (args),y			mark comma with null
+	iny				point to next byte
+	jmp 10$			forever
+;
+80$	lda #0			mark exit char w/ null ( semi colon ? )
+	sta (args),y
+	rts
+;
+;
+;
+;	delimit_single_arg
+;		delimits ARG for a single numeric value
+;		recognizes the following chars as universal delimiters:
+;			space,tab
+;		passes any commas or other punctation.
+;		implementes the single quote weirdness.
+;
+delimit_single_arg
+	ldy #0
+	sty nargs
+;
+	lda (args),y	if	first char is null or space or ;
+	beq 90$
+	cmp #';
+	beq 90$
+	jsr isspace
+	bcs 10$
+90$	sec			return un happy ( args is 0 )
+	rts
+;
+10$	inc nargs	nargs <= 1
+;
+20$	lda (args),y	do	if	yth char is null
+	beq 80$				go exit hapopy
+	cmp #';			if	yth char is ;
+	bne 30$
+	jsr 80$				terminate at ;
+	jsr outerr_q			issue 'q error
+	clc				return happy
+	rts
+;
+30$	jsr isspace		if	char is white
+	bcc 80$				go terminate and return happy
+;
+	cmp #''			if	its a quote (ARG!!)
+	bne 40$
+	ldd args			find how many chars are invovled
+	jsr range_of_single_quote
+	jmp 20$			else
+40$	iny				point to next char
+	jmp 20$
+;
+80$	lda #0
+	sta (args),y
+	clc
+	rts
+;
+;
+;
+;	range of single_quote
+;		this weird routine is called when a single quote is
+;		encountered in the args list stream.
+;
+;		entry:	(x,a),y		points to single quote
+;		exit:	parse_pntr 	destroyed
+;			x,a		destroyed
+;			(oldx,a),y	pointer to end of quoted thingie.
+;			c=1	y=0	routine misscalled
+;			c=1	y<>0	syntactical problem, 
+;					y points to next bit
+;			c=0		y points to next bit
+;
+;
+range_of_single_quote
+	std parse_pntr
+	lda (parse_pntr),y	if	yth char is not a 
+	cmp #''
+	bne 90$				go return 0 chars un happy
+;
+	iny			if	char 1 is null
+	lda (parse_pntr),y	
+	beq 90$				go return 1 char, un happy
+	cmp #''			if	char 1 is single  quote
+	beq 70$				go return 2, happy
+;
+	iny
+	lda (parse_pntr),y	if	char 3 is null
+	beq 80$				go return 2,happy
+;
+	cmp #''			if	char 3 is single quote
+	beq 70$				go return 3,happy
+;
+	iny
+	lda (parse_pntr),y	if	char 4 is single quote
+	cmp #''	
+	beq 70$				go return 4,happy
+;
+	dey 			prepare to return 2 chars
+	lda (parse_pntr),y	
+	jmp isspace		return happy iff char 2 is white
+;
+70$	iny
+80$	clc
+	rts
+;
+90$	sec
+	rts
+;

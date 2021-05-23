@@ -1,0 +1,324 @@
+	.page
+	.subttl "initialization"
+
+init	lda #0			; kill kernal messages 
+	jsr setmsg
+
+	jsr kill_basic_irqs	; bye bye basic...
+	jsr save_zero_page	; save zero page
+	jsr down_load_code	; down load our private indirect code
+
+	lda mmucr		; save mmu on stack
+	pha
+	lda #mmucr_bank0_normal	; select my ram set up..
+	sta mmucr
+
+	lda #0
+	sta fatal_error		; make state non-fatal
+	sta current_channel	; init our i/o
+
+	jsr pass_a		; perform pass 1 ( .a == 0 )
+	bit fatal_error
+	bmi 9$
+	bit two_pass_only	; a quickie?
+	bmi 6$
+
+5$	inc pass
+	lda pass
+	bmi 6$			; failsafe
+	jsr pass_a		; perform phase correction pass(es)
+	bit fatal_error
+	bmi 9$
+	lda phase_error
+	bne 5$			; loop until all addresses resolved
+
+6$	lda #$ff		; perform pass2
+	jsr pass_a
+	bit fatal_error
+9$	bmi 90$
+
+	jsr flush_list		flush list
+	jsr flush_obj		flush obj
+	jsr flush_xref		flush xref
+
+60$	lda conditional_depth
+	beq 70$
+
+	jsr primm_to_error_channel
+	.byte "CONDITIONAL IN PROGRESS AT EOF",CR,0
+
+70$	lda end_flag
+	bne 80$
+
+	jsr primm_to_error_channel
+	.byte "MISSING END STATEMENT",CR,0
+
+80$	jsr list_error_count	list errors count please
+	lda list_channel	if	listing or xref enabled
+	ora xref_device	
+	beq 85$
+	jsr symbol_table		print symbol table
+	jsr 				perform_cross_reference
+
+85$	jsr top_of_form		( form  feed... )
+
+90$	jsr clrch		clear channels
+	jsr 			restore_zero_page
+	pla			restore mmu to previous state
+	sta mmucr
+	jsr enable_basic_irqs
+	rts			return to papa
+
+	.page
+	.subttl	"Main Loops"
+
+pass_a
+	sta pass		save pass number
+	global_init		do lots of inits
+     	jsr macro_init		macro init complains if not enough mem
+	bcs 90$			
+	jsr line_number_init
+	jsr init_input		must init after macro init !!!!!
+	jsr init_symbol_table
+	jsr xref_init		; do up the xref open
+	ldi start_file_name	open the first file
+	jsr set_file
+	bcs 90$			if	 ok
+
+1$	jsr read_line			do	read a line
+	bcs 90$					if	error, break
+	jsr pass_main_loop			call the buggers innards
+	jmp 1$				loop
+
+90$	rts
+
+;
+pass_main_loop
+	ldi line		list the line
+	jsr set_list
+	jsr equate_check	perform equate processing
+	bcs 80$			if	done, exit
+;				switch(oper)
+	ldy #0
+	lda (oper),y			case (null):
+	beq 80$				exit
+
+	cmp #'.				case( starts with '.'):
+	bne 20$
+	jsr directive				directive
+	jmp 70$				break
+
+20$	cmp #'*				case(oper start with '*'):
+	bne 30$
+
+	jmp outerr_e				error, equate missed
+				
+;					default
+30$	jsr oper_toupper			convert oper to upper case...
+	ldd oper				eval as macro
+	jsr eval_macro				if	no error
+	bcc 70$						break;
+
+	jsr eval_opcode				evaluate line as opcode
+	bcc 70$					if	no error, break
+
+	jmp outerr_o					tell user 'O' error
+
+70$	bcs 80$			if	not in error condition
+	adc pc				pc += .a
+	sta pc
+	bcc 80$
+	inc pc+1
+
+80$	rts			return
+
+;
+;*******************************************************************************
+;			equate check
+;*******************************************************************************
+;
+;	equate_check
+;		delimits label and oper
+;		scans for equates
+;		if	present
+;			performs nessesary opertions
+;
+;		if	label feild no blank
+;			does label operation or call to define macro.
+;
+;		exit:	c=0 	need to continue processing operation
+;				for macros opcodes....
+;			c=1	line is completed
+;
+
+equate_check
+	jsr delimit_label_oper
+
+;			delimit everything normally
+
+	ldd label	if	'='	in the label !!
+	jsr equate_here
+	bcs 30$
+	cpy #0			if	first char
+	bne 10$
+	jmp outerr_e			expression error, done
+10$	tax				save next
+	lda #0				terminate label
+	sta (label),y
+	txa				if	= was last char
+	bne 20$
+	ldd oper				x,a <= oper
+	jmp equate_label_to_this		go equate label to oper
+
+20$	iny				x,a <= label + y + 1
+	ldd label
+	jsr effective_address
+	jmp equate_label_to_this	go equate label to this thing
+
+30$	ldd oper	if	'='	in the operator
+	jsr equate_here
+	bcs 60$
+
+	cpy #0			if	= is not the first char in oper
+	beq 40$
+
+	jsr main_store_label		assign to label the value of PC
+	ldd oper			label <= oper
+	std label
+	jsr equate_here			where were we ?
+
+40$	tax			save char after =
+	lda #0			make the eq a terminator
+	sta (oper),y
+	txa			restore char after =
+
+	cmp #0			if	= is last char in arg
+	bne 50$
+	jsr delimit_single_arg		delimit the arg
+	jmp equate_label_to_arg		go equate the (label) to the arg
+
+50$	iny			x,a <= oper + y + 1
+	ldd oper
+	jsr effective_address
+	jmp equate_label_to_this go use that to equate too
+
+60$	ldy #0			if	 the first char of oper is =
+	lda (arg),y
+	cmp #'=
+	bne 100$
+
+	jsr main_store_label		assign PC to label
+
+	ldd oper			label <= oper
+	std label
+
+70$	incd arg		do	arg++
+	ldy #0			while	(arg) = space
+	lda (arg),y
+	jsr isspace
+	bcc 70$
+
+80$	jsr delimit_single_arg	delimit the argument
+
+	jmp equate_label_to_arg
+
+
+
+100$	ldy #0		if	label is non blank
+	lda (label),y
+	beq 180$
+	ldi text_macro		if	oper is .macro
+	ldy #oper
+	jsr strstrt_toupper
+	bcs 150$
+	jsr directive_macro		go	do up the macro bit
+	sec					return done with line
+	rts
+
+150$	jsr main_store_label	do the label operation
+180$	clc		return and continue processing
+	rts
+
+main_store_label
+	ldy #0
+	lda (label),y
+	beq 10$
+	jsr label_operation
+	jmp list_pc
+10$	rts
+
+;
+;*******************************************************************************
+;		equate_label_to something
+;*******************************************************************************
+;	equate_label_to_xxx
+;
+;		passes xxx to eval for equation
+;		if	eval fails in anyway
+;			error 'E'
+;		list value as equate
+;		if	label ='*'
+;			lists the PC
+;			PC <= value
+;		else
+;			add_symbol.
+;
+;		always returns c=1 to prevent further line proccessing
+
+
+equate_label_to_arg
+	ldd arg
+equate_label_to_this
+	jsr eval	eval x,a
+	lda valflg	if	error
+	bne 90$			go puke
+
+	ldy #0		if	(label)=='*'
+	lda (label),y
+	cmp #'*
+	bne 20$
+
+	iny			if	next char not null
+	lda (label),y
+	bne 90$				massive error
+
+	ldd value		pc <= value
+	std pc
+	jmp 80$		else
+
+20$	ldd label		define (label) to equal value
+	jsr add_symbol
+
+80$	ldd value	list the equate
+	jsr list_equate
+
+	sec		return c=1	(always)
+	rts
+
+90$	jmp outerr_e	expression error, return
+
+;
+;	equate_here
+;		entry:	x,a pointer to string
+;		exit	c=1	'=' not in string
+;			c=1	= in string at position y
+;				.a	= next char
+
+	zpage equate_pntr,2
+
+equate_here
+	std equate_pntr
+	ldy #$FF
+10$	iny
+	lda (equate_pntr),y
+	beq 90$
+	cmp #'=
+	bne 10$
+
+	incd equate_pntr
+	lda (equate_pntr),y
+	clc
+	rts
+
+90$	sec
+	rts

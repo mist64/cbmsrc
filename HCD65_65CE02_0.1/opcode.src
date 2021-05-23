@@ -1,0 +1,903 @@
+	.page
+	.subttl  Opcode Definition & Evaluation
+; last modified 09/13/88 by Fred Bowen to add 45c02 and 45c10 instructions & parsing qwirks.
+;
+;            00  01  02  03    04      05    06    07   08    09  0a    0b    0c     0d     0e     0f
+; type      imm abs  zp imp (ind,x) (ind),y zp,x abs,x abs,y rel (abs) zp,y (zp),z (abs,x) val,rel r/w
+; mnem      imm abs zpg imp   inx     iny   zpx   abx   aby  rel  iab  zpy   inz     iax    vrel   write
+; #bytes     2   3   2   1*    2       2     2     3     3    2+   3    2     2       3       2~    n/a
+;
+;	* MAP (or AUG) instruction requires 4 bytes
+;	+ word relative branches require 3 bytes  (BSR is word-rel only)
+;	~ RMB/SMB intructions require 2 bytes; BBR/BBS instructions require 3 bytes
+;
+bit_mode_imm	= %0000000000000001
+bit_mode_abs	= %0000000000000010
+bit_mode_zpg	= %0000000000000100
+bit_mode_imp	= %0000000000001000
+bit_mode_acc	= %0000000000001000
+bit_mode_inx	= %0000000000010000
+bit_mode_iny	= %0000000000100000
+bit_mode_zpx	= %0000000001000000
+bit_mode_abx	= %0000000010000000
+bit_mode_aby	= %0000000100000000
+bit_mode_rel	= %0000001000000000
+bit_mode_iab	= %0000010000000000
+bit_mode_zpy	= %0000100000000000
+bit_mode_inz	= %0001000000000000
+bit_mode_iax	= %0010000000000000
+bit_mode_vre	= %0100000000000000
+bit_mode_write	= %1000000000000000	; this is a flag for xref only
+
+mode_imm	= 0
+mode_abs	= 1
+mode_zpg	= 2
+mode_imp	= 3
+mode_acc	= 3
+mode_inx	= 4
+mode_iny	= 5
+mode_zpx	= 6
+mode_abx	= 7
+mode_aby	= 8
+mode_rel	= 9
+mode_iab 	= 10
+mode_zpy	= 11
+mode_inz	= 12
+mode_iax	= 13
+mode_vre	= 14
+
+; imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+;
+; opcode_structure
+;	<pntr><name><mode><....>
+;	<pntr> 	= single byte pntr to next opcode
+;	<name)	= 2 byte hashed opcode name
+;	<mode>	= 16 bit addressing mode flag 
+;	<....>	= 1-16 bytes of opcode values (only those that exist according to <mode> are present)
+
+opstruct_name_offset	= 1
+opstruct_mode_offset	= 3
+opstruct_op_offset	= 5
+
+
+add_mode .macro %mode,%arg
+	.ifge %arg
+defop_mode	= defop_mode+%mode
+defop_count	= defop_count+1
+	.endif
+	.endm
+
+
+defop	.macro %name,^wri,^imm,^abs,^zpg,^imp,^inx,^iny,^zpx,^abx,^aby,^rel,^iab,^zpy,^inz,^iax,^vre
+	.ife ^wri
+defop_mode = 0
+	.else
+defop_mode = bit_mode_write
+	.endif
+
+defop_count = 0
+
+;  1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
+; imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+
+	add_mode bit_mode_imm,^imm
+	add_mode bit_mode_abs,^abs
+	add_mode bit_mode_zpg,^zpg
+	add_mode bit_mode_imp,^imp
+	add_mode bit_mode_inx,^inx
+	add_mode bit_mode_iny,^iny
+	add_mode bit_mode_zpx,^zpx
+	add_mode bit_mode_abx,^abx
+	add_mode bit_mode_aby,^aby
+	add_mode bit_mode_rel,^rel
+	add_mode bit_mode_iab,^iab
+	add_mode bit_mode_zpy,^zpy
+	add_mode bit_mode_inz,^inz
+	add_mode bit_mode_iax,^iax
+	add_mode bit_mode_vre,^vre
+
+opcode_hash_value = 0
+	.irpc %char,%name
+opcode_hash_value = %00100000*opcode_hash_value+%00011111!.'%char'
+	.endr
+
+	.byte defop_count+5
+	.word opcode_hash_value
+	.word defop_mode
+
+	.ifge ^imm
+	.byte ^imm
+	.endif
+	.ifge ^abs
+	.byte ^abs
+	.endif
+	.ifge ^zpg
+	.byte ^zpg
+	.endif
+	.ifge ^imp
+	.byte ^imp
+	.endif
+	.ifge ^inx
+	.byte ^inx
+	.endif
+	.ifge ^iny
+	.byte ^iny
+	.endif
+	.ifge ^zpx
+	.byte ^zpx
+	.endif
+	.ifge ^abx
+	.byte ^abx
+	.endif
+	.ifge ^aby
+	.byte ^aby
+	.endif
+	.ifge ^rel
+	.byte ^rel
+	.endif
+	.ifge ^iab
+	.byte ^iab
+	.endif
+	.ifge ^zpy
+	.byte ^zpy
+	.endif
+	.ifge ^inz
+	.byte ^inz
+	.endif
+	.ifge ^iax
+	.byte ^iax
+	.endif
+	.ifge ^vre
+	.byte ^vre
+	.endif
+
+	.endm
+	.page
+
+opcode_table
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop lda,0,$a9,$ad,$a5,-01,$a1,$b1,$b5,$bd,$b9,-01,-01,-01,$b2,-01,-01
+	defop sta,1,-01,$8d,$85,-01,$81,$91,$95,$9d,$99,-01,-01,-01,$92,-01,-01
+	defop jsr,0,-01,$20,-01,-01,-01,-01,-01,-01,-01,-01,$22,-01,-01,$23,-01
+	defop adc,0,$69,$6d,$65,-01,$61,$71,$75,$7d,$79,-01,-01,-01,$72,-01,-01
+	defop and,0,$29,$2d,$25,-01,$21,$31,$35,$3d,$39,-01,-01,-01,$32,-01,-01
+	defop asl,1,-01,$0e,$06,$0a,-01,-01,$16,$1e,-01,-01,-01,-01,-01,-01,$0a
+	defop asr,1,-01,-01,$44,$43,-01,-01,$54,-01,-01,-01,-01,-01,-01,-01,$43
+	defop asw,1,-01,$cb,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop aug,0,-01,-01,-01,$5c,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop bbr,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,$0f
+	defop bbs,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,$8f
+	defop bcc,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$90,-01,-01,-01,-01,-01
+	defop bcs,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$b0,-01,-01,-01,-01,-01
+	defop beq,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$f0,-01,-01,-01,-01,-01
+	defop bmi,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$30,-01,-01,-01,-01,-01
+	defop bne,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$d0,-01,-01,-01,-01,-01
+	defop bpl,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$10,-01,-01,-01,-01,-01
+        defop bra,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$80,-01,-01,-01,-01,-01
+        defop bru,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$80,-01,-01,-01,-01,-01
+	defop bsr,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$63,-01,-01,-01,-01,-01
+	defop bvc,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$50,-01,-01,-01,-01,-01
+	defop bvs,0,-01,-01,-01,-01,-01,-01,-01,-01,-01,$70,-01,-01,-01,-01,-01
+	defop bit,0,$89,$2c,$24,-01,-01,-01,$34,$3c,-01,-01,-01,-01,-01,-01,-01
+	defop brk,0,-01,-01,-01,$00,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop clc,0,-01,-01,-01,$18,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cld,0,-01,-01,-01,$d8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cle,0,-01,-01,-01,$02,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cli,0,-01,-01,-01,$58,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop clv,0,-01,-01,-01,$b8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cmp,0,$c9,$cd,$c5,-01,$c1,$d1,$d5,$dd,$d9,-01,-01,-01,$d2,-01,-01
+	defop cpx,0,$e0,$ec,$e4,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cpy,0,$c0,$cc,$c4,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop cpz,0,$c2,$dc,$d4,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop dec,1,-01,$ce,$c6,$3a,-01,-01,$d6,$de,-01,-01,-01,-01,-01,-01,$3a
+	defop dew,1,-01,-01,$c3,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop dex,1,-01,-01,-01,$ca,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop dey,1,-01,-01,-01,$88,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop dez,1,-01,-01,-01,$3b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop eom,0,-01,-01,-01,$ea,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop eor,0,$49,$4d,$45,-01,$41,$51,$55,$5d,$59,-01,-01,-01,$52,-01,-01
+	defop inc,1,-01,$ee,$e6,$1a,-01,-01,$f6,$fe,-01,-01,-01,-01,-01,-01,$1a
+	defop inw,1,-01,-01,$e3,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop inx,0,-01,-01,-01,$e8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop iny,0,-01,-01,-01,$c8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop inz,0,-01,-01,-01,$1b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop jmp,0,-01,$4c,-01,-01,-01,-01,-01,-01,-01,-01,$6c,-01,-01,$7c,-01
+	defop ldx,0,$a2,$ae,$a6,-01,-01,-01,-01,-01,$be,-01,-01,$b6,-01,-01,-01
+	defop ldy,0,$a0,$ac,$a4,-01,-01,-01,$b4,$bc,-01,-01,-01,-01,-01,-01,-01
+	defop ldz,0,$a3,$ab,-01,-01,-01,-01,-01,$bb,-01,-01,-01,-01,-01,-01,-01
+	defop lsi,0,-01,-01,-01,-01,-01,$e2,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop lsr,1,-01,$4e,$46,$4a,-01,-01,$56,$5e,-01,-01,-01,-01,-01,-01,$4a
+	defop map,0,-01,-01,-01,$5c,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop neg,0,-01,-01,-01,$42,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,$42
+	defop nop,0,-01,-01,-01,$ea,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop ora,0,$09,$0d,$05,-01,$01,$11,$15,$1d,$19,-01,-01,-01,$12,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop pha,1,-01,-01,-01,$48,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop php,1,-01,-01,-01,$08,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop phw,1,$f4,$fc,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop phx,1,-01,-01,-01,$da,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop phy,1,-01,-01,-01,$5a,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop phz,1,-01,-01,-01,$db,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop pla,0,-01,-01,-01,$68,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop plp,0,-01,-01,-01,$28,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop plx,0,-01,-01,-01,$fa,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop ply,0,-01,-01,-01,$7a,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop plz,0,-01,-01,-01,$fb,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+        defop rmb,1,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,$07
+	defop rol,1,-01,$2e,$26,$2a,-01,-01,$36,$3e,-01,-01,-01,-01,-01,-01,$2a
+	defop ror,1,-01,$6e,$66,$6a,-01,-01,$76,$7e,-01,-01,-01,-01,-01,-01,$6a
+	defop row,1,-01,$eb,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop rti,0,-01,-01,-01,$40,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop rtn,0,$62,-01,-01,$60,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop rts,0,$62,-01,-01,$60,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop sbc,0,$e9,$ed,$e5,-01,$e1,$f1,$f5,$fd,$f9,-01,-01,-01,$f2,-01,-01
+	defop sec,0,-01,-01,-01,$38,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop sed,0,-01,-01,-01,$f8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop see,0,-01,-01,-01,$03,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop sei,0,-01,-01,-01,$78,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop smb,1,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,$87
+	defop ssi,1,-01,-01,-01,-01,-01,$82,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop stx,1,-01,$8e,$86,-01,-01,-01,-01,-01,$9b,-01,-01,$96,-01,-01,-01
+	defop sty,1,-01,$8c,$84,-01,-01,-01,$94,$8b,-01,-01,-01,-01,-01,-01,-01
+        defop stz,1,-01,$9c,$64,-01,-01,-01,$74,$9e,-01,-01,-01,-01,-01,-01,-01
+
+;                   imm abs zpg imp inx iny zpx abx aby rel iab zpy inz iax vre
+	defop tab,0,-01,-01,-01,$5b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tax,0,-01,-01,-01,$aa,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tay,0,-01,-01,-01,$a8,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop taz,0,-01,-01,-01,$4b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tba,0,-01,-01,-01,$7b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tsx,0,-01,-01,-01,$ba,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tsy,0,-01,-01,-01,$0b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop txa,0,-01,-01,-01,$8a,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop txs,0,-01,-01,-01,$9a,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tya,0,-01,-01,-01,$98,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tys,0,-01,-01,-01,$2b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	defop tza,0,-01,-01,-01,$6b,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop trb,1,-01,$1c,$14,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+        defop tsb,1,-01,$0c,$04,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01,-01
+	.byte 0
+
+end_opcode_table
+
+	.page
+
+	ram opcode_hash,2	two byte area for hash of opcode name
+opcode_temp = opcode_hash	two byte temp area
+	zpage opcode_pntr,2
+	ram opcode_flags	syntax flags for features found in arg to opcode
+
+
+;	opcode_flags = flag values for argument features
+
+flag_inx	= %00000001	;index x		,x
+flag_iny	= %00000010	;index y		,y
+flag_inz	= %00000100	;index z		,z
+flag_ind	= %00001000	;indirect 		)
+flag_opp	= %00010000	;opening paren		(
+flag_imm	= %00100000	;immediate		#
+flag_acc	= %01000000	;accumulator mode	A
+flag_noarg	= %10000000	;no argument flag
+
+
+	ram opcode_modes,16	legality flags for opcodes (0 = not opcode)
+	ram opcodes,16		opcodes in each addressing mode
+
+
+;	find_opcode	finds opcode in list
+;		entry:	OPER points to 3 bytes of mnumonic
+;		exit:	c=1	opcode not found:	.a = 'O'
+;			c=0	opcode found:
+;				OPCODE_MODES (b7) set for legal modes
+;				OPCODES contains opcodes for modes marked as legal
+
+find_opcode
+	lda #0			;opcode_hash <= hash value for opcode
+	sta opcode_hash
+	tay
+10$	lda (oper),y
+	jsr isalpha
+	bcc 15$
+
+90$	sec			;puke if non alpha char
+	lda #'O'
+	rts
+
+15$	jsr 100$
+	iny
+	cpy #3
+	bne 10$
+
+	lda (oper),y		;puke if > 3 chars
+	bne 90$
+
+	ldi opcode_table	;opcode_pntr <= base of opcode_table
+	std opcode_pntr
+
+20$	ldy #0			;do	if	(opcode_pntr) == null
+	lda (opcode_pntr),y
+	beq 90$			;		go puke
+	ldy #opstruct_name_offset
+	lda (opcode_pntr),y	;	if	this name matches
+	cmp opcode_hash
+	bne 30$
+	iny
+	lda (opcode_pntr),y
+	cmp opcode_hash+1
+	beq 50$			;		goto 50$
+
+
+30$	ldy #0			;	opcode_pntr += (opcode_pntr)
+	lda (opcode_pntr),y
+	clc
+	adc opcode_pntr	
+	sta opcode_pntr
+	bcc 20$
+	inc opcode_pntr+1
+	jmp 20$			;forever
+
+
+50$	ldy #opstruct_mode_offset+1	; opcode_tempo <= legal modes
+	lda (opcode_pntr),y
+	sta opcode_temp+1
+	dey
+	lda (opcode_pntr),y
+	sta opcode_temp
+
+	ldy #opstruct_op_offset		; y <= offset in structure to opcode storage
+	ldx #0				; x <= 0
+
+60$	lsr opcode_temp+1		; do	shift bit out of legal modes
+	ror opcode_temp
+	bcc 65$				; if	bit set
+
+	lda (opcode_pntr),y		;	opcodes,x <= next byte in struct
+	sta opcodes,x
+	iny				;	y ++
+
+65$	ror opcode_modes,x		; shift carry high order modes byte
+	inx				; inx
+	cpx #16				; until	x = 16
+	bcc 60$
+	clc			; return happy
+	rts
+
+
+100$	asl a
+	asl a
+	asl a
+	ldx #4
+110$	asl a
+	rol opcode_hash
+	rol opcode_hash+1
+	dex
+	bpl 110$
+	rts
+
+	.page
+;	opcode_analyze_arg
+;
+;		looks at (arg)
+;		termiates at first non quoted space or semi colon
+;		sets flag
+
+
+opcode_analyze_arg
+	lda #0			opcode_flags <= 00
+	sta opcode_flags
+
+10$	jsr delimit_single_arg	delimit the arg (commas not relevant)
+	bcc 15$
+	jmp 110$		if	error go set no arg bits.
+
+; trailing spaces, semicolon or EOS have now resulted in the ARG being terminated.
+
+15$	ldy #0			if	string starts with immediate (#) sign
+	lda (arg),y
+	cmp #'#'
+	bne 20$
+	lda #flag_imm			set immediate flag & skip 
+	jsr 105$
+	jmp 80$				check for null arg and return
+
+
+20$	cmp #'('		if	string starts with open paren
+	bne 25$
+
+	lda #flag_opp			set open paren flag & skip
+	jsr 105$
+
+25$	jsr 150$		x,a <= last two chars in string
+
+	cmp #','		if	arg ends in ",Y" or ",Z"
+	bne 30$
+	cpx #'Y'
+	beq 26$
+	cpx #'Z'
+	bne 30$
+	lda #flag_inz
+	.byte $2c
+26$	lda #flag_iny			set flags and terminate arg
+	jsr 100$
+	jsr 150$			x,a <= last two chars in string
+
+30$	cpx #')'		if	last char is)
+	bne 40$
+	lda #flag_opp			if	no open paren
+	bit opcode_flags
+	beq 80$					go exit
+
+	iny				y ++ (point to last char)
+	lda #flag_ind			set flags and terminate arg
+	jsr 100$
+	jsr 150$			x,a <= last two chars in string
+
+40$	cpx #'X'		if	arg ends in ",X"
+	bne 80$
+	cmp #','
+	bne 80$
+
+	lda #flag_inx			set flags and terminate arg
+	jsr 100$
+
+80$	ldy #0
+	lda (arg),y	if	string is now null
+	beq 110$		go set no arg and return
+	jsr toupper	if	its a single .a
+	cmp #'A
+	bne 90$
+	iny
+	lda (arg),y
+	bne 90$
+	lda #flag_acc		set accumulator flag
+	jsr 120$
+	ldy #0			nullify string
+	tya
+	sta (arg),y
+90$	rts		return
+;
+;
+;
+100$	jsr 120$		set bits in opcode flags
+	lda #0			terminate arg at yth char
+	sta (arg),y
+	rts			return
+;
+105$	incd arg		inc arg
+	.byte $2c
+;
+110$	lda #flag_noarg		set no argument flag
+;
+120$	ora opcode_flags	set bits in opcode flags
+	sta opcode_flags
+	rts			return
+
+
+;		if (arg) > 2 chars
+;			x <= last char
+;			a <= next to last char
+;			y <= pointer to next to last char
+;		else
+;			x,a <= 0
+
+
+150$	ldy #$ff		y <= pointer to last char in .arg
+	ldx #0			(.a,.x = 0)
+160$	iny
+	lda (arg),y
+	bne 160$
+;
+	cpy #2			if	y < 2
+	bcc 170$			go return
+;
+	dey			x <= last char (upper case please)
+	lda (arg),y
+	jsr toupper
+	tax
+	dey			y <= pointer to next to last char
+	lda (arg),y		.a <= next to last char
+170$	rts
+
+	.page
+;******************************************************************************
+;			EVAL_OPCODE
+;******************************************************************************
+;
+;	this routine parses opcode and arg.
+;	it checks for errors.
+;	it calls outbyte to emit object code bytes
+;	it calls eval to check the value of the argument
+;	it calls outerr for various errors
+;	it return the number of object code bytes created.
+;
+;	the software first searches for the opcode in the opcode
+;	tables, and also checks the argument for various syntactical
+;	features expected by 6502 assemeblers.
+;
+;	if then combines information about the addressing mode with
+;	the syntactical features found and the results of any argument
+;	evalautation to produce lots of errors except in the special case
+;	where in the input line is correct.
+;
+;	ram value		16 bit flag
+;	ram valerr		= 0	ok
+;				= 1	undefined
+;				= 2	forward reference
+
+eval_opcode
+	jsr find_opcode			;find the opcode
+	bcc 1$
+	rts
+
+1$	lda opcode_modes+mode_imp	;if	implied operation
+	bpl 10$
+	lda opcodes+mode_imp		;	.a <= opcode
+	cmp opcodes+mode_vre		;	(kludge to distinguish between imp and acc modes, and pass RTN #)
+	beq 10$
+	cmp #$60
+	beq 10$
+	cmp #$5c			;	(kludge to allow special handling of AUG instruction)
+	bne 81$
+	jmp opcode_aug
+
+81$	ldy #0				;	output at pc
+	jsr outbyte
+	lda #1				;	return happy one byte used
+	clc
+	rts
+
+10$	jsr opcode_analyze_arg		;examine the arg for syntactical features
+	lda opcode_flags		;if	no arg or 'A' addressing selected
+	and #flag_noarg+flag_acc
+	beq 20$
+
+	ldx opcode_modes+mode_acc	;	if	acc addressing allowed
+	bpl 17$
+	lda opcode_flags		;		if	any other flags set
+	cmp #flag_acc
+	beq 15$
+	lda opcodes+mode_acc		;			(allow RTS/RTN to pass)
+	cmp #$60
+	beq 15$
+	jsr outerr_q			;			???
+15$	lda opcodes+mode_acc		;			output the acc mode byte
+	jmp 81$				;			& return happy
+
+;						else
+17$	and #flag_noarg			;		if 	no arg
+	beq 18$				;			dreaded 'E' error
+	jmp 90$
+
+18$	and #255-flag_acc		;		clear noarg flag
+	sta opcode_flags
+
+	lda #$0a			;		value <= $000a
+	sta value
+	lda #0
+	sta value+1
+	sta valflg			;		valflg <= no errors
+	jsr outerr_q			;		output a ??
+	jmp 30$
+
+;					else
+20$	asl opcode_modes+15		;	c <= b7 of write mode opcode flag
+	jsr xref_write_if_carry
+
+	lda opcode_modes+mode_vre	;if	not special mode
+	bpl 25$
+	lda opcode_modes+mode_imp	;	(exclude imp/acc kludge)
+	bmi 25$
+	jmp 200$
+
+25$	ldd arg				;	go evaluate the argument
+	jsr eval			;	(user gets the errors)
+	clc
+	jsr xref_write_if_carry
+
+; at this point implied and accumulator modes have been eliminated.
+; the argument has been evaluated, and any evaluation errors have been reported.
+
+30$	lda opcode_modes+mode_rel	;if	relative mode opcode
+	bpl 40$
+	lda opcode_flags		;	if	any flags set
+	beq 31$
+	jsr outerr_q			;		?
+
+31$	ldi $FFFE			;	value <= -2 + value - pc
+	add value
+	sbd pc
+	std value
+
+	asl a				;byte-relative or word-relative?
+	txa
+	bcc 32$
+	eor #$ff
+32$	beq 36$				;	branch if byte-relative
+	bit two_pass_only
+	bmi 35$
+
+33$	lda opcodes+mode_rel
+	ora #$03			;	a <= word-relative mode opcode
+34$	jmp 83$
+
+35$	lda opcodes+mode_rel		;	a <= byte-relative mode opcode
+	cmp #$63
+	beq 34$				;	special case- BSR is word-rel only
+	jsr outerr_a			;	if 2-pass only, branches assumed to be
+					;	byte-rel, and value error reported if
+					;	out of range
+
+36$	lda opcodes+mode_rel		;	a <= byte-relative mode opcode
+	cmp #$63
+	beq 34$				;	special case- BSR is word-rel only
+
+82$	ldy #0				;output .a as opcode
+	jsr outbyte
+	lda value			;output low order value
+	ldy #1
+	jsr outbyte
+	lda #2				;.a <= 2 bytes used
+	clc				;return happy
+	rts
+
+40$	lda opcode_flags	
+	and #flag_imm			;if	immediate mode selected
+	beq 50$
+	cmp opcode_flags		;	if	others selected
+	beq 47$
+	jsr outerr_q			;		outerr a q
+47$	lda opcodes+mode_imm		;	if	PHW# kludge
+	cmp #$f4
+	bne 48$
+	ldx #mode_imm			;		x <= word-imm mode legal!
+	ldy #mode_imp			;		y <= byte-imm mode illegal!
+	jmp 100$
+
+48$	ldx #mode_imp			;	x <= known illegal mode
+	ldy #mode_imm			;	y <= immeditate mode
+	jmp 100$			;	go select one
+
+50$	lda opcode_flags
+	and #flag_ind+flag_opp		;if	any parens found
+	beq 70$
+	cmp #flag_ind+flag_opp		;	if	both not found
+	beq 55$
+	jsr outerr_q			;		output a 'Q' error
+
+55$	lda opcode_flags		;	if	no indexing
+	and #flag_iny+flag_inx
+	bne 60$
+	ldx #mode_iab			;		x,a <= abs,zpg indirect modes
+	ldy #mode_inz
+	jmp 100$			;		go perform decision
+
+60$	cmp #flag_inx			;	if	by x only
+	bne 65$
+	ldx #mode_iax			;		x,a <= abs,zpg indirect indexed modes
+	ldy #mode_inx
+	jmp 100$
+
+65$	cmp #flag_iny			;	if	not by y only
+	beq 67$
+	jsr outerr_q			;		??
+
+67$	ldx #mode_imp			;	x <= known illegal opcode mode
+	ldy #mode_iny
+	jmp 100$			;	go decide
+
+
+; have eliminated implied, acc, immediate, relative  and all indirect forms of addressing.
+; therefore it must be indexing by x or y or no indexing at all.
+
+70$	lda opcode_flags		;if	not straight addressing
+	beq 75$
+	cmp #flag_inx
+	beq 85$				;	if	not index by x
+	cmp #flag_iny
+	beq 80$				;		if not	index by y
+	jsr outerr_q			;			question it
+
+75$	ldx #mode_abs			;		x,y <= abs,zero page modes
+	ldy #mode_zpg
+	jmp 100$			;		go decide
+
+80$	ldx #mode_aby			;	x,y <= abs,zpg y indexed modes
+	ldy #mode_zpy
+	jmp 100$			;	go decide
+
+85$	ldx #mode_abx			;x,y <= abs,zpg x indexed modes
+	ldy #mode_zpx
+
+; at this point, the zero page and absolute modes for this addressing mode are in x and y. 
+; make a selection based on the legality of the modes and the result of instruction evaluation.
+
+100$	lda opcode_modes,y		;if	zero page mode legal
+	bpl 140$
+	lda value+1			;	if	>8bit result
+	beq 110$
+	lda opcode_modes,x		;		if	abs legal
+	bmi 140$			;			go use abs
+
+	lda opcodes,y			;		.a <= opcode to use
+	pha				;		.save .a
+	jsr outerr_v			;		outerr 'v'
+	pla				;		recall opcode to use
+	jmp 82$				;		go spit it out
+
+110$	lda valflg			;	if	forward_reference
+	and #value_forward
+	beq 120$
+	lda opcode_modes,x		;		if	abs legal
+	bpl 120$
+	lda opcodes,x			;			.a <= opcode to use
+	pha				;			stack .a
+	jsr outerr_w			;			wasted byte warning
+	pla				;			recall .a
+	jmp 83$				;			go spit it out
+
+120$	lda opcodes,y			;	.a <= zero page opcode
+	jmp 82$				;	go spit it out.....	
+
+140$	lda opcode_modes,x		;	if	abs opcode illegal
+	bmi 150$
+90$	jsr outerr_question		;		I'm confused...
+	lda #0				;		return no bytes used
+	clc
+	rts
+
+150$	lda opcodes,x			;	output the opcode
+83$	ldy #0
+	jsr outbyte
+	ldd value			;	output the value
+	ldy #1
+	jsr outword
+	lda #3				;	return 3 bytes used
+	clc
+	rts
+
+; handling for special opcodes, such as  BBS #,zp,byte_rel  syntactii
+
+200$	ldy #0				;evaluate 1st arg (bit#), necessary to form opcode
+	sty byte_cntr
+	jsr eval_next_operand
+	bcs 210$
+
+	cmp #8
+	bcc 210$
+	tya
+	pha
+	jsr outerr_v			;	bit value must be in range (0-7)
+	pla
+	tay
+
+210$	lda value			;	combine opcode with bit#
+	and #7
+	asl a
+	asl a
+	asl a
+	asl a
+	ora opcodes+mode_vre
+	jsr byte_spit_one		;	output the formed opcode (BBR/BBS)
+
+	jsr check_for_comma		;check syntax
+	jsr eval_next_operand		;evaluate argument 2 of 3 (z-page reference)
+	jsr byte_spit_one
+	lda opcodes+mode_vre		;done if RMB/SMB ops!
+	and #$0f
+	cmp #$0f
+	beq 215$
+	lda #2				;	done!  exit with #bytes used
+	clc
+	rts
+
+215$	jsr check_for_comma		;check syntax
+	jsr eval_next_operand		;evaluate argument 3 of 3 (byte-relative offset)
+	ldi $FFFD			;	value <= -3 + value - pc
+	add value			;	(PC already incremented by 2)
+	sbd pc
+	std value
+	asl a				;	in range?
+	txa
+	bcc 220$
+	eor #$ff
+220$	beq 230$
+	jsr outerr_a			;	range error
+
+230$	lda value
+	jsr byte_spit_one
+	lda #3				;return number of bytes used
+	clc				;return happy
+	rts
+
+
+
+eval_next_operand
+	jsr byte_classify_this_char
+	bne 20$
+	jsr byte_find_end_of_normal_expression
+	lda (args),y
+	pha				;save syntax & pointer
+	tya
+	pha
+	lda #0				;terminate expression
+	sta (args),y
+
+	ldd args
+	jsr eval			;evaluate null-terminated byte-sized expression at (args),y
+	lda byte_cntr
+	cmp #2
+	beq 10$
+	lda value+1
+	beq 10$
+	jsr outerr_v			;...value error
+	bcs 15$
+
+10$	clc
+15$	pla				;restore syntax & pointer
+	tay
+	pla
+	sta (args),y
+	lda value
+	rts
+
+20$	jsr outerr_q_but_save_y		;...missing required param
+	lda #0
+	sta value
+	rts
+	
+
+check_for_comma
+	jsr byte_classify_this_char
+	and #%00001000
+	bne 10$
+	jmp outerr_q_but_save_y
+
+10$	iny
+	ldd args
+	jsr effective_address
+	std args
+	ldy #0
+	clc
+	rts
+
+outerr_q_but_save_y
+	tya
+	pha
+	jsr outerr_q
+	pla
+	tay
+	lda #0
+	sta value
+	sta value+1
+	sec
+	rts
+
+; the AUG opcode requires special handling- it is a single opcode
+; with no arguments, yet requires 4 bytes to be allocated.
+; the assembler fills these "extra" bytes with NOPs.
+
+opcode_aug
+	ldy #0
+	sty byte_cntr
+	jsr byte_spit_one	;output the opcode
+	jsr list_force_new_line
+	lda #$ea		;output 3 nops
+	jsr byte_spit_one
+	lda #$ea
+	jsr byte_spit_one
+	lda #$ea
+	jsr byte_spit_one
+	lda #4
+	clc
+	rts

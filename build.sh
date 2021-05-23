@@ -184,3 +184,5 @@ build1 FIG FOR1-1
 #   build2 RAMDOS a
 #   build2 HCD65_3.5 c65
 #   build2 HCD65_65CE02 c65
+#   build2 HCD65_65CE02_0.1 c65
+#   build2 HCD65_65CE02_0.2 c65
