@@ -1,0 +1,844 @@
+	.page
+	.subttl "MACRO JUNKOLA"
+;
+;
+;	the macro storage area contains 2 things.
+;
+;	macro definitions grow from the bottom of the
+;	storage area.
+;
+;	the input stack grows from the top of the storage area.
+;	note that macros are expanded by pushing the expanded
+;	text back into the input stream.
+;
+;	the input stack is also managed by the input moduale.
+;	all references to the stack by inpunt moudual
+;	are performed by PUSH_BYTE(),PULL_BYTE(), and
+;	input_pntr. Input_pntr is the pointer to the
+;	moving end of the input stack. it is merely used
+;	as an index. no external moduales may attempt to
+;	reference data in the stack except via the push and 
+;	pull routines.
+;
+;	the input moduale contains a routine called
+;	push_macro_struct which must be called before a macro
+;	is expanded into the input stream. this is 
+;	to allow the input manager to communicate with the
+;	output manager information regarding the depth of
+;	of the macro expansion.
+;	
+;
+;	macros are stored as groups of two null terminated strings.
+;	the first string is the macro name. the second string is the
+;	macro definiition. The macro definition is stored as a seris of
+;	<CR> terminated lines. line_feeds are ignored. charecters with the
+;	value from $e0 through $ff are used as arguement position indicators.
+;	the end of the macro store area is terminated by a NULL macro and
+;	is pointed too by the macro_expand_top pntr.
+;
+;	note that while macros are being defined, the macro_top_pntr may
+;	not be correct. the only assurence is that macro_top_pntr
+;	if correct when the macro definition phase is ended
+;
+;	the macro expansion routines will not store the .endm or the .endr
+;	in the macro expansion stream. Note that endm and endr are symnonyms
+;
+;
+macro_subs_char = $e0
+;
+;	these for pointers are the buffer limits for the macro storage area
+;
+	zpage macro_base_pntr,2		(fixed)
+	zpage macro_end_pntr,2		(moving)
+	zpage input_pntr,2		(moving)
+	zpage input_top_pntr,2		(fixed)
+;
+;		these two pointers are general purpose pointers
+;
+	zpage macro_pntr_1,2
+	zpage macro_pntr_2,2
+;
+;		this area holds macro arguments during expansion/compression
+;
+;	ram macro_args,256	you put it where ??? the cassette buffer !?!
+;
+	ram macro_directive_nest_count	
+;
+	ram macro_arg_cntr		; counter into arg list
+	zpage macro_arg_pntr,2		; pointer into arg list
+	zpage macro_expansion_input,2	; pointer into expansion area for
+;
+;
+;
+;
+macro_init
+	ldd max_mem_0		; x,a <= highest free address for basic
+	tay
+	bne 10$
+	dex
+10$	dey
+	tya
+	cpi bank0_ram_max	; if	 > max "seeable" ram
+	bcc 20$
+	ldi bank0_ram_max		x,a <= max seeable ram
+;
+20$	std input_top_pntr	; set up top of macro area here
+	std input_pntr
+;
+	ldd text_top		; calc first free address after basic text
+	clc
+	adc #1
+	bne 30$
+	inx
+30$	std macro_base_pntr	; point there
+	ldy #0			; put a null there ( irpc,irp,rept need this )
+	tya
+	sta (macro_base_pntr),y
+	incd macro_base_pntr	; put our base one past there
+	ldd macro_base_pntr	; put endpntr at same place
+	std macro_end_pntr	
+;
+	cpd input_top_pntr	; if	top < bot
+	bcc 80$
+	jmp insufficient_memory	;	uh.. sorry about that null....
+80$	rts
+;
+push_byte	;			if 	pointers are equal
+	cmpdr macro_end_pntr,input_pntr,y
+	bcc 10$
+	jmp 				insufficient_memory
+;
+10$	ldy #0
+	sta (input_pntr),y
+	decd input_pntr		input_pntr--
+	clc
+	rts
+;
+;
+;
+pull_byte		;	if	input_pntr >= end_pntr
+	cmpdr input_pntr,input_top_pntr,y
+	bcs 90$		;		go exit error
+	incd input_pntr	;	input_pntr++
+	ldy #0		;	.a <= (input_pntr)
+	lda (input_pntr),y
+	clc
+90$	rts
+;
+macro_store_append_byte
+	cmpdr input_pntr,macro_end_pntr,y
+	beq 90$
+	ldy #0
+	sta (macro_end_pntr),y
+	incd macro_end_pntr
+	clc
+	rts
+;
+90$	jmp insufficient_memory
+;
+delete_macro
+;
+;	delete_macro
+;		entry:	x,a point to name for macro
+;		exit:	if	macro was in macro store, it is removed.
+;
+;
+	jsr find_macro	if	macro can be found
+	bcs 80$
+	std macro_pntr_2	pntr2 <= pointer to name
+	std macro_pntr_1	pntr1 <= pointer to next macro
+	ldx #macro_pntr_1
+	jsr next_macro
+10$	cmpdr macro_pntr_1,macro_end_pntr,x	
+	bcs 20$			while	pntr_1 < macro_end_pntr
+	ldy #0			do 	(macro_pntr_2++) <= (macro_pntr_1++)
+	lda (macro_pntr_1),y
+	sta (macro_pntr_2),y
+	incd macro_pntr_1
+	incd macro_pntr_2
+	jmp 10$
+;
+20$	ldd macro_pntr_2	macro_end_pntr <= macro_pntr_2
+	std macro_end_pntr
+;
+80$	clc		return happy
+	rts
+;
+;
+;	next_macro
+;		.x is zero page address of pointer to macro definition
+;		advances macro_pntr to point to next macro definition
+;		( by advanccing by 2 null terminated string )
+;	next_macro_string
+;		.x is zero page pntr to macro definition
+;		advances macro_pntr to point to next string in macro store.
+;
+next_macro
+	jsr next_macro_string
+next_macro_string
+	jmp string_advance
+;
+;
+;
+;*******************************************************************************
+;				FIND_MACRO
+;*******************************************************************************
+;
+;	find_macro
+;		entry:	x,a point to alleged macro name
+;		exit:	c=0:	macro name found.
+;				x,a point to macro definition.
+;			c=1:	macro name not found
+;				x,a point to end of macro store.
+find_macro
+	std macro_pntr_2	store address of macro name
+	ldd macro_base_pntr	set pointer to start of macro store
+	std macro_pntr_1
+;			
+10$	ldd macro_pntr_1	do	if	at end of macro definitions
+	cpd macro_end_pntr
+	bne 20$
+	sec					return pointer to end of def
+	rts
+;
+20$	ldy #macro_pntr_2		compare string at pntr with name
+	jsr strcmp_toupper		( ignore case of users string )
+	bcs 30$				if	equal
+	ldd macro_pntr_1			x,a <= pointer  to macro name
+	clc					c=0
+	rts					return
+;
+30$	ldx #macro_pntr_1		point to next macro
+	jsr next_macro	
+	jmp 10$			loop forever
+;
+;
+;
+;
+;	directive_macro
+;		entry:	(label) = name of macro to be defined
+;		args:	points to arguement list
+;
+;		defines macro with name == (label)
+;		also processes args while storing macro
+;		stores the .endm as part of the macro.
+;		( this is used to change the macro nest count during
+;		 macro expansion ).
+;
+;
+directive_macro
+	ldd label		if	macro defined with same name
+	jsr delete_macro		delete it
+;
+;				copy name of macro into store
+;
+	ldd label		pntr_2 <= label addresss
+	std macro_pntr_2
+;
+10$	ldy #0			do	a <= (pntr_2++)
+	lda (macro_pntr_2),y
+	incd macro_pntr_2
+	pha				save .a
+	jsr toupper			store name in upper case only
+	jsr macro_store_append_byte	append this byte to macro store
+	pla				recall .a
+	bne 10$			while	.a <> 0
+;
+;
+20$	jsr comma_delimit_args	delimit args
+	lda nargs		clip nargs to max allowed
+	cmp #$1f
+	bcc 30$
+	lda #$1f
+30$	sta nargs
+;
+	ldy #$FF		y <= -1
+	ldx nargs		x = number of args
+;
+	beq 50$			if	x <> 0
+;
+40$	iny				do	do	y++
+	lda (args),y					macro_args <= (args)
+	sta macro_args,y
+	bne 40$					until	null copyied
+	dex					x--
+	bne 40$				until	x==0
+;
+;	at this point:
+;		if	the macro was previously defined
+;			the macro definition was deleted
+;		the macro name has been appended to the end of the macro store.
+;		the end of the macro store now points to the position where the
+;		the macro definition should be written
+;
+;		macro_args is pointing to a seris of null terminated
+;		dummy arguments which are to mark the substitution areas
+;		within the macro.
+;
+50$	jmp store_macro		go store the macro
+;
+;
+;	store_macro
+;		entry:	nargs = number of argumenets for macro definitnon
+;			macro_args =
+;				seris of null terminated macro args
+;			read_line points to first line of macro.
+;
+;		operation:	lines are read in, compressed,
+;				and checked for the macro directives.
+;				they are stored until the correct unested
+;				endm or endr is detected.
+;				THIS ONLY STORES A DEFINITION.
+;
+store_macro
+	lda #1		nest count <= 1
+	sta macro_directive_nest_count
+;
+10$	jsr read_line	do	read a line of text into line
+	bcc 12$
+;
+	jsr primm_to_error_channel
+	.byte "MACRO DEFINITION IN PROGRESS AT EOF",cr,0
+	sec
+	rts
+;
+12$	ldi line
+	jsr set_list		list line to output
+;
+	jsr macro_compress_line	compress the line
+;
+;				save current end of macro store
+	ldd macro_end_pntr	
+	phd
+;
+	ldi line		point to start of line
+	std macro_pntr_1
+;
+20$	ldy #0			while (pntr) <> '0'
+	lda (macro_pntr_1),y
+	beq 30$			do	append byte to macro store
+	jsr macro_store_append_byte
+	incd macro_pntr_1		point to next byte
+	jmp 20$
+;
+30$	lda #cr			append a cr at end of line
+	jsr macro_store_append_byte
+;
+	jsr delimit_label_oper	delimit the operator on the saved line
+;
+	jsr oper_toupper	force operator to upper case
+;
+	inc macro_directive_nest_count
+;
+	ldi text_macro		if oper = .macro,.irp,.irpc or .rept
+	ldy #oper
+	jsr strcmp
+	beq 80$
+	ldi text_irp
+	ldy #oper
+	jsr strcmp
+	beq 80$
+	ldi text_irpc
+	ldy #oper
+	jsr strcmp
+	beq 80$
+	ldi text_rept
+	ldy #oper
+	jsr strcmp
+	beq 80$				goto 60$
+;
+	dec macro_directive_nest_count
+	dec macro_directive_nest_count
+;
+	ldi text_endr		if	oper == .endr or .endm
+	ldy #oper
+	jsr strcmp
+	beq 80$				goto 70$
+	ldi text_endm
+	ldy #oper
+	jsr strcmp
+	beq 80$
+;
+	inc macro_directive_nest_count
+;
+;
+80$	pld			recall_end_of_storage before this line
+;			while	nest_count <) 0
+	ldy macro_directive_nest_count
+	beq 88$
+	jmp 10$
+;			terminate storage before this line
+88$	std macro_end_pntr
+	lda #0		terminate macro with null
+	jmp macro_store_append_byte
+;
+;
+;
+;	macro_compress_line
+;		entry:	macro_args has arglist for psuedo args.
+;			line has a line of text for compression
+;			nargs is set.
+;
+;
+;	nargs			number of argumants in the arg list
+;	macro_arg_pntr		pointer into arg list
+;	macro_arg_cntr		counter into arg list
+;
+macro_input_pntr	= macro_pntr_1
+macro_output_pntr 	= macro_pntr_2
+;
+macro_compress_line
+	ldi line		input <= output <= line
+	std macro_input_pntr
+	std macro_output_pntr
+;
+10$	ldy #0
+	lda (macro_input_pntr),y while	(input_pntr) <> null
+	beq 80$
+;
+	jsr macro_find_arg	do	if 	can find the arg
+	bcc 30$					.a <= subs char,.y = len of arg
+;					else
+	ldy #0					.a <= input char
+	lda (macro_input_pntr),y
+	iny					.y = 1
+;
+30$	pha				save char
+;
+	ldd macro_input_pntr		advance input by number of args
+	jsr effective_address
+	std macro_input_pntr
+;
+	pla				recall char
+	ldy #0				write at output location
+	sta (macro_output_pntr),y
+;
+	incd macro_output_pntr		incd output pntr
+	jmp 10$
+;
+80$	lda #0			terminate output string
+	tay
+	sta (macro_output_pntr),y
+	clc			return
+	rts
+;
+;	macro_find_arg
+;		entry:	nargs = number of args
+;			macro_args = list of macro_args
+;			macro_input_pntr = pointer to string to check
+;		exit:	c=1	argument not found
+;			c=0	argument found
+;				.a = subs char to use of arg
+;				.y = length of arg
+;
+macro_find_arg
+	lda #0		if	no args
+	cmp nargs
+	bcc 10$
+	rts			return c=1
+;
+10$	ldi macro_args		pntr <= start of args
+	std macro_arg_pntr
+;
+	lda #0			cntr == 0
+	sta macro_arg_cntr
+;
+20$	ldy #0			do	if	(pntr) not null
+	lda (macro_arg_pntr),y
+	beq 30$ 
+;
+	ldd macro_arg_pntr			if 	(pntr) matches
+	ldy #macro_input_pntr
+	jsr strstrt
+	bcs 30$
+;
+	ldd macro_arg_pntr				y <= length of arg
+	jsr strlen
+	lda macro_arg_cntr				a <= subs char to use
+	ora #macro_subs_char
+	clc						reurtn happy
+	rts
+;
+30$	ldx #macro_arg_pntr		advance arg pntr
+	jsr string_advance
+	inc macro_arg_cntr		inc counter
+	lda macro_arg_cntr	until	cntrr == nargs
+	cmp nargs
+	bne 20$
+	sec
+	rts
+;
+;
+;
+;
+;
+;	eval_macro
+;
+;		checks oper to see if it is a macro
+;		if	so it expands the macro
+;			by shoving it back into the input stream.
+;
+eval_macro
+	ldd oper		if 	(oper) is not  macro
+	jsr find_macro
+	bcc 1$
+	rts				return c=1
+;
+1$	std macro_expansion_input	save input source
+	jsr push_macro_struct		inform input manager
+;
+	jsr list_macro_call
+	jsr macro_parse_args_for_expansion
+	ldi macro_args			pntr <= @macro_args
+	std macro_arg_pntr
+;					point to definition
+	ldx #macro_expansion_input
+	jsr string_advance
+	ldd macro_expansion_input	x,a <= pointer to defitnion
+	jmp expand_macro		go expand the bugger
+;
+;
+;
+;
+rept_pntr = directive_pntr
+;
+;
+directive_rept
+	jsr macro_parse_args_for_expansion
+	lda nargs		save number of args
+	pha
+	lda #0			mark number of args as 0
+	sta nargs
+;
+	ldd macro_end_pntr	save current end of definitions
+	std rept_pntr
+;
+	jsr store_macro		store the new definition
+	jsr push_macro_struct	inform input manager
+;
+	pla			if	args
+	beq 10$
+	ldi macro_args		 	evaluate the repeat count
+	jsr eval
+	bcs 10$			 	if 	value perfect
+	lda valflg
+	beq 20$					goto 20
+10$	jsr outerr_v		complain
+	lda #0
+	tax			value <= 0
+	std value
+;
+20$	lda value		while	value <> 0
+	ora value+1
+	beq 50$
+30$	ldd rept_pntr		do	expand the definition
+	jsr expand_macro
+	decd value			value--
+	jmp 20$
+;
+50$	ldd rept_pntr		delete the final defitnion by marking endpntr
+	std macro_end_pntr
+	lda #0			return zero bytes used
+	clc
+	rts
+;
+;
+;
+;
+directive_irpc
+	ldd macro_end_pntr	save current end of definitions
+	std rept_pntr
+;
+	jsr macro_parse_args_for_expansion
+	lda nargs		save number of args
+	pha
+	lda #1			mark number of args as 1
+	sta nargs
+;
+;
+	jsr store_macro		store the new definition
+	jsr push_macro_struct	inform input manager
+;
+	pla			if	not exactly two args
+	cmp #2
+	beq 10$
+	jsr outerr_s			complain about syntax
+
+	jmp 80$				go clean up and exit
+;
+10$	lda #1			nargs <= 1
+	sta nargs
+;
+	ldi macro_args		arg_pntr <=pointer to null at end
+	std macro_arg_pntr		of expansion string
+	ldx #macro_arg_pntr
+	jsr string_advance
+	jsr string_advance
+	decd macro_arg_pntr
+;
+20$	ldy #0			do	terminate arg at (macro_arg_pntr) 
+	lda #0
+	sta (macro_arg_pntr),y
+	dec macro_arg_pntr		back up a char
+	lda (macro_arg_pntr),y		if	at null
+	beq 80$					break
+	ldd rept_pntr			expand the definition with this arg
+	jsr expand_macro
+	jmp 20$
+;
+;
+80$	ldd rept_pntr		delete the final defitnion by marking endpntr
+	std macro_end_pntr
+	lda #0			return zero bytes used
+	clc
+	rts
+;
+;
+;
+;
+directive_irp
+	ldd macro_end_pntr	save current end of definitions
+	std rept_pntr
+;
+	jsr macro_parse_args_for_expansion
+	lda nargs		save number of args
+	pha
+	lda #1			mark number of args as 1
+	sta nargs
+;
+	jsr store_macro		store the new definition
+	jsr push_macro_struct	inform input manager
+;
+	pla			nargs <= recall number of args
+	sta nargs
+	cmp #2			if	 < 2 args 
+	bcs 10$
+	jsr outerr_s			complain about syntax
+	jmp 80$				go clean up and exit
+;
+;
+10$	dec nargs		do	args--
+	lda nargs			save number of args on stack
+	pha
+;
+	ldi macro_args			arg_pntr <= base of args
+	std macro_arg_pntr
+;
+20$	ldx #macro_arg_pntr		do	arg_pntr <= address of next arg
+	jsr string_advance
+	dec nargs 			while	(--nargs)<>0
+	bne 20$
+;
+70$	lda #1				nargs <= 1
+	sta nargs
+	ldd rept_pntr			expand the definition with this arg
+	jsr expand_macro
+	pla				restore nargs from stack
+	sta nargs	
+	cmp #1			until	nargs == 1
+	bne 10$
+;
+;
+80$	ldd rept_pntr		delete the final defitnion by marking endpntr
+	std macro_end_pntr
+	lda #0			return zero bytes used
+	clc
+	rts
+;
+;
+;
+;	expand_macro
+;
+;		entry:	x,a points to start of macro definition
+;			macro_arg_pntr
+;				points to seris of null terminated macro args.
+;			nargs	contains the number of args in macro_args.
+;
+;		operation:
+;			expands macro definition into input stream.
+;			does not inform input of operation.
+;
+;
+expand_macro
+	std macro_expansion_input
+	ldx #macro_expansion_input
+	jsr string_advance
+	decd macro_expansion_input
+;
+;				do	point to previous char
+10$	decd macro_expansion_input
+	ldy #0				if	null
+	lda (macro_expansion_input),y
+	beq 80$					go exit
+;
+	cmp #macro_subs_char		if	not a macro expand token
+	bcs 20$
+	jsr push_byte				push the byte
+	jmp 10$					loop
+;
+20$	and #255-macro_subs_char	a <= index value of token
+;
+	cmp nargs			if 	>= nargs
+	bcs 10$					loop ( null expansion )
+;
+	tax				.x <= index value + 1
+	inx
+	ldy #$ff			y <= -1
+;
+;					do
+30$	iny					do	.a <= (args),++y
+	lda (macro_arg_pntr),y
+	bne 30$					until	.y = 0
+	dex					x--
+	bne 30$				while	x <> 0
+;
+	tya 				if	y==0
+	beq 10$					loop ( null first record )
+;
+	dey
+	sty macro_arg_cntr		cntr <= y - 1
+;
+50$	ldy macro_arg_cntr		do
+	lda (macro_arg_pntr),y			if	(arg_pntr,cntr) == 0
+	beq 70$						break
+	jsr push_byte				push 	(arg_pntr,cntr)
+	ldy macro_arg_cntr			if	cntr == 0
+	beq 70$						break
+	dec macro_arg_cntr			cntr--
+	jmp 50$					loop
+;
+70$	jmp 10$			loop
+;
+80$	clc
+	rts
+;
+;
+;		
+;	macro_parse_args_for_expansion
+;	
+;	copies ares from args ( default location ) to
+;	macro_args ( needed to expand the macro ).
+;
+;	on the way, args are delimited with spaces, and counted via nargs.
+;	the tilde charecter is used for a literal substitution char, and
+;	outside sets of angle brackets are used per BSO operation.
+;
+;
+macro_parse_args_for_expansion
+	ldd args		pntr1 <= address of args
+	std macro_pntr_1
+	ldi macro_args		pntr2 <= address of our copy of args
+	std macro_pntr_2
+	lda #0			nargs <= 0
+	sta nargs
+;
+10$	ldy #0			do	get a char
+	jsr mpafe_getc
+	beq 80$				quit if null
+	bcs 50$				if	tilded, go get normal arg
+	jsr mpafe_space_check		if	space or semi colon
+	beq 80$					exit
+;
+	cmp #'<				if	<
+	clc
+	bne 50$
+;
+	inc nargs				args ++
+	jsr mpafe_incd_pntr1			pntr1++
+	ldx #1					x <= 1
+	ldy #$ff				y <= -1
+20$	iny					do	y++
+	jsr mpafe_getc					(pntr2) <= next char
+	sta (macro_pntr_2),y
+	bne 30$						if 	EOS
+	jsr outerr_b						balance error
+	bcs 80$							go exit
+;							if	tilded
+30$	bcs 20$							loop
+	cmp #'<						if	<
+	bne 40$
+	inx							x++
+;
+40$	cmp #'>						if	>
+	bne 20$
+	dex							x--
+	bne 20$					until	x==0
+;
+	jsr mpafe_clip_advance			clip arg and point to next
+;
+	ldy #0					read next char
+	lda (macro_pntr_1),y
+	beq 80$					if	space,or semicolon,orEOS
+	jsr mpafe_space_check
+	beq 80$						go exit
+	cmp #',					if	comma
+	bne 45$
+;
+	jsr mpafe_incd_pntr1				pntr1++
+	jmp 10$						go get next arg
+;
+45$	jsr outerr_q				complain about_syntax
+	jmp 10$					go get next arg
+;
+50$	inc nargs			nargs++
+	sta (macro_pntr_2),y		write the byte
+	bcc 69$
+;
+60$	iny				do	y++
+	jsr mpafe_getc				(pntr2) <= next char
+	sta (macro_pntr_2),y
+	beq 80$					go exit iff null
+	bcs 60$					loop if tilded
+	jsr mpafe_space_check			if	space or ;
+	beq 70$						go terminiate and exit
+69$	cmp #',				until	, found
+	bne 60$
+;
+65$	jsr mpafe_clip_advance
+	jmp 10$				go get more args (hungry)
+;
+70$	lda #0			termiante arg
+	sta (macro_pntr_2),y
+;
+80$	clc			return happy
+	rts
+;
+;	
+;
+mpafe_getc
+	lda (macro_pntr_1),y	.a <- char
+;				if	null
+	beq 80$				exit	Z=1,C=0
+	cmp #'~			if	not	tilde 
+	bne 80$				exit	Z=1,C=0
+	jsr mpafe_incd_pntr1		skip tilde char	; c preserved as 1
+	lda (macro_pntr_1),y	.a <= char
+;				if	not null
+	bne 90$				exit	Z=0,C=1
+	jsr outerr_s		complain
+	lda #0			exit null,	Z=0,C=0
+;
+80$	clc
+90$	rts
+;
+mpafe_space_check
+	cmp #';
+	beq 10$
+	jsr isspace
+10$	rts
+;
+;
+mpafe_clip_advance
+	lda #0					(pntr2) <= null (clip arg )
+	sta (macro_pntr_2),y
+	iny					adjust pntr1,pntr2 to point past
+	tya
+	adad macro_pntr_2
+	tya
+	adad macro_pntr_1
+	rts					return
+;
+mpafe_incd_pntr1
+	incd macro_pntr_1
+	rts
+;

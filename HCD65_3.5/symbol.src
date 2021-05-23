@@ -1,0 +1,791 @@
+	.page
+	.subttl "Symbol Table Management"
+;
+;	SYMBOL TABLE MANAGEMENT
+;	-----------------------
+;	The symbol table manager provides the user with 
+;	a seris of routines for managing the symbols within the 
+;	cross assembler.
+;
+;	It is designed for both local labels ( i.e. symbols of the
+;	form ( xxx$ ) where xxx is the decimal representaion of a 
+;	number from 1 to 255 ) and normal symbols ( i.e those
+;	containging only letters, digits, underscores, and periods,
+;	but do not start with a digit ).
+;
+;
+;	The main software provides the following global locations
+;	for reference:
+;		current_line	current line number
+;		value		value ( for symbol definitions )
+;		pc		current program counter value
+;
+;	
+;	the main software is provided with the following calls
+;
+;	symbol_init	clears the symbol_table
+;
+;	add_symbol	adds a SYMBOL to the table
+;			may be called to redefine symbol values.
+;			entry:	x,a point to null terminated string
+;				value = value of symbol
+;			exit:	c=0	ok.
+;				c=1	symbol table overflow
+;					.y = "@" overflow char
+;
+;	label_operation
+;			adds symbol as label if pass one
+;			checks symbol for label value match if pass 2
+;
+;	 eval_symbol	returns value of a symbol.
+;			entry:	x,a point to null terminate string.
+;				if symbol not in table, it is added
+;				as an undefined symbol.
+;				spits errors if pass 2 and errors occur.
+;			exit:	x,a = value of label.
+;
+;
+;	symbol_table	prints the symbol table to stdout.
+;
+;
+;	Internally the symbol table mamager maintains the symbol table,
+;	a temporary symbol structure ( current_symbol) and an buffer called
+;	local_symbol_name. local_symbol_name contains the delimiting symbol
+;	for the curent set of local labels.
+;
+;
+;
+;	GLOBALS
+;	-------
+;	pc		program counter ( 2 bytes )
+;	current_line	current line number ( 2 bytes )
+;	pass		pass number ( 1 byte = 1 or 2 )
+;	
+;	0     1     23	    456     7	    n
+;	<len><type><value><linedef><locdef><text><0>
+;	len:	single byte indicating size of definition
+;		( pointer to next definition )
+;	type:	single byte indicating status of symbol
+;		0 = undefined
+;		1 = SYMBOL
+;		2 = LABEL
+;		3 = MULIBLY DEFINED LABEL
+;	linedef: 3 byte binary line number of when symbol first defined
+;	locdef:	single byte
+;		if	null then <text> contains the label name
+;		else	locdef is the local label value
+;			<text> is null.
+;	text:	the text for the label.
+;
+type_undefined 	= 0		symbol if undefined
+type_symbol	= 1		symbol is defined symbol
+type_label	= 2		symbol is defined label
+type_multilabel	= 3		symbol is multibly defined label
+;
+;
+symbol_len_offset = 0
+symbol_type_offset = 1
+symbol_value_offset = 2
+symbol_linedef_offset = 4	; lindef overwriten w/ alpha @ symbol table time.
+symbol_alpha_offset = 4
+symbol_local_offset = 6
+symbol_name_offset = 7
+max_symbol_len = 32
+;
+max_symbol_struct_len = max_symbol_len+symbol_local_offset+2
+;
+;
+	zpage current_symbol,max_symbol_struct_len+2 ; painful but efficient
+current_symbol_name = current_symbol+symbol_name_offset
+	ram directive_local_cntr,2
+	ram largest_symbol
+;
+;
+;
+;*****************************************************************************
+;			indirection code
+;*****************************************************************************
+;
+down_load_code
+	ldx #down_load_code_end-down_load_code_start-1
+10$	lda down_load_code_start,x
+	sta down_load_code_base,x
+	dex
+	bpl 10$
+	rts
+;
+down_load_code_start	; mark start of down loaded code area
+;
+	.ifgt current_symbol-$400
+	*** error *** current symbol not in shared ram 
+	.endif
+;
+;
+find_symbol = *+down_load_code_base-down_load_code_start
+	jsr first_symbol	point to first_symbol ( slow but less code )
+	ldx #mmucr_bank1_ram	select correct bank
+	stx mmucr
+;
+10$	sec			do	assume failure
+	ldy #0				if	next symbol pntr == 0
+	lda (bank1_pntr),y
+	beq 80$					exit fail
+	tax				save pntr to next symbol
+	ldy #symbol_local_offset	y <= index of comparision -
+	lda (bank1_pntr),y		if	locals match
+	cmp current_symbol,y
+	bne 50$
+20$	iny				do	y++
+	lda (bank1_pntr),y			if	 yth char doesn't match
+	cmp current_symbol,y
+	beq 30$
+50$	txa						recall offset
+	clc						add to pntr
+	adc bank1_pntr
+	sta bank1_pntr
+	bcc 10$
+	inc bank1_pntr+1
+	bne 10$						goto top loop
+;
+30$	cmp #0				until	.a == 0
+	bne 20$
+	clc				ok
+;
+80$	;	fall through to bank1_lda to return (carry preserved,less code)
+;
+bank1_lda = *+down_load_code_base-down_load_code_start
+
+	ldx #mmucr_bank1_ram
+	stx mmucr
+	ldx #mmucr_bank0_normal	; select bank 0
+	lda (bank1_pntr),y	; read it
+	stx mmucr		; restore mmu
+	rts			; return
+;
+bank1_sta = *+down_load_code_base-down_load_code_start
+	ldx #mmucr_bank1_ram	; select bank1
+	stx mmucr
+	ldx #mmucr_bank0_normal
+	sta (bank1_pntr),y	; write it
+	stx mmucr		; return mmu
+	rts			; return
+;
+;
+;
+down_load_code_end		; mark end of downloaded code area
+down_load_code_space = down_load_code_max-down_load_code_base
+down_load_code_len = down_load_code_end-down_load_code_start
+;
+	.ifgt	down_load_code_len-down_load_code_space
+	***	ERROR  ***  downloaded code too large
+	.endif
+;
+;
+;
+;
+init_symbol_table
+	bit pass		if 	pass one
+	bmi 10$
+;
+	jsr first_symbol
+	lda #0				largest symbol == null length
+	sta largest_symbol		
+	jsr bank1_sta			make first symbol null length
+;
+10$	lda #$01		local_cntr <= two non zero digits
+	sta directive_local_cntr+1
+	sta directive_local_cntr
+	rts
+;
+;
+first_symbol	;		point to first symbol
+	ldi symbol_table_start
+	std bank1_pntr
+	ldy #0
+	jmp bank1_lda		return length of symbol in .a
+;
+next_symbol
+	ldy #0			if	not at a null
+	jsr bank1_lda
+	beq 10$
+;
+	clc				bank1_pntr += (bank1_pntr)
+	adc bank1_pntr
+	sta bank1_pntr
+	bcc 10$
+	inc bank1_pntr+1
+;
+10$	jmp bank1_lda		return length of symbol in .a
+;
+read_this_symbol
+	std bank1_pntr
+;
+read_symbol	;	copy symbol from bank1_pntr to current_symbol
+	ldy #0		y <+ (bank1_pntr)  (length)
+	jsr bank1_lda	
+	tay		if	> max length allowed
+	dey
+	cpy #max_symbol_struct_len+1
+	bcc 10$
+;
+	sec			return unhappy
+	rts
+;
+10$	jsr bank1_lda	copy y bytes to current_symbol
+	sta current_symbol,y
+	dey
+	bpl 10$
+	clc		return happy
+	rts
+;
+;
+;
+store_symbol	;	copys current_symbol too symbol_table
+;			y <= the length of the symbol structure to save
+;			( carry preserved )
+;		exit:	c=0	ok, symbol stored
+;			c=1,y=@	symbol table overflow 
+;
+	ldy #0			if 	overwriting previous description
+	jsr bank1_lda
+	beq 5$
+;
+	ldy #symbol_local_offset	y <= number of bytes to copy
+;					( just the data, not the name )
+	bne 50$			else
+;
+;
+;	at this point we know we wish add a symbol to the table.
+;	the bank1_pntr points to the null at the current end of 
+;	the symbol table.
+;
+5$	ldy #symbol_name_offset		y <= number of bytes in symbol
+10$	lda current_symbol,y
+	beq 20$
+	iny
+	cpy #max_symbol_struct_len	( clip iff too many )
+	bne 10$
+;
+	lda #0
+	sta current_symbol,y
+;
+;
+20$	iny				.a <= offset to following symbol
+	lda #0
+	sta current_symbol,y		tack the null on the end
+	sty current_symbol		current symbol <= offset to null
+;
+	tya				.a <= length of this addition
+;
+	ldx bank1_pntr+1		x,a <= .a + bank1_pntr
+	clc
+	adc bank1_pntr
+	bcc 25$
+	inx
+25$	cpi symbol_table_end		if	>= end of symbol_table
+	bcc 30$
+	lda #'@					symbol table overflow !!!!
+	sec					gag puke
+	rts					return
+;
+30$	cpy largest_symbol		if	y > largest_symbol
+	bcc 50$
+;
+	sty largest_symbol			largest_symbol <= .y
+;
+50$	lda current_symbol,y	copy the data to bank one
+	jsr bank1_sta
+	dey
+	bpl 50$
+	clc			return happy
+	rts
+; 
+;
+;
+;
+;
+;	compare_symbol	entry:	current_symbol has name of a legal symbol
+;			symbols are lexographicically compared.
+;			exit:	z,c are as if you could say:
+;				lda (bank1_pntr),y
+;				cmp current_symbol
+;
+compare_symbol
+	ldy #symbol_local_offset if	locals match
+	jsr bank1_lda
+	cmp current_symbol,y
+	bne 80$
+;
+10$	iny				do	iny
+	jsr bank1_lda				read a byte of symbol
+	cmp current_symbol,y			if	<> current symbol
+	bne 80$						break
+	cmp #0				until	at terminating nulls
+	bne 10$					loop
+;			
+80$	rts			return
+;
+;
+	.ife 1
+;
+;	find_symbol	entry:	current_symbol set up with name of 
+;				legal symbol.
+;
+;			exit:	c = 1	symbol not in table
+;					( bank1_pointer at end of table )
+;				c=0	symbol in table
+;					( bank1_pntr at base of symbol )
+;
+find_symbol
+;
+	jsr first_symbol	point to first symbol (.a == len,c=1ifa=0)
+	bne 20$			if there	goto middle of loop
+;
+10$	jsr next_symbol		do	point to next symbol
+	bne 20$				if	 not there
+	sec					puke ola
+	rts
+;
+20$	jsr compare_symbol	until	matches current symbol
+	bne 10$
+80$	clc			return happy
+	rts
+;
+	.endif
+;
+
+;
+	zpage ext_symbol_pntr,2
+;
+;
+;	legal_symbol
+;		entry:	x,a point to a symbol string
+;		exit:	c=0	symbol is legal.
+;				current_symbol_name = name of symbol
+;				if	 local, then local feild <> 0
+;			c=1	symbol is illegal.
+;		
+;
+;
+legal_symbol
+	std ext_symbol_pntr	stuff the pointer
+	ldy #0			clear the local feild
+	sty current_symbol+symbol_local_offset
+;
+	lda (ext_symbol_pntr),y	load the first char
+	beq 90$			puke if null string...
+;
+	jsr isdigit		if	 its a digit
+	bcs 30$
+;
+10$	lda (ext_symbol_pntr),y		while	char is a digit
+	jsr isdigit				
+	bcs 20$
+;
+	and #$0F			do	mask high order bits	
+	ldx #10					local <= 10*local+.acc
+15$	adc current_symbol+symbol_local_offset
+	bcs 90$					( puke if overflow )
+	dex
+	bne 15$
+	sta current_symbol+symbol_local_offset
+;
+	iny					point to next char
+	bne 10$
+;
+20$	cmp #'$				if	not '$
+	bne 90$					puke
+	iny
+	lda (ext_symbol_pntr),y		if	next not a null
+	bne 90$					puke
+;					install symbol trailing null
+	sta current_symbol+symbol_name_offset+2
+	ldd directive_local_cntr	mark local value stuff
+	std current_symbol+symbol_name_offset
+;
+	ldy #2				y <= pointer to null in name
+	jmp 50$			else
+;
+30$	lda (ext_symbol_pntr),y		do	copy upper case to current symbol
+	jsr toupper
+	sta current_symbol+symbol_name_offset,y
+	jsr islegalsymbolchar			if	illegal char
+	bcs 40$						break
+	iny 
+	cpy #max_symbol_len
+	bne 30$
+	lda #0				( clip if too long )
+40$	cmp #0				if	 not null
+	bne 90$					puke ( illegal symbol )
+;					mark trailing null
+	sta current_symbol+symbol_name_offset,y	
+;
+;	at this point the local or global symbol has been copied to the
+;	current symbol, and .y = the offset to the trailing null.
+;
+50$	tya
+	adc #symbol_name_offset+1
+	sta current_symbol
+	clc
+	rts
+;
+90$	sec
+	rts
+;
+;
+;	.local directive
+;		selects a new unwige local label string
+;		creates overflow if all used
+;
+directive_local
+	inc directive_local_cntr	inc low order
+	bne 10$				if	zero
+	inc directive_local_cntr		inc low order
+	inc directive_local_cntr+1		inc high order
+	bne 10$					if	zero
+	jsr outerr_at					symbol table overflow
+10$	sec				return no bytes used
+	rts
+;
+;
+;***************************************************************************
+;			LABEL_OPERATION
+;***************************************************************************
+label_operation
+	ldd label		copy symbol to current symbol
+	jsr legal_symbol	if	illeagl
+	bcc 5$
+	jmp outerr_q			puke
+;
+;				if	symbol is not local
+5$	lda current_symbol+symbol_local_offset
+	bne 10$
+	jsr directive_local		delimit locals
+;
+10$	jsr find_symbol		look for the symbol 
+	bcs 50$			if	found
+;
+	jsr read_symbol			read the damn thing
+	bit pass			if 	pass 1
+ 	bmi 20$
+;
+;				PASS1, LABEL FOUND & READ IN
+;
+	lda #type_multilabel			mark as multi label
+	sta current_symbol+symbol_type_offset
+	jmp store_symbol			store the symbol & return
+;
+;				PASS2, LABEL FOUND & READ IN
+;
+20$	jsr xref_definition
+;
+	lda current_symbol+symbol_type_offset	if	multilabel
+	cmp #type_multilabel
+	bne 25$
+	jmp outerr_m					M error,return
+;
+25$	cmp #type_label				if	label
+	bne 30$
+	ldd pc						if	value <> PC
+	cpd current_symbol+symbol_value_offset
+	beq 28$
+	jmp outerr_p						PHASE ERROR !
+28$	clc						return happy
+	rts
+;
+30$	jsr outerr_p				PHASE ERROR !
+	lda #type_multilabel			mark as multi label
+	jsr store_symbol			store the symbol
+	bcc 38$					if	error
+	jsr outerr					spit error
+38$	rts					return happy
+;
+;		---> LABEL NOT FOUND <---
+;
+50$	lda pass		if	pass 1
+	bne 60$
+;
+;				PASS1 LABEL NOT FOUND
+;
+	lda #type_label				mark as label
+	sta current_symbol+symbol_type_offset
+	ldd current_line			mark line
+	std current_symbol+symbol_linedef_offset
+	ldd pc					mark value
+	std current_symbol+symbol_value_offset
+	jmp store_symbol			go store the symbol and return
+;
+;				PASS2 LABEL NOT FOUND
+;
+60$	jsr xref_definition
+	lda #type_undefined			mark as undefined
+	sta current_symbol+symbol_type_offset
+	jsr store_symbol			store it
+	bcs 90$					if	no error returned
+	lda #'P						complain about phase
+90$	jmp outerr				return error
+;
+;
+;
+;
+;	add_symbol	adds a SYMBOL to the table
+;			may be called to redefine symbol values.
+;			entry:	x,a point to null terminated string
+;				value = value of symbol
+;			exit:	c=0	ok.
+;				c=1	symbol table overflow
+;					.y = "@" overflow char
+;
+;
+add_symbol
+	jsr legal_symbol	if	illegal
+	bcc 10$
+	lda #'Q			quetion that.
+	rts
+;
+10$	jsr find_symbol	if	not found
+	bcc 20$
+;				mark current symbol as undefined
+	lda #type_undefined
+	sta current_symbol+symbol_type_offset
+	jmp 30$
+;			else	copy symbol to current symbol
+20$	jsr read_symbol
+;
+;			if	symbol undefined
+30$	lda current_symbol+symbol_type_offset
+	cmp #type_undefined
+	bne 50$
+;
+	lda #type_symbol		mark as symbol
+	sta current_symbol+symbol_type_offset
+;					copy line number across
+	ldd current_line
+	std current_symbol+symbol_linedef_offset
+;
+45$	ldd value			copy value into symbol
+	std current_symbol+symbol_value_offset
+;
+	jmp 80$
+;
+50$	cmp #type_symbol	if	symbal already defined as symbol
+	beq 45$				go copy the new value, store and return
+;
+	lda #type_multilabel	mark as mulibly defined label
+	sta current_symbol+symbol_type_offset
+;
+80$	jsr xref_definition
+	jmp store_symbol	store symbol_and return
+;
+;
+;
+; eval_symbol
+;	eval_symbol	returns value of a symbol.
+;			entry:	x,a point to null terminate string.
+;				if symbol not in table, it is added
+;				as an undefined symbol.
+;				errors are spit out.
+;			exit:	value = value of label.
+;				valflg bits set
+;
+;					forward reference
+;					undefined
+;					syntax
+;					
+;				c=0	cool man, cool.
+;				c=1	error occured
+;
+eval_symbol
+	jsr legal_symbol	if	 illegal
+	bcc 10$
+;
+	jmp eval_syntax			syntax_error
+;
+10$	jsr find_symbol		if	cannot be found
+	bcc 20$
+;
+	lda pass			if	pass 2
+	bpl 15$
+	lda #type_undefined			mark as undefined
+	sta current_symbol+symbol_type_offset
+	jsr store_symbol			store in table
+;
+	jsr xref_access				tell xref
+15$	jmp eval_undefined		return undefined error
+;
+;
+20$	jsr xref_access		tell xref
+	jsr read_symbol		read symbol into current symbol
+;
+	lda current_symbol+symbol_type_offset
+	cmp #type_undefined	if	undefined
+	bne 25$
+	jmp eval_undefined		return such to eval
+;
+25$	cmp #type_multilabel	if	multi label
+	bne 30$
+;
+	jsr outerr_s			outerr an 'S'
+;
+30$	ldd current_symbol+symbol_value_offset
+	std value		copy value to value
+;
+;				if	forward reference
+40$	ldd current_line
+	cpd current_symbol+symbol_linedef_offset
+	bcs 50$
+;
+	jmp eval_forward_reference	tell eval
+;
+50$	clc			return
+	rts
+;
+
+;
+;	is_symbol_defined
+;		used by ifdef,ifndef conditional checks.
+;		just returns whether symbol is leaglly defined.
+;		does not affect symboltable, cross reference, nor
+;		errors
+;
+;
+;
+;
+is_symbol_defined
+	jsr legal_symbol	if	 illegal
+	bcs 90$				puke
+;
+	jsr find_symbol		if	cannot be found
+	bcs 90$				puke
+;
+	jsr read_symbol		read symbol into current symbol
+;
+	lda current_symbol+symbol_type_offset
+	cmp #type_undefined	if	undefined
+	beq 90$				puke
+;				if	not yet defined
+	ldd current_symbol+symbol_linedef_offset
+	cpd current_line
+;					return c=1
+90$	rts
+;
+;
+;
+;	symbol table
+;		this routine causes the symbol table to be printed.
+;		in the process of printing the symbol table, the
+;		value feild in teh symbol structure is overwritten with
+;		an index describing the alphabetical postion of the 
+;		symbol. This is used by the cross reference software.
+;		the type feild in the structure is set to type_cross_ref
+;		once the symbol is printed. this is also used by the 
+;		xref util.	local symbols are ignored.
+;
+symbol_table_text
+	.byte cr,tab,tab,tab,"SYMBOL TABLE",cr
+	.byte tab,"<BLANK> = LABEL, <=> = SYMBOL, <+>= MULTIBLY DEFINED",cr,0
+;
+	ram alpha_order,2
+;
+symbol_table
+	lda #0			alpha order <= 0
+	sta alpha_order
+	sta alpha_order+1
+;
+	ldi symbol_table_text	set up symbol table text...
+	std mid_line_pntr
+;
+	jsr list_enable_output	enable all outputs
+	jsr open_list_channel
+	jsr top_of_form		do a page
+;
+;
+1$	jsr first_symbol	do	iff no symbols
+	bne 10$					exit
+	rts
+10$	jsr read_symbol			do	read symbol
+	lda current_symbol+symbol_local_offset	if 	local
+	beq 20$
+	jsr next_symbol					point to next symbol
+	bne 10$						loop if present
+	rts
+;
+20$	jsr next_symbol			while 	more symbol
+	beq 50$
+	jsr compare_symbol		do	if 	>= than current_symbol
+	bcs 20$						loop
+;
+	jsr read_symbol				read it into current symbol
+	jmp 20$
+;
+;
+50$	lda largest_symbol			if	not room on this line
+	jsr is_there_room_on_this_line
+	bcc 60$
+	jsr print_cr					print a cr
+;
+60$	jsr print_symbol			print this symbol
+	jsr print_space				some space would be nice
+	jsr print_space
+;
+70$	jsr find_symbol			refind the symbol
+;					mark it as local so we won't consider it
+;					again.
+	dec current_symbol+symbol_local_offset
+	incd alpha_order		alpha_order++
+	ldd alpha_order			mark alpha order
+	std current_symbol+symbol_alpha_offset
+	jsr store_symbol		store (trash ) it.
+	jmp 1$			go see if more symbols to print
+;
+;
+;
+;
+
+;	print_symbol
+;		entry:	current_symbol has a symbol in it.
+;
+;		prints	symbol in current symbol along with
+;			value and typeing information
+;
+;
+	ram print_symbol_temp
+;
+print_symbol
+;
+	ldx #7					print name
+	stx print_symbol_temp
+;
+10$	ldx print_symbol_temp
+	lda current_symbol+symbol_name_offset-7,x
+	beq 20$
+	jsr print
+	inc print_symbol_temp
+	bne 10$
+;
+20$	ldx print_symbol_temp
+	cpx largest_symbol
+	bcs 30$
+	jsr print_space
+	inc print_symbol_temp
+	bne 20$
+;
+30$	ldx current_symbol+symbol_type_offset
+	cpx #type_undefined
+	bne 40$
+	jsr primm
+	.byte " ****",0
+	rts
+;
+40$	lda #'='
+	cpx #type_symbol
+	beq 70$
+	lda #' '
+	cpx #type_label
+	beq 70$
+	lda #'+
+70$	jsr print
+	ldd current_symbol+symbol_value_offset
+	jmp print_hex_word
+;
+;

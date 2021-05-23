@@ -1,0 +1,386 @@
+	.page
+	.subttl	"Direcitves"
+;
+;
+	zpage directive_pntr,2
+	zpage directive_cntr,1
+;
+directive
+	ldi directive_text_base
+	std directive_pntr
+	jsr oper_toupper
+;
+	lda #0
+	sta directive_cntr
+;
+10$	ldy #oper
+	ldd directive_pntr
+	jsr strcmp
+	beq 80$
+;
+	inc directive_cntr
+	ldx #directive_pntr
+	jsr string_advance
+;
+	ldy #0
+	lda (directive_pntr),y
+	bne 10$
+	jmp outerr_o
+;
+80$	lda directive_cntr
+	asl a
+	tax
+	lda directive_code+1,x
+	pha
+	lda directive_code,x
+	pha
+	rts
+;
+directive_code
+	.word directive_blist-1
+	.word directive_byte-1
+	.word directive_byt-1
+	.word directive_clist-1
+	.word directive_dbyte-1
+	.word directive_else-1
+	.word directive_end-1
+	.word directive_endif-1
+	.word directive_endm-1
+	.word directive_endr-1
+	.word directive_formln-1
+	.word directive_gen-1
+	.word directive_ifb-1
+	.word directive_ifdef-1
+	.word directive_ife-1
+	.word directive_ifge-1
+	.word directive_ifgt-1
+	.word directive_ifidn-1
+	.word directive_ifle-1
+	.word directive_iflt-1
+	.word directive_ifn-1
+	.word directive_ifnb-1
+	.word directive_ifndef-1
+	.word directive_ifnidn-1
+	.word directive_include-1
+	.word directive_irp-1
+	.word directive_irpc-1
+	.word directive_list-1
+	.word directive_local-1
+	.word directive_messg-1
+	.word directive_mlist-1
+	.word directive_nam-1
+	.word directive_name-1
+	.word directive_nclist-1
+	.word directive_nlist-1
+	.word directive_nmlist-1
+	.word directive_nogen-1
+	.word directive_page-1
+	.word directive_pag-1
+	.word directive_rept-1
+	.word directive_rmb-1
+	.word directive_ski-1
+	.word directive_skip-1
+	.word directive_space-1
+	.word directive_subttl-1
+	.word directive_word-1
+	.word directive_wor-1
+
+;
+text_macro			; this is not detected by directive
+	.byte '.MACRO',0	; it is used elsewhere for trapping elsewhere
+;
+;
+directive_text_base
+	.byte '.BLIST',0
+	.byte '.BYTE',0
+	.byte '.BYT',0
+	.byte '.CLIST',0
+	.byte '.DBYTE',0
+text_else
+	.byte '.ELSE',0
+	.byte '.END',0
+text_endif
+	.byte '.ENDIF',0
+text_endm
+	.byte '.ENDM',0
+text_endr
+	.byte '.ENDR',0
+	.byte '.FORMLN',0
+	.byte '.GEN',0
+	.byte '.IFB',0
+	.byte '.IFDEF',0
+	.byte '.IFE',0
+	.byte '.IFGE',0
+	.byte '.IFGT',0
+	.byte '.IFIDN',0
+	.byte '.IFLE',0
+	.byte '.IFLT',0
+	.byte '.IFN',0
+	.byte '.IFNB',0
+	.byte '.IFNDEF',0
+	.byte '.IFNIDN',0
+	.byte '.INCLUDE',0
+text_irp
+	.byte '.IRP',0
+text_irpc
+	.byte '.IRPC',0
+	.byte '.LIST',0
+	.byte '.LOCAL',0
+	.byte '.MESSG',0
+	.byte '.MLIST',0
+	.byte '.NAM',0
+	.byte '.NAME',0
+	.byte '.NCLIST',0
+	.byte '.NLIST',0
+	.byte '.NMLIST',0
+	.byte '.NOGEN',0
+	.byte '.PAGE',0
+	.byte '.PAG',0
+text_rept
+	.byte '.REPT',0
+	.byte '.RMB',0
+	.byte '.SKI',0
+	.byte '.SKIP',0
+	.byte '.SPACE',0
+	.byte '.SUBTTL',0
+	.byte '.WORD',0
+	.byte '.WOR',0
+	.byte 0		; terminate list
+;
+;
+;******************************************************************************
+;			word directive
+;******************************************************************************
+;
+;
+directive_wor
+directive_word
+	jsr comma_delimit_args	delimit args
+	lda #0			cntr <= 0
+	sta directive_cntr
+	ldd args		pntr <= args
+	std directive_pntr
+;
+;
+10$	lda nargs		while	cntr <> nargs
+	cmp directive_cntr
+	beq 80$
+;
+	ldd directive_pntr	do	eval the current arg
+	jsr eval
+	lda directive_cntr		y <= 2*cntr
+	asl a
+	tay
+	ldd value			output the value
+	jsr outword			
+	ldx #directive_pntr		advance one arg
+	jsr string_advance
+	inc directive_cntr		inc counter
+	jmp 10$
+;
+80$	lda nargs		return bytes used
+	asl a
+	clc
+	rts
+;******************************************************************************
+;			word directive
+;******************************************************************************
+;
+;
+directive_dbyte
+	jsr comma_delimit_args	delimit args
+	lda #0			cntr <= 0
+	sta directive_cntr
+	ldd args		pntr <= args
+	std directive_pntr
+;
+;
+10$	lda nargs		while	cntr <> nargs
+	cmp directive_cntr
+	beq 80$
+;
+	ldd directive_pntr	do	eval the current arg
+	jsr eval
+	lda directive_cntr		.a <= 2*cntr
+	asl a
+	pha				save .a
+	tay				.y <= .a
+	lda value+1			spit high order byte
+	jsr outbyte
+	pla				.y <= stacked value + 1
+	tay				
+	iny				
+	lda value			spit low order byte
+	jsr outbyte
+;
+	ldx #directive_pntr		advance one arg
+	jsr string_advance
+	inc directive_cntr		inc counter
+	jmp 10$
+;
+80$	lda nargs		return bytes used
+	asl a
+	clc
+	rts
+;
+;
+;
+;******************************************************************************
+;			include directive
+;******************************************************************************
+;
+directive_include
+	jsr delimit_single_arg	; delimit the arg
+	bcc 10$			; if	error
+	jmp outerr_s			syntax error,exit
+10$	jsr open_error_channel_if_unique
+	jsr primm
+	.byte "INCLUDING  ",0
+	ldd args
+	jsr print_null_terminated_string_cr
+	ldd args		set file to (args)
+	jsr set_file
+	sec			no bytes used
+	rts
+;
+;******************************************************************************
+;			.endm directive
+;			.endr directive
+;******************************************************************************
+;
+directive_endm
+directive_endr
+	jmp outerr_n
+;
+
+;******************************************************************************
+;			.formln directive
+;******************************************************************************
+;
+directive_formln
+	jsr delimit_single_arg	delimit_the_arg
+	bcs 90$			complain if no arg
+	ldd arg			eval the arg
+	jsr eval
+	bcs 90$			complain if error
+	lda value+1		puke if value > 255
+	bne 90$
+	lda value		if	value <> 0	( kill paging )
+	clc
+	adc #6				.a <= value+6
+	bcs 90$				puke if > 255
+	cmp #15
+	bcc 90$				puke if < 15
+70$	sta formln		stick to to formln
+	sec
+	rts
+;
+90$	jmp outerr_q
+;
+;
+
+;******************************************************************************
+;			.messg directive
+;******************************************************************************
+directive_messg
+	bit pass
+	bpl 90$
+	jsr open_error_channel_if_unique
+	ldd arg
+	jsr print_null_terminated_string_cr
+90$	sec
+	rts
+;
+;******************************************************************************
+;			.subttl directive
+;******************************************************************************
+directive_subttl
+	ldy #0			y <= 0
+10$	lda (arg),y		do	subttl,y <= (arg),y
+	sta subttl,y			if	was null
+	beq 20$					break
+	iny				y++
+	cpy #subttl_max_len-2	until	y== max len for subttl - 2
+	bne 10$
+	lda #0			clear	last byte of subttl
+	sta subttl,y
+20$	sec			return no bytes used 
+	rts
+;
+;******************************************************************************
+;			.name directive
+;******************************************************************************
+directive_nam
+directive_name
+	ldy #0			y <= 0
+10$	lda (arg),y		do	name,y <= (arg),y
+	sta name,y
+	beq 20$				exit iff null
+	iny				y++
+	cpy #name_max_len	until	y== max len for name
+	bne 10$
+	lda #0			clear	last byte of name
+	sta name,y
+20$	sec			return no bytes used
+	rts
+;
+
+;******************************************************************************
+;			.rmb directive
+;******************************************************************************
+;
+directive_rmb
+	jsr delimit_single_arg	
+	bcs 90$		syntax if no args
+	ldd arg
+	jsr eval
+	bcs 90$		syntax if cannot eval ok
+	lda value+1
+	bne 80$		address error if > 255 bytes
+	lda value	return number of bytes to reserve
+	clc		return happy
+	rts
+;
+80$	jmp outerr_a
+90$	jmp outerr_s
+
+;
+;******************************************************************************
+;			.end directive
+;******************************************************************************
+;
+directive_end
+	bit pass
+	bpl 60$
+;
+	jsr flush_list	; flush a list
+	jsr read_line	; read next line
+	bcs 80$		; if	ok
+	jsr primm_to_error_channel
+	.byte "ADDITIONAL INPUT AFTER END STATEMENT IGNORED",cr,0
+;
+60$	jsr read_line	; eat all remaining lines
+	bcc 60$
+;
+80$	dec end_flag	; end flag <= non-zero
+	sec		; return no bytes used
+	rts
+;
+
+;
+;******************************************************************************
+;			.byte directive
+;******************************************************************************
+;
+;	byte is unique in the way it handles quotes.
+;	consequently here is a pile of software.
+;
+;	basically quoted string must be delimited on both sides.
+;
+;	normal expressions appearing in byte directives can only yeild
+;	a single byte.
+;
+;
+	ram byte_cntr
+	.include byte
+;

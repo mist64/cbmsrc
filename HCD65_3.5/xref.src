@@ -1,0 +1,504 @@
+	.subttl  "CROSS REFERENCE SOFTWARE"
+;***************************************************************************
+;			xref software
+;***************************************************************************
+;
+	ram	xref_mode
+;	ram	xref_buf,256	globally declared for unusual location
+;
+	ram	xref_pntr,2
+	ram	xref_start_col	; coloumn to start printing references in.
+;
+;
+;
+;	called by eval opcode to indicate that a reference is 
+;	write type ( as opposed to read ).
+;
+;
+xref_write_if_carry
+	ror xref_mode
+	rts
+;
+;	called by eval_symbol to indicate a reference to a symbol
+;
+xref_access
+	lda #space
+	bit xref_mode
+	bpl xref_output_reference
+	lda #'$
+	bne xref_output_reference
+;
+;	called by add_symbol,add_label to inicate a symbol is being
+;	assigned a value here.
+;
+xref_definition
+	lda #'#
+;	jmp xref_output_reference
+;
+;
+xref_output_reference
+	bit pass		if	pass2
+	bpl 99$				if	not local
+	ldx current_symbol+symbol_local_offset
+	bne 99$
+	pha					save ref
+	lda bank1_pntr				spit bank 1 pntr
+	jsr xref_byte
+	lda bank1_pntr+1
+	jsr xref_byte
+	lda current_line			spit line of reference
+	jsr xref_byte
+	lda current_line+1
+	jsr xref_byte
+	pla					spit saved ref
+	jmp xref_byte
+99$	rts			return
+;
+;	xref_byte	spits a byte out the xref channel
+;
+;
+xref_byte
+	ldx xref_pntr		place byte in buffer
+	sta xref_buf,x
+	inc xref_pntr		inc pointer
+	cpx #254-1		if	not full
+	beq xref_flush_xref
+	rts				return
+;
+;
+;
+;	xref_flush_xref
+;		this is the internal flush xref for when
+;		xref is feeling consipated and wishes to
+;		flush self.
+;
+xref_flush_xref
+	ldx xref_pntr	if	xref buffer not empty & device <> 0
+	beq 80$
+;
+	ldx xref_device
+	beq 80$
+;
+	jsr open_xref_channel	open the xref channel
+;
+	ldx #0				x <= 0
+10$	txa				do	save .x
+	pha	
+	lda xref_buf,x				print buf,x
+	jsr print
+	pla					recall .x
+	tax
+	inx					x++
+	cpx xref_pntr			until	x==xref_pntr
+	bne 10$
+;
+80$	lda #0		xref_pntr <= 0
+	sta xref_pntr
+	rts		return
+;
+;
+;
+;	flush_xref	caues xref buf to be flushed.
+;			causes symbol table to be printed.
+;
+flush_xref
+	lda xref_device		if	xref file here
+	beq 9$
+	jsr xref_flush_xref		flush the reference buffer
+	jsr xref_close			close the file
+9$	rts
+;
+;
+;
+xref_file_name_read
+	.byte "0:HCD65XREF.TMP,S,R"
+xref_file_name_write
+	.byte "0:HCD65XREF.TMP,S,W"
+;
+xref_open_read
+	ldx #<xref_file_name_read
+	ldy #>xref_file_name_read
+	bne open_xref	
+;
+xref_init
+	lda pass	; only init once at start of pass two.
+	bmi 10$
+	rts
+10$	lda #0
+	sta xref_pntr
+	ldx #<xref_file_name_write
+	ldy #>xref_file_name_write
+;
+open_xref
+	lda #xref_file_name_write-xref_file_name_read
+	jsr setnam
+	ldx xref_device
+	bne 10$
+	sec
+	rts
+10$	lda #xref_channel
+	tay
+	jsr setlfs
+	lda #0
+	tax
+	jsr setbnk
+	jsr open
+	bcs xref_file_error
+	ldx xref_device
+	jsr dscheck
+	bcs xref_file_error
+	jsr _clrch
+	clc
+	rts
+;
+xref_close
+	jsr _clrch
+	lda #xref_channel
+	jsr close
+	ldx xref_device
+	jsr dscheck
+	bcs xref_file_error_message
+	rts
+;
+xref_file_error
+	jsr xref_close
+	bcc xref_file_error_message
+	rts
+;
+xref_file_error_message
+	jsr primm_to_error_channel
+	.byte "PROBLEM WITH XREF OUTPUT FILE.",cr,0
+	lda #0
+	sta xref_device
+	sec
+	rts
+;
+;
+
+;
+;	symbol table has been printed.
+;	line def feild in symbol table has been overwritten with
+;	alpha ordering.
+;
+;	cross reference file has been written a a seris of 
+;	5 byte records containing:
+;
+;		<pntr_to_symbol_entry_in_table><linnumber><access_type>
+;
+;
+;	reference_struct
+.next	= 0
+.symbol	= 2
+.alpha	= 4
+.line	= 6
+.type	= 8
+;
+declare_ref_struct .macro %a
+	ram %a.next,2		<pntr_to_next_struct>
+	ram %a.symbol,2		<pntr_to_symbol>
+	ram %a.alpha,2		<alpha_order_index>
+	ram %a.line,2		<line_number>
+	ram %a.type,1		<access_type>
+%a	= %a.next
+	.endm
+;
+ref_struct_len = 9
+;
+	declare_ref_struct low_ref	; low structure for current buffered set
+	declare_ref_struct this_ref	; the current structure
+	declare_ref_struct high_ref	; high structure for buffered set
+;
+	zpage start_pntr,2	; pointer to first entry in linked list
+	zpage end_pntr,2	; pointer to end of area
+	zpage this_pntr,2	; pointer to the current entry in the list
+	zpage prev_pntr,2	; pointer to entry before that
+	zpage free_pntr,2	; pointer to free slot at end of entry
+	zpage pre_free_pntr,2	; pointer to mem before that
+;
+	zpage ref_cmp_pntr,2	; pointer for comparing two references
+;
+;
+;	compare the ref poined to by x,a to this_ref
+;		( only the alpha,line,and type feilds )
+;		return z,c flags as normal compare would.
+;
+compare_to_this_ref
+	std ref_cmp_pntr
+	ldx #110$-100$-1
+;
+10$	ldy 100$,x
+	lda (ref_cmp_pntr),y
+	cmp this_ref,y
+	bne 80$
+	dex
+	bpl 10$
+	sec
+	inx
+80$	rts
+;
+;	table of offsets for comparion purposes
+100$	.byte .type
+	.byte .line
+	.byte .line+1
+	.byte .alpha
+	.byte .alpha+1
+110$
+;
+;
+;
+;	perform_cross_reference is called to have a 
+;	cross reference performed by the software.
+;
+;	It must be called after a symbol table is printed
+;	because symbol_table marks all the symbols with their
+;	relative order in memory.
+;
+text_cross_reference
+	.byte tab,tab,tab,"CROSS REFERENCE",cr
+	.byte tab,tab,"( <#> = DEFINITION, <$> = WRITE, <BLANK> = READ )",cr,0
+;
+;
+perform_cross_reference
+	lda xref_device
+	bne 1$
+	rts
+;
+1$	ldi text_cross_reference
+	std mid_line_pntr
+;
+	jsr top_of_form	top of form
+	lda #0			low ref <= 0000
+	tax
+	std low_ref.alpha
+	std low_ref.line
+	sta low_ref.type
+;			do	open xref file
+10$	jsr xref_open_read
+	bcc 11$
+	rts			return if error occured ( error already printed)
+;
+11$	ldx #0			start pntr <= 0000
+	stx start_pntr
+	stx start_pntr+1
+	dex			high_ref.alpha <= $FFFF
+	stx high_ref.alpha
+	stx high_ref.alpha+1
+;
+	ldd macro_base_pntr	end_pntr <= start of strage area
+	std end_pntr
+;
+	jsr _clrch
+	ldx #xref_channel
+	jsr _chkin
+;
+20$	jsr basin		do	read bytes from xref file
+	sta this_ref.symbol
+	jsr basin
+	sta this_ref.symbol+1
+;
+	jsr readss			( dummy check for empty file )
+	beq 25$				( ok
+	eor #$40
+	bne 90$					error
+	beq 40$						early eof )
+;
+25$	jsr basin
+	sta this_ref.line
+	jsr basin
+	sta this_ref.line+1
+	jsr basin
+	sta this_ref.type
+;
+	jsr readss			if	real bad status
+	and #%10111111
+	beq 30$
+90$	jmp 					xref_file_error
+;					get the alpha order for this symbol
+30$	ldd this_ref.symbol
+	jsr read_this_symbol
+	bcs 90$				puke if erroneous symbol.
+	ldd current_symbol+symbol_linedef_offset
+	std this_ref.alpha
+	jsr insert_reference		insert the reference into storage
+;
+40$	jsr readss		until	status <> 0
+	beq 20$
+;
+	jsr xref_close		close the xref file
+	bcc 45$			if	error occured
+	rts				return
+;
+45$	jsr open_list_channel	open the list channel
+	ldd start_pntr		x,a <= address of first ref struct
+	cpx #0			if	this pntr = $00xx
+	bne 50$
+	rts				return
+;				do
+50$	std this_pntr			this_pntr <= x,a
+;
+	ldy #ref_struct_len-1		read ref to this_ref
+55$	lda (this_pntr),y
+	sta this_ref,y
+	dey
+	bpl 55$
+;
+	ldd this_ref.alpha		x,a <= alpha for this ref
+	cpd low_ref.alpha		if	<> low_ref.alpha
+	beq 60$
+	std low_ref.alpha			low_ref.lpha <= x,a
+	jsr print_cr				print a cr
+	ldd this_ref.symbol			read its symbol
+	jsr read_this_symbol
+	jsr print_symbol			print it
+	jsr print_tab				print a tab
+	lda list_char_count			start_col <= current coloumn in list
+	sta xref_start_col
+;
+60$	lda #8				if	no room on this line
+	jsr is_there_room_on_this_line
+	bcc 65$
+	jsr print_cr				print_cr
+62$	jsr print_tab				do	print tabs
+	lda list_char_count			until	at right place
+	cmp xref_start_col
+	bcc 62$
+;
+65$	ldd this_ref.line		print the line number
+	jsr print_decimal
+	lda this_ref.type		print the access char
+	jsr print
+	jsr print_tab			print a tab
+;
+;				
+70$	ldd this_ref.next		x,a <= this_ref.next
+	bne 50$			while	x,a  <> 0
+;
+80$	jsr _clrch		clear channels
+;				low_ref <= high_ref
+	ldy #ref_struct_len-1
+85$	lda high_ref,y
+	sta low_ref,y
+	dey
+	bpl 85$
+;
+	lda #$ff	while	low_ref.alpha <> $FFFF
+	tax
+	cpd low_ref.alpha
+	beq 89$
+	jmp 10$
+89$	rts		return
+;
+;
+
+;
+;	high_ref	previous high reference value
+;	this_ref	the current reference to insert
+;	low_ref		the lowest refernce already printed
+;	start_pntr	pointer to first symbol in list ( or null )
+;	end_pntr	pointer to end of mem
+;	this_pntr	free
+;	prev_pntr
+;
+;
+insert_reference
+	ldi low_ref		if	ref is before low ref
+	jsr compare_to_this_ref
+	bcc 10$
+9$	rts				return
+;
+10$	ldi high_ref		if	ref is after high ref
+	jsr compare_to_this_ref
+	bcc 9$				return
+;
+;
+	ldi start_pntr		prev_pntr <= address_of_start_pointer
+	std prev_pntr
+;
+	ldd start_pntr		this_pntr <= start_pntr
+20$	std this_pntr
+	cpx #0
+	beq 30$			while > this pntr <> 0
+;					if	this string is higher than ref
+	jsr compare_to_this_ref
+	bcs 30$					break
+;
+	ldd this_pntr			prev_pntr <= this_pntr
+	std prev_pntr
+;
+	ldy #1				this_pntr <= this_pntr->next
+	lda (this_pntr),y
+	tax
+	dey
+	lda (this_pntr),y
+	jmp 20$
+;
+;
+30$	ldd end_pntr		free_pntr <= end_pntr	( free stuff at end )
+	std free_pntr
+;
+	ldi ref_struct_len	if	room at end
+	add end_pntr
+	cpd input_top_pntr
+	bcs 35$
+;
+	std end_pntr			end_pntr <= new end of data area
+	jmp 70$			else
+;
+35$	ldd prev_pntr			x,a <= prev_pntr
+;
+40$	ldy free_pntr			do	pre_free_pntr <= free_pntr
+	sty pre_free_pntr			( preserve ,xa )
+	ldy free_pntr+1
+	sty pre_free_pntr+1
+;
+	std free_pntr				free_pntr <= x,a
+	ldy #1					x,a <= (prev_pntr)
+	lda (free_pntr),y
+	tax
+	dey
+	lda (free_pntr),y
+	cpx #0				while	x <> 0
+	bne 40$
+;
+;	pre_free is now pointing to reference before last referece
+;	in a list which hasn't sufficient space to insert a new reference
+;
+;
+50$	ldd free_pntr			x,a <= pointer to last reference in list
+	ldy this_pntr+1			if	the currrent refrence goes 
+	bne 60$					after this one
+;
+	std pre_free_pntr			pre_free_pntr <= last reference
+;
+55$	ldy #ref_struct_len-1			copy (pre_free_pntr) to high_ref
+58$	lda (pre_free_pntr),y
+	sta high_ref,y
+	dey
+	bpl 58$
+	rts					return
+;
+60$	jsr 55$				copy (pre_free_pntr) to high_ref
+	lda #0				(pre_free_pntr) <= 0000 ( new last ref )
+	tay
+	sta (pre_free_pntr),y
+	iny
+	sta (pre_free_pntr),y
+;
+;
+;
+70$	ldy #1
+72$	lda (prev_pntr),y		this_ref points to where previous one
+	sta this_ref.next,y		used too.
+	lda free_pntr,y			previous ref points to where this
+	sta (prev_pntr),y		one will be.
+	dey
+	bpl 72$
+;
+	ldy #ref_struct_len-1	copy this ref to (free_pntr)
+;
+75$	lda this_ref,y
+	sta (free_pntr),y
+	dey
+	bpl 75$
+;
+	rts			return

@@ -1,0 +1,187 @@
+
+	.page
+	.subttl ed1  editor initialization & I/O routines  (04/29/85)
+
+;////////////////   E D I T O R     J U M P     T A B L E   \\\\\\\\\\\\\\\\\
+	*=$c000
+cint	*=*+3	;initialize editor & screen
+disply	*=*+3	;display character in .a, color in .x
+lp2	*=*+3	;get a key from irq buffer into .a
+loop5	*=*+3	;get a chr from screen line into .a
+k_print	*=*+3	;print character in .a
+scrorg	*=*+3	;get size of current window (rows,cols) in .x, .y
+scnkey	*=*+3	;scan keyboard subroutine
+repeat	*=*+3	;repeat key logic & 'ckit2' to store decoded key
+plot	*=*+3	;read or set (.c) cursor position in .x, .y
+cursor	*=*+3	;move 8563 cursor subroutine
+escape	*=*+3	;execute escape function using chr in .a
+keyset	*=*+3	;redefine a programmable function key
+irq	*=*+3	;irq entry
+init80	*=*+3	;initialize 80-column character set
+swapper	*=*+3	;swap editor local variables (40/80 mode change)
+window	*=*+3	;set top left or bottom right (.c) of window
+
+	.page
+	.subttl  c/128  KERNAL JUMP TABLE   (04/29/85)
+
+;///////////////////   K E R N A L   J U M P   T A B L E   \\\\\\\\\\\\\\\\\\\\
+
+
+	* = $ff80-57	;new 'jmps' for c/128
+
+spin_spout	*=*+3	;setup fast serial port for input or output
+close_all	*=*+3	;close all logical files for a given device
+c64mode		*=*+3	;reconfigure system as a c/64 (no return!)
+dma_call	*=*+3	;initiate dma request to external ram expansion
+boot_call	*=*+3	;boot load program from disk
+phoenix		*=*+3	;call all function card's cold start routines
+lkupla		*=*+3	;search tables for given la
+lkupsa		*=*+3	;search tables for given sa
+_swapper	*=*+3	;swap to alternate display device	(editor)
+dlchr		*=*+3	;init 80-col character ram		(editor)
+pfkey		*=*+3	;program function key			(editor)
+setbnk		*=*+3	;set bank for load/save/verify
+get_cfg		*=*+3	;convert bank to mmu configuration
+jsrfar		*=*+3	;JSR to any bank, RTS to calling bank
+jmpfar		*=*+3	;JMP to any bank
+indfet		*=*+3	;LDA (fetvec),Y from any bank
+indsta		*=*+3	;STA (stavec),Y to any bank
+indcmp		*=*+3	;CMP (cmpvec),Y to any bank
+_primm		*=*+3	;print immediate  (always JSR to this routine!)
+
+	.page
+	* = $ff80	;conforms to c/64 jump table
+
+sys_rev	*=*+1	;release number of kernal (318020-04 rev 07/10/85)
+
+_cint	*=*+3	;init screen editor & display chips	(editor)
+ioinit	*=*+3	;init i/o devices (ports, timers, etc.)
+ramtas	*=*+3	;initialize ram for system
+restor 	*=*+3	;restore vectors to initial system
+vector 	*=*+3	;change vectors for user
+setmsg 	*=*+3	;control o.s. messages
+secnd 	*=*+3	;send sa after listen
+tksa 	*=*+3	;send sa after talk
+memtop 	*=*+3	;set/read top of memory
+membot 	*=*+3	;set/read bottom of memory
+key	*=*+3	;scan keyboard				(editor)
+settmo 	*=*+3	;set timeout in ieee ?????????????????? unused ???????????
+acptr 	*=*+3	;handshake serial byte in
+ciout 	*=*+3	;handshake serial byte out
+untlk 	*=*+3	;send untalk out serial
+unlsn 	*=*+3	;send unlisten out serial
+listn 	*=*+3	;send listen out serial
+talk 	*=*+3	;send talk out serial
+readss 	*=*+3	;return i/o status byte
+setlfs 	*=*+3	;set la, fa, sa
+setnam 	*=*+3	;set length and fn adr
+__open	*=*+3	;open logical file
+__close	*=*+3	;close logical file
+__chkin	*=*+3	;open channel in
+__ckout	*=*+3	;open channel out
+__clrch	*=*+3	;close i/o channel
+basin	*=*+3	;input from channel
+bsout	*=*+3	;output to channel
+loadsp 	*=*+3	;load from file
+savesp 	*=*+3	;save to file
+settim 	*=*+3	;set internal clock
+rdtim 	*=*+3	;read internal clock
+stop	*=*+3	;scan stop key
+getin	*=*+3	;get char from queue
+clall	*=*+3	;clear all logical files (see close_all)
+clock	*=*+3	;increment clock
+_scrorg *=*+3	;return current screen window size	(editor)
+_plot 	*=*+3	;read/set x,y coord			(editor)
+iobase 	*=*+3	;return i/o base
+;
+;
+init_status = $0a04
+;
+;
+	.ifn 0
+
+	.page
+	.subttl  c/128  BASIC JUMP TABLE   (04/29/85)
+
+;///////////////////   B A S I C   J U M P   T A B L E   \\\\\\\\\\\\\\\\\\\\
+;
+	*=$4000
+basic_hard_reset	*=*+3
+basic_soft_reset	*=*+3
+basic_irq		*=*+3
+;
+	*=$af00
+; Format Conversions
+
+ayint	*=*+3	;convert f.p. to integer
+givayf	*=*+3	;convert integer to f.p.
+fout	*=*+3	;convert f.p. to ascii string
+val_1	*=*+3	;convert ascii string to f.p.
+getadr	*=*+3	;convert f.p. to an address
+floatc	*=*+3	;convert address to f.p.
+
+; Math Functions
+
+fsub	*=*+3	;MEM - FACC
+fsubt	*=*+3	;ARG - FACC
+fadd	*=*+3	;MEM + FACC
+faddt	*=*+3	;ARG - FACC
+fmult	*=*+3	;MEM * FACC
+fmultt	*=*+3	;ARG * FACC
+fdiv	*=*+3	;MEM / FACC
+fdivt	*=*+3	;ARG / FACC
+log	*=*+3	;compute natural log of FACC
+int	*=*+3	;perform basic INT on FACC
+sqr	*=*+3	;compute square root of FACC
+negop	*=*+3	;negate FACC
+fpwr	*=*+3	;raise ARG to the MEM power
+fpwrt	*=*+3	;raise ARG to the FACC power
+exp	*=*+3	;compute EXP of FACC
+cos	*=*+3	;compute COS of FACC
+sin	*=*+3	;compute SIN of FACC
+tan	*=*+3	;compute TAN of FACC
+atn	*=*+3	;compute ATN of FACC
+round	*=*+3	;round FACC
+abs	*=*+3	;absolute value of FACC
+sign	*=*+3	;test sign of FACC
+fcomp	*=*+3	;compare FACC with MEM
+rnd_0	*=*+3	;generate random f.p. number
+
+; Movement
+
+conupk	*=*+3	;move RAM MEM to ARG
+romupk	*=*+3	;move ROM MEM to ARG
+movfrm	*=*+3	;move RAM MEM to FACC
+movfm	*=*+3	;move ROM MEM to FACC
+movmf	*=*+3	;move FACC to MEM
+movfa	*=*+3	;move ARG to FACC
+movaf	*=*+3	;move FACC to ARG
+
+optab		*=*+3
+drawln		*=*+3
+gplot		*=*+3
+cirsub		*=*+3
+run		*=*+3
+runc		*=*+3
+clear		*=*+3
+new		*=*+3
+lnkprg		*=*+3
+crunch		*=*+3
+fndlin		*=*+3
+newstt		*=*+3
+_eval		*=*+3
+frmevl		*=*+3
+run_a_program	*=*+3
+setexc		*=*+3
+linget		*=*+3
+garba2		*=*+3
+execute_a_line	*=*+3
+	.endif
+
+	.page
+;	basic ram variables
+;
+text_top = $1210
+max_mem_0 =$1212
+;
+

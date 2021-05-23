@@ -156,9 +156,6 @@ build2 DOS_1541_05 1541
 build2 DOS_1541C_02 serlib
 build2 DOS_1541C_03 serlib
 
-# TODO cbm6502asm problems:
-#   build2 RAMDOS a
-
 build1 PRINTER_8023P us.ptr.src
 
 build1 ASSEMBLER_AIM65_REC assembler
@@ -182,3 +179,7 @@ build1 KICKMAN kickman
 build1 OMEGA omega
 build1 WIZARD wizard
 build1 FIG FOR1-1
+
+# TODO cbm6502asm problems:
+#   build2 RAMDOS a
+#   build2 HCD65_3.5 c65

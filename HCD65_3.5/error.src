@@ -1,0 +1,127 @@
+;
+;
+;	A	Address error.  Address specified is  out  of  range  for
+;		given instruction.  Relative branch out of bounds, etc.
+;     	B       Balance  error.   Unmatched  delimiters  
+;     	C       Character  error.   Indicates  a  character  not  in  the
+;               supported subset for the assembler.
+;     	D       Macro definition error.  Indicates macro definition which
+;             	is  missing  the  name of the macro, or one with too many
+;             	dummy arguments specified.  The entire  macro  definition
+;             	(up to its matching .ENDM) is ignored.
+;     	E       Expression  error.   Invalid  syntax  in  an  expression,
+;             	usually one of the following:
+;             	(1) Missing last term
+;             	(2) Division by zero.
+;             	(3) Missing expression (blank field)
+;     	F       Format error.  Probably a missing or incorrect field.
+;     	J       Warning that address space is filled.   Location  counter
+;             	wrapped  around from the last allowable address to 0, and
+;             	a byte was deposited.
+;     	L       Erroneous use of a local symbol (i.e.  with = or .MACRO).
+;     	M       Multiply-defined symbol.  A symbol is defined  more  than
+;             	once   (where  this  is  illegal).   All  but  the  first
+;             	definition are ignored.
+;     	N       Nesting error.  Mispaired .IF:.ENDIF, .MACRO:.ENDM,  etc.
+;             	This  is  an  error which encompasses more than one line.
+;             	Single-line delimiter pairing  errors  normally  generate
+;             	"B"  errors.   This error will also occur when include files
+;             	exceed the maximum nesting level of five.
+;
+;     	O       Undefined instruction mnemonic (opcode).
+;
+;     	P       Phase error.  Pass 2 value of symbol not equal to pass  1
+;             	value  of symbol.  The pass 1 value prevails.  This error
+;             	code may also indicate an illegal forward reference, such
+;             	as  branch  out  of  range,  or  an attempt to redefine a
+;             	symbol which has already been referenced.
+;
+;     	Q       Questionable syntax.  Generally a warning which indicates
+;             	a  line  is  not  entirely of proper syntax, and that the
+;             	assembler  has  made  some  assumption  about  what   the
+;             	programmer    intended.     Often    indicates   improper
+;             	delimiters,  extra  delimiters,  or  missing  delimiters.
+;             	This error code is also produced when an "EVEN" directive
+;             	appears in a SECTION which has been  defined  as  aligned
+;             	only  on  a  BYTE  boundary.   In such a case, the "EVEN"
+;             	directive is ignored.
+;
+;     S       	Invalid symbol.  Use of the wrong type of user symbol  in
+;             	the  wrong  place  (e.g.   macro  name  used as part of a
+;             	numeric expression, etc.).  This  error  code  will  also
+;             	flag all lines on which references appear to symbols that
+;             	are multiply-defined in the program.   While  the  latter
+;             	does  not  strictly  indicate  an  error condition, it is
+;             	possible that changing one of the multiply defined symbol
+;             	names  might  require  changing lines which reference it;
+;             	therefore, such lines are flagged  by  the  assembler  to
+;             	facilitate locating them.  This error can also occur when
+;             	a forward reference to  a  redefined  special  symbol  is
+;             	made.   In addition, any attempt to define a symbol whose
+;             	name is the same as a section (segment) name will produce
+;             	this error.
+;
+;     	U       Undefined  symbol.   A  symbol  is   referenced   in   an
+;             	expression,  but  that  symbol has no defined value.  The
+;             	assembler assumes the symbol to have a value of zero.
+;
+;     	V       Value error.  An operand value was out  of  range.
+;
+;     	W       Wasted byte warning.  Indicates that an extended  address
+;             	was  generated because of a forward reference to a symbol
+;             	appearing in the operand field.  The assembled code  will
+;             	still work correctly, but a byte of memory may be wasted.
+;             	This error can frequently  be  corrected  by  rearranging
+;             	code in the source program.
+;	
+;     	Y       Assembler  feature  not  implemented.    The   user   has
+;             	attempted  to use an assembler directive or feature which
+;             	is not implemented in  the  currently-running  assembler.
+;             	Also flags relocation-oriented directives used without /R
+;             	in command string.
+;
+;     	*       Too many errors detected on the source line to print  all
+;             	of the error codes for this line.
+;
+;
+;
+;
+;
+;     SYSTEM ERRORS
+;
+;	non_fatal
+;		could_not_open_source_file:xxx	: ignored
+;		conditional_in_progress_at_eof
+;		macro_in_progress_at_eof
+;		macro_definition_at_eof
+;		too_many_source_files
+; 
+;	fatal
+;		insufficient_memory	( symbols work ok )
+;		could_not_open_output_file
+;		output_file_error
+;
+insufficient_memory
+	jsr error_fatal
+	.byte "INSUFFICIENT MEMORY",0
+;
+error_fatal
+	lda #$ff		mark fatal error flag
+	sta fatal_error
+	jsr open_error_channel	open up mr error
+	pla			pull text address off of stack
+	tay			y <= low order
+	pla			x <= high order
+	tax
+	iny			a <= y+1
+	tya
+	bne 10$			if	.a == 0
+	inx				x++
+10$	jsr print_null_terminated_string_cr	print (x,a)
+	jsr primm
+	.byte "CURRENT FILE = ",0
+	ldi file_name		print the current file
+	jsr print_null_terminated_string_cr
+	sec			return unhappy
+	rts
+;
