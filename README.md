@@ -90,12 +90,12 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
-| [BASIC_C65](BASIC_C65)                                       | 1991 | final C65 BASIC |
-| [GRAPHICS_C65](GRAPHICS_C65)                                 | 1991 | final C65 BASIC Graphics lib |
-| [KERNAL_C65](KERNAL_C65)                                     | 1991 | final C65 KERNAL, EDITOR, MONITOR |
-| [DOS_C65](DOS_C65)                                           | 1991 | final C65 DOS |
-| [BASIC_C64_C65](BASIC_C64_C65)                               | 1991 | final C64 mode BASIC V2 |
-| [KERNAL_C64_C65](KERNAL_C64_C65)                             | 1991 | final C64 mode KERNAL |
+| [BASIC_C65](BASIC_C65)                                       | 1991 | C65 BASIC (911115) |
+| [GRAPHICS_C65](GRAPHICS_C65)                                 | 1991 | C65 BASIC Graphics lib (911119) |
+| [KERNAL_C65](KERNAL_C65)                                     | 1991 | C65 KERNAL, EDITOR, MONITOR (911119) |
+| [DOS_C65](DOS_C65)                                           | 1991 | C65 DOS (911119) |
+| [BASIC_C64_C65](BASIC_C64_C65)                               | 1991 | C64 mode BASIC V2 (900531) |
+| [KERNAL_C64_C65](KERNAL_C64_C65)                             | 1991 | C64 mode KERNAL (910117) |
 
 
 ## Disk Drives
@@ -316,19 +316,19 @@ The PET BASIC V2 source (1978) as built by Microsoft.
 
 ### BASIC_C65
 
-The final version of C65 BASIC V10 (1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+The final version of C65 BASIC V10 (911115, 1991-11-15). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
 
 ### GRAPHICS_C65
 
-The final version of the C65 GRAPHICS BASIC (1991), the graphics library that is part of BASIC 10. Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+The final version of the C65 GRAPHICS BASIC (911119, 1991-11-19), the graphics library that is part of BASIC 10. Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
 
 ### KERNAL_C65
 
-The final version of the C65 KERNAL (called "KERNEL"; 1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+The final version of the C65 KERNAL (called "KERNEL"; 911119, 1991-11-19). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
 
 ### DOS_C65
 
-The final version of the C65 CBDOS (Computer-Based DOS; 1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+The final version of the C65 CBDOS (Computer-Based DOS; 911119, 1991-11-19). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
 
 
 ### BASIC_CBM2&#x5f;&#x2a;, KERNAL_CBM2&#x5f;&#x2a;, EDITOR_CBM2&#x5f;&#x2a;
