@@ -1,0 +1,74 @@
+	.page
+	.subttl RCLR Function
+
+;**********************************************************
+;
+;  rclr(n)  --  return color
+;		 n = 0  :  vic background color
+;		     1  :  graphic foreground color
+;		     2  :  multicolor-1
+;		     3  :  multicolor-2
+;		     4  :  vic border color
+;		     5  :  text color (of current screen)
+;		     6  :  8563 background color
+;
+;**********************************************************
+
+rclr	jsr conint      	;evaluate integer argument, put in x
+	jsr put_io_in_map
+
+	dex
+	bmi 10$			;0, vic background
+	dex
+	bmi 20$			;1, graphic foreground
+	dex
+	bmi 30$			;2, graphic multicolor 1
+	dex
+	bmi 40$			;3, graphic multicolor 2
+	dex
+	bmi 50$			;4, vic border
+	dex
+	bmi 60$			;5, current text color
+	dex
+	bmi 70$			;6, 8563 background
+	jmp fcerr		;illegal value error
+
+10$	lda vic_background
+	and #$7f		;(msb is garbage)
+	jmp 100$
+
+20$	lda foreground 		;(1)
+	jmp 100$
+
+30$	lda multicolor_1 	;(2)
+	jmp 100$
+
+40$	lda multicolor_2 	;(3)
+	jmp 100$
+
+50$	lda vic_border		;border (4)
+	jmp 100$
+	
+60$	lda _text_color		;(5)
+	bit _mode
+	bpl 100$		; done if 40 col screen
+	bmi 75$			; adjust if 80 column
+
+70$	lda #26			;(6)
+	sta _8563_addr
+	lda _8563_data
+75$	and #$0f
+	tax
+	lda _8563_unadjust,x
+
+
+100$	and #$0f
+	tay
+	iny			;make color match keytops
+	jmp sngflt      	;float 1 byte arg. in y
+
+
+_8563_unadjust
+	.byte $0,$c,$6,$e,$5,$d,$b,$3
+	.byte $2,$a,$8,$4,$9,$7,$f,$1
+;end

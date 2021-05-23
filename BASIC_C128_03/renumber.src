@@ -1,0 +1,619 @@
+	.page
+	.subttl renumber
+
+;***********************************************************************
+;
+; renumber                                 
+;                                          
+; 	syntax:                                  
+;   	  renumber [n1 [,[n2] ,n3]]              
+;           n1 =new start line number, default 10 
+;           n2 =line increment, default 10        
+;           n3 =start line, default first         
+;                                          
+; 	syntax error may occur for missing commas or bad line numbers
+;   	illegal quantity error for line inc. of 0 & for bad ren. range
+; 	overflow error if increment wraps line number during renumber
+;	line number too large error if renumbering would force line
+;       	numbers greater than 63999
+;	out of memory error if the renumbered program would be too large
+;	unresolved reference error if an imbedded line number references
+;	       a line which does not exit
+;                                             
+; 	returns to ready mode on completion of renumber
+;                                          				
+;***********************************************************************
+
+
+; before actually renumbering the program, two preliminary passes are
+; made to insure no errors would occur during the actual renumbering
+; process (as detailed below)
+;
+; pass1 makes sure that the renumbered program would have no line
+; numbers greater than 63999 (nothing is actually renumbered; the 
+; statement table is not modified)
+;
+; pass 2 checks if the renumbered program would be too long and also
+; checks for non-existant line number destinations
+;
+; pass 3 examines the entire statement table first for imbedded line
+; numbers (branches) to fix. this is done by looking for keywords (goto,
+; gosub, then, run) which are usually followed by line numbers. the old
+; line number is mapped to a new value and the string representing the 
+; new branch label replaces the original text. 
+;
+; pass 4 then replaces the statement number bytes by their final values. 
+; lastly, the table is relinked.
+
+
+testwd
+        .byte gototk,runtk,gosutk,thentk,resttk,resutk,traptk,elsetk
+
+renum
+	jsr errind		;allowed only in direct mode
+
+; set up default values for n1, n2, and n3
+
+	lda #0	   		;line #10...
+	ldx #10
+	stx renum_tmp_1		;default renum origin (n1)
+	sta renum_tmp_1+1
+	stx renum_tmp_2		;default increment (n2)
+	sta renum_tmp_2+1
+	sta hightr		;default start line # (n3)
+	sta hightr+1
+
+	jsr chrgot		;any parameters?
+	beq ren_pass_1		;no...
+
+
+; check for new starting line number (n1)
+
+	jsr linget		;check for a number
+	lda endchr		;was there one?
+	beq renum_10		;no...use default
+	lda linnum
+	ldx linnum+1
+	sta renum_tmp_1
+	stx renum_tmp_1+1
+
+; check for new increment
+
+renum_10
+	jsr optwrd		;an increment given?
+ 	bcc renum_30		;no...use default
+
+	sty renum_tmp_2
+	sta renum_tmp_2+1
+	ora renum_tmp_2		;increment must be >0
+	bne renum_30		;ok
+
+renum_20
+	jmp fcerr		;illegal quantity error
+
+
+; check for starting line number
+
+renum_30
+	jsr optwrd		;starting line number given?
+	bcc ren_pass_1		;no...
+
+	sty hightr
+	sty linnum		
+	sta hightr+1
+	sta linnum+1
+	jsr fndlin		;test for illegal renumber range
+	lda lowtr		;(n1 must be >= n3)
+	ldx lowtr+1
+	sta highds		;pointer to first statement to renumber
+	stx highds+1
+	lda renum_tmp_1
+	ldx renum_tmp_1+1
+	sta linnum
+	stx linnum+1
+	jsr fndlin		;lowtr = ptr to 1st stmt to be overlapped
+	sec
+	lda lowtr		;can't be smaller
+	sbc highds
+	lda lowtr+1
+	sbc highds+1
+	bcc renum_20		;bad...
+
+
+;***********************************************************************
+;*************************  p a s s    o n e  **************************
+;***********************************************************************
+
+; pass1 makes sure that the renumbered program will not have any line numbers
+; greater than 63999 (however, nothing is actually renumbered in this pass)
+
+ren_pass_1
+	jsr n1_reset		;put n1 in fac, reset txtptr
+
+	jsr chargt		;skip low link
+	iny			;(.y=1)
+	jsr indtxt		;skip high link
+	beq ren_pass_2		;end of program => exit
+
+r_pass1_10
+	iny			;(.y=2)
+	jsr indtxt		;line number low
+	sec
+	sbc hightr		;in line range which is to be renumbered?
+	iny			;(.y=3)
+	jsr indtxt		;line number high
+	sbc hightr+1
+	bcs r_pass1_20		;yes => fake renumbering
+	jsr set_next		;goto next line
+	bne r_pass1_10		;if z=0 then not end-of-text => keep going
+	beq ren_pass_2		;	else end
+
+r_pass1_20
+	jsr set_next		;goto next line
+	beq ren_pass_2		;if z=1 then end-of-text => exit
+	jsr new_num		;create next line number
+	bcs r_pass1_30		;if c=1 then it wrapped => error
+	cmp #>63999		;can't have lines > 63999
+	bcc r_pass1_20		;if c=0 then ok
+
+r_pass1_30			;renumbering will generate an illegal line #
+	ldx #err_too_large	;'line number too large' error
+	jmp error
+
+set_next
+	ldy #$00		;set for next basic line
+	jsr indtxt		;low link
+	tax
+	iny			;(.y=1)
+	jsr indtxt		;high link
+	beq set_end		;if z=1 then end of program => exit
+	stx txtptr
+	sta txtptr+1
+set_end	rts
+
+
+;***********************************************************************
+;*************************  p a s s    t w o  **************************
+;***********************************************************************
+
+; pass 2 checks if the renumbered program will be too long and also
+; checks for non-existant line number destinations
+
+ren_pass_2
+	lda #$01		;set flag for 'pass 2'
+	sta z_p_temp_1
+	lda text_top		;copy top-of-text pointer for later use
+	ldx text_top+1		;(we don't want to change original here)
+	sta fndpnt
+	stx fndpnt+1
+	jsr imbed_lines		;search for imbedded lines (but don't change)
+
+
+;***********************************************************************
+;***********************  p a s s    t h r e e  ************************
+;***********************************************************************
+
+; pass 3 actually renumbers the imbedded destination line numbers
+; which follow goto, gosub, trap, etc.
+
+ren_pass_3
+	dec z_p_temp_1		;z_p_temp_1 = 0 (for pass 3)
+	jsr imbed_lines		;search for and update imbedded line #'s
+
+
+;***********************************************************************
+;************************  p a s s    f o u r  *************************
+;***********************************************************************
+
+; pass 4 actually renumbers the program line numbers
+
+ren_pass_4
+	jsr chargt_x2		;skip link
+	beq ren_exit		;null => end-of-text, exit
+	jsr chargt		;not null...
+	sta linnum		;if line# >= start#, replace with facho
+	iny
+	jsr indtxt
+	sec
+	sbc hightr+1
+	bcc r_pass4_20		;no, let alone
+	bne r_pass4_10		;yes, replace
+	lda linnum
+	sbc hightr
+	bcc r_pass4_20		;no, let alone
+r_pass4_10
+	lda facho
+	sta (txtptr),y		;hi
+	dey
+	lda facho+1
+	sta (txtptr),y		;lo
+	jsr chargt		;skip past 2nd byte of line#
+	jsr line_inc		;incr line# and scan to eol
+	beq ren_pass_4		;always...
+r_pass4_20
+	jsr chargt		;skip past line#
+	jsr scan_thru		;scan to eol
+	beq ren_pass_4		;always...
+
+									
+;*************************** ren_exit **********************************
+									
+;exit: jsr lnkprg, fix text_top, jsr runc, jmp ready
+
+ren_exit
+	jmp notdel	
+
+									
+;************************** imbed_lines ********************************
+
+; look for imbedded line #'s (after goto, gosub, etc.)
+; but only change them in pass 3 (ie. z_p_temp_1 = 0)
+
+imbed_lines
+	jsr stxtpt		;start at first line	
+next_line
+	jsr chargt_x2		;skip link
+	bne 10$			;not last (null) link
+	jmp n1_reset		;put current line # in fac, reset txtptr, exit
+10$
+	jsr chargt		;line number
+	sta forpnt		;save in case there is an error
+	jsr chargt
+	sta forpnt+1
+next_char
+	jsr chargt		;first character in the line
+chk_quote
+	cmp #'"'		;opening double quote?
+	bne not_quote		;no...
+20$	jsr chargt		;scan line
+	beq next_line		;end...
+	cmp #'"'		;close double quote
+	bne 20$ 		;no... continue
+	beq next_char		;yes... resume renumber
+not_quote
+	tax			;end of line?
+	beq next_line		;yes...
+	bpl next_char		;not a token...
+
+	ldx #8	   		;check special token list
+30$	cmp testwd-1,x
+	beq iline_10		;a match...
+	dex
+	bne 30$  		;continue until zero
+
+	cmp #gotk		;wasn't in the token list. check for 'go to'
+	bne chk_escape		;not 'go', go check for 'collision' *c128 fix*
+hop_1	jsr chrget		;got a 'go', look for 'to'
+	beq next_line		;end of line, abort
+	cmp #totk
+	beq iline_10		;got it! go to fix number routine
+	bne next_char		;no 'to', keep looking
+
+; look for 'COLLISION'. This is an escape command. *c128 fix*
+
+chk_escape		
+	cmp #esc_cmd_tk	
+	bne next_char	
+	jsr chrget	
+	beq hop_1     		;end of line ,abort
+	cmp #collision_tk	
+ 	bne next_char	
+40$	jsr chrget		;got it! skip over first argument
+	beq hop_1 		;end of line, abort
+	cmp #','
+	bne 40$			;not there yet.	
+
+
+iline_10
+	lda txtptr		;save current txtptr
+	sta oldlin
+	lda txtptr+1
+	sta oldlin+1
+	jsr chrget
+	bcs chk_quote		;not a #...
+	jsr linget		;get line # from text
+	jsr form_line		;replace if this line # > n3 
+	lda oldlin		;restore old txtptr
+	sta txtptr
+	lda oldlin+1
+	sta txtptr+1
+
+	jsr chrget		;skip over leading spaces
+	lda txtptr		;then backup (txtptr) by 1
+	bne iline_15
+	dec txtptr+1
+iline_15
+	dec txtptr
+
+	ldx #$ff
+	lda z_p_temp_1		;if this is pass2 then don't actually change
+	beq p3code		;if z=1 then pass3 => ok to change
+	jsr p2code_patch	;	else pass2 => don't change
+				; (318018_03 mod: FAB; fix 'memory error' check)
+iline_20
+	cmp #','		;comma from 'on'?
+	beq iline_10		;it is...
+	bne chk_quote		;no...
+
+
+;*********** this part of imbed_lines executed in pass 2 only **********
+
+p2code				;updates text_top without actually changing lines
+	inx
+	lda fbuffr+1,x		;get character from number
+	beq p2cd30		;end of number
+	jsr chrget		;get digit from old number
+	bcc p2code		;digit...move on
+
+p2cd10	inc fndpnt
+	bne p2cd20
+	inc fndpnt+1
+p2cd20	sec			;have we run out of memory (theoretically)?
+	lda fndpnt		;(compare with limit-of-memory pointer)
+	sbc max_mem_0
+	lda fndpnt+1
+	sbc max_mem_0+1
+	bcs p2cd60		;yes - error
+	inx			;no - next...
+	lda fbuffr+1,x
+	bne p2cd10
+	rts			;no more
+
+p2cd30
+	jsr chrget
+	bcs p2cd50		;old stuff after # is other char
+	lda fndpnt		;digit...move down
+	bne p2cd40
+	dec fndpnt+1
+p2cd40	dec fndpnt
+	bcc p2cd30		;still digits...
+p2cd50	rts	
+
+p2cd60	jmp omerr		;'out of memory' error
+
+
+;*********** this part of imbed_lines executed in pass 3 only **********
+
+p3code
+	inx
+p3cd10	lda fbuffr+1,x		;get character from number
+	beq p3cd30		;end of number
+	pha			;save digit from new number
+
+	jsr chargt		;get digit from old number
+	cmp #':'		;command terminator or letter?
+	bcs p3cd15
+	cmp #' '		;space? (fix for goto10 :rem)
+	beq p3cd15
+	sec
+	sbc #'0'		;number?
+	sec
+	sbc #$d0
+	bcc p3cd20		;digit...move on
+
+p3cd15	jsr move_init		;other char...move up  
+	inc argmo
+	jsr moveup_20
+	inc text_top
+	bne p3cd20
+	inc text_top+1
+
+p3cd20
+	pla
+	ldy #0
+	sta (txtptr),y		;put new digit in new number
+	inx
+	bne p3cd10		;branch always
+
+p3cd30
+	jsr chrget
+	bcs iline_20		;old stuff after # is other char
+p3cd40				;digit...move down
+	jsr move_init
+	dec argmo
+	jsr movedown_10
+	lda text_top
+	bne 50$
+	dec text_top+1
+50$	dec text_top
+	jsr chrgot
+	bcc p3cd40		;still digits...
+	jmp iline_20		;branch always
+
+
+;*************************** form_line *********************************
+
+;remaps the destination line if it is greater than n3
+
+form_line
+	jsr n1_reset
+find_it
+	jsr chargt_x2		;new line, skip over link
+	bne 70$			;if we get to end-of-text without finding the
+	ldx #err_ref		;line # then 'unresolved reference' error
+	lda forpnt
+	sta curlin		;fake error routine into saying 'in line xxxxx'
+	lda forpnt+1
+	sta curlin+1
+	jmp error
+
+70$	jsr chargt		;get line number low
+	sta highds		;highds = current line# in loop
+	cmp linnum
+	bne 100$
+	jsr chargt		;get line number high
+	sta highds+1
+	cmp linnum+1
+	bne 110$
+	sec			;if linnum < start#, no remapping
+	sbc hightr+1
+	bcc 80$
+	bne 90$
+	lda linnum
+	sbc hightr
+	bcs 90$
+80$
+	lda linnum		;use same line#
+	sta facho+1
+	lda linnum+1
+	sta facho
+90$
+	ldx #$90		;make replacement string
+	sec
+	jsr floatc
+	jmp fout
+
+100$
+	jsr chargt
+	sta highds+1		;(** 01/27/84 fix)
+110$
+	jsr line_add		;scan to end of line
+	beq find_it		;always
+
+
+
+
+;*************************** n1_reset **********************************
+
+;copies n1 (new renumber origin) into facho & sets (txtptr) = (txttab)-1
+
+n1_reset
+	lda renum_tmp_1
+	sta facho+1
+	lda renum_tmp_1+1
+	sta facho
+	jmp stxtpt
+
+
+;*************************** line_add **********************************
+
+;adds n2 (new line increment) to line number stored in facho if the 
+;current line number (highds) >= n3 (line to start renumbering with).
+;the line is then scanned through
+
+line_add
+	lda highds		;if line# >= start# then incr new#
+	sec
+	sbc hightr
+	lda highds+1
+	sbc hightr+1
+	bcc scan_thru
+line_inc
+	jsr new_num
+
+scan_thru
+	jsr chargt		;scan to end of line
+	bne scan_thru
+	rts
+
+
+;**************************** new_num **********************************
+
+;adds n2 (the new line increment) to the line number stored in facho
+
+new_num
+	lda facho+1		;increment new line#
+	clc
+	adc renum_tmp_2
+	sta facho+1
+	lda facho
+	adc renum_tmp_2+1
+	sta facho
+	rts
+
+
+;********************** chargt & chargt_x2 *****************************
+
+;chargt simulates chrget but doesn't ignore spaces & carry has no
+;significance.  chargt_x2 executes chargt twice.
+
+chargt_x2								
+	jsr chargt
+chargt
+	ldy #0	   		;increment txtptr
+	inc txtptr
+	bne 1$
+	inc txtptr+1
+1$
+	jmp indtxt
+
+
+;***********************************************************************
+;********************** memory move routines ***************************
+;***********************************************************************
+
+
+;*************************** move_init *********************************
+
+;intitialize variables for memory move routines
+
+move_init
+	lda txtptr
+	sta index1
+	lda txtptr+1
+	sta index1+1
+	lda text_top
+	sta index2
+	lda text_top+1
+	sta index2+1
+	ldy #0
+	sty count
+	sty argmo
+	rts
+
+
+;*************************** movedown **********************************
+
+;move basic text area from (index1) to (index2) down one byte
+;(call movedown_10)
+
+movedown
+	inc index1
+	bne movedown_10
+	inc index1+1
+movedown_10
+	ldy count
+	iny
+	jsr indin1
+	ldy argmo
+	iny
+	sta (index1),y
+	jsr compare
+	bne movedown
+	rts
+
+
+;**************************** moveup ***********************************
+
+;move basic text area from (index1) to (index2) up one byte
+;(call moveup_20)
+
+moveup
+	lda index2
+	bne moveup_10
+	dec index2+1
+moveup_10
+	dec index2
+moveup_20
+	ldy count
+	jsr indin2
+	ldy argmo
+	sta (index2),y
+	jsr compare
+	bne moveup
+	rts
+
+
+;**************************** compare ***********************************
+
+;compares index1 with index2, sets c and z flags accordingly
+
+compare
+	lda index1
+	cmp index2
+	bne 1$
+	lda index1+1
+	cmp index2+1
+1$	rts
+
+;.end

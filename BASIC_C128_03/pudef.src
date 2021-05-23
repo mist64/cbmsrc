@@ -1,0 +1,18 @@
+	.page
+	.subttl PUDEF Command
+
+
+puctrl	jsr frmstr		;do frmevl,frestr. return with a=len, index=~string
+	tay
+	dey
+	cpy #4
+	bcc 1$
+	jmp fcerr		;len > 4 is illegal value error.
+1$	jsr indin1_ram1		;lda (index),y
+	sta sw_rom_ram0
+	sta puchrs,y
+	dey
+	bpl 1$
+	rts
+
+;.end

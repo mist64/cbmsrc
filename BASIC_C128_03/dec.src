@@ -1,0 +1,59 @@
+	.page
+	.subttl DEC function
+
+;
+; dec... convert a hex string representing
+;	 a 2 byte integer into decimal
+
+dcml	jsr len1	;find length of string
+	sta index2	;len ret. in a
+	ldy #0
+	sty index2+1	;zero char counter
+	sty strng2	;zero out value
+	sty strng2+1
+dec010
+	cpy index2	;evaluated all characters?
+	beq dec050	;branch if so
+	jsr indin1_ram1	;get next character from string
+	iny
+	cmp #' '	;ignore spaces
+	beq dec010
+	inc index2+1
+	ldx index2+1
+	cpx #5
+	beq decbad	;can't have more than 4 characters
+
+	cmp #'0'
+	bcc decbad	;bad if < '0'
+	cmp #':'	;'9'+1
+	bcc dec030	;ok if in '0'..'9'
+	cmp #'A'
+	bcc decbad	;bad if > '9' & < 'a'
+	cmp #'G'
+	bcs decbad	;bad if > 'f'
+
+	sbc #7	   	;adjust if in 'a'..'f'
+dec030
+	sbc #$2f	;adjust to $00..$0f
+	asl a	    	;shift low nibble to high
+	asl a
+	asl a
+	asl a
+	ldx #4	   	;mult. old val. by 16, add new
+dec040
+	asl a
+	rol strng2
+	rol strng2+1
+	dex
+	bne dec040
+	beq dec010
+
+dec050
+	ldy strng2	;get lsb of value,
+	lda strng2+1	;& msb,
+	jmp nosflt	;go float 2 byte unsigned integer
+
+decbad
+	jmp fcerr	;illegal qty error
+
+;.end

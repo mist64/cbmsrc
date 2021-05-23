@@ -1,0 +1,100 @@
+Process Count: 49           VAX/VMS Monitor Utility        Uptime:    2 01:20:17
+                                   PROCESSES
+                                    SUMMARY      From: 12-OCT-1984 11:07:29
+                                                 To:   12-OCT-1984 11:08:35
+
+   PID      UIC    STATE PRI   NAME          SIZE      DIOCNT  FAULTS  CPU TIME
+
+00010000 [000,000] COM    0 NULL            0/0             0       0 12:39:06.9
+00010001 [000,000] HIB   16 SWAPPER         0/0             0       0 00:06:45.7
+00020019 [200,012] COM    4 RADOVSKY        211/440        82    3118 00:00:22.0
+0001001A [200,004] LEF    5 FISHER          21/99         184    8917 00:00:47.4
+0005001B [200,010] LEF    8 LENTHE          16/489        106     576 00:00:04.9
+0007001C [001,004] LEF    4 SYSTEM_1        29/87           6     298 00:00:01.5
+0009001D [001,004] HIB    5 SYSTEM          30/93          22     345 00:00:02.8
+0004001E [200,017] LEF    9 ANDERSON        10/53          22    3374 00:00:07.3
+0019001F [200,024] COM    3 _JOB702         17/407         23   36707 00:08:30.3
+00070020 [300,007] LEF    4 STONG           11/52         225    3685 00:00:52.3
+000B0021 [100,032] LEF    7 SCHWENDEMAN     40/160        280    3141 00:00:54.4
+00140022 [200,023] LEF    5 REED            25/166        409   17060 00:04:41.5
+00240023 [300,017] LEFO   4 LCD             1/40            SWAPPED OUT
+00080024 [300,001] LEFO   9 SIEW            0/37            SWAPPED OUT
+00070025 [200,005] LEF    7 RAIBLE          0/80          547   31407 00:07:50.2
+
+                                  SUMMARIZING
+
+Process Count: 49           VAX/VMS Monitor Utility        Uptime:    2 01:20:17
+                                   PROCESSES
+                                    SUMMARY      From: 12-OCT-1984 11:07:29
+                                                 To:   12-OCT-1984 11:08:35
+
+   PID      UIC    STATE PRI   NAME          SIZE      DIOCNT  FAULTS  CPU TIME
+
+001D0026 [300,017] LEFO   4 _TTC6:          0/40            SWAPPED OUT
+000E0027 [200,022] HIB    6 PACI            12/55          69     742 00:00:07.9
+000D0028 [376,005] LEFO   9 JBOYER          0/36            SWAPPED OUT
+000C0029 [300,003] LEF    7 HAYNIE          36/91       10874  135634 00:15:42.5
+0008002A [200,024] LEF    4 ANDREAS         12/53         227    7147 00:00:39.1
+001E002B [200,024] COM    3 _JOB617         17/950         25 1068827 03:12:16.9
+001B002C [100,025] COM    3 856GDS2OUT      5/175       20325  852865 03:15:02.9
+000B002D [200,011] LEF    4 LINTNER         11/52         253    3783 00:00:44.8
+0006002E [200,015] LEF    7 YANG            37/113       2757   44099 00:12:37.2
+0013002F [300,013] CUR    6 RYAN            30/195        147    4269 00:00:26.4
+00110030 [100,005] LEF    7 SHALES          81/195         59    1100 00:00:07.3
+00210031 [100,011] LEFO   7 SHOSTEK         0/48            SWAPPED OUT
+00140032 [300,021] LEF    9 SIRACUSA        30/90       17607   62775 00:22:02.6
+00290033 [300,014] COM    3 _JOB707         0/275        1961   13665 00:04:27.9
+000D0034 [300,003] LEFO   6 HERD            7/56            SWAPPED OUT
+
+                                  SUMMARIZING
+
+Process Count: 49           VAX/VMS Monitor Utility        Uptime:    2 01:20:17
+                                   PROCESSES
+                                    SUMMARY      From: 12-OCT-1984 11:07:29
+                                                 To:   12-OCT-1984 11:08:35
+
+   PID      UIC    STATE PRI   NAME          SIZE      DIOCNT  FAULTS  CPU TIME
+
+00230035 [200,031] HIB    6 BELL            12/55          30     336 00:00:25.1
+00280036 [200,006] LEFO   7 DIORIO          2/48            SWAPPED OUT
+00010037 [001,003] HIB    9 REMACP          0/43            1      37 00:00:00.2
+00010038 [100,027] HIB    6 DECmail_LCLSND  77/164         29   68433 00:08:33.7
+00010039 [001,004] HIB    6 EVL             0/30            4   18635 00:00:05.4
+0001003A [001,004] HIB   10 NETACP          0/148        1291  123102 00:15:29.5
+0001003B [100,027] HIB    7 DECMAIL_CONTROL 4/54            7      64 00:01:25.0
+0019003C [300,014] LEF    5 BOWEN           8/52          857    6289 00:01:35.1
+001E003D [300,011] LEF    4 DAVIS           17/67        1144    9065 00:02:31.6
+0001003E [001,004] HIB    8 PRTSYMB4        0/29         1454    2232 00:01:18.2
+0001003F [001,004] HIB    8 PRTSYMB3        0/29          638    3378 00:02:02.6
+00010040 [001,004] HIB    9 PRTSYMB2        0/29          881    7346 00:05:34.9
+00010041 [001,004] HIB    8 PRTSYMB1        0/29         1280    3639 00:02:27.3
+00010042 [001,003] HIB   10 DRB2BACP        57/206     122846   48381 00:34:14.2
+00010043 [001,004] LEF    8 OPCOM           0/52          139     411 00:00:03.0
+
+                                  SUMMARIZING
+
+Process Count: 49           VAX/VMS Monitor Utility        Uptime:    2 01:20:17
+                                   PROCESSES
+                                    SUMMARY      From: 12-OCT-1984 11:07:29
+                                                 To:   12-OCT-1984 11:08:35
+
+   PID      UIC    STATE PRI   NAME          SIZE      DIOCNT  FAULTS  CPU TIME
+
+00010044 [001,004] HIB    9 JOB_CONTROL     2/53         1713    5398 00:01:03.1
+00530045 [100,030] LEF    7 CADTOOLS        35/122        991    6835 00:03:27.5
+00010046 [001,003] HIB   10 DRA0BACP        47/113     139797   37328 00:18:18.5
+00020047 [001,006] HIB    9 ERRFMT          0/51          820     425 00:00:11.2
+
+
+
+
+
+
+
+
+
+
+
+
+                                  SUMMARIZING
+

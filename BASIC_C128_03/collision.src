@@ -1,0 +1,44 @@
+	.page
+	.subttl COLLISION Command
+
+;*****************************************************************
+;
+; COLLISION Command
+;
+;   syntax : COLLISION n [,address]
+;
+;   where : n = 1 ==> sprite / sprite
+;		2 ==> sprite / background
+;		3 ==> light pen
+;
+;	    address == BASIC line number to trap to on interrupt
+;
+; 	    no address ==> disable trapping
+;
+;*****************************************************************
+
+collision
+	jsr getbyt		;get type in .X
+	dex			;adjust 1..3 to 0..2
+	cpx #3
+	bcs 99$			;value error
+
+	stx coltyp
+	jsr optwrd		;get (optional) address in .Y,.A
+	php			;save .C (.C == 1 ==> real value)
+	ldx coltyp
+	sta int_adr_hi,x	;save address given
+	tya
+	sta int_adr_lo,x
+
+	lda intval		;this records valid interrupts
+	ora sbits,x		;set correct bit
+	plp
+	bcs 10$			;..unless this is a 'clear',
+	eor sbits,x		;..in which case we'll reset bit
+10$	sta intval
+	rts
+
+99$	jmp fcerr		;illegal value error
+
+;end

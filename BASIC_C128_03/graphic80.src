@@ -1,0 +1,254 @@
+	.page
+	.subttl GRAPHIC80 for c256
+
+;*************************************************************
+;
+;  Collection of perverse wedges for c256 demo
+;
+;*****************************************************************
+
+vdcput	= $cdca			;editor routine: update 8563 reg #31 with .A
+vdcout	= $cdcc			;editor routine: update 8563 reg .X  with .A
+vdcget	= $cdd8			;editor routine: read   8563 reg #31 into .A
+vdcin	= $cdda			;editor routine: read   8563 reg .X  into .A
+
+
+plot_80				;plot a point on 8563 bit map
+	jsr calc_grapnt		;calc grapnt, read byte, bit offset in .Y
+	bcc 1$
+	rts
+
+1$	ora rbits,y		;set bit
+	ldx colsel
+	bne 10$			;...branch if bit to be set
+	eor rbits,y		;...else bit to be cleared
+
+10$	jsr put_grapnt		;update bit map at grapnt
+				;fall into color_80 to color the square & rts
+
+	.page
+color_80
+	lda ypos		;convert (xpos,ypos) to absolute color address
+	ldy #0
+	jsr div80		; Y = ypos/8 * 80
+	jsr mul80
+	sta tempf1
+	sty tempf2
+	lda xpos
+	ldy xpos+1
+	jsr div80		; X = xpos/8
+	clc
+	adc tempf1
+	sta grapnt		; ADR = Y + X + offset to color map
+	lda tempf2
+	adc #>$c000		;offset
+	sta grapnt+1
+
+	lda fg_bg		;get color spec: must swap nybbles for 8563!
+	ldx colsel		;want fg or bg?
+	beq 10$			;...bg
+	lsr a			;...fg
+	lsr a
+	lsr a
+	lsr a
+	tax			;convert to 8563 colors
+	lda $ce5c,x
+	bpl 20$			;bra
+
+10$	and #$0f
+	tax
+	lda $ce5c,x
+	asl a
+	asl a
+	asl a
+	asl a
+20$	sta z_p_temp_1
+
+	jsr get_grapnt		;get the current bg/fg colors at (grapnt) in .A
+	ldx colsel		;want fg or bg??
+	beq 30$			;...bg
+	and #$f0		;want fg, preserve bg
+	.byte $2c
+30$	and #$0f
+	ora z_p_temp_1		;merge
+
+	jmp put_grapnt		;update 8563 color at (grapnt) per .A & rts
+
+	.page
+read_80
+	jsr calc_grapnt		;calc grapnt, read byte, bit offset in .Y
+	bcs rts_80		;...off screen
+	and rbits,y		;get the bit
+	pha
+	tya			;tyx
+	tax
+	pla
+	jmp readlp		;continue normal 'readpt'
+
+	.page
+scnclr_80
+	jsr put_io_in_map	;put IO into map
+	ldx #19
+	lda #<$8000		;point to start of bit map
+	jsr vdcout
+	dex
+	lda #>$8000
+	jsr vdcout
+	lda #0			;clear the 8563 bit map
+	jsr vdcput
+	ldy #$3f		;# pages:  16k bit map
+	jsr wipe_80
+
+
+	lda fg_bg		;current color spec: must swap nybbles for 8563!
+	and #$0f
+	tax			;convert to 8563 colors
+	lda $ce5c,x
+	asl a
+	asl a
+	asl a
+	asl a
+	sta z_p_temp_1
+	lda fg_bg
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	tax			;convert to 8563 colors
+	lda $ce5c,x
+	ora z_p_temp_1
+	jsr vdcput		;clear the 8563 attributes
+	ldx #19
+	lda #<$c000		;point to start of bit map
+	jsr vdcout
+	dex
+	lda #>$c000
+	jsr vdcout
+	ldy #$08		;# of pages: 2k attributes,  fall into wipe_80
+	
+
+wipe_80				;init .Y pages of 8563 ram
+	ldx #30
+	lda #0			;a page at a time
+10$	jsr vdcout
+	dey
+	bne 10$			;...loop until done
+rts_80	rts
+
+	.page
+calc_grapnt
+	sec			;convert (xpos,ypos) to absolute bit map address
+	lda ypos+1
+	bne rts_80		;...off screen!
+	lda ypos
+	cmp #200
+	bcs rts_80		;...off screen!
+	jsr mul80		; Y = ypos*80
+	sta tempf1
+	sty tempf2
+	lda xpos
+	ldy xpos+1
+	jsr div80		; X = xpos/8	(.Y = remainder = offset into byte)
+	cmp #80
+	bcs rts_80		;off screen!
+	clc
+	adc tempf1
+	sta grapnt		; ADR = Y + X + offset to bit map
+	lda tempf2
+	adc #>$8000		;offset
+	sta grapnt+1
+	clc			;...grapnt = byte in bit map,  .Y=bit offset in byte
+				;...fall into get_grapnt to read the byte
+
+
+
+get_grapnt
+	jsr set_grapnt		;setup address
+	jmp vdcget		;read the byte into .A & rts
+
+
+
+put_grapnt
+	pha
+	jsr set_grapnt		;setup address
+	pla
+	jmp vdcput		;store the byte & rts
+
+
+
+set_grapnt
+	jsr put_io_in_map
+	ldx #18			;point 8563 update address at (grapnt)
+	lda grapnt+1
+	jsr vdcout
+	inx
+	lda grapnt
+	jmp vdcout		;rts
+
+	.page
+;	MULTIPLY by 80	(.A * 80 --> 16-bit product)
+;
+;	result in (.a/.y) = (lo/hi), .x preserved
+
+mul80	sta vtemp1	;multiplier
+	lda #0		;product lsb
+	sta vtemp2	;product msb
+	ldy #8		;# bits in multiplier
+
+10$	asl a		;shift product left 1 bit
+	rol vtemp2
+	asl vtemp1	;shift multiplier left
+	bcc 20$
+	clc
+	adc #80		;add multiplicand to product
+	bcc 20$
+	inc vtemp2
+
+20$	dey
+	bne 10$		;...loop until done
+	ldy vtemp2	;...return .A=lsb .Y=msb
+	rts
+
+	.page
+;	DIVIDE	by 8	(.A/.Y) / 8 --> 8-bit quotient in .A, remainder in .Y
+;
+;	result in .a, .x preserved
+;
+;div80	sta vtemp1	;dividend lsb
+;	tya		;dividend msb
+;	ldy #8		;# bits in divisor
+;
+;10$	asl vtemp1	;shift dividend and quotient left 1 bit
+;	rol a
+;	cmp #8
+;	bcc 20$
+;	sbc #8		;subtract divisor
+;	inc vtemp1	;increment quotient
+;
+;20$	dey
+;	bne 10$		;...loop until done
+;	tay		;...return .Y=remainder
+;	lda vtemp1	;...return .A=quotient
+;	rts
+
+div80	sta vtemp1	;divide (a,y) by 8, result in a, remainder in y
+	sty vtemp2
+	lsr vtemp2
+	ror vtemp1
+	ror a
+	lsr vtemp2
+	ror vtemp1
+	ror a
+	lsr vtemp2
+	ror vtemp1
+	ror a
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	tay
+	lda vtemp1
+	rts
+
+;	.end

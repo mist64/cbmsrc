@@ -75,7 +75,8 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 
 | Directory                                                    | Year | Comments    |
 |--------------------------------------------------------------|------|-------------|
-| [BASIC_C128](BASIC_C128)                                     | 1986 |
+| [BASIC_C128_03](BASIC_C128_03)                               | 1985 | 318018-03, 318019-03 |
+| [BASIC_C128_04](BASIC_C128_04)                               | 1986 | 318018-04, 318019-04 |
 | [EDITOR_C128](EDITOR_C128)                                   | 1985 | 318020-05 |
 | [EDITOR_C128_DIN](EDITOR_C128_DIN)                           | 1985 | 315078-03, German |
 | [EDITOR_C128_NATIONAL](EDITOR_C128_NATIONAL)                 | 1987 |             |
@@ -272,10 +273,12 @@ The Commodore Plus/4, C16 and C116 BASIC 3.5 and KERNAL source (1984). Source: [
 * KERNAL_TED_04 is 318004-04 (PAL) and 318005-04 (NTSC). $FF80 = $84/$04. (It was reconstructed from kernal/kernal.xrf in the dump.)
 * KERNAL_TED_05 is 318004-05 (PAL) and 318005-05 (NTSC). $FF80 = $85/$05. (The sources were missing a patch, which was reconstructed from kernal/kernal.lst in the dump.)
 
-###  BASIC_C128, KERNAL_C128_0{3|5|6}, EDITOR_C128[_DIN], MONITOR_C128
+###  BASIC_C128_0{3|4}, KERNAL_C128_0{3|5|6}, EDITOR_C128[_DIN], MONITOR_C128
 
 The Commodore 128 BASIC 7.0, KERNAL, EDITOR and MONITOR sources (1985/1986). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
+* BASIC_C128_03 is 318018-03/318019-03.
+* BASIC_C128_04 is 318018-04/318019-04.
 * KERNAL_C128_03 is 318020-03, $FF80 = 0. (It was reconstructed from listings/first_release/kernal.lis in the dump.)
 * KERNAL_C128_05 is 318020-05, $FF80 = 1.
 * KERNAL_C128_06 is 318020-06, $FF80 = 2. This version seems to have been unreleased.

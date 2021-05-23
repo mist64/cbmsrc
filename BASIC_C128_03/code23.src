@@ -1,0 +1,118 @@
+	.page
+	.subttl 'code23'
+	lda #'-'	;exponent is negative.
+fout14
+	sta fbuffr+1,y	;store sign of exponent.
+	lda #'E'
+	sta fbuffr,y	;store the "e" character.
+	txa
+	ldx #@57
+	sec
+fout15
+	inx		;move closer to output value.
+	sbc #@12	;subtract 10.
+	bcs fout15	;not negative yet.
+	adc #@72	;get second output character.
+	sta fbuffr+3,y	;store high digit.
+	txa		
+	sta fbuffr+2,y	;store low digit.
+	lda #0		;put in terminator.
+	sta fbuffr+4,y
+	beq fout20	;return, (always branches).
+fout19
+	sta fbuffr-1,y	;store the character.
+fout17
+	lda #0		;a terminator.
+	sta fbuffr,y
+fout20
+	lda #<fbuffr
+	ldy #>fbuffr
+	rts		;all done.
+
+
+
+fhalf	.byte @200,0,0,0,0
+
+foutbl	.byte @372,@12,@37,0,0
+	.byte @230,@226,@200,@377
+	.byte @360,@275,@300,0
+	.byte 1,@206,@240,@377
+	.byte @377,@330,@360,0,0
+	.byte 3,@350,@377,@377
+	.byte @377,@234,0,0,0,@12
+	.byte @377,@377,@377,@377
+
+fdcend	.byte @377,@337,@12,@200
+	.byte 0,3,@113,@300,@377
+	.byte @377,@163,@140,0,0
+	.byte @16,@20,@377,@377
+	.byte @375,@250,0,0,0,@74
+timend
+			;
+			;exponentiation and square root function.
+			;	
+			;square root function---sqr(a).
+			;use sqr(x)=x~.5
+sqr
+	jsr movaf	;move fac into arg.
+	lda #<fhalf
+	ldy #>fhalf
+
+fpwr	jsr movfm	;put memory into fac.
+			;last thing fetched is facexp into accx.
+			;
+			;exponentiation --- x~y.
+			;n.b. 0~0=1
+			;first check if y=0. if so, the result is one.
+			;next check if x=0. if so the result is zero.
+			;then check if x>0. if not check that y is an integer.
+			;if so, negate x, so that lg doesn't give fcerr.
+			;if x is negative and y is odd, negate the result
+			;returned by exp.
+			;to compute the result use x~y=exp((y*log(x)).
+			;
+
+fpwrt
+	beq exp		;if fac=0, just exponentiate taht.
+	lda argexp	;is x=0?
+	bne fpwrt1	;
+	jmp zerof1	;zero fac.
+
+fpwrt1
+	ldx #<tempf3	;save it for later in a temp.
+	ldy #>tempf3
+	jsr movmf
+			;y=0 already. good; incase no one calls int.
+	lda argsgn
+	bpl fpwr1	;no problems if x>0.
+	jsr int		;integerize the fac.
+	lda #<tempf3	;get addr of comperand.
+	ldy #>tempf3
+	jsr fcomp	;equal?
+	bne fpwr1	;leave x neg. log will blow him out.
+			;a=-1 and y is irrelavant.
+	tya		;negative x. make positive.
+	ldy integr	;get evenness.
+fpwr1
+	jsr movfa1	;alternate entry point
+	tya
+	pha		;svae evenness for later. 
+	jsr log	        ;find log
+	lda #<tempf3	;multiply fac times log(x).
+	ldy #>tempf3
+	jsr fmult
+	jsr exp		;exponentiate the fac.
+	pla
+	lsr a		;is it even?
+	bcc negrts	;yes. or x>0.
+			;negate the number in fac.
+negop
+	lda facexp
+	beq negrts
+	lda facsgn
+	eor #@377
+	sta facsgn
+negrts
+	rts
+
+;.end

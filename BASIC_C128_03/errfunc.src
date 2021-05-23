@@ -1,0 +1,54 @@
+	.page
+	.subttl ERR$ Function
+
+errd	jsr conint	;get integer arg in x
+	dex
+	txa
+	cmp #errlst	;check range
+	bcs errerr	;what would you call it?
+	jsr erstup
+	ldy #$ff
+	ldx #0
+
+1$	inx		;count printing characters
+2$	iny
+	lda (index2),y	;ind.ok
+	bmi 3$		;msb set means last
+	cmp #$20
+	bcc 2$		;don't count non-printers
+	bcs 1$		;count all others
+
+3$	txa
+	jsr strspa	;get space
+	ldx #0
+	ldy #$ff
+	sta sw_rom_ram1	;set up string bank
+
+4$	iny
+	lda (index2),y	;this time, move chars
+	cmp #$20
+	bcc 4$
+	jsr swapxy
+	pha
+	and #$7f
+	sta (dsctmp+1),y
+	jsr swapxy
+	inx
+	pla		;test if msb was set
+	bpl 4$
+	jmp chrd1	;pla,pla,jmp putnew
+
+errerr
+	jmp fcerr	;bad value
+
+swapxy	pha
+	txa
+	pha
+	tya
+	tax
+	pla
+	tay
+	pla
+	rts
+
+;end

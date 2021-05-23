@@ -1,0 +1,23 @@
+	.page
+	.subttl DIM Statement
+
+;	The 'dim' code sets [dimflg] and then falls into the variable search
+;	routine, which looks at dimflg at 3 different points:
+;
+;		1) if an entry is found, 'dimflg' being on indicates
+;		   a doublly-defined variable.
+;		2) when a new entry is being built, 'dimflg' being on indicates
+;		   the indices should be used for the size of each index.
+;		   Otherwise the default of ten is used.
+;		3) When the build entry code finishes, indexing will be done
+;		   only if 'dimflg' is off.
+
+
+dim3	jsr chkcom	;must be a comma.
+dim	tax		;make .x non-zero (.a must be non zero to work correctly)
+	jsr ptrgt1
+	jsr chrgot	;get last character.
+	bne dim3
+	rts
+
+;end

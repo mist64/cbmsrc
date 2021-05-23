@@ -1,0 +1,85 @@
+
+	.page
+	.subttl RESUME command
+
+; RESUME command
+;
+; Used to resume execution following a TRAPped error.
+;
+; Syntax:
+;	RESUME [line_number | NEXT]
+;
+; Can take the following forms:
+;
+;	RESUME			:resume executing at the statement which caused 
+;				 the error.
+;	RESUME NEXT		:resume execution at the statement FOLLOWING
+;				 the statement which caused the error.
+;	RESUME line_number	:resume at the specified line number.
+
+
+resume	jsr errdir	;no direct mode
+	ldx errlin+1	;is there an error to resume from?
+	inx
+	beq rescnt	;can't resume!
+	jsr chrgot	;look for arguments
+	beq resswp	;no arg's...restart err'd line
+	bcc resnum	;numeric argument
+	cmp #nexttk	;only other choice is 'next'
+	bne ressnr	;if not, syntax error
+
+	jsr resswp	;resume execution with next stm't
+	ldy #0
+	jsr indtxt
+	bne 2$		;must be a ':'
+	iny		;must be a null,get next line
+	jsr indtxt	;make sure its not end-of-text
+	bne 1$
+	iny
+	jsr indtxt
+	bne 1$
+	jmp ready	;2 nulls, eot. bye!
+
+1$	ldy #3	   	;new line, update pointers
+	jsr indtxt
+	sta curlin
+	iny
+	jsr indtxt
+	sta curlin+1
+	tya
+	clc
+	adc txtptr
+	sta txtptr
+	bcc 2$
+	inc txtptr+1
+2$	jsr chrget	;skip over this character, into body of statement
+	jmp data	;advance until null or ':', then rts
+
+resnum	jsr getwrd
+	sta linnum+1
+	jsr resend
+	jmp luk4it
+
+resswp	ldx #1
+1$	lda errlin,x
+	sta curlin,x
+	lda errtxt,x
+	sta txtptr,x
+	dex
+	bpl 1$
+
+resend	ldx #$ff
+	stx errnum	;reset error status- he's saying he's fixed it
+	stx errlin
+	stx errlin+1	;flag 'no further resumes until next error'
+	ldx tmptrp	;restore trap line to allow traps again
+	stx trapno+1
+	rts
+
+ressnr	jmp snerr
+
+
+rescnt	ldx #errcr
+	jmp error
+
+;end

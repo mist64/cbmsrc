@@ -1,0 +1,79 @@
+	.page
+	.subttl MID$ Pseudo-variable
+
+; alternate use of the mid$ fn., as the target of an assignment stmt.
+;
+; mid$(string_var,starting_position [,length]) = string_expression
+
+midd2
+
+midwrk	=midd2-1
+
+	jsr chkopn		;check for '('
+	jsr ptrget		;get pointer to descriptor of string-var
+	sta forpnt		;store for later use
+	sty forpnt+1
+	jsr chkstr		;check if string
+
+	jsr combyt		;look for comma, followed by 1 byte starting address
+	dex			;adjust starting addr.
+	stx hulp		;store    "	"
+
+	cmp #')'		;finished?
+	beq 10$			;branch if so (use default length)
+	jsr combyt		;..else get length
+	.byte $2c
+
+10$	ldx #$ff		;default length
+	stx z_p_temp_1
+	jsr chkcls		;look for ')'
+	lda #equltk		;look for '='
+	jsr synchr
+
+	jsr frmevl		;bring on the source!
+	jsr chkstr		;nothing funny.
+
+	ldy #2	   		;get string descriptors
+20$	lda #forpnt		;target
+	jsr indsub_ram1		;lda (forpnt),y
+	sta str1,y
+	jsr indfmo		;source
+	sta str2,y
+	dey
+	bpl 20$
+
+; test for target string in text was removed-  all strings in ted are
+; copied to string ram when they are created.
+	sec			;adjust pointer to source string so that the same
+	lda str2+1		;..index can load & save
+	sbc hulp
+	sta str2+1
+	bcs *+4
+	dec str2+2
+
+	lda z_p_temp_1		;get specified length (or default)
+	cmp str2		;compare with length of source
+	bcc *+4	  		;ok if less,
+	lda str2		;..else use length of source
+	tax
+	beq 80$			;done if length=0
+	clc
+	adc hulp		;add length to starting posn.
+	bcs 98$			;error if > 256,
+	cmp str1
+	bcc *+4
+	bne 98$			;...or if > target length.
+
+	ldy hulp		;get adjusted starting address
+70$	lda #str2+1
+	jsr indsub_ram1		;fetch from string bank
+	sta (str1+1),y		;this is what it's all about
+	iny
+	dex
+	bne 70$			;keep going for specified length
+
+80$	jmp frefac		;free up temp. string, rts
+
+98$	jmp fcerr		;illegal quantity error
+
+;end

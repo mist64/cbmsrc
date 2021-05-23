@@ -1,0 +1,13 @@
+	.page
+	.subttl TRON / TROFF Commands
+
+tron			;trace mode on
+	lda #$ff
+	.byte $2c
+
+troff			;trace mode off
+	lda #0
+	sta trcflg
+	rts
+
+;end

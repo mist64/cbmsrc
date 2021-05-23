@@ -1,0 +1,46 @@
+	.page
+	.subttl  PATCHES to BASIC ($4000-$7FFF)
+
+;  CHAR_PATCH  fixes CHAR with 80-column text screen
+;
+
+char_patch
+	jsr put_io_in_map	;must enable I/O to move 80-col cursor!
+	jmp _jplot		;move cursor (k_jplot does not bring in I/O)
+	
+
+
+;  K_PRINT  fixes CHAR with 80-column text screen
+;
+
+k_print
+	jsr put_io_in_map	;must enable I/O to print to 80-col screen
+	jmp _print		;print character in .A
+
+
+
+;  P2CODE_PATCH  fixes RENUMBER 'out of memory' check
+;
+
+p2code_patch
+	jsr p2code		;renumber 'pass two': trial run to see if enough room
+	jmp chrgot		;re-get last character from BASIC text & rts
+
+
+
+;  DELETE_PATCH  fixes DELETE top of text check
+;
+
+delete_patch
+	inc index2		;increment destination address
+	bne 10$
+	inc index2+1
+
+10$	sec			;compare destination ptr with new text_top ptr
+	lda index2
+	sbc text_top
+	lda index2+1
+	sbc text_top+1		;.C=1 if done, .C=0 if more
+	rts
+
+;.end

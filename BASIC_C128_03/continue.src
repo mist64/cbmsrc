@@ -1,0 +1,45 @@
+	.page
+	.subttl CONTINUE Command
+;**********************************************************
+;*
+;*	continue execution after stop/end
+;*
+;*
+;**********************************************************
+cont	bne cont_rts		;make sure there is a terminator.
+
+	bit runmod		;if in run-mode, just rts
+	bmi cont_rts
+
+	ldx #errcn		;continue error.
+	ldy oldtxt+1		;a stored txtptr of zero is set up
+	bne 1$			;by stkini and indicates there is nothing to continue.
+	jmp error		;"stop", "end", typing crlf to
+
+1$	lda oldtxt		;"input" and ^c setup oldtxt
+	sta txtptr
+	sty txtptr+1
+	lda oldlin
+	ldy oldlin+1
+	sta curlin
+	sty curlin+1
+
+setexc	lda #$80
+	sta runmod		;set up run mode
+	asl a	    		;.a=0
+	sta autinc		;turn auto increment off
+	sta autinc+1
+	sta intval		;enable & reset collision-trapping mechanism
+	sta _autoinsert		;disable auto-insert mode
+
+	ldx #2			;turn off all interrupt trip flags
+10$	sta int_trip_flag,x
+	dex
+	bpl 10$
+
+	jmp _setmsg		;turn kernal messages off & rts
+
+cont_rts
+	rts
+
+;end

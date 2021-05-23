@@ -1,0 +1,90 @@
+	.page
+	.subttl SCALE Command
+
+;*************************************************************************
+;
+;  scale : turn the scale mode on or off, and optionally set scale factor
+;
+;	syntax : SCALE n {,x_max,y_max}
+;
+;	where : n = 0 (off) or 1 (on)
+;		x_max >= 320
+;		y_max >= 200
+;
+;*************************************************************************
+
+scale	jsr getbyt
+	cpx #2
+	bcc 1$
+	jmp fcerr		;illegal value
+
+1$	stx scalem      	;0 if off, 1 if on
+	jsr chrgot		;end of statement?
+	bne 10$			;no, go get x & y arg's
+	ldx #0			;yes, supply defaults
+	lda #llen+llen
+	ldy #nlines+nlines
+	bit _graphm
+	bpl 5$			;branch if not mcm,
+	lsr a			;..else divide # of rows by 2
+5$	stx scale_x
+	sta scale_x+1
+	stx scale_y
+	sty scale_y+1
+	rts
+
+10$	jsr get_lt_32768	;check for comma, get positive integer < 32768
+	lda #<n20971200
+	ldy #>n20971200
+	jsr romupk		;put 320*65535 in arg
+	jsr fdivt		;fac=320*65535 / x_max
+	jsr getadr		;get int(fac) : must be 0 < x =< 65535
+	cmp #0
+	bne 20$
+	cpy #0
+	beq bad_bad_value
+20$	pha			;save msb of x
+	tya
+	pha			;save lsb of x
+
+	jsr get_lt_32768	;check for comma, get positive integer < 32768
+	lda #<n13107000
+	ldy #>n13107000
+	jsr romupk		;arg = 200*65535
+	jsr fdivt		;fac = arg / y_max
+	jsr getadr		;get int(fac) : must be 0 < y =< 65535
+	cmp #0
+	bne 30$
+	cpy #0
+	beq bad_bad_value	;bad value! bad bad value!
+
+30$	sty scale_y		;save lsb of y
+	sta scale_y+1		;.and msb of y
+	pla
+	sta scale_x		;.and lsb of x
+	pla
+	sta scale_x+1		;.and msb of x
+
+	rts
+
+
+
+get_lt_32768
+	jsr chkcom		;get second arg
+	jsr frmnum		;put their arg in fac
+	lda facsgn
+	bmi bad_bad_value	;error if negative
+	lda facexp
+	cmp #$90
+	bcs bad_bad_value	;error if >= 32768
+	rts
+
+bad_bad_value
+	jmp fcerr
+
+
+n20971200
+	.byte $99,$1f,$ff,$60,$00
+n13107000
+	.byte $98,$47,$ff,$38,$00
+;end

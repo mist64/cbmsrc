@@ -1,0 +1,75 @@
+	.page
+	.subttl 'code12'
+n32768	.byte 144,128,0,0,0
+
+flpint	jsr ayint
+	lda facmo
+	ldy  faclo
+	rts
+
+intidx	jsr chrget
+	jsr frmevl	;get a number
+
+posint	jsr chknum
+	lda facsgn
+	bmi nonono	;if negative, blow him out.
+
+ayint	lda facexp
+	cmp #144	;fac .gt. 32767?
+	bcc qintgo
+	lda #<n32768	;get address of -32768.
+	ldy #>n32768
+	jsr fcomp	;see if fac=((x)).
+
+nonono	beq qintgo
+	jmp fcerr	;no, fac is too big.
+
+qintgo	jmp qint	;go to wint and shove it.
+	.page
+
+; float an unsigned double byte integer
+; entry: msb in a, lsb in y
+
+nosflt	jsr stoint
+	sec	      	;sign is positive
+	jmp floatc
+
+
+
+pos	sec
+	jsr k_jplot	;get tab pos in .y
+
+sngflt	lda #0
+	jmp givayf	;float it
+
+;
+;subroutine to see if we are in direct mode,
+;and complain if so.
+
+errdir	bit runmod	;direct mode?
+	bmi storts	;no
+	ldx #errid	;input direct error code.
+	.byte $2c
+errguf	ldx #erruf
+	jmp error
+
+
+
+stoint	ldx #0		;move int to fac & compute proper exponents
+	stx valtyp
+	sta facho
+	sty facho+1
+	ldx #$90
+storts	rts
+
+
+
+
+errind	bit runmod	;goto error if not in direct mode
+	bmi 1$	;in run mode
+	rts
+
+1$	ldx #erroid
+	jmp error
+
+;.end

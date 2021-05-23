@@ -1,0 +1,124 @@
+	.page
+	.subttl SPRSAV Command
+
+;***************************************************************
+;
+;  sprsav ( n1 / s1$ ) , ( n2 / s2$ )
+;   - move string(s1) or sprite(n1) to string(s2) or sprite(n2)
+;               n1 & n2 = a sprite number (1-8)
+;                   s1$ = a string variable or expression
+;                   s2$ = a string variable
+;
+;***************************************************************
+
+sprsav	jsr savinp      		;evaluate 1st expression
+	bcs 20$				;skip if source is a string
+	sta forpnt
+	sty forpnt+1    		;save sprite address
+	ldy #62
+
+10$	lda (forpnt),y			;move sprite def to save area
+	sta savram,y
+	dey
+	bpl 10$
+
+	iny
+	sty savram+64   		;save sprite column length
+	sty savram+66   		;save sprite row length
+	lda #23
+	sta savram+63
+	lda #20
+	sta savram+65
+	ldx #<savram    		;set ptr to start of sprite def
+	ldy #>savram
+	stx strng1			;**
+	sty strng1+1			;**
+
+	lda #67         		;set sprite length including lengths
+	jsr strlit_1			;**get string space, copy savram to it
+	jsr desc_free			;**free up temp descriptor
+
+20$	stx savsiz      		;save source length
+	sta savsiz+1
+	sty savsiz+2    		;save source start address
+
+	jsr chkcom      		;check for a comma
+
+	lda txtptr      		;save basic text pointer
+	sta sprtmp_1
+	lda txtptr+1
+	sta sprtmp_2
+	jsr savinp      		;get next destination parameter
+	bcs savs50      		;skip if string
+
+	sta grapnt
+	sty grapnt+1    		;save sprite address
+	lda savsiz+1
+	sta forpnt      		;get source address
+	lda savsiz+2
+	sta forpnt+1
+	ldy #0
+40$	cpy savsiz      		;test index vs source length
+	beq 45$				;exit if source depleted
+	lda #forpnt			;move source byte to sprite
+	jsr indsub_ram1			; (from ram bank 1)
+	sta sw_rom_ram0
+	sta (grapnt),y
+	iny
+	cpy #63
+	bne 40$
+45$	rts
+
+
+savs50	lda sprtmp_1			;restore basic text pointer
+	sta txtptr
+	lda sprtmp_2
+	sta txtptr+1
+	jsr ptrget      		;get symbol table descriptor for string dest.
+	sta forpnt
+	sty forpnt+1    		;save symbol table address
+	lda #<savsiz
+	sta facmo       		;save descriptor address of source
+	lda #>savsiz
+	sta facmo+1
+	jmp inpcom      		;move source to dest, do rts (snerr if not eol)
+
+
+savinp	jsr frmevl      		;evaluate expression
+	bit valtyp
+	bmi desc_free			;exit if a string variable
+	jsr conint			;get one byte integer in .X
+	dex				;adjust sprite 1..8 to 0..7
+	cpx #8
+	bcs 20$				;bad value
+	txa				;move sprite number to .A
+	lsr a
+	ror a
+	ror a           		;get sprite address
+	ldy #>sprite_base
+	bcc 5$
+	iny
+5$	clc             		;flag 'sprite'
+	rts
+
+20$	jmp fcerr
+
+desc_free				;free up temporary descriptor,
+					;set up pointers to string.
+	lda facmo			;get address of temp descriptor
+	ldy facmo+1
+	jsr fretms
+
+	ldy #0				;get len, addr of string
+	jsr indfmo
+	tax
+	iny
+	jsr indfmo
+	pha
+	iny
+	jsr indfmo
+	tay
+	pla
+	sec				;flag 'string found'
+	rts				;return w/ x=len, (a,y)==> string
+;end

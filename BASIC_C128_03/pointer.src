@@ -1,0 +1,32 @@
+	.page
+	.subttl POINTER Command
+
+;******************************************************************
+;
+; POINTER(var_name) - return address of descriptor for var_name
+;
+;******************************************************************
+
+pointer	jsr chrget		;skip over escape token
+	jsr chkopn		;test for open paren
+	jsr isletc		;test if character follows parens
+	bcc pointer_err		;...syntax error if not.
+	jsr ptrget		;look for this varname in table
+pointer_ret=*-1
+	tax
+	tya
+	pha
+	jsr chkcls		;look for closing paren
+	txa
+	tay
+	pla
+	cmp #>zero		;is this a dummy pointer?
+	bne 10$
+	lda #0			;if so, return 0
+	tay
+10$	jmp nosflt
+
+pointer_err
+	jmp snerr		;syntax error
+
+;end

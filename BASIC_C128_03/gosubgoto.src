@@ -1,0 +1,87 @@
+	.page
+	.subttl gosub / goto routines
+
+; gosub. push text pointer, line #, & gosub token on stack:
+;
+;		(bottom) highest memory
+;===========================================================
+;		txtptr+1 address of next statement
+;		txtptr
+;		========
+;		curlin+1 current line number
+;		curlin
+;		========
+;		'gosub' token <== (tos) top of stack pointer
+;===========================================================
+;		(top of stack) lowest memory
+
+gosub	jsr gosub_sub
+	jsr chrgot	;get character and set carry for linget.
+	jsr goto
+	jmp newstt
+
+	.page
+
+goto	jsr linget	;pick up the line number in "linnum".
+	lda endchr	;test if linget found any number
+	beq no_number_error
+
+goto_1	jsr remn	;jump to end of line. (entry for interrupt code)
+	sec
+	lda curlin
+	sbc linnum
+	lda curlin+1
+	sbc linnum+1
+	bcs luk4it
+	tya
+	sec
+	adc txtptr
+	ldx txtptr+1
+	bcc lukall
+	inx
+	bcs lukall	;always goes.
+
+luk4it	lda txttab
+	ldx txttab+1
+
+lukall	jsr fndlnc	;(a,x) are all set up.
+	bcc userr	;undefined statement error
+	lda lowtr
+	sbc #1
+	sta txtptr
+	lda lowtr+1
+	sbc #0
+	sta txtptr+1
+	bit runmod	;in direct mode?
+	bpl setexc	;yes
+	rts
+
+userr	ldx #errus
+	jmp error
+
+no_number_error
+	jmp snerr
+
+
+
+gosub_sub
+	lda #lengos	;free up necessary space on stack
+	jsr getstk	;make sure there is room.
+	ldy #lengos-1
+	lda txtptr+1	;push on the text pointer.
+	sta (tos),y
+	dey
+	lda txtptr
+	sta (tos),y
+	dey
+	lda curlin+1	;push on the curent line number.
+	sta (tos),y
+	dey
+	lda curlin
+	sta (tos),y
+	dey
+	lda #gosutk	(acca) were smashed by getstk.
+	sta (tos),y
+	rts
+
+;.end

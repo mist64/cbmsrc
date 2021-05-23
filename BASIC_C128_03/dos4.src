@@ -1,0 +1,114 @@
+	.page
+	.subttl DOS 4
+
+;   error on channel - read status
+
+errchl	lda dsdesc      	;entry for user
+	bne echks       	;chk old status
+	lda #40         	;get 40 char str
+	sta dsdesc      	;we have 40 chrs
+	jsr getspa
+	stx dsdesc+1		;return low
+	sty dsdesc+2		;return high
+	ldy #40
+	sta sw_rom_ram1		;set up string bank
+	lda #<dsdesc
+	sta (dsdesc+1),y
+	iny
+	lda #>dsdesc
+	sta (dsdesc+1),y
+
+
+echks	ldx dosfa       	;chk bus <=ds read
+	bne eread       	;if =0 default
+	ldx #8
+	stx dosfa
+eread
+	lda #doslfn
+	ldy #$6f
+	jsr k_setlfs
+
+	lda #0
+	jsr k_setnam
+
+	jsr k_open
+	ldx #doslfn
+	jsr _chkin
+	bcs errbad      	;a problem??
+
+	ldy #$ff
+loop1
+	iny
+	jsr k_basin
+	sta sw_rom_ram1	;set up string bank
+	cmp #cr         	;check for end
+	beq errend
+	sta (dsdesc+1),y
+	cpy #40
+	bcc loop1       	;branch unless too long.
+errend
+	lda #0
+	sta (dsdesc+1),y
+	jsr k_clrch
+	lda #doslfn
+	sec             	;not a real close
+	jmp k_close
+
+errbad
+	pha
+	jsr errend
+	jsr oldclr      	;flag 'no ds available'
+	pla             	;get error
+	tax
+	jmp error
+
+
+;  r-u-sure subroutine
+
+are_you_sure
+	bit runmod      	;direct mode?
+	bmi ans3        	;no
+	jsr k_primm		;prompt user
+	.byte 'ARE YOU SURE?', 0
+	jsr k_clrch       	;clear channel for basin
+	jsr k_basin       	;next char
+	pha             	;save first char of reply
+ans1   			;eat chars until end of line
+	cmp #cr
+	beq ans2        	;if cr received, exit
+	jsr k_basin
+	bne ans1        	;continue to ignore
+
+ans2
+	pla
+	cmp #'Y'		;z set means ans=y.....
+	rts
+ans3
+	lda #0          	;...or not in direct mode.
+	rts
+
+
+
+;  oldclr subroutine
+;  clears disk status
+
+oldclr	tya             	;save y
+	pha
+	lda dsdesc      	;chk for allocation
+	beq 10$			;bra if not
+	ldy #40
+	tya
+	sta sw_rom_ram1		;set up string bank
+	sta (dsdesc+1),y	;length of garbage
+	iny
+	lda #$ff
+	sta (dsdesc+1),y	;garbage flaged
+
+10$	lda #0
+	sta sw_rom_ram0
+	sta dsdesc      	;kill ds$
+	pla             	;restore y
+	tay
+	rts
+
+;.end

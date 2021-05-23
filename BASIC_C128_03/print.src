@@ -1,0 +1,155 @@
+	.page
+	.subttl PRINT / PRINT# / CMD
+
+;***********************************************************
+;*
+;*	PRINT / PRINT# /CMD
+;*
+;**********************************************************
+
+printn	jsr cmd		;docmd.
+	jmp iodone	;release channel.
+
+cmd	jsr getbyt
+	beq saveit
+	lda #','	;comma?
+	jsr synchr
+saveit
+	php
+	stx channl	;channel to output on.
+	jsr coout
+	plp		;get status back.
+	jmp print
+
+strdon
+	jsr strprt
+newchr
+	jsr chrgot	;reget last character.
+print
+	beq crdo	;terminate so type crlf
+	cmp #usetk
+	bne printc
+	jmp using
+
+
+
+printc
+	beq prtrts	;here after seeing tab(x) or , or.
+			;in which case a terminator does not mean a crlf
+			;but just rts.
+	cmp #tabtk	;tab function?
+	beq taber	;yes.
+	cmp #spctk	;space function?
+	clc		;clear carry.
+	beq taber	;yes.
+	cmp #','	;comma?
+	beq comprt	;yes.
+	cmp #';'	;a semicolon?
+	beq notabr	;yes.
+	jsr frmevl	;evaluate the formula
+	bit valtyp	;a string?
+	bmi strdon	;yes.
+	jsr fout
+	jsr strlit	;build descriptor.
+	jsr strprt	;print the number.
+	jsr outspc	;print a space.
+	bne newchr	;always goes.
+
+fininl
+	lda #0		;put a zero at end of buf.
+	sta buf,x
+
+zz5	=buf-1		;set up pointer.
+
+	ldx #<zz5
+	ldy #>zz5
+	lda channl	;no crdo if not termianl. 
+	bne prtrts
+
+crdo
+	lda #cr
+	jsr outdo
+	bit channl
+	bpl crfin
+	lda #lf
+	jsr outdo
+crfin
+	eor #$ff
+prtrts
+	rts
+
+
+
+comprt	sec
+	jsr k_jplot	;get tab position in x
+	tya
+	sec
+morco1	sbc #column_width
+	bcs morco1
+	eor #$ff
+	adc #1
+	bne aspac
+
+taber	php		;remember if spc or tab function.
+	sec
+	jsr k_jplot	;read tab position
+	sty trmpos
+	jsr gtbytc	;get value into accx.
+	cmp #')'
+	bne snerr4
+	plp
+	bcc xspac
+	txa
+	sbc trmpos
+	bcc notabr	;negative, don't print any.
+aspac	tax
+xspac	inx
+xspac2	dex
+	bne xspac1
+
+notabr
+	jsr chrget	;reget last character.
+	jmp printc	;don't call crdo.
+
+snerr4
+	jmp snerr
+
+xspac1
+	jsr outspc
+	bne xspac2
+	.page
+;
+; strout routine
+;
+; Print the string pointed to by (xreg) which ends with a zero.
+
+strout	jsr strlit	;get a string literal.
+
+strprt	jsr frefac	;return temp pointer.
+	tax		;put count into counter.
+	ldy #0
+	inx		;move one ahead.
+strpr2	dex
+	beq prtrts	;all done.
+	jsr indin1_ram1	;lda (index),y
+	jsr outdo
+	iny
+	cmp #cr
+	bne strpr2
+	jsr crfin	;type rest of carriage return.
+	jmp strpr2	;and on and on.
+
+outspc	lda channl
+	beq crtskp
+
+realsp	lda #' '	;space
+	.byte $2c
+crtskp	lda #29	  	;cbm cursor right (non-destructive skip char)
+	.byte $2c
+outqst	lda #'?'
+
+outdo	jsr outch	;output char in .a
+	and #$ff
+	rts
+
+;.end

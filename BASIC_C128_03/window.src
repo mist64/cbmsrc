@@ -1,0 +1,72 @@
+	.page
+	.subttl WINDOW Command
+
+;****************************************************************
+;*
+;*  WINDOW Command
+;*
+;*  Syntax : WINDOW upper-left col, upper-left row,
+;*		    lower-left col, lower-right row [,clear]
+;*
+;*  Where  :  0 <= row <= 24
+;*	      0 <= column <= (80/40)
+;*	      clear : 0 (no) or 1 (yes)
+;*
+;****************************************************************
+
+window	jsr getbyt		;get u.l. col
+	cpx #40
+	bit _mode
+	bpl 10$
+	cpx #80
+10$	bcs 98$
+	stx window_temp
+
+	jsr combyt		;get u.l. row
+	cpx #25
+	bcs 98$
+	stx window_temp+1
+
+	jsr combyt		;get l.r. column
+	cpx #40
+	bit _mode
+	bpl 20$
+	cpx #80
+20$	bcs 98$
+	stx window_temp+2
+	cpx window_temp		;can't be less than u.l. column
+	bcc 98$
+
+	jsr combyt		;get l.r. row
+	cpx #25
+	bcs 98$
+	stx window_temp+3
+	cpx window_temp+1	;can't be less than u.l. row
+	bcc 98$
+
+	jsr optzer		;get optional clear flag
+	cpx #2
+	bcs 98$
+	txa
+	pha
+
+	ldx window_temp
+	lda window_temp+1
+	clc
+	jsr _set_window
+
+	ldx window_temp+2
+	lda window_temp+3
+	sec
+	jsr _set_window
+
+	ldx #19			;assume 'home', not 'cls'
+	pla
+	beq 30$
+	ldx #147
+30$	txa
+	jmp k_bsout
+
+98$	jmp fcerr		;illegal value error
+
+;end

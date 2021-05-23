@@ -1,0 +1,33 @@
+	.page
+	.subttl RSPCOLOR Function
+
+;******************************************************************
+;*
+;*	RSPCOLOR - return sprite multicolor reg's
+;*
+;*	Syntax : RSPCOLOR (argument)
+;*
+;*	Where  : argument = [1..2]
+;*			1 : return multicolor #1
+;*			2 : return multicolor #2
+;*
+;******************************************************************
+
+rspcolor
+	jsr chkcls	;check for closing paren
+	jsr conint	;get arg in .X
+	dex		;adjust [1..2] to [0..1
+	cpx #2
+	bcs 98$		;value error
+
+	jsr put_io_in_map
+	lda vic+37,x
+	and #$0f
+	tay
+	iny
+	jmp sngflt	;float 1 byte arg in .Y
+
+
+98$	jmp fcerr	;bad value error
+
+;end

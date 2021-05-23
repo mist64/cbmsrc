@@ -1,0 +1,44 @@
+	.page
+	.subttl 'code17'
+gtbytc
+	jsr chrget
+getbyt
+	jsr frmnum	;read formula into fac.
+conint
+	jsr posint	;convert the fac to a single byte int.
+	ldx facmo
+	bne go_fcerr	;result must be .le. 255.
+	ldx faclo
+	jmp chrgot	;set condition codes on terminator.
+
+
+getnum			;get 2 byte value in y,a : check for a comma, get 1 byte val in x
+	jsr frmnum	;get address.
+	jsr getadr	;get that location.
+
+combyt			;check for a comma, get a 1 byte value in x
+	jsr chkcom	;check for comma.
+	jmp getbyt	;get something to store and return.
+
+comwrd	jsr chkcom
+
+getwrd	jsr frmnum	;get a 2 byte value in y,a
+
+getadr	lda facsgn	;for this entry, value can't be < 0
+	bmi go_fcerr	;function call error.
+
+getsad			;get signed 2 byte value in (y,a)
+	lda facexp	;examine exponent.
+	cmp #145
+	bcs go_fcerr	;function call error.
+	jsr qint	;integerize it.
+	lda facmo
+	ldy facmo+1
+	sty poker
+	sta poker+1
+	rts		;it's all done.
+
+go_fcerr
+	jmp fcerr
+
+;end

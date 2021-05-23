@@ -1,0 +1,46 @@
+	.page
+; "DISPLAY.MAP"
+;                     TEXT           HIRES          MULTI         HIRES          MULTI
+; 		      MODE        BIT-MAPPED     BIT-MAPPED       SPLIT          SPLIT
+; 	|	|
+; $DC00	|-------| ------------   ------------   ------------   ------------   ------------
+;   |	|	|  Text color                    Bit-mapped     Text color    Text color/ (*1)
+;   |	|	|    info.                       color info.      info.      BM color info.
+; $D800	|-------| ------------   ------------   ------------   ------------   ------------
+; 	|	|
+; 	|	|
+; 	~	~
+; 	|	|
+; 	|	|
+; $4000	|-------| ------------   ------------   ------------   ------------   ------------
+;   |	|	|
+;   |	|	|     Not            Bit            Bit            Bit            Bit     
+;   |	~	~                    map            map            map            map     
+;   |	|	|    used.          screen         screen         screen         screen   
+;   |	|	|
+; $2000	|-------| ------------   ------------   ------------   ------------   ------------
+;   |	|	|     Not         Bit-mapped     Bit-mapped     Bit-mapped     Bit-mapped 
+;   |	|	|    used.        color info.    color info.    color info.    color info.
+; $1C00	|-------| ------------   ------------   ------------   ------------   ------------
+; 	|	|
+; 	|	|
+; 	|	|
+; $0800	|-------| ------------   ------------   ------------   ------------   ------------
+;   |	|	|     Text           Not            Not            Text           Text
+;   |	|	|    screen       used. (*2)     used. (*2)       screen         screen
+; $0400	|-------| ------------   ------------   ------------   ------------   ------------
+; 	|	|
+; 	|	|
+; 
+;  (*1) There are actually 2 banks of RAM that can be mapped into this slot in the map. By
+;       selecting one bank during the BM portion of the screen (top), and the other during
+;       the TEXT portion of the screen (bottom), each mode will have unique RAM for it's
+;       own purposes.
+; 
+;  (*2) Although the information on the TEXT screen is not actually being displayed at this
+;       time, it is still being acessed and updated during any operation normally routed to
+;       the screen (such as default print statements, error messages, etc.) "Not used" is
+;       NOT meant to imply that during this mode, all print operations are going into the
+;       bit-bucket.
+
+

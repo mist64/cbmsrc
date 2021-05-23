@@ -1,0 +1,529 @@
+	.page
+	.subttl SPRDEF Command
+
+;***************************************************************
+;
+;  sprdef --  define a sprite interactively
+;
+;***************************************************************
+
+sprdef	jsr sethir		;make sure a graphics area is allocated
+	jsr put_io_in_map
+
+	lda #$d0
+	sta character_rom	;set up address of character rom
+
+	lda #%00100000
+	sta _graphm		;make hires mode
+	jsr clear_graphics	;clear the screen
+	ldy #$80		;to clear the screen
+	sty xysgn 		;for rvs fld
+
+	ldy #24
+	lda #' '		;space
+	ldx #0
+
+10$	jsr chrdsp		;put down right edge for def'n area
+	inx
+	cpx #21
+	bcc 10$
+
+20$	jsr chrdsp		;put down bottom border
+	dey
+	bpl 20$
+
+	jsr put_io_in_map
+	lda _text_color
+	pha			;save color
+	lda vic+33
+	sta _text_color
+	lda #'+'
+	ldx #0
+	stx xysgn
+
+30$	ldy #0
+40$	jsr chrdsp		;set up definition area
+	iny
+	cpy #24
+	bcc 40$
+	inx
+	cpx #21
+	bcc 30$
+
+	pla
+	sta _text_color
+	jsr def_clear		;clear the sprite def'n area
+
+defbeg	ldy #2
+	ldx #23
+
+10$	lda stline-2,y		;sprite number request message
+	beq 20$
+	jsr chrdsp
+	iny
+	bne 10$
+
+20$	jsr put_io_in_map
+30$	jsr _getin
+	beq 30$			;wait for input
+	cmp #$0d
+	bne 40$			;skip if not a return
+	jsr clear_graphics	;clear screen 
+	lda #0
+	sta _graphm		;set to text mode
+	rts
+
+40$	sec
+	sbc #$31		;convert users 1-8 to 0-7
+	sta sprite_number	;assume sprite number
+	cmp #8
+	bcs 30$			;loop back if invalid
+	tax
+	asl a
+	tay			;times 2 for indexing
+	lda sbits,x
+	sta bitmsk		;save bit mask for sprite
+	and vic+28		;test if multicolor sprite
+	beq 50$			;skip if not
+	lda #$80
+
+50$	sta defmod		;save mode of definition
+	lda #8
+	sta vic_save+0,y	;set up address of where to show sprite
+	lda #74
+	sta vic_save+1,y
+	lda bitmsk
+	ora vic_save+16
+	sta vic_save+16		;turn on msb for x-position
+	lda bitmsk
+	sta vic+21		;enable only this sprite
+
+	ldx sprite_number	;turn off speed for this sprite
+	ldy sproff,x 		;get offset for this sprite to def'n area
+	lda #0
+	sta sprite_data,y
+
+	txa	  		;put sprite number into accumulator
+	ldy #15+2
+	ldx #23
+	clc
+	adc #$31
+	jsr chrdsp		;show sprite number (0-7)
+	jsr put_io_in_map
+	lda sprite_number
+	lsr a
+	ror a
+	ror a
+	sta forpnt		;set up sprite base address
+	ldy #>sprite_base
+	bcc 60$
+	iny
+60$	sty forpnt+1
+	jsr show_sprite		;move sprite to definition area
+
+	ldy #63
+70$	lda (forpnt),y		;move sprite to save area
+	sta savram,y
+	dey
+	bpl 70$
+
+dohome	ldx #0
+	stx rowcnt		;initialize cursor to top-left
+	stx colcnt
+
+dfloop	jsr togcur		;show cursor
+10$	jsr _getin		;get key input
+	beq 10$			;loop till got a key
+	pha
+	jsr togcur		;turn cursor off
+	pla
+	ldx #colend-colnum
+
+dloop1	cmp colnum-1,x		;check if a color key was entered
+	bne 10$
+	dex
+	txa
+	ldx sprite_number
+	sta vic+39,x		;set new sprite color
+	jsr show_sprite
+	bcs dfloop		;always
+10$	dex
+	bne dloop1
+
+	ldx #cmdend-cmdstr-1 	;check table of valid commands
+20$	cmp cmdstr,x
+	beq 30$
+	dex
+	bpl 20$
+	bmi dfloop		;no valid entry found
+
+30$	txa
+	tay			;save index for routines to use (if necessary)
+	asl a			;find address of command
+	tax
+	lda defjmp,x 		;address high
+	pha
+	lda defjmp+1,x 		;address low
+	pha
+	rts			;go to the routine requested through rts mechanisim.
+
+
+def040	tya			;alter color at cursor position
+	sta vtemp2
+	jsr colbyt		;get color byte
+	pha
+	ldy colcnt
+	ldx rowcnt
+	jsr getvm		;video matrix address for row
+	pla
+	jsr setcol		;set new color
+	ldy colcnt
+	tya
+	and #7			;mask column number
+	tax			;use as bit index
+	tya
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc rowcnt		;get offset into sprite
+	adc rowcnt
+	adc rowcnt
+	tay
+	lda (forpnt),y		;get sprite byte
+	bit defmod
+	bpl def044
+	sta vtemp1
+	lda rbits,x
+	ora rbits+1,x 		;masks 2 bits for multicolor sprite
+	pha
+	ora vtemp1		;set 2 bits in sprite byte
+	sta vtemp1
+	pla
+	ldx vtemp2
+	and colval,x 		;get inverse bits of colors
+	eor vtemp1
+	jmp def046
+
+def044	ora rbits,x		;set bits
+	asl vtemp2
+	bne def046
+	eor rbits,x
+
+def046	sta (forpnt),y		;save sprite byte
+	bit defmod		;see if cursor should auto-advance
+	bvc def110		;yes, go to advance right routine
+	jmp dfloop		;jump to next command
+
+
+;here for cancel
+
+def050	ldy #63	 		;copy back original sprite
+
+10$	lda savram,y
+	sta (forpnt),y
+	dey
+	bpl 10$
+
+def060	lda #0			;part of cancel, also used for return
+	sta vic+21		;disable sprites
+	jmp defbeg
+
+
+
+def070	lda defmod		;toggle multicolor
+	eor #$80
+	sta defmod
+	jsr show_sprite
+	lda colcnt		;make sure cursor is on an even loc'n
+	and #$fe
+	sta colcnt
+	ldy #28
+	.byte $2c
+
+def080	ldy #23			;toggle y expand
+	.byte $2c
+
+def090	ldy #29			;toggle x expand
+	lda vic,y
+	ldx sprite_number
+	eor sbits,x
+	sta vic,y
+	jmp dfloop
+
+
+
+def100	ldy #63			;clear sprite def'n area
+	lda #0
+
+def102	sta (forpnt),y		;clear sprite
+	dey
+	bpl def102
+
+	jsr def_clear
+	jmp dohome		;home cursor
+
+
+
+def110	lda #1			;move cursor right
+	.byte $2c
+
+def120	lda #$ff		;move cursor left
+	bit defmod
+	bpl 5$
+	asl a			;multiply by 2 if multicolor
+5$	clc
+	adc colcnt		;net result: adds for right, subtracts for left
+	bmi 10$			;too far left
+	cmp #24
+	bcs def160		;too far right. go to beginning of next line
+	sta colcnt		;must be good. ship it.
+	bcc def155		;always
+
+10$	ldx #23			;too far left. wrap to right of next line up.
+	bit defmod
+	bpl 20$
+	dex			;..one less if multicolor
+20$	stx colcnt
+
+; fall thru to 'move cursor up'
+
+def140	lda #$ff		;move cursor up
+	.byte $2c
+def130	lda #1			;move cursor down
+	clc
+	adc rowcnt
+	cmp #21
+	bcs def155
+	sta rowcnt
+	bcc def155		;always
+
+
+
+def150	lda defmod		;toggle auto-advance
+	eor #$40
+	sta defmod
+def155	jmp dfloop
+
+def160	lda #0			;return - move to beginning of next line
+	sta colcnt
+	beq def130		;jump to 'down 1 line' routine
+
+
+
+
+def_copy		;copy a sprite into the one being edited
+
+;set up to query 'copy from?'
+
+	ldy #2
+	ldx #24
+5$	lda copy_line-2,y
+	beq 10$			;done when null is found
+	jsr chrdsp
+	iny
+	bne 5$			;always
+
+; get number of sprite to copy from user
+
+10$	jsr put_io_in_map
+20$	jsr _getin
+	beq 20$			;loop until a key is pressed
+	cmp #$0d
+	beq 50$			;abort if a <cr> is pressed
+	sec
+	sbc #$31		;convert '1'..'8' to 0..7
+	cmp #8
+	bcs 20$			;ignore if not in range
+
+; convert sprite # to index, and copy it
+
+	lsr a
+	ror a
+	ror a
+	sta vtemp1
+	ldy #>sprite_base
+	bcc 30$
+	iny
+30$	sty vtemp1+1
+
+	ldy #63
+40$	lda (vtemp1),y
+	sta (forpnt),y
+	dey
+	bpl 40$
+
+; display new sprite
+
+	jsr show_sprite
+
+; clear prompt from screen
+
+50$	lda #0
+	tay
+60$	sta $3e00,y		;318018-02 patch (leaves IO in the map!)
+	dey
+	bne 60$
+	jmp dfloop
+
+	.byte $ff,$ff,$ff	;place holder
+
+
+;*****************************************************************
+;
+;  show sprite in definition area
+;
+;*****************************************************************
+
+show_sprite
+
+	ldx #0
+	stx strcnt		;init count of sprite bytes
+
+10$	stx lincnt		;save pointer to area row
+	jsr getvm		;get address to video matrix
+	ldy #0			;init column count of area to 0
+20$	ldx #8			;count of bits in sprite byte
+	sty numcnt		;save column number of area
+	ldy strcnt
+	lda (forpnt),y		;get next sprite byte
+	inc strcnt
+	ldy numcnt		;get column count
+
+30$	asl a
+	bit defmod
+	bpl 40$			;skip if not multicolor
+	rol a
+	dex
+40$	pha			;save shifted sprite byte
+	rol a			;shift to get color selection
+	jsr colbyt		;get color byte
+	jsr setcol		;save into video matrix
+	iny
+	pla			;get sprite byte
+	dex
+	bne 30$			;more bits left
+	cpy #24
+	bcc 20$			;not done with row
+	ldx lincnt
+	inx			;point to next row
+	cpx #21
+	bcc 10$			;loop for next row
+	rts
+
+
+;*******************************************************************
+;
+;  colbyt  --  get byte = color / color  --  a = color selection
+;
+;*******************************************************************
+
+colbyt	and #03
+	lsr a
+	ror a
+	beq 10$			;skip if 0/2 selected
+	bit defmod
+	bpl 20$			;skip if not multicolor mode
+	lda vic+37		;get multicolor-1
+	bcc colbyt_1			;skip if that is it
+	lda vic+38		;get multicolor-2
+	bcs colbyt_1			;...always
+
+10$	lda vic+33		;get background color
+	bcc colbyt_1			;have it
+
+20$	stx vtemp1
+	ldx sprite_number
+	lda vic+39,x 		;get sprite foreground color
+	ldx vtemp1
+
+colbyt_1
+	and #$0f		;(subroutine entry)
+	sta vtemp1
+	asl a
+	asl a
+	asl a
+	asl a
+	ora vtemp1		;make both nibbles same color
+	rts
+
+
+
+setcol	sta (grapnt),y		;put color into video matrix
+	bit defmod
+	bpl 10$
+	iny
+	sta (grapnt),y		;again if multicolor
+10$	rts
+
+togcur	ldx rowcnt
+	jsr getvm		;get video matrix pointer
+	ldy colcnt
+	bit defmod
+	bpl makcr1		;do once for non-multicolor
+	jsr makcr1
+
+makcr1	lda (grapnt),y
+	eor #$80
+	sta (grapnt),y
+	iny
+	rts
+
+copy_line
+	.byte 'COPY FROM?',0
+
+stline	.byte 'SPRITE NUMBER?  ',0
+
+cmdstr		;letter-commands
+	.byte '1234',$03,$8d,'XY'	:1,2,3,4,cancel,return,x,y
+	.byte 'M',$9d,$1d,$91,$11	;multicolor,left,right,up,down
+	.byte $93,$13,'A',cr,'C'	;clear screen,home,auto,copy
+cmdend
+
+defjmp 	;table of addresses of each sprdef command
+	.dbyte def040-1,def040-1,def040-1,def040-1 ;colors 1,3,2,4
+	.dbyte def050-1,def060-1 	;cancel, shifted return
+	.dbyte def090-1,def080-1,def070-1 ;x,y expand, multicolor toggle
+	.dbyte def120-1,def110-1 	;left, right move
+	.dbyte def140-1,def130-1 	;up,down move
+	.dbyte def100-1,dohome-1 	;clear screen, home cursor
+	.dbyte def150-1,def160-1 	;toggle auto-advance, return
+	.dbyte def_copy-1		;copy another sprite
+
+
+;  valid ascii codes for colors
+;
+colnum	.byte $90,$05,$1c,$9f		;black   - white    - red     - cyan
+	.byte $9c,$1e,$1f,$9e		;purple  - green    - blue    - yellow
+	.byte $81,$95,$96,$97		;orange  - brown    - lt red  - dk grey
+	.byte $98,$99,$9a,$9b		;m. grey - lt green - lt blue - lt grey
+colend
+	.page
+
+getvm	lda _ldtb2,x
+	sta grapnt
+	lda _ldtb1,x
+	and #3
+	ora #>color_ram_lo
+	sta grapnt+1
+	rts
+
+
+def_clear			;clear sprite def'n area
+	lda vic+33
+	jsr colbyt_1		;make both nybbles = bgnd
+	ldx #20	 		;init bottom row of def'n area
+
+10$	pha
+	jsr getvm
+	pla
+	ldy #23
+
+20$	sta (grapnt),y		;clear 1 line of def'n area
+	dey
+	bpl 20$
+	dex
+	bpl 10$
+	rts
+
+;end

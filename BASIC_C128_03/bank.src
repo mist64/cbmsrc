@@ -1,0 +1,25 @@
+	.page
+	.subttl BANK Command
+
+;********************************************************
+;*
+;*  Set Context Bank for SYS, PEEK, POKE.
+;*
+;*  Syntax:	BANK n
+;*  Where:
+;*	    n=0  ==> ram 0
+;*	    n=1  ==> ram 1
+;*	    n=14 ==> system rom / io out (charrom in)
+;*	    n=15 ==> system rom / io in
+;*
+;********************************************************
+
+bank	jsr getbyt	;get bank number in .x
+	cpx #16
+	bcs 10$		;bank >15 is an error
+	stx current_bank
+	rts
+
+10$	jmp fcerr	;illegal value error
+
+;end

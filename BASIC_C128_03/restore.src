@@ -1,0 +1,36 @@
+	.page
+	.subttl restore command
+;*********************************************************************
+;*
+;* restore command
+;*
+;* reset pointers to next data statement. allows optional argument
+;* specifying a specific line number, otherwise default is
+;* beginning of text area.
+;*
+;*********************************************************************
+restor
+	beq restore$1	;branch if no argument...use default
+	jsr getwrd	;get 2 byte argument
+	sty linnum
+	sta linnum+1
+	jsr fndlin	;get pointer to specified line
+	bcs 1$		;branch if found...
+	jmp userr	;else flag an error
+1$	lda lowtr	;decrement 2 byte pointer, and save it
+	ldy lowtr+1
+	bcs restore$2		;always
+
+restore$1
+	sec
+	lda txttab
+	ldy txttab+1
+restore$2
+	sbc #1
+	bcs 1$
+	dey
+1$	sta datptr
+	sty datptr+1
+	rts
+
+;end

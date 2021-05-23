@@ -1,0 +1,55 @@
+	.page
+	.subttl FRE Function
+
+;*****************************************************************************
+; fre(n) function
+;
+;   where:
+;	n=0 returns amount of free ram in bank 0. This is the area between
+;	    top of text (TEXT_TOP) and top of available ram (MAX_MEM_0).
+;	n=1 returns amount of free ram in bank 1. This is the area
+;	    between top of arrays (STREND) and bottom of strings (FRETOP)
+;
+;*****************************************************************************
+
+fre	jsr conint	;get integer argument in .x
+	cpx #1		;which bank?
+	bcc 1$		;go do bank zero
+	beq 2$		;go do bank one
+	jmp fcerr	;any other is unpleasant to talk about
+
+1$	sec
+	lda max_mem_0
+	sbc text_top
+	tay		;set up result for nosflt
+	lda max_mem_0+1
+	sbc text_top+1
+	bcs 3$
+	ldx fretop
+	inx
+	iny
+	sta arisgn
+	tya
+	sec
+	sbc #5
+	sta facov
+4$	lda facov
+	eor $ae37,x
+	eor arisgn
+	beq val_2
+	jsr $ffd2
+	inc facov
+	inx
+	bne 4$
+	rts
+
+2$	jsr garba2	;do garbage collect
+	sec
+	lda fretop
+	sbc strend
+	tay
+	lda fretop+1
+	sbc strend+1
+3$	jmp nosflt	;go float the number
+
+;end

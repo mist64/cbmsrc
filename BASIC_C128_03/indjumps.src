@@ -1,0 +1,43 @@
+	.page
+	.subttl Indirect Load Subroutines
+
+inddef	lda #defpnt
+	jmp indsub_ram1
+
+indfrm	lda #form
+	jmp indsub_ram1
+
+inddpt	lda #dscpnt
+	jmp indsub_ram1
+
+indhtr	lda #hightr
+	jmp indsub_ram0
+
+indhtr_ram1
+	lda #hightr
+	jmp indsub_ram1
+
+indfmo	lda #facmo
+	jmp indsub_ram1
+
+indlow	lda #lowtr
+	jmp indsub_ram0
+
+indst1	lda #strng1
+	jmp indsub_ram0
+
+indst1_ram1
+	lda #strng1
+	jmp indsub_ram1
+
+indgrb	lda #grbpnt
+	jmp indsub_ram1
+
+indlow_ram1
+	lda #lowtr
+	jmp indsub_ram1
+
+indin1	lda #index1
+	jmp indsub_ram0
+
+;end

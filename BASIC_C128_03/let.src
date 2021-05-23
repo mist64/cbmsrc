@@ -1,0 +1,247 @@
+	.page
+	.subttl LET command
+
+;****************************************************************
+;*
+;*  [LET] variable = expression
+;*
+;****************************************************************
+
+let	jsr ptrget	;get pntr to variable into "varpnt".
+	sta forpnt	;preserve pointer.
+	sty forpnt+1
+	lda #equltk
+	jsr synchr	;"=" is necessary.
+	lda intflg	;save for later.
+	pha
+	lda valtyp	;retain the variable's value type
+	pha
+	jsr frmevl	;get value of formula into "fac".
+	pla
+	rol a		;carry set for string , off for numeric.
+	jsr chkval	;make sure "valtyp" matches carry.
+			;and set zero flag for numeric.
+	bne copstr	;if numeric, copy it.
+	pla		;get number type.
+
+qintgr	bpl copflt	;store a flting number.
+	jsr round	;round integer.
+	jsr ayint	;make two-byte number.
+	ldy #0
+	lda facmo	;get high 
+	sta sw_rom_ram1
+	sta (forpnt),y	;store it.
+	iny
+	lda faclo	;get low.
+	sta (forpnt),y
+	rts
+
+
+copflt	ldx forpnt
+	ldy forpnt+1
+	sta sw_rom_ram1
+	jmp movmf	;put number @fdrpnt.
+
+
+copstr	pla		;if string, no intflg.
+
+inpcom	ldy forpnt+1	;ti$?
+	cpy #>zero	;only ti$ can be this on assign.
+	bne getspt	;was not ti$.
+	jsr frefac	;we won't need it.
+	cmp #6		;length correct?
+	bne fcerr2
+	ldy #0		;yes, do setup.
+	sty facexp	;zero to start with.
+	sty facsgn
+timelp
+	sty fbufpt	;save position.
+	jsr timnum	;get a digit.
+	jsr mul10	;whole quantity by 10.
+	inc fbufpt
+	ldy fbufpt
+	jsr timnum
+	jsr movaf
+	tax		;if num=0 then no mult.
+	beq noml6	;if =0, go tit.
+	inx		;mult by two.
+	txa
+	jsr finml6	;add in and mult by 2 gives *6.
+noml6	ldy fbufpt
+	iny
+	cpy #6		;done all six?
+	bne timelp
+	jsr mul10	;one last time.
+	jsr qint	;shift it over to the right.
+	ldx facmo	
+	ldy facmoh
+	lda faclo
+	jmp _settim
+timnum
+	jsr indin1_ram1	;lda (index),y
+	jsr qnum
+	bcc gotnum
+fcerr2
+	jmp fcerr	;must be numeric string.
+gotnum
+	sbc #$2f	;c is off.
+	jmp finlog	;add in digit to fac.
+
+
+
+dskx1
+	pla
+	iny
+dskx2
+	cmp fretop+1
+	bcc dntcpy
+	bne qvaria
+	dey
+	jsr indfmo
+	cmp fretop
+	bcc dntcpy
+qvaria
+	ldy faclo
+	cpy vartab+1	;if (vartab).gt.(facmo), don't copy.
+	bcc dntcpy
+	bne copy	;it is less.
+	lda facmo
+	cmp vartab	;compare low orders.
+	bcs copy
+dntcpy
+	lda facmo
+	ldy facmo+1
+	jmp copyc
+
+
+
+getspt
+	ldy #2		;get pntr to descriptor.
+	jsr indfmo
+	cmp dsdesc+2	;check for ds$ hi
+	bne dskx2	;nope
+	pha
+	dey
+
+	jsr indfmo
+	cmp dsdesc+1	;check for ds$ lo
+	bne dskx1	;nope
+	lda dsdesc	;check if len=0
+	beq dskx1	;yup
+	pla		;fall through to copy
+
+copy
+	ldy #0
+	jsr indfmo
+	jsr strini	;get room to copy string into.
+	lda dscpnt	;get pointer to old descriptor, so
+	ldy dscpnt+1	
+	sta strng1	;movins can find string.
+	sty strng1+1
+	jsr movins	;copy it.
+
+	lda strng1	;fix to free get strings
+	ldy strng1+1
+	jsr fretms	;free the string, if it is a temp
+
+	lda #<dsctmp
+	ldy #>dsctmp
+copyc
+	sta dscpnt
+	sty dscpnt+1
+	sta index	;index points to new descriptor
+	sty index+1
+	jsr fretms
+
+;   fix the strings by flagging the old string as
+;   garbage and the new string by pointing it to
+;   its new descriptor.
+
+	jsr stradj	;set up new string
+	bcc 10$		;leave it alone
+	ldy #0
+	lda forpnt	;put in backwards link
+	sta sw_rom_ram1	;set up string bank
+	sta (index),y
+	iny
+	lda forpnt+1
+	sta (index),y
+
+10$	lda forpnt	;fix old string
+	sta index
+	lda forpnt+1
+	sta index+1
+	jsr stradj	;point to old string
+	bcc 20$		;in text do not fix
+	dey		;restore y
+	lda #$ff	;garbage flag
+	sta sw_rom_ram1	;set up string bank
+	sta (index),y
+	dey
+	txa
+	sta (index),y	;store length
+
+20$	ldy #2
+
+30$	lda #dscpnt
+	jsr indsub_ram1	;lda (dscpnt),y
+	sta (forpnt),y	;set the descriptor
+	dey
+	bpl 30$
+	rts
+
+
+
+;   takes the pointer index which points to a descriptor
+;   and indexes to the desciptors string data.
+;   if the string is not in string space (no action to take)
+;   we return with carry clear, else we return with
+;   the pointer set to the link bytes in the string
+;   the length in .a and the carry set.
+
+stradj	ldy #0
+	jsr indin1_ram1	;push length on stack
+	pha
+	beq sadj8	;length 0 do nothing
+	iny
+	jsr indin1_ram1	;lo byte to x
+	tax
+	iny
+	jsr indin1_ram1
+	cmp max_mem_1+1
+	bcc sadj2	;ok
+	bne sadj8	;if above top of memory
+	cpx max_mem_1	;msb the same, test lsb
+	bcs sadj8	;if above top of memory
+sadj2
+	jsr indin1_ram1
+	cmp fretop+1
+	bcc sadj8	;if below fretop
+	bne sadj3
+	cpx fretop
+	bcc sadj8	;if below fretop
+sadj3
+	cmp dsdesc+2
+	bne sadj4	;fix
+	cpx dsdesc+1
+	beq sadj8
+sadj4
+	stx index	;ok set pointer
+	sta index+1
+	pla		;get back length
+	tax		;into x also
+	clc
+	adc index
+	sta index
+	bcc sadj6
+	inc index+1
+sadj6
+	sec		;carry set
+	rts
+
+sadj8
+	pla		;clean up stack
+	clc
+	rts
+
+;end

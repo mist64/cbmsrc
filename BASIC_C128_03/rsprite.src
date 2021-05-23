@@ -1,0 +1,61 @@
+	.page
+	.subttl RSPRITE Function
+
+;******************************************************************
+;*
+;*	RSPRITE - Return sprite information
+;*
+;*	Syntax : RSPRITE (sprite_number, argument)
+;*
+;*	Where  : sprite_number = [1..8]
+;*		 argument = [0..5]
+;*			0 : enabled?	(y(1)/n(0))
+;*			1 : color?  (1..16)
+;*			2 : prioroty over background? (y(1)/n(0))
+;*			3 : expand in x direction? (y(1)/n(0))
+;*			4 : expand in Y direction? (y(1)/n(0))
+;*			5 : multicolor sprite?     (y(1)/n(0))
+;******************************************************************
+
+rsprite	jsr conint	;get first arg, sprite #, in .X
+	dex		;adjust [1..8] to [0..7]
+	cpx #8		; (318018-03 mod; fab)
+	bcs 98$		;value error
+	txa
+	pha		;save sprite number
+
+	jsr chkcom	;check for proper delimiter
+	jsr getbyt	;do frmevl, get 1 byte arg (arg) in .X
+	jsr chkcls	;look for closing paren
+
+	cpx #6
+	bcs 98$		;value error
+
+	pla		;sprite number
+	tay
+	jsr put_io_in_map
+	lda vic+39,y	;assume 'color'
+	and #$0f
+	clc
+	adc #1		;adjust to 'keyboard' colors
+	cpx #1
+	beq 10$		;it was color. set up for float
+
+	lda rspmod,x	;get index for this function
+	tax
+	lda sbits,y	;get mask for this sprite number
+
+	and vic,x
+	beq 10$
+	lda #1		;return all non-zeros as '1'
+
+10$	tay
+	jmp sngflt	;go float 1 byte arg in .Y
+
+
+98$	jmp fcerr	;bad value error
+
+rspmod .byte 21,39,27,29,23,28	;table in indices
+
+;end
+

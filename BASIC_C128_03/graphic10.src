@@ -1,0 +1,176 @@
+	.page
+	.subttl 'graphics10'
+grpcol
+	jsr isgrap      ;make sure graphics area allocated
+
+
+
+;************************************************************
+;
+;   incolr  --  get color selection parameter into colsel
+;
+;************************************************************
+
+incolr
+	ldx #1			;get an optional 1 byte val, def=fg(1)
+	jsr chrgot
+incol1
+	beq incol2      	;eol, use default
+	cmp #','
+	beq incol2      	;just ',', use default
+	jsr getbyt
+	cpx #4			;must be 0-3
+	bcs illval      	;..else illegal value
+	cpx #2
+	bit _graphm      	;if hires, must be 0 or 1
+	bmi incol2
+	bcs illval
+incol2
+	stx colsel
+	rts
+
+illval
+	jmp fcerr		;illegal value
+
+
+
+;******************************************************************
+;
+;  incord  ---  get x/y coordinates from input stream into vwork+x
+;
+;  coordinate may have form :
+;      x,y = absolute xpos & absolute ypos
+;      +/-x,y = relative xpos & absolute ypos
+;      x,+/-y = absolute xpos & relative ypos
+;    +/-x,+/-y = relative xpos & relative ypos
+;	   x;y = x-distance at an angle y
+;  relative distances and angle distances are relative to
+;    current xpos and/or ypos
+;  values are scaled to current mode parameters if required
+;
+;***************************************************************
+
+
+incor2				;enter here for optional argument
+	jsr chrgot		;end of line?
+	beq incr2a		;yes, use defaults
+	jsr chkcom
+	cmp #','		;is there really an arg?
+	bne incord		;yes, let'er rip
+
+incr2a				;set default pos = current pos
+	ldy #0
+incr2c
+	lda xpos,y
+	sta vwork,x
+	inx
+	iny
+	cpy #4
+	bne incr2c
+	rts
+
+
+incor3				;enter here for non-optional arg preceded by a comma
+	jsr chkcom
+
+
+incord
+	stx vtemp4		;save offset to destination
+	jsr cordsb		;get 2-byte x-parameter
+	jsr chrgot
+	cmp #','
+	beq docord		;skip ahead if have comma
+	cmp #';'		;check for semi-colon
+	beq docrd1		;skip if have angle
+	jmp snerr		;show syntax message
+
+
+docrd1
+	jsr chrget      	;skip over '	;'
+	jsr getwrd      	;get 2-byte angle in a,y
+	sta z_p_temp_1		;swap a,y
+	tya
+	ldy z_p_temp_1
+	jsr gtang1      	;get sine & cosine values for the angle
+	ldx vtemp4
+	lda vwork,x
+	sta vwork+2,x   	;move length to y-parameter
+	lda vwork+1,x
+	sta vwork+3,x
+	jsr scalxy      	;scale the values
+	lda #$0e
+	sta vtemp5
+	clc
+	ldx vtemp4
+doang1
+	jsr angmlt      	;multiply length * angle
+	sta vwork,x     	;save angle result
+	tya
+	sta vwork+1,x
+	ldy #xpos-vwork
+	lsr vtemp5
+	bcc doang2
+	ldy #ypos-vwork
+doang2
+	jsr dotwo		;add/subtract value to current position
+	sta vwork,x
+	tya			;save result in destination
+	sta vwork+1,x
+	inx
+	inx
+	lsr vtemp5
+	bne doang1      	;do y-coordinate
+	clc
+	rts
+
+
+docord
+	jsr chrget      	;skip over comma
+	inc vtemp4      	;point to y-destination
+	inc vtemp4
+	jsr cordsb      	;get y-paramter
+	ldx vtemp4
+	dex
+	dex
+	jsr scalxy      	;scale the values
+	ldy #ypos-vwork
+	ldx vtemp4
+	inx
+	inx
+docor1
+	dex
+	dex
+	lsr vtemp5
+	bcc docor2      	;skip if not relative
+	jsr addtwo      	;add to current position
+	sta vwork,x
+	tya
+	sta vwork+1,x
+docor2
+	ldy #xpos-vwork
+	cpx vtemp4
+	beq docor1      	;loop to do x-coordinate
+	clc
+	rts
+
+
+;
+; cordsb -- get the next 2-byte parameter
+;
+cordsb
+	jsr chrgot      	;read character
+	cmp #plustk     	;check if relative - plus sign
+	beq crdsb1      	;skip if yes
+	cmp #minutk
+	beq crdsb1      	;skip if relative - minus sign
+	clc			;.c=1 if relative coord, .c=0 if absolute
+crdsb1
+	rol vtemp5		;save coord type for later
+	jsr cordsb_patch	; (318018-03 mod; fab: get SIGNED value in (y,a))
+	ldx vtemp4
+	sta vwork+1,x   	;save 2-byte parameter
+	tya
+	sta vwork,x
+	rts
+
+;.end

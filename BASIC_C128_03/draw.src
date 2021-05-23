@@ -1,0 +1,49 @@
+	.page
+	.subttl DRAW Command
+;********************************************************
+;
+;  draw {s} { ,p !  to p }
+;
+;	   where:
+;		  s    = optional color selection (1-4)
+;		  p    = point to plot
+;		  to p = draw a line to the point p
+;
+;********************************************************
+
+draw	jsr isgrap		;make sure graphics area has been allocated
+
+	ldx #1
+	stx colsel		;set default color selection
+
+	jsr chrgot
+	cmp #totk		;check if of the form 'draw to'
+	beq 10$			;yes, use defaults
+
+	jsr incolr		;get color, or set up default
+	jsr chrgot		;eol?
+	bne 10$			;no, go on.
+	jmp gplot		;form is 'DRAW' : plot one point at xpos,ypos
+
+10$	jsr chrgot
+	cmp #','
+	beq 20$			;statement of form ',p'
+	cmp #totk
+	beq 20$			;'to p'
+	rts			;ok if end of statement, anything else will crash
+
+20$	pha
+	jsr chrget		;skip over comma or semicolon
+	ldx #xdest-vwork
+	jsr incord
+	pla
+	bpl 40$			;branch if ','
+	jsr drawln
+	jmp 10$
+
+40$	jsr dstpos
+	jsr gplot		;plot to the point
+	jmp 10$
+
+
+;.end

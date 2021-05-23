@@ -1,0 +1,9 @@
+	.page
+	.subttl FETCH Command
+
+; Fetch - set up for call to kernal routine
+
+fetch	lda #$85
+	jmp swap_01
+
+;end

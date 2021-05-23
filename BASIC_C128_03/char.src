@@ -1,0 +1,255 @@
+	.page
+	.subttl CHAR Command
+
+;*****************************************************************
+;
+;   char (s),x,y,str(,r) -- display a character string
+;	s = color selection (1-4) (default is foreground (1))
+;	x,y = column/row position for 1st character
+;	str = character string (1-255)
+;	r = normal(0) or reverse(1)
+;
+;*****************************************************************
+
+char	jsr incolr		;get color selection
+
+	ldx #llen+1		;set up screen size. assume graphics
+	ldy #nlines+1
+	lda _graphm		;test if assumption correct
+	bne 10$			;..it's twooo! it's twooo!
+	jsr _screen_org		;it's text. test how large the virtual window is
+	inx
+	iny
+
+10$	stx colcnt
+	sty rowcnt
+
+	jsr combyt		;check comma, get column number
+	cpx colcnt
+	bcs charer		;exit - col number too large
+	stx colcnt
+
+	jsr combyt		;check comma, get row number
+	cpx rowcnt
+	bcc char10		;skip if okay
+
+charer	jmp fcerr		;exit - illegal value
+
+char10	stx rowcnt		;initialize column counter
+	jsr chrgot		;end of line?
+	bne 10$			;no, go get string
+
+	lda #0			;force a length of zero,
+	beq 20$			;..and skip over string handler
+
+10$	jsr chkcom		;check for comma
+
+	jsr frmstr		;do frmevl, frestr. returns len in a, index points to string
+20$	sta sw_rom_ram0
+	sta numcnt		;save length
+	tya
+	pha			;save index
+	txa
+	pha
+
+	jsr optzer		;look for optional invert (def. is 0, normal)
+	txa			;move .x's lsb to xysgn's msb
+	ror a
+	ror xysgn
+
+	pla			;restore 'index' (ptr to string)
+	sta index
+	pla
+	sta index+1
+	lda _graphm
+	bne char20		;skip if not text screen
+
+; case: printing to text screen
+
+	ldx rowcnt		;text mode: treat like 'print at x,y,string'
+	ldy colcnt
+	clc
+	jsr char_patch		;move cursor (318018-03 mod: fab; call plot w/IO in)
+	ldy #0
+
+	bit xysgn		;test if reverse flag set
+	bpl 30$			;branch if not
+	lda #18			; (318018-03 mod: FAB; call print w/IO in)
+	jsr k_print		;otherwise send 'reverse on' character
+
+30$	cpy numcnt
+	beq 40$
+	jsr indin1_ram1		;get the character from the string
+	jsr put_io_in_map
+	jsr _print		;print to text screen
+	iny
+	bne 30$
+
+40$	bit xysgn		;test if reverse flag set
+	bpl 50$			;branch if not
+	lda #146		; (318018-03 mod: FAB; call print w/IO in)
+	jsr k_print		;else send 'reverse off' char, do rts
+50$	rts
+
+
+; case: printing to bit mapped screen
+
+char20	jsr isgrap		;make sure a graphic area has been allocated
+
+	lda upper_graphic
+	sta character_rom	;set up pointer to upper/graphic character base
+
+	lda foreground
+	tax
+	pha			;save foreground color
+	lda colsel
+	pha
+	bit _graphm
+	bpl char25		;skip if not multicolor mode
+	pla			;colsel
+	beq char27		;use fgnd color (feature)
+	lsr a
+	beq char27		;use fgnd color
+	ldx multicolor_1
+	bcc char27		;use multicolor-1
+	ldx multicolor_2
+	bcs char27		;use multicolor-2
+
+char25	ldx foreground		;high-res mode
+	pla			;colsel
+	bne char27		;use foreground color
+	jsr put_io_in_map
+	ldx vic_background
+
+char27	stx foreground
+	ldx rowcnt
+	ldy #0
+	sty strcnt		;initialize string counter
+
+char30	ldy strcnt		;get string offset
+	inc strcnt		;increment offset
+	jsr indin1_ram1		;get string character
+	sta sw_rom_ram0
+	dec numcnt
+	bmi char50		;exit if end of string
+
+	cmp #14			;is character 'go to upper/lower'?
+	bne 10$			;no, go on.
+	lda upper_lower
+	bne 20$
+
+10$	cmp #142		;is character 'go to upper/graphic'?
+	bne 30$			;no, go on.
+	lda upper_graphic
+20$	sta character_rom	;point to correct rom
+	bne 40$			;always
+
+30$	ldy colcnt
+	jsr chrdsp		;not special, so display the character
+	inc colcnt		;increment column count
+
+40$	cpy #llen-1     	;check if at end
+	bcc char30		;loop if not
+	ldy #0
+	sty colcnt		;set to start of next line
+	inx
+	cpx #24
+	bcc char30		;loop if not at end of screen
+
+char50	pla
+	sta foreground		;restore color
+	rts
+
+
+
+;*****************************************************************
+;
+;	chrdsp - display a character
+;	   x = row number
+;	   y = column number
+;	   a = character
+;
+;*****************************************************************
+
+chrdsp	pha			;save character
+	jsr docolr		;set colors
+
+	tya			;get addr for row (X) and col (Y) in grapnt
+	clc
+	adc _ldtb2,x		;add column position to low byte offset
+	sta grapnt
+	lda _ldtb1,x		;get high byte screen address
+	adc #0			;add any carry
+	asl grapnt
+	rol a
+	asl grapnt		;mult by 8 to get offset into 8k area
+	rol a
+	asl grapnt
+	rol a
+	sta grapnt+1
+
+	sta sw_rom_ram0		;mostly here to take i/o out of map
+	lda #0
+	sta z_p_temp_1
+	pla			;recall character
+	pha
+	asl a			;multiply by 8 to get char rom addr
+	rol z_p_temp_1
+	asl a
+	asl a
+	rol z_p_temp_1
+	sta index2
+	lda z_p_temp_1
+	adc character_rom	;get char rom base
+	sta index2+1
+	tya
+	pha			;save column number
+	ldy #7
+
+movchr	lda xysgn		;rvs fld flag
+	asl a
+	lda (index2),y		;get char byte (was jsr charin)
+	bcc movch0		;invert fields if carry set
+	eor #$ff
+
+movch0	bit _graphm		;get graphic mode
+	bpl dochr0		;skip if not multicolor
+
+	and #$aa		;remove every other bit
+	sta z_p_temp_1
+	lda colsel		;what is color source?
+	bne movch1
+	lda z_p_temp_1
+	bcs movrvs		;bgnd: is it rvs fld?
+	lsr a			;bgnd (do fgnd on mc#1)
+	eor z_p_temp_1
+	eor #$aa
+	bne dochr0
+movrvs
+	ora #$55	 	;bgnd rvs (do fgnd on mc#2)
+	bne dochr0
+movch1
+	cmp #2
+	bne movch2
+	lda z_p_temp_1		;mc#1 pattern '10'
+	bcs dochr0
+movch2
+	bcc movch3
+	lda z_p_temp_1		;mc#2 pattern '11'
+	lsr a
+	eor z_p_temp_1
+	bcc dochr0
+movch3
+	lda z_p_temp_1		;fgnd pattern '01'
+	lsr a
+
+dochr0
+	sta (grapnt),y  	;save into graphic bit map
+	dey
+	bpl movchr
+	pla
+	tay			;restore colnum
+	pla			;restore character
+	rts
+
+;end

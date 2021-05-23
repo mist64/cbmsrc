@@ -1,0 +1,22 @@
+	.page
+	.subttl WIDTH Command
+
+;***********************************************************
+;*
+;*   WIDTH - set single/double line drawing width
+;*
+;*	syntax : WIDTH arg
+;*
+;*	where  : arg :== 1(single) | 2(double)
+;*
+;***********************************************************
+
+set_width
+	jsr getbyt		;get 1 byte arg in .X
+	dex			;adjust 1..2 to 0..1
+	cpx #2
+	bcs 98$
+	stx width
+	rts
+
+98$	jmp fcerr		;illegal value error

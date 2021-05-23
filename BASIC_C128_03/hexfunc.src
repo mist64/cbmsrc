@@ -1,0 +1,41 @@
+	.page
+	.subttl HEX$ Function
+
+hexd	jsr chknum
+	lda poker
+	pha
+	lda poker+1
+	pha
+	jsr getadr	;2 byte val in (poker)
+	lda #4
+	jsr strspa
+	ldy #0
+	lda poker+1
+	sta sw_rom_ram1	;set up string bank
+	jsr hexit
+	lda poker
+	jsr hexit
+	pla
+	sta poker+1
+	pla
+	sta poker
+	jmp chrd1	;pla,pla,jmp putnew
+
+hexit	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr dohex
+	pla
+
+dohex	and #$0f
+	cmp #$0a
+	bcc 1$
+	adc #6
+1$	adc #'0'
+	sta (dsctmp+1),y
+	iny
+	rts
+
+;end

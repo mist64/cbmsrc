@@ -1,0 +1,94 @@
+	.page
+	.subttl SPRITE Command
+
+;*********************************************************************
+;
+;	SPRITE n [,e [,c [,p [,x [,y [,r] ] ] ] ] ]
+;
+;	where:	n :== sprite number (1-8)
+;		e :== enable (0 off, 1 on)
+;		c :== color (1-16)
+;		p :== priority over background (0 no, 1 yes)
+;		x :== expand in x direction (0 no, 1 yes)
+;		y :== expand in y direction (0 no, 1 yes)
+;		r :== resolution (0 hires, 1 multicolor)
+;
+;*********************************************************************
+
+sprite	jsr get_sprite_number	;get sprite number in z_p_temp_1
+
+	jsr optbyt		;look for (optional) enable
+	bcc 10$			;none here, don't change
+	ldy #21
+	jsr sprbit		;set/clear sprite bit
+
+10$	jsr optbyt		;get (optional) color
+	bcc 20$			;branch if no arg
+	dex			;adjust 1..16 to 0..15
+	cpx #16
+	bcs sprite_error	;too big
+	txa
+	ldx z_p_temp_1		;get back sprite number
+	jsr put_io_in_map
+	sta vic+39,x
+
+20$	jsr optbyt		;look for (optional) priority
+	bcc 30$
+	ldy #27
+	jsr sprbit
+
+30$	jsr optbyt		;look for (optional) x expansion
+	bcc 40$
+	ldy #29
+	jsr sprbit
+
+40$	jsr optbyt		;look for (optional) y expansion
+	bcc 50$
+	ldy #23
+	jsr sprbit
+
+50$	jsr optbyt		;look for (optional) resolution
+	bcc 60$
+	ldy #28
+	jsr sprbit
+
+60$	rts
+
+sprite_error	jmp fcerr		;bad value
+
+
+
+
+;  set or clear a bit in the vic's registers
+;	.X = 1 to set, 0 to clear
+;	.Y = register in vic to operate on
+
+sprbit	txa
+	lsr a			;put lsb in .C (0 clear, 1 set sprite bit)
+	bne sprite_error	;only 0 or 1, please.
+	ldx z_p_temp_1		;get sprite number
+	lda sbits,x
+	jsr put_io_in_map
+	ora vic,y
+	bcs 10$
+	eor sbits,x
+10$	sta vic,y
+	rts
+
+
+sbits	.byte $01,$02,$04,$08,$10,$20,$40,$80
+
+
+
+
+
+
+get_sprite_number
+	jsr getbyt
+	dex
+	cpx #8
+	bcs sprite_error
+	stx z_p_temp_1
+	rts
+
+;.end

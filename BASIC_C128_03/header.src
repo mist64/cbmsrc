@@ -1,0 +1,10 @@
+	.page
+	.subttl 'header'
+
+	*=$4000
+
+	jmp hard_reset
+	jmp soft_reset
+	jmp basic_irq
+
+;.end

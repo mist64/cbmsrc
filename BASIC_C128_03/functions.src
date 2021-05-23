@@ -1,0 +1,224 @@
+	.page
+	.subttl Function Handler
+
+; at this point, eval has determined that the token in a has to be a
+; function. it must therefor be in the range sgn..mid$ (old basic),
+; or rgr..instr (new extensions). we will collapse these two
+; disjoint blocks into one continuous range.
+;
+; on entry, we can assume the token is >= 'sgn'
+
+isfun	cmp #esc_fn_tk	;is this an escape function?
+	beq do_esc_fn	;branch if so
+	cmp #insttk+1	;instring token is last function
+	bcs snerr1
+	cmp #middtk+1
+	bcc 1$		;no need to adjust
+	sbc #rgrtk-middtk-1
+
+1$	pha		;save token
+	tax
+	jsr chrget	;set up for synchk.
+	cpx #insttk-1	;look for (adjusted) instr token
+	beq 2$
+	cpx #middtk+1
+	bcs oknorm
+	cpx #lefttk	;is it past "lastnum"?
+	bcc oknorm	;no, must be normal function.
+
+
+; Most functions take a single argument. the return address of these functions
+; is "chknum", which ascertains that (valtyp)=0 (numeric). Normal functions
+; that return string results (eg.,chr$) must pop off that return addr and 
+; return directly to "frmevl".
+;
+; The so called "funny" functions can take more than one argument, the first
+;  of which must be string and the second of which must be a number between 0
+; and 255. The closed parenthesis must be checked and return is directly to
+; "frmevl" with the text pointer pointing beyond the ")". the pointer to the
+; description of the string argument  is stored on the stack underneath the
+;  value of the integer argument.
+
+2$	jsr chkopn	;check for an open parenthesis.
+	jsr frmevl	;eat open paren and first argument.
+	jsr chkcom	;two args so comma must delimit.
+	jsr chkstr	;make sur efirst was string.
+
+	pla		;move token to x
+	cmp #insttk-1   ;yet another special case: instr bails out here.
+	beq instgo
+	tax
+	lda facmo+1
+	pha
+	lda facmo
+	pha
+	txa		;push token on stack
+	pha
+	jsr getbyt
+	pla		;put token in y
+	tay
+	txa
+	pha
+	tya		;put token in a
+	jmp fingo	;go set up to evaluate fn
+
+
+
+oknorm
+	jsr parchk	;check for open parens, evaluate argument
+	pla		;restore token
+
+fingo
+	sec		;convert token to index into jump table
+	sbc #onefun
+	asl a
+	tay
+	lda fundsp+1,y
+	sta jmper+2
+	lda fundsp,y
+	sta jmper+1
+	jsr jmper	;dispatch.
+			;string functions remove this ret addr.
+	jmp chknum	;check for numericness and return.
+
+	.page
+; escape function handler
+
+do_esc_fn
+	jsr chrget		get second token
+	beq snerr6		;error if no second token
+	cmp #pointer_tk
+	beq 10$			;skip pre-parse if 'POINTER()'
+	pha
+	jsr chrget		;should be '('
+	jsr chkopn
+	jsr frmevl		;evaluate first argument
+	pla
+10$	cmp #lowest_esc_fn_tk	;see if this esc fn is one of ours
+	bcc foreign_esc_fn	;nope.
+	cmp #highest_esc_fn_tk+1
+	bcs foreign_esc_fn	;nope
+; convert to index into the function dispatch table
+	adc #highest_old_fn_tk-lowest_esc_fn_tk-1
+	bne fingo		;always
+
+
+foreign_esc_fn
+	sec			;flag 'up for grabs'
+	jsr go_foreign_esc_fn
+n_esc_fn_vec
+	bcs snerr6		;it's unwanted. off to the refuse pile
+	jmp chknum
+
+go_foreign_esc_fn
+	jmp (esc_fn_vec)
+
+instgo	jmp instr
+
+snerr6	jmp snerr
+	.page
+
+orop	ldy #255	;must always complement.
+	.byte $2c	;skip two instructions.
+andop	ldy #0
+	sty count	;operator.
+	jsr ayint	;(facmo&lo)=int value and check size.
+	lda facmo	;use demorgan's law on high.
+	eor count
+	sta integr
+	lda faclo	;and low.
+	eor count
+	sta integr+1
+	jsr movfa
+	jsr ayint	;(facmo&lo)=int of arg.
+	lda faclo
+	eor count
+	and integr+1
+	eor count	;finish out demorgan.
+	tay		;save high.
+	lda facmo
+	eor count
+	and integr
+	eor count
+	jmp givayf	;float 9a,y) and ret to user.
+			;
+			;time to perform a relational operator.
+			;(domask) contains the bits as to which relational
+			;operator it was. carry bit on=string compare.
+			;
+
+
+dorel
+	jsr chkval	;check for match.
+	bcs strcmp	;is it a string?
+	lda argsgn	;pack argument for fcomp.
+	ora #$7f
+	and argho
+	sta argho
+	lda #<argexp
+	ldy #>argexp
+	jsr fcomp
+	tax
+	jmp qcomp
+
+
+
+strcmp
+	lda #0
+	sta valtyp
+	dec opmask
+	jsr frefac	;free the faclo string.
+	sta dsctmp	;save it for later.
+	stx dsctmp+1
+	sty dsctmp+2
+	lda argmo	;get pointer to other string.
+	ldy argmo+1
+	jsr fretmp	;frees first desc pointer.
+	stx argmo
+	sty argmo+1
+	tax		;copy count into x.
+	sec
+	sbc dsctmp	;which is greater. if 0, all set up.
+	beq stasgn	;just put sign of difference away.
+	lda #1
+	bcc stasgn	;sign is positive.
+	ldx dsctmp	;length of fac is shorter.
+	lda #$ff	;get a minus one for negatives.
+stasgn	sta facsgn	;keep for later.
+	ldy #255	;set pointer to first string. (arg).
+	inx		;to loop properly.
+nxtcmp	iny
+	dex		;any characters left to compare?
+	bne getcmp	;not done yet.
+	ldx facsgn	;use sign of length difference.
+			;since all characters are the same.
+qcomp	bmi docmp	;c is always set then.
+	clc
+	bcc docmp	;always branch.
+
+
+getcmp	lda #argmo
+	jsr indsub_ram1	;(argmo),y
+	pha
+	lda #dsctmp+1
+	jsr indsub_ram1	;(dsctmp+1),y
+	sta syntmp
+	pla
+	cmp syntmp
+	beq nxtcmp
+	ldx #$ff
+	bcs docmp
+	ldx #1
+
+
+
+docmp
+	inx		;-1 to 1, 0 to 2, 1 to 4.
+	txa
+	rol a
+	and domask
+	beq goflot
+	lda #$ff	;map 0 to 0. all others to -1.
+goflot
+	jmp float	;float the one-byte result into fac.
+;.end

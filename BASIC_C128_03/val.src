@@ -1,0 +1,36 @@
+	.page
+	.subttl VAL function
+
+; The "val"function takes a string and turns it into a number by interpreting
+; the ascii digits etc. Except for the problem that a terminator must be
+; supplied by replacing the character beyond the string, VAL is merely a call
+; to floating point input ("fin").
+
+val	jsr len1	;get length
+	bne val_1
+	jmp zerofc	;return 0 if len=0
+;
+; use text to fp number code by faking a new text poiner
+;
+val_1	clc
+	adc index1
+	sta strng2	;add len to index1 and put in strng2
+	lda index1+1
+	adc #0
+	sta strng2+1
+
+	ldy #0
+	lda #strng2
+	jsr indsub_ram1	;replace character after string with $00 (fake eol)
+	pha		;save old character
+	tya		; (.A=0)
+	sta (strng2),y	;..and put in null.
+	jsr fin_chrget_2 ;get character pointed to and set flags.(sorta like chrgot)
+	ldx #1			;flag 'bank 1'
+	jsr fin	  	;go do evaluation
+	pla		;get pres'd character.
+	ldy #0
+	sta (strng2),y	;restore zeroed-out character
+val_2	rts
+
+;end

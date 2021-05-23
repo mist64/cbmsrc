@@ -1,0 +1,122 @@
+	.page
+	.subttl PEN / POT functions
+
+;***********************************************************
+;
+;	pot(n)  --  read paddles
+;
+;	   n =	1 : paddle-1 - x-position
+;		2 : paddle-1 - y-position
+;		3 : paddle-2 - x-position
+;		4 : paddle-2 - y-position
+;
+;	    result >= 256 --  trigger set
+;***********************************************************
+
+pot	jsr chkcls	;look for closing paren
+	jsr conint	;get 1 byte arg in .X
+	dex
+	cpx #4
+	bcs pot_error	;value error
+
+	jsr put_io_in_map
+	ldy #0
+	txa
+	ldx #$40
+	lsr a	    	;test if x-pos or y-pos
+	bcc 10$		;skip if x-position
+	iny		;increment offset into sidreg
+10$	lsr a
+	bcc 20$
+	ldx #$80
+20$	stx pot_temp_1	;a temp
+	php		;save status
+	sei		;disable irq - to inhibit keyboard
+	lda d1pra
+	pha		;save kybd output lines
+	stx d1pra		;turn on correct paddle
+	ldx #0
+
+30$	inx		;delay to let pots be read by sid
+	bne 30$
+
+40$	lda sid+25,y	;read x or y pot
+	cmp sid+25,y	;debounce
+	bne 40$
+
+	sta pot_temp_2	;save pot value
+	ldx #0	   	;set index to d1pra
+	bit pot_temp_1	;test if pot-0,1 or pot-2,3
+	bmi 50$		;skip if pot 2,3
+	inx		;index to d1prb
+50$	lda #04	  	;use joy line-2
+	dey		;test if pot-x or pot-y
+	bmi 60$		;skip if pot-x
+	asl a	    	;use joy line-3
+60$	ldy #$ff
+	sty d1pra	;disable kybd inpts
+	iny		;set to zero for no trigger
+	and d1pra,x     ;test if trigger set
+	bne 70$		;skip if not trigger
+	iny		;return value >255 for trigger
+70$	pla
+	sta d1pra	;restore kybd output lines
+	tya
+	ldy pot_temp_2	;restore pot value
+	plp		;restore status
+	jmp nosflt	;output 2-byte result
+
+pot_error
+	jmp fcerr
+	.page
+
+;*************************************************************
+;
+;  pen(n)  --  read light pen
+;
+;	n = 0	vic pen, x pos'n
+;	    1	vic pen, y pos'n
+;	    2	8563 pen, x pos'n
+;	    3   8563 pen, y pos'n
+;	    4   8563 trigger
+;
+;*************************************************************
+
+pen	jsr chkcls		;look for closing parens
+	jsr conint		;get 1 byte arg in .X
+	cpx #5
+	bcs pot_error		;bad value
+	cpx #2
+	bcs 20$			;8563
+
+	ldy vic_save+19,x	;get light pen value
+	sty pot_temp_1		;a temp
+	lda #0
+	sta vic_save+19,x	;reset to zero
+	cpx #0
+	bne 10$			;skip if y position
+	asl pot_temp_1    	;multiply * 2 if x position
+	adc #0			;make .A = 1 iff a bit rippled out of lsb
+10$	ldy pot_temp_1		;get lsb in .Y, msb's in .A,...
+	jmp nosflt		;float it
+
+20$	jsr put_io_in_map
+	cpx #4
+	beq 40$
+
+	ldy #17			;assume x (2) (r17)
+	cpx #2
+	beq 30$
+	dey			;el-wrongo. it was y (3) (r16)
+30$	sty _8563_addr
+	ldy _8563_data
+	jmp sngflt		;float 1 byte arg in .Y
+
+40$	lda _8563_addr		;read status
+	ldy #0			;assume no l.p. trigger
+	and #64
+	beq 50$
+	iny			;wrong - bit was set. return 1
+50$	jmp sngflt
+
+;end

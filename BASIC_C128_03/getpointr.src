@@ -1,0 +1,339 @@
+	.page
+	.subttl variable searching
+
+;	Routine to read the variable name at the current text position
+;	and put a pointer to it's value in VARPNT.
+;	[TXTPTR] points to the terminating character.
+;	Note that evaluating subscripts in a variable name can cause recursive
+;	calls to 'ptrget', so at that point all values must be stored on the stack.
+
+ptrget	ldx #0
+	jsr chrgot
+ptrgt1	stx dimflg	;store flag away
+ptrgt2	sta varnam
+	jsr chrgot	;get current character
+	jsr isletc	;check for a letter
+	bcs ptrgt3	;must be a letter
+interr	jmp snerr
+
+
+
+ptrgt3	ldx #0		;assume no second character
+	stx valtyp	;default is numeric
+	stx intflg	;assume floating
+	jsr chrget	;get following character
+	bcc issec	;branch if numeric
+	jsr isletc	;is it alpha?
+	bcc nosec	;no, no second character. branch.
+issec	tax		;save second character of name
+
+eatem	jsr chrget	;skip over remainder of name. we only care about 2 chars.
+	bcc eatem	;..eat numbers,
+	jsr isletc
+	bcs eatem	;..and alphas, too!
+
+nosec	cmp #'$'	;is this a string?
+	bne notstr	;if not, [VALTYP] = 0
+	lda #$ff
+	sta valtyp	;..else, flag 'string'
+	bne turnon
+
+notstr	cmp #'%'	;isn't string. is it integer?
+	bne strnam	;branch if not.
+	lda subflg
+	bne interr
+	lda #$80	;flag integer by turning on both high bits
+	sta intflg
+	ora varnam
+	sta varnam
+
+turnon	txa		;turn on msb of second character
+	ora #$80
+	tax
+	jsr chrget	;get character after $ or %
+
+strnam	stx varnam+1	;store away second character
+	sec
+	ora subflg	;add flag whether to allow arrays
+	sbc #'('
+	bne 1$
+	jmp is_array	;note: won'y match if 'subflg' set
+
+1$	ldy #0
+	sty subflg	;allow subscripts again
+	lda vartab	;place to start search
+	ldx vartab+1
+
+stxfnd	stx lowtr+1
+lopfnd	sta lowtr
+	cpx arytab+1	;at end of table yet?
+	bne lopfn
+	cmp arytab
+	beq notfns	;yes, we couldn't find it.
+
+lopfn	jsr indlow_ram1	;(lowtr),y
+	cmp varnam	;compare high orders
+	bne notit
+	iny
+	jsr indlow_ram1
+	cmp varnam+1	;and the low part?
+	bne 1$
+	jmp finptr	;!!that's it!!
+
+1$	dey
+notit	clc
+	lda lowtr
+	adc #7		;makes no difference among types
+	bcc lopfnd
+	inx
+	bne stxfnd	;branch always
+
+
+
+
+; test for a letter.            / carry off=not a letter
+;                                 carry on= a letter
+
+isletc	cmp #'A'
+	bcc 1$		;if less than "a", return.
+	sbc #$5b
+	sec
+	sbc #@245	;reset carry if (a) .gt. "z".
+1$	rts
+
+
+notfns	tsx		;check who's calling
+	lda $102,x
+	cmp #>pointer_ret
+	beq ldzr	;special case if called by pointer function
+20$=isvret-1
+	cmp #>20$	;is eval calling???
+	bne notevl	;no, carry on.
+
+ldzr	lda #<zero	;set up pointer to simulated zero
+	ldy #>zero
+	rts		;for strings or numeric.
+
+
+qst001	cpy #$c9	 ;we know first is 't', is second shift i?
+	beq ldzr
+	cpy #$49	;or 'i'?
+	bne varok
+	beq gobadv
+qst004
+	cpy #$d3	;check for 'ds$'
+	beq gobadv
+	cpy #'S'	;check for 'ds'
+	bne varok
+	beq gobadv
+qst002
+	cpy #'T'	;check for 'st'
+	bne varok
+	beq gobadv
+qst003
+	cpy #'R'	;check for 'er'
+	beq gobadv
+	cpy #'L'	;check for 'el'
+	bne varok
+gobadv
+	jmp snerr
+
+
+
+notevl	lda varnam
+	ldy varnam+1
+	cmp #'T'	;screen out 'ti',
+	beq qst001
+	cmp #'S'	;...and 'st',
+	beq qst002
+	cmp #'E'	;...and er and el,
+	beq qst003
+	cmp #'D'	;...and ds.
+	beq qst004
+
+varok	lda arytab
+	ldy arytab+1
+	sta lowtr
+	sty lowtr+1
+	lda strend
+	ldy strend+1
+	sta hightr
+	sty hightr+1
+	clc
+	adc #7
+	bcc noteve
+	iny
+noteve
+	sta highds
+	sty highds+1
+	jsr bltu
+	lda highds
+	ldy highds+1
+	iny
+	sta arytab
+	sty arytab+1
+
+
+; scan thru array entries, looking for string arrays. if any
+; are found, it will be necessary to adjust the back-links
+; on the strings in that array, since the array descriptor
+; block itself was moved
+
+	sta arypnt	;set pointer to arrays
+	sty arypnt+1
+aryva2
+	lda arypnt
+	ldx arypnt+1
+aryva3
+	cpx strend+1	;end of arrays ?
+	bne aryvgo
+	cmp strend
+	bne aryvgo
+	beq arydon	;always..finished
+
+aryvgo
+	sta index1
+	stx index1+1
+	ldy #0
+	jsr indin1_ram1	;look at array name
+	tax
+	iny
+	jsr indin1_ram1	;name 2nd char
+	php		;save status reg
+	iny
+	jsr indin1_ram1	;point to offset to next array
+	adc arypnt
+	sta arypnt	;save start of next array in arypnt
+	iny
+	jsr indin1_ram1
+	adc arypnt+1
+	sta arypnt+1
+	plp		;restore status
+	bpl aryva2	;not a string type
+	txa
+	bmi aryva2	;not a string array
+	iny		;ok we have a string array
+	jsr indin1_ram1	;get number of dimensions
+	ldy #0
+	asl a	    	;move index to ptr to 1st string (add 2*number of dims + 5)
+	adc #5
+	adc index1
+	sta index1
+	bcc aryget
+	inc index1+1
+
+aryget
+	ldx index1+1
+	cpx arypnt+1	;done with this array?
+	bne gogo
+	cmp arypnt
+	beq aryva3	;yes
+gogo
+	ldy #0	   	;process string pointer
+	jsr indin1_ram1	;get length of string
+	beq dvarts	;skip if null string
+	sta syntmp
+	iny
+	jsr indin1_ram1	;get lo byte of string ptr
+	clc
+	adc syntmp	;and add string length
+	sta hightr
+	iny
+	jsr indin1_ram1	;get hi byte of string ptr
+	adc #0	   	;adjust high byte
+	sta hightr+1
+
+
+
+; fix backwards pointer by adding
+; move length to it
+
+	ldy #0
+	jsr indhtr_ram1	;lda (hightr),y
+	adc #7		;carry clear (careful!)
+	sta (hightr),y
+	iny
+	jsr indhtr_ram1	;lda (hightr),y
+	adc #0
+	sta (hightr),y	;done with this string
+;
+; fix the next string in the array
+;
+dvarts	lda #strsiz
+	clc
+	adc index1
+	sta index1
+	bcc aryget
+	inc index1+1
+	bne aryget	;branch always
+
+
+arydon	ldy #0
+	lda varnam
+	sta sw_rom_ram1
+	sta (lowtr),y
+	iny		;.y=1
+	lda varnam+1
+	sta (lowtr),y
+	lda #0
+10$	iny
+	sta (lowtr),y
+	cpy #6
+	bne 10$
+
+finptr	lda lowtr
+	clc
+	adc #2
+	ldy lowtr+1
+	bcc 10$
+	iny
+10$	sta varpnt
+	sty varpnt+1
+	rts
+
+
+
+
+bltu	jsr reason
+	sta strend
+	sty strend+1
+	sec
+	lda hightr
+	sbc lowtr
+	sta index
+	tay
+	lda hightr+1
+	sbc lowtr+1
+	tax
+	inx
+	tya
+	beq decblt
+	lda hightr
+	sec
+	sbc index
+	sta hightr
+	bcs 10$
+	dec hightr+1
+	sec
+10$	lda highds
+	sbc index
+	sta highds
+	bcs moren1
+	dec highds+1
+	bcc moren1
+
+bltlp	jsr indhtr_ram1	;lda (hightr),y
+	sta (highds),y
+
+moren1	dey
+	bne bltlp
+	jsr indhtr_ram1	;lda (hightr),y
+	sta (highds),y
+
+decblt	dec hightr+1
+	dec highds+1
+	dex
+	bne moren1
+	rts
+
+;end

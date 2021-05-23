@@ -1,0 +1,53 @@
+	.page
+	.subttl Find Line Routine
+
+;fndlin routine
+;
+;fndlin searches the program text for the line whose number is passed in "linnum".
+;there are two possible returns
+;   1) carry set.
+; 	lowtr points to the link field in the line 
+;	which is the one searched for.
+;
+;   2) carry clear.
+;	line not found. (lowtr) points to the line in 
+;       the program greater than the one sought after.
+; 
+fndlin	lda txttab
+	ldx txttab+1	;load up (a,x) with (txttab).
+
+fndlnc	ldy #1
+	sta lowtr
+	stx lowtr+1
+	jsr indlow	;see if link is zero.
+	beq flinrt
+	iny
+	iny
+	jsr indlow
+	sta syntmp
+	lda linnum+1	;compare high orders of line numbers.
+	cmp syntmp
+	bcc flnrts	;no such line number.
+	beq 1$
+	dey
+	bne affrts	;always branch
+
+1$	dey
+	jsr indlow
+	sta syntmp	
+	lda linnum
+	cmp syntmp	;compare low orders.
+	bcc flnrts	;no such number.
+	beq flnrts	;got it.
+
+affrts	dey
+	jsr indlow	;fetch link.
+	tax
+	dey
+	jsr indlow
+	bcs fndlnc	;always branches
+
+flinrt	clc		;c may be high
+flnrts	rts		;return to caller
+
+;end

@@ -1,0 +1,133 @@
+	.page
+	.subttl KEY Command
+
+;**************************************************************
+;
+;   chgkey  --  add, delete or change function key definition
+;
+;**************************************************************
+
+chgkey	jsr getbyt	;get key number
+	dex
+	cpx #8
+	bcc 10$		;ok
+	jmp fcerr	;exit - key number invalid
+
+10$	stx z_p_temp_1	;save key number
+	jsr chkcom	;look for comma
+	jsr frmstr	;do frmevl, frestr. returns len in .a, addr in 'index'
+	tay		;set up for call to do-a-key
+	lda #1		;tell do-a-key that string is in bank 1
+	sta index+2
+	lda #index	;now .A points to (adr lo, adr hi, bank #)
+	ldx z_p_temp_1
+	inx
+	jsr put_io_in_map
+	jsr _doakey	;re-define the key
+	bcs 20$		;bad return (.c=1)
+	rts		;ok return (.c=0)
+
+20$	jmp omerr	
+
+
+;*************************************************************
+;
+;   key  --  programmable key functions
+;
+;*************************************************************
+
+key	beq 10$			;no arg, show all keys
+	cmp #ontk
+	beq 5$
+
+	cmp #esc_cmd_tk
+	bne chgkey		;must be 'change key defn's'
+
+	jsr chrget
+	cmp #off_tk
+	beq 5$
+	jmp snerr		;syntax error
+5$	jmp bad_command		;they're using the KEY OFF or KEY ON command
+
+10$	ldx #0
+	ldy #0
+
+lstky1	inx			;get key number = 1-8
+	lda _pky_lengths-1,x	;get key size
+	beq lstest		;skip if key not defined
+	sta keysiz		;save size
+	stx z_p_temp_1		;save key number
+	ldx #5
+
+20$	lda preamb,x  		;print key preamble
+	dex
+	bne 30$
+	ora z_p_temp_1		;if last char of preamble, "or" in key number
+30$	jsr k_bsout		;print character
+	txa
+	bpl 20$
+
+
+	ldx #7
+lsloop	lda _pky_buffer,y	;print key definition
+	iny
+	pha			;save character
+
+	stx syntmp		;check for special (non-printable) characters
+	ldx #4
+50$	cmp keychr-1,x		;is character a special one?
+	beq list_special	;yes...display it as 'chr$(...)'
+	dex
+	bne 50$
+
+	ldx syntmp		;restore .x
+	cpx #8
+	bcc 60$			;1st time thru - display leading quote
+	bne 70$			;previous was a character - no additions needed
+	lda #'+'		;add since previous was quote or return
+	jsr k_bsout
+60$	lda #'"'
+	jsr k_bsout		;add leading quote
+70$	pla			;restore character
+	jsr k_bsout		;display it
+	ldx #9
+
+
+lstnd	dec keysiz
+	bne lsloop		;loop to end of definition
+	cpx #9
+	bcc 10$			;skip if previous not normal character
+	lda #'"'
+	jsr k_bsout		;add ending quote
+10$	lda #$8d
+	jsr k_bsout		;add ending return (shifted)
+	ldx z_p_temp_1
+
+lstest	cpx #8
+	bne lstky1		;loop for all keys
+	rts
+
+
+list_special
+	ldx syntmp	;restore .x
+10$	lda keydat-3,x	;display something like  ' "+chr$( '
+	jsr k_bsout
+	dex
+	cpx #3
+	bcs 10$
+	pla		;restore character
+	jsr prtdec	;display decimal value of chr in .a
+	lda #')'	;finish off with closing paren.
+	jsr k_bsout
+	ldx #8
+	bne lstnd	;..always
+
+
+keydat .byte '($RHC+"'
+
+keychr .byte cr, $8d, $22, $1b
+
+
+
+
+;.end

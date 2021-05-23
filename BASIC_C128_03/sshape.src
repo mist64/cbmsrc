@@ -1,0 +1,180 @@
+	.page
+	.subttl SSHAPE Command
+
+;******************************************************************
+;
+;  sshape str , p1 (,p2)  --  save a shape into string ( str )
+;	    str  =  string to hold shape
+;	     p1  =  one corner coordinate of the shape to be saved
+;	     p2  =  opposite diagonal coordinate of the shape
+;		      default = current coordinate position
+;
+;******************************************************************
+
+sshape	jsr isgrap      	;make sure graphics area is allocated
+	jsr ptrget
+	sta sw_rom_ram0
+	sta stradr
+	sty stradr+1    	;save symbol table address
+	bit valtyp
+	bmi havstr      	;skip if a string
+	jmp chkerr      	;exit - type mismatch
+
+havstr	ldx #xsize-vwork
+	jsr incor3      	;get first coordinates
+
+	ldx #xdest-vwork
+	jsr incor2      	;get optional second coordinate pair
+
+	ldx #ysize-vwork
+	ldy #ydest-vwork
+	lda #2
+	sta vtemp1
+
+3$	jsr abstwo      	;get top left coordinates of rectangle
+	tax
+	tya			;save column/row length
+	pha
+	ldy vtemp1
+	jsr dstmov      	;move dest into pos
+	bcc 4$			;skip if x/y-cord > x/y-dest
+	lda xsize,y
+	sta xpos,y      	;else use x/y-cord as lower value
+	lda xsize+1,y
+	sta xpos+1,y
+
+4$	txa			;save low byte of size
+	sta xsize,y
+	sta savsiz,y
+	pla			;save high byte of size
+	sta xsize+1,y
+	sta savsiz+1,y
+	ldx #xsize-vwork
+	ldy #xdest-vwork
+	dec vtemp1
+	dec vtemp1
+	beq 3$			;loop to test x-positions
+	ldy #$ff		;init byte counter into shape string
+	sty strptr
+	lda xpos
+	sta xsave		;save xpos in temp location
+	lda xpos+1
+	sta xsave+1
+	tya			;($ff)
+	jsr strspa		;reserve string space for shape buffer (dsctmp)
+	sta sw_rom_ram0
+
+10$	jsr getpos      	;get bit map position
+	lda (grapnt),y  	;get bit map byte
+	bcc 30$			;skip if addr in bounds
+	lda xpos
+	bit _graphm
+	bpl 20$			;skip if not multicolor mode
+	sec			;mult xpos*2 & add 1
+	rol a
+20$	and #07			;get bit offset into bit map byte
+	tax
+	lda #0			;set up null bit map byte
+30$	bit _graphm
+	bpl 40$			;skip if not multicolor mode
+	dex			;move bit position back
+40$	stx bitidx		;save bit offset into bit map byte
+50$	asl a			;left justify the bit map byte
+	dex
+	bpl 50$
+	ror a
+	sta vtemp1		;save the shifted byte
+	lda #8			;increment column position by 4 or 8
+	bit _graphm
+	bpl 55$
+	lsr a
+55$	clc
+	adc xpos
+	sta xpos
+	bcc 56$
+	inc xpos+1
+56$	jsr getpos      	;get bit map position
+	lda #0
+	bcs 60$			;skip if position out of bounds
+	lda (grapnt),y  	;- else get bit map byte
+60$	sta vtemp2      	;save bit map byte
+	ldx bitidx      	;get bit index into byte
+70$	lsr a			;right justify bits
+	inx
+	cpx #8
+	bne 70$
+	ora vtemp1      	;get left bits
+	inc strptr      	;increment pointer into string area
+	ldy strptr
+	cpy #252
+	bcc 80$			;skip if string not filled
+	jmp errlen      	;string too long error
+
+80$	sta sw_rom_ram1
+	sta (dsctmp+1),y 	;save byte into string
+	sta sw_rom_ram0
+	ldx bitidx      	;get bit index into bit map byte
+	lda xsize
+	sec
+	bit _graphm
+	bpl 85$
+	sbc #4
+	.byte $2c
+85$	sbc #8			;subtract 8 from column length count
+	sta xsize
+	lda vtemp2      	;restore bit map byte
+	bcs 50$			;loop if not done with row
+	dec xsize+1
+	bpl 50$			;loop if not done with row
+	ldx ysize
+	bne 100$		;skip if not done
+	dec ysize+1
+	bpl 100$		;skip if not done
+
+	bit _graphm		;if multicolor mode, multiply x by 2
+	bpl 88$
+	asl savsiz
+	rol savsiz+1
+88$	ldx #0
+
+90$	lda savsiz,x    	;move column & row lengths
+	iny			;- to end of string area
+	sta sw_rom_ram1
+	sta (dsctmp+1),y
+	sta sw_rom_ram0
+	inx
+	cpx #4
+	bne 90$
+
+	iny
+	sty savsiz      	;save string length
+	lda dsctmp+1
+	sta savsiz+1    	;save low byte of string start
+	lda dsctmp+2
+	sta savsiz+2    	;save high byte of string start
+	lda #<savsiz
+	sta facmo		;set addr of string descriptor
+	lda #>savsiz
+	sta facmo+1
+	lda stradr
+	sta forpnt      	;set symbol table addr of dest. string
+	lda stradr+1
+	sta forpnt+1
+	jsr copy		;move string
+	jmp dstpos      	;restore coordinates,do rts
+
+100$	dec ysize		;decrement row count
+	inc ypos		;increment row position
+	bne 110$
+	inc ypos+1
+110$	lda xsave
+	sta xpos		;restore starting column address
+	lda xsave+1
+	sta xpos+1
+	lda savsiz
+	sta xsize		;restore column length count
+	lda savsiz+1
+	sta xsize+1
+	jmp 10$
+
+	;.end

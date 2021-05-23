@@ -1,0 +1,63 @@
+	.page
+	.subttl JOY Function
+
+;*************************************************************
+;
+;  joy(n)  --  return joy-stick value
+;	   n =  1 : joystick-1
+;		2 : joystick-2
+;	   result  =      0-8 : not triggered
+;			128-136 : triggered
+;	   result mod 128 =  0 : no joystick reading
+;
+;				      1
+;				   8     2
+;				7	    3
+;				   6     4
+;				      5
+;
+;*************************************************************
+
+joy	jsr conint		;get 1 byte arg in x
+	dex
+	cpx #2			;make sure arg. is valid
+	bcs 30$			;>1, error
+
+	txa
+	eor #1
+	tax			;invert to match legends on case
+
+	php			;save status
+	jsr put_io_in_map
+	sei			;disable irq to inhibit kybd
+	lda d1pra
+	pha			;save kybd output lines
+	ldy #$ff
+	sty d1pra		;set to not read any kybd inputs
+
+10$	lda d1pra,x		;read joystick values
+	cmp d1pra,x		;debounce
+	bne 10$
+
+	tax			;save joystick values
+	pla
+	sta d1pra		;reset kybd output lines
+	txa			;restore joystick values
+	plp			;restore status
+	and #$0f 		;test which direction
+	tay
+	lda joytab-5,y		;get direction indicator
+	tay			;save direction : 0-8
+	txa			;restore joystick value
+	and #$10		;test if button triggered
+	bne 20$			;skip if not
+	tya
+	ora #$80 		;show trigger depressed
+	tay
+20$	jmp sngflt		;float 1 byte arg in y.
+
+30$	jmp fcerr
+
+joytab	.byte 4,2,3,0,6,8,7,0,5,1,0
+
+;end

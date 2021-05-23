@@ -1,0 +1,46 @@
+	.page
+	.subttl RWINDOW Function
+
+;******************************************************************************
+;
+; RWINDOW  - returns information about the current console display environment.
+;
+;   syntax : RWINDOW (n)
+;
+;   where:	n=0 : number of lines in the current window
+;		 =1 : number of rows in the current window
+;		 =2 : returns either 40 or 80, depending on the
+;			current console device
+;
+;******************************************************************************
+
+rwindow	jsr chkcls
+	jsr conint
+	cpx #2
+	beq 50$			;return current console
+	bcs 98$
+
+	cpx #0
+	bne 10$
+
+	lda _screen_bottom
+	sec
+	sbc _screen_top
+	bcs 60$			;always
+
+10$	lda _screen_right
+	sec
+	sbc _screen_left
+	bcs 60$			;always
+
+
+50$	lda #40			;assume VIC
+	bit _mode
+	bpl 60$
+	lda #80
+60$	tay
+	jmp sngflt		;float 1 byte arg in .Y
+
+98$	jmp fcerr
+
+;end

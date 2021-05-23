@@ -111,7 +111,8 @@ build2 BASIC_C64GS basic
 
 build2 BASIC_TED basic
 
-build2 BASIC_C128 basic
+build2 BASIC_C128_03 basic
+build2 BASIC_C128_04 basic
 
 build1 BASIC_CBM2_1982-11-19 bas256 # or bas64 bas128 bas192 bas256
 build1 BASIC_CBM2_1983-05-31 cbm256 # or cbm128
