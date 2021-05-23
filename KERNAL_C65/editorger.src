@@ -1,0 +1,3058 @@
+;	.nam C65 ASCII Screen Editor (C)1991 CBM
+	.subttl *** Copyright (C) 1991  by  Commodore Business Machines, Inc. ***
+
+;  ***************************************************************************
+;  *                               //                                        *
+;  *              CCCCCCC         //    6666666     555555555                *
+;  *             CCC   CCC       //    666   666    555                      *
+;  *            CCC             //    666           555                      *
+;  *            CCC            //     666 6666      55555555                 *
+;  *            CCC           //      6666   666          555                *
+;  *            CCC          //       666     666          555               *
+;  *             CCC   CCC  //         666   666    555   555                *
+;  *              CCCCCCC  //           6666666      5555555                 *
+;  *                      //                                                 *
+;  *                                                                         *
+;  *     EEEEEEEEE  DDDDDDDD    IIIII TTTTTTTTT   OOOOOOO    RRRRRRRR        * 
+;  *     EEE        DDD   DDD    III     TTT     OOO   OOO   RRR   RRR       * 
+;  *     EEE        DDD    DDD   III     TTT    OOO     OOO  RRR   RRR       * 
+;  *     EEEEEE     DDD    DDD   III     TTT    OOO     OOO  RRRRRRRR        * 
+;  *     EEE        DDD    DDD   III     TTT    OOO     OOO  RRR RRR         * 
+;  *     EEE        DDD   DDD    III     TTT     OOO   OOO   RRR  RRR        * 
+;  *     EEEEEEEEE  DDDDDDDD    IIIII    TTT      OOOOOOO    RRR   RRR       * 
+;  *                                                                         *
+;  *        Copyright (C)1991  by   Commodore Business Machines, Inc.        *
+;  *									     *
+;  *			    All  Rights  Reserved			     *
+;  *                                                                         *
+;  ***************************************************************************
+  
+;		    NATIONAL ROM VERSION  910729  (ver 0.9B)
+  
+;	****************************************************************** 
+;	*                                                                * 
+;	* This listing contains confidential and proprietary information *
+;	* of CBM, Inc.  The reproduction, dissemination or disclosure to *
+;	* others without express written permission is prohibited.  This *
+;	* software is intended for use in  Commodore C/65 systems only.  *
+;	*                                                                * 
+;	*  The  information  in  this  document  is  subject  to change  * 
+;	*                       without notice.                          * 
+;	*                                                                * 
+;	*  No  responsibility  is  assumed  for the reliability of this  * 
+;	*                          software.                             * 
+;	*                                                                * 
+;	****************************************************************** 
+
+;	This version written and assembled by Fred Bowen using BSO assembler format.
+	.page
+
+
+
+
+
+
+
+
+
+
+;	******************************************************************
+;	*                                                                *
+;	* THIS VERSION OF THE COMMODORE SCREEN EDITOR CONTAINS  SPECIFIC *
+;	* MODIFICATIONS FOR THE IMPLEMENTATION OF THE FOLLOWING NATIONAL *
+;	* KEYBOARD AND SCREEN EDITOR:                                    *
+;	*								 *
+;	*     ****   *****   ****    *    *     *     *   *   *   *      *
+;	*    *       *       *   *   **  **    * *    **  *    * *       *
+;	*    * ***   ***     ****    * ** *   *****   * * *     *        *
+;	*    *   *   *       *  *    *    *   *   *   *  **     *        *
+;	*     ****   *****   *   *   *    *   *   *   *   *     *        *
+;	*                                                                *
+;	*        *     *   *    ***   *****   ****    ***     *          *
+;	*       * *    *   *   *        *     *   *    *     * *         *
+;	*      *****   *   *    ***     *     ****     *    *****        *
+;	*      *   *   *   *       *    *     *  *     *    *   *        *
+;	*      *   *    ***    ****     *     *   *   ***   *   *        *
+;	*                                                                *
+;	******************************************************************
+
+
+
+;.end
+	.page  
+
+;	The following C128 files were used in this program's creation:
+
+;	.include disclaim
+;	.include sysdoc
+;	.include relnotes
+;	.include declare
+;	.include entries
+;
+;	.include ed1
+;	.include ed2
+;	.include ed3
+;	.include ed4
+;	.include ed5
+;	.include ed6
+;	.include routines
+;	.include ed7
+;	.include patches
+
+	.page
+	.subttl Editor Initialization & I/O Routines
+;////////////////   E D I T O R     J U M P     T A B L E   \\\\\\\\\\\\\\\\\
+
+	jmp cint		;initialize editor & screen
+	jmp disply		;display character in .a, color in .x
+	jmp lp2			;get a key from IRQ buffer into .a
+	jmp loop5		;get a chr from screen line into .a
+	jmp print		;print character in .a
+	jmp scrorg		;get size of current window (rows,cols) in .x, .y
+key	jmp keyboard_scan	;scan keyboard subroutine
+	jmp repeat		;repeat key logic & 'ckit2' to store decoded key
+	jmp plot		;read or set (.c) cursor position in .x, .y
+	jmp mouse_cmd		;install/remove mouse driver
+	jmp escape		;execute escape function using chr in .a
+pfkey	jmp keyset		;redefine a programmable function key
+irq_ed	jmp editor_irq		;IRQ entry
+	jmp palette_init	;initialize VIC palette
+swapper	jmp swap		;40/80 mode change
+	jmp window		;set top left or bottom right (.c) of window
+	jmp cursor		;turn on or off (.c) soft cursor
+
+	.page
+line_length	= 80
+
+linz0	= 0		;80 column screen lines
+linz1	= linz0+line_length
+linz2	= linz1+line_length
+linz3	= linz2+line_length
+linz4	= linz3+line_length
+linz5	= linz4+line_length
+linz6	= linz5+line_length
+linz7	= linz6+line_length
+linz8	= linz7+line_length
+linz9	= linz8+line_length
+linz10	= linz9+line_length
+linz11	= linz10+line_length
+linz12	= linz11+line_length
+linz13	= linz12+line_length
+linz14	= linz13+line_length
+linz15	= linz14+line_length
+linz16	= linz15+line_length
+linz17	= linz16+line_length
+linz18	= linz17+line_length
+linz19	= linz18+line_length
+linz20	= linz19+line_length
+linz21	= linz20+line_length
+linz22	= linz21+line_length
+linz23	= linz22+line_length
+linz24	= linz23+line_length
+
+	.page
+ldtb2			;screen lines low byte table
+	.byte <linz0
+	.byte <linz1
+	.byte <linz2
+	.byte <linz3
+	.byte <linz4
+	.byte <linz5
+	.byte <linz6
+	.byte <linz7
+	.byte <linz8
+	.byte <linz9
+	.byte <linz10
+	.byte <linz11
+	.byte <linz12
+	.byte <linz13
+	.byte <linz14
+	.byte <linz15
+	.byte <linz16
+	.byte <linz17
+	.byte <linz18
+	.byte <linz19
+	.byte <linz20
+	.byte <linz21
+	.byte <linz22
+	.byte <linz23
+	.byte <linz24
+
+ldtb1			;screen lines high byte table
+	.byte >linz0
+	.byte >linz1
+	.byte >linz2
+	.byte >linz3
+	.byte >linz4
+	.byte >linz5
+	.byte >linz6
+	.byte >linz7
+	.byte >linz8
+	.byte >linz9
+	.byte >linz10
+	.byte >linz11
+	.byte >linz12
+	.byte >linz13
+	.byte >linz14
+	.byte >linz15
+	.byte >linz16
+	.byte >linz17
+	.byte >linz18
+	.byte >linz19
+	.byte >linz20
+	.byte >linz21
+	.byte >linz22
+	.byte >linz23
+	.byte >linz24
+
+	.page
+
+editor_vectss
+	.word contrl	;print <ctrl> indirect
+	.word shiftd	;print <shft> indirect
+	.word escape	;print <esc>  indirect
+	.word keylog	;keyscan logic indirect
+	.word keyput	;key buffer indirect
+editor_vectse
+
+
+
+keycod	.word mode1	;decode matrix for normal keys
+	.word mode2	;decode matrix for shifted keys (right keycap legends)
+	.word mode3	;decode matrix for C= keys	(left  keycap legends)
+	.word mode4	;decode matrix for control keys
+	.word mode1	;decode matrix for alt keys	(none- default to norm)
+	.word mode5	;decode matrix for caps lock
+keyend
+
+	.page
+;//////   S C R E E N   &   E D I T O R   I N I T I A L I Z A T I O N   \\\\\\
+
+cint	lda #%00000011
+	tsb d2pra	;set VIC bank (*VA14,15)
+
+	jsr clrch	;make keyboard/screen default input/output channels
+
+; Initialize Editor's  GLOBAL  variables
+
+;	php
+;	sei
+;	ldx vic+49		;save speed
+;	lda #%01000000
+;	trb vic+49		;SLOW mode
+;	lda #0
+;	sta sid1+24		;turn sound off, both channels
+;	sta sid2+24
+;	stx vic+49
+;	plp
+
+	lda #0
+	sta graphm		;set display to full text mode
+	sta mode		;set display to 80-column
+	sta mono		;set display to color (not monochrome)
+	sta ndx			;clear keyboard queue
+	sta kyndx		;clear function key index
+	sta keyboard_lock	;unlock keyboard
+	sta dead_keys		;enable national deadkeys & clear pending
+	sta crsw		;clear <cr> flag
+	sta pause		;clear <ctl>-S flag
+	sta blnon		;reset cursor status
+	sta charen		;reset character fetch to ROM
+	sta mouse_enable	;disable mouse driver
+	sta mouse_pointer	;default mouse pointer to sprite 0
+
+	ldx #3			;							[910307]
+1$	lda mouse_window,x	;set default mouse window (assumes "hotspot" at sprite 0,0)
+	sta mouse_top,x
+	dex
+	bpl 1$
+
+	lda #$24
+	sta vm1			;default VIC text/character area ($0800/$D000)
+	lda #>screen
+	sta ldtb1_sa		;default high byte of screen
+
+	lda #10
+	sta xmax		;set maximum keyboard buffer size
+	lda #16
+	sta blnct		;reset cursor blink count	(16 = 1 second)
+	sta blnsw		;turn off cursor
+	sta delay		;reset delay before a key repeats
+	lda #3
+	sta kount		;reset delay between key repeats (3 = .2 second)
+
+	jsr taball		;set default TAB stops
+	sta rptflg		;enable key repeats (all keys, .a=$80)
+
+;	lda #$d0
+;	sta split		;set split screen division 5 lines up from bottom
+
+	.page
+;  Initialize Editor  LOCAL  variables
+
+	ldx #localzpend-localzp
+2$	lda localzp,x
+	sta pnt,x		;init local vars
+	dex
+	bpl 2$
+
+	ldx #editor_vectse-editor_vectss-1
+3$	lda editor_vectss,x
+	sta ctlvec,x		;initialize Editor indirect vectors
+	dex
+	bpl 3$
+
+	jsr reset_screen	;clear wrap table
+	jsr clear_screen	;clear text screen
+
+	bit init_status		;DON'T CHANGE THE FOLLOWING IF NMI OR USER CALL
+	bvs 10$			;	skip
+
+	ldx #<autoscrollno	;install null autoscroll vector & keys
+	ldy #>autoscrollno
+	stx iautoscroll
+	sty iautoscroll+1
+
+	lda #$10
+	sta autoscrollupchr
+	lda #$16
+	sta autoscrolldnchr
+
+	ldx #keyend-keycod-1	;initialize keyboard matrix lookup tables
+;4$	lda keycod,x		;						[ASCII systems]
+4$	lda national_keycod,x	;						[National systems]
+	sta decode,x
+	dex			; (keyscan will update per ASC/DIN key later)
+	bpl 4$
+
+	ldx #pkyend-pkytbl
+5$	lda pkytbl-1,x		;initialize programmable key definitions
+	sta pkybuf-1,x
+	dex
+	bne 5$
+
+	lda #%01000000		;flag Editor installation by system
+	tsb init_status
+
+10$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+clear_screen			;clear the current screen window
+	jsr home		;start at top of window
+10$	jsr setup_line_x	;point to a line
+	jsr clear_line		;clear the line
+	cpx scbot		;done if it's the last line in the window
+	inx
+	bcc 10$
+
+
+
+home	ldx sctop	;put the cursor at top left of current window
+	stx tblx	;move to top of window
+	stx lsxp	; (for input after home or clear)
+
+
+stu10	ldy sclf	;////// entry from insert/delete line routines
+	sty pntr	;move to left side of window
+	sty lstp
+
+setup_line		;////// entry to set pointers to beginning of current line
+	ldx tblx	;.x=line#, .y=col#
+
+
+
+setup_line_x
+	lda ldtb1,x	;generate pointers to current screen line
+	bbr7 mode,20$	;  (halve table values for 40-col mode)
+	lsr a
+
+20$	ora ldtb1_sa	;customize
+	sta pnt+1		
+	lda ldtb2,x
+	bbr7 mode,10$
+	ror a
+
+10$	sta pnt		;'pnt' points to screen RAM
+
+
+
+scolor	php		;(((called by BLINK during IRQ)))
+	sei
+	lda pnt
+	sta user	;'user' points to color RAM
+	lda pnt+1
+	and #%00000111
+	ora #>viccol
+	sta user+1
+	plp
+	rts		;.x=line#
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;/////////////////   E D I T O R   I R Q   R O U T I N E S   \\\\\\\\\\\\\\\\\\
+
+editor_irq			;assumes I/O at $DC00, not color nybbles
+;	lda vic+25		;is this a VIC IRQ?				removed	[910225]
+;	bpl irq_not_mine	;	no- not interested
+;	tsb vic+25		;	reset register (write 1's to clear bits)
+;	sta vicIRQ		;	but save copy of it for others
+
+	lda vicIRQ
+	and #1			;	we're interested in only the raster IRQ
+	beq irq_not_mine	;   	   not a raster IRQ
+
+	jsr mouse_irq		;scan mouse ports
+	cli			;allow interruptable keyscan ????
+	jsr keyboard_scan	;scan keyboard
+	jsr blink		;blink cursor
+	sec			;tell Kernel this was the 50/60Hz IRQ
+	rts
+
+
+irq_not_mine
+	clc			;tell Kernel this was not the 50/60Hz IRQ
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;///////////////   E D I T O R   I N P U T   R O U T I N E S   \\\\\\\\\\\\\\\\
+
+lp2			;fetch a character from IRQ key buffer
+	ldx kyndx	;check for function key strings first
+	beq 1$		;	branch if none
+	ldy keyidx	;get index to current character in key string
+	lda pkydef,y	;get the character
+	dec kyndx	;one less character in string
+	inc keyidx	;index to next character
+	cli
+	clc		;always a good return from keyboard
+	rts
+
+
+1$	ldy keyd	;get a key from IRQ buffer (.x=0 from 'lp2')
+
+2$	lda keyd+1,x	;push down buffer contents
+	sta keyd,x
+	inx
+	cpx ndx
+	bne 2$
+
+	dec ndx		;one less key in buffer
+	tya		;return character in .a
+	cli		;always a good return from keyboard
+	clc
+	rts
+
+	.page
+loop4			;LOOP TO MOVE CHARACTERS FROM KEY BUFFER TO SCREEN UNTIL <CR>
+	jsr autoscrollcheck
+	bcc waitky	;	character was handled by someone else, presumably autoscroller
+	jsr print	;print the character in .a
+
+waitky	jsr crsron	;enable cursor
+	cli		;IRQs must run or we'll hang ????
+
+1$	lda ndx		;wait here for any buffered keystroke from IRQ keyscan
+	ora kyndx	; (or function key)
+	beq 1$
+
+	jsr crsroff	;disable cursor
+	jsr lp2		;get the key from IRQ key buffer
+	cmp #cr		;return key?
+	bne loop4	;no- buffer to screen until <cr>
+
+			;PREPARE TO PASS CHARACTERS FROM SCREEN
+	sta crsw	;set flag to pass characters from screen
+	rmb7 qtsw	;clear quote mode
+
+	jsr fndend	;find last non-blank character in line
+	stx lintmp	;	save last row id ('indx' = last column)
+	jsr fistrt	;find beginning row of this line
+	ldy sclf	;	assume first character is at left margin
+	lda lsxp	;input actually began on this row
+	bmi 4$		;	branch if it's on a wrapped line
+	cmp tblx	;is cursor still on this row?
+	bcc 4$		;	branch if it's below this row
+
+	ldy lstp	;input actually began in this column
+	cmp lintmp	;does input begin & end on same row?
+	bne 2$		;	branch if not
+	cpy indx	;does input begin & end in same column?
+	beq 3$		;	branch if the same
+2$	bcs clp2	;	branch if null input
+
+3$	sta tblx	;start input from this row
+4$	sty pntr	;start input from this column
+	bra lop5	;go pass characters
+
+	.page
+loop5			;/////  entry for Kernel BASIN routine \\\\\
+	phy
+	phx		; (save current cursor position)
+	lda crsw	;pass characters? (ie: input device = screen)
+	beq waitky	;	no-  buffer      (ie: input device = keyboard)
+	bpl lop5	;	yes- if there're any to pass
+
+
+
+clp2
+	lda #0		;clear flag- I/O is finished
+	sta crsw
+	lda #cr
+	ldx #3		;kludge for OPEN4,4 / CMD4 / LIST delemma
+	cpx dfltn
+	beq 1$		;input is from the screen
+	cpx dflto
+	beq 2$		;output is to the screen
+
+1$	jsr print	;force a <cr>
+
+2$	lda #cr		;pass a return as the last character
+	bra clp7	;always
+	
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+lop5
+	jsr setup_line	;set 'pnt' and 'user' to beginning of line
+	jsr get1ch	;get a screen character
+	sta datax
+	and #$3f	;convert chr from screen codes...
+	asl datax
+	bit datax
+	bpl 1$		;	branch if not alt character set
+	ora #$80
+
+1$	bcc 2$		;	branch if not rvs fld character
+	bbs7 qtsw,3$	;	branch if in quote mode
+
+2$	bvs 3$		;	branch if not shifted character
+	ora #$40
+
+3$	jsr qtswc	;	toggle quote mode if quote chr
+
+	ldy tblx	;check for last non-blank character
+	cpy lintmp
+	bcc 4$		;	branch if not on last input line
+	ldy pntr
+	cpy indx
+	bcc 4$		;	branch if not on last input column
+	ror crsw	;make >0 (.c=1) to fake <cr>: this is the last chr
+	bra 5$		;always
+
+4$	jsr nxtchr	;move 'pntr' to next character
+
+5$	cmp #$de	;pi?
+	bne clp7	;	no
+	lda #$ff	;translate it to true CBM pi
+
+clp7	sta datax
+	plx		; (restore cursor position for 'basin')
+	ply
+	lda datax	;pass character in .a
+	clc		;always a good return from screen or keyboard
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+qtswc
+	cmp #quote	;test for quote character
+	bne 1$		;	it's not
+	lda qtsw
+	eor #$ff	;toggle quote flag
+	sta qtsw
+	lda #quote
+1$	rts
+
+
+
+loop2			;/////////////   'print' exits here   \\\\\\\\\\\\\\
+	lda datax
+	sta lstchr	;save in case it's <escape> or <home> for next test
+;	jsr cursor	;move cursor ahead of output
+	ldx insrt
+	beq 1$		;branch if not insert mode
+	rmb7 qtsw	;clear quote mode in case quote was hit in insert mode
+
+1$	ply		;restore all registers
+	plx
+	pla
+	clc		;good
+	rts		;will return to 'loop2'
+
+
+
+nxt33			;various entries from 'print' to output a character
+	ora #$40
+
+nxt3	bbr7 rvs,nvs	;branch if not rvs mode
+
+nc3	ora #$80
+
+nvs	ldx insrt	;in insert mode?
+	beq 1$		;	no
+	dec insrt	;	yes- decrement insert field count
+
+1$	bbr7 insflg,2$	;in auto insert mode?
+	pha		;	yes- save the character to insert
+	jsr insert	;make room for it
+	ldx #0
+	stx insrt	;disallow the other insert mode
+	pla
+
+2$	jsr displc	;display chr & fall thru to 'movchr' (will return to 'loop2')
+
+;	cpy #69
+;	bne advance_cursor
+;	jsr beep	;ring bell (if enabled) to flag right margin
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; advance cursor	('movchr')
+;	move to next character position & insert blank line if at end of line
+;	entry:   .y = column position
+;	exit:    .c=1 if aborted (scroll disabled)
+
+advance_cursor
+	cpy scrt
+	bcc 1$		;easy if not at end of line
+	ldx tblx
+	cpx scbot
+	bcc 1$		;	skip if not last line of screen
+	bbs7 scroll,3$	;	abort if scrolling disabled (.c set)
+
+1$	jsr setup_line	;set up 'pnt' and 'user' vectors
+	jsr nxtchr	;move to next char position
+	bcc 3$		;	done if not move to new line
+	jsr getbit	;check if on a continued line
+	bcs 2$		;	yes
+	sec		;	no- in case we abort...
+	bbs6 scroll,3$	;		abort if line linker disabled
+	jsr scroll_down	;			insert a new blank line
+
+2$	clc		;for clean exit
+3$	rts
+
+
+
+; skip to next line (wrap to top if scroll disabled)
+
+nxln
+	ldx tblx
+	cpx scbot	;at the bottom of window?
+	bcc 1$		;	no
+
+	bbs7 scroll,2$	;branch if scroll is disabled
+	jsr scroll_up	;scroll it all
+
+1$	inc tblx	;increment line count
+	clc
+	bra setup_line	;go set up line pointers
+
+2$	lda sctop	;wrap to top of screen
+	sta tblx
+	sec
+	bra setup_line
+
+;.end
+	.page
+	.subttl  Scroll Routines
+
+
+;///////////////   S C R O L L    R O U T I N E S   \\\\\\\\\\\\\\\\\\
+
+
+scroll_down		;///////// scroll down \\\\\\\\\
+	ldx lsxp
+	bmi 10$			;skip if new line flag already set
+	cpx tblx
+	bcc 10$			;skip if old line is below scroll area
+	inc lsxp		;else inc start line number
+
+10$	ldx scbot		;scroll down, starting at bottom
+
+20$	jsr setup_line_x	;set 'pnt' to line's text, 'user' to line's color
+
+25$	ldy sclf
+	cpx tblx		;test if at destination line
+	beq 30$			;	done if yes
+	dex			;point to previous line as source
+	jsr getbt1
+	inx
+	jsr putbt1		;move continuation byte
+	dex
+	jsr move_line		;move one line
+	bra 25$
+
+30$	jsr clear_line
+	bra setbit		;mark as continuation line
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+scroll_up		;//////////// scroll up \\\\\\\\\\\\\\\
+	ldx sctop
+10$	inx
+	jsr getbt1	;find first non-continued line
+	bcc scru15
+	cpx scbot
+	bcc 10$
+	ldx sctop
+	inx
+	jsr clrbit	;clear to only scroll 1 line
+
+scru15			;////// entry from 'dline'
+	dec tblx
+	bbs7 lsxp,20$	;no change if already new line
+	dec lsxp	;move input up one
+
+20$	ldx sctop
+	cpx sedt2
+	bcs 30$
+	dec sedt2	;in case doing insert
+
+30$	jsr scr10	;scroll
+	ldx sctop
+	jsr getbt1
+;	php		;????	(removed for BASIC autoscroll)		[901029] FAB
+;	jsr clrbit	;make sure top line is not continuation
+;	plp
+	bcc 40$			;	done if top line off
+	bbs7 scroll,scroll_up	;keep scrolling if enabled
+40$	rts
+
+	.page
+scr10	jsr setup_line_x	;set 'pnt' to line's text, 'user' to line's color
+
+10$	ldy sclf
+	cpx scbot		;at last line?
+	bcs 20$			;	yes
+	inx			;point to next line
+	jsr getbt1
+	dex
+	jsr putbt1		;move continuation byte
+	inx
+	jsr move_line		;move one line
+	bra 10$
+
+20$	jsr clear_line		;make last line blank
+	php
+	sei
+	lda #$7f
+	sta colm
+	lda rows		;scan keyboard
+	plp
+	cmp #$df		;check for slow-scroll key (C=)
+	bne slorts		;	branch if not, else exit after a delay
+
+
+	ldy #0
+slowmo	phx		;delay
+	plx
+	dex
+	bne slowmo
+	dey
+	bne slowmo
+slorts	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+move_line
+	lda #0			;copy command
+	sta dma_list
+	jsr dma_screen_prep	;prep & set up destination
+
+	jsr setup_line_x	;set up source
+	clc
+	tya
+	adc pnt
+	sta dma_list_source_lo
+	lda #0
+	adc pnt+1
+	sta dma_list_source_hi
+	jsr dma_text		;move characters & color
+
+
+dma_color
+	bit mono		;monochrome screen?
+	bmi 10$			;	yes
+	lda #$f0		;convert text pointers to color pointers
+	tsb dma_list_source_hi
+	tsb dma_list_dest_hi	;	color begins at $01F800
+	lda #$01
+	sta dma_list_source_bank
+	sta dma_list_dest_bank
+	lda #<dma_list
+	sta dma_ctlr		;do the move
+	ldy scrt		;leave .y as old scroll/clear routines did
+10$	rts
+
+
+dma_text
+	sec			;calc number of characters to move
+	lda scrt
+	sbc dma_list_count_lo	; (RightMargin-StartingColumn+1)
+	inc a
+	sta dma_list_count_lo
+	lda #0
+	sta dma_list_source_bank
+	sta dma_list_dest_bank
+	lda #<dma_list
+	sta dma_ctlr		;do the move
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+clear_line			;///// enter here to clear entire line in .x
+	ldy sclf		;      (used by scroll and clear-screen)
+	jsr clrbit		;make sure non-continued line
+
+clear_eol			;///// enter here to clear line in .x starting at .y
+	lda #3			;      (used by clear-EOS and clear-EOL)
+	sta dma_list		;fill command
+	jsr setup_line_x
+	jsr dma_screen_prep	;set up dma destination for line x
+;	inc dma_list_count_lo	;???? add this for buggy DMA fill count
+;	bne 10$			;????
+;	inc dma_list_count_hi	;????
+;10$				;????
+	lda #space
+	sta dma_list_source_lo
+	jsr dma_text		;clear the characters
+
+	lda color
+	and #$0f
+	sta dma_list_source_lo
+	bra dma_color		;clear the colors
+
+
+
+dma_screen_prep
+	tya
+	sta dma_list_count_lo	;starting column position
+	clc
+	adc pnt
+	sta dma_list_dest_lo	;absolute destination
+	lda #0
+	sta dma_list_cmd2	;						[910520] F018A
+	sta dma_ctlr+2		;init dma_list & dma device
+	sta dma_list_count_hi
+	adc pnt+1
+	sta dma_list_dest_hi
+	lda #>dma_list
+	sta dma_ctlr+1
+keyboard_lock_rts
+	rts
+
+	.page
+autoscrollcheck
+	bbs5 scroll,autoscrollno	;autoscroll disabled
+	bbs7 scroll,autoscrollno	;all scrolls disabled
+
+	cmp autoscrolldnchr
+	beq autoscrolldn		;want to scroll screen down
+	cmp autoscrollupchr
+	beq autoscrollup		;want to scroll screen up
+
+autoscrollno
+	sec				;exit if no action taken, .A=chr to print
+	rts
+
+autoscrolldn
+	cmp #145			;if scroll character is cursor key,
+	bne 10$
+	ldx sctop			;	make sure cursor is at top of window
+	cpx tblx
+	bcc autoscrollno		;		it's not- do nothing
+10$	sec
+	bra autoscrollcall		;call autoscroller with .c=1 to scroll down
+
+autoscrollup
+	cmp #17				;if scroll character is cursor key,
+	bne 10$
+	ldx tblx			;	make sure cursor is at bottom of window
+	cpx scbot
+	bcc autoscrollno		;		it's not- do nothing
+10$	clc				;call autoscroller with .c=0 to scroll up
+
+autoscrollcall
+	tax				;save scroll character
+	lda init_status			;is autoscroll vector safe to use?
+	and #1
+	php
+	txa
+	plp
+	beq ScrollMon		;	no- BASIC not present so go directly to Monitor????
+
+	jmp (iautoscroll)		;pass control through indirect, default=autoscrollno
+
+;.end
+	.page
+	.subttl  IRQ Keyscan & Cursor Blink Routines
+
+;/////////////////   K E Y B O A R D     S C A N   \\\\\\\\\\\\\\\\\\\
+
+keyboard_scan			;scan the keyboard
+	bit keyboard_lock	;filter out wrapped IRQ calls (but allow interruptable code)
+	bmi keyboard_lock_rts	;	wrapped- bar new keyscan until old one done
+	smb7 keyboard_lock	;shut the door
+	
+	lda #%00000000
+	sta colm		;raise main key lines
+	inc a
+	sta e_keys		;raise extended keys & check for caps_lock (ASC/DIN)
+	lda #%11111110
+	sta e_keys_ddr
+	lda e_keys
+	and #$01
+	eor #$01		;invert sense so '1' means key is down
+	asl a
+	asl a
+	asl a
+	asl a
+	sta shflag		;set status & init remainder of shift key status
+
+	jsr check_keyboard_mode	;if ASC/DIN mode, update key tables & chrset per ASC/DIN key
+;	jmp 1$			;	(in ASCII versions, this is a JMP 1$) ????
+
+1$	ldy #72			;initialize key counter (64 for unextended key version)
+	sty sfdx		;assume no keys (72=index to null ($ff) key in table)
+	ldx rows		;quick check for any key down in matrix
+	cpx #$ff
+	beq ckit2		;	nothing- skip 'way ahead  (restore 'colm' @'ckit2')
+
+	ldy #0			;init key counter
+	lda decode
+	sta keytab		;assume mode #1 (normal keys)
+	lda decode+1
+	sta keytab+1
+
+	lda #$ff
+	sta e_keys		;drop extended key lines and
+	rol a			;start with 1st column (.a=$fe since .c=0 from above)
+
+
+2$	bbs7 shflag,3$		;msb set means we are scanning extended key lines
+	sta colm
+	bra 4$
+3$	sta e_keys		;raise one column
+
+4$	ldx #8			;scan 8 rows each column
+	pha			;preserve column drivers
+
+5$	lda rows		;scan the row
+	cmp rows		;debounce the keyboard
+	bne 5$
+
+6$	lsr a			;look for a key down
+	bcs 9$			;	branch if not this key
+	pha			;got one...but preserve remainder
+
+	lda (keytab),y		;fetch the character code for this key
+
+	cmp #$08		;check for modifier keys................$01 = shift
+	beq 7$			;	branch if 'alt' key		$02 = C=
+	cmp #$05		;					$04 = control
+	bcs 8$			;	branch if not a modifier key	$08 = alt
+	cmp #$03		;					$10 = caps lock
+	beq 8$			;	branch if not a modifier key
+7$	tsb shflag		;save modifier (merge in into flag byte)
+;	.byte $2c		;damn BIT instruction works out to BIT $D481 (SID) ????	[910618]
+	bra 81$
+
+8$	sty sfdx		;save key number
+81$	pla			;recall the rest of the row
+
+9$	iny			;index to next key
+	dex			;index to next row
+	bne 6$			;	branch if still more keys in this row
+
+	cpy #73			;(65 for unextended keyboard)
+	bcs 10$			;	branch if finished all keys
+	pla			;recall column configuration
+
+	sec
+	rol a			;rotate scan to next column
+	bcs 2$			;	branch if still more columns
+	sta colm		;(.a=$ff) drop all lines driving main matrix
+	smb7 shflag		;flag we are now scanning extended matrix
+	lda #%11111101		;raise extended column
+	bra 2$			;always
+
+
+10$	pla			;all done- cleanup
+	rmb7 shflag		;remove temporary flag bit
+	lda sfdx		;.a= key number, fall into 'keylog' to decode key
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+	jmp (keyvec)		;'keylog' indirect
+
+keylog				;evaluate various shift keys & determine lookup table
+	cmp #64
+	bne 10$			;special test for <scroll> key
+	bbs6 locks,99$		;	branch if disabled
+	lda lstshf
+	bne 99$			;	branch if too soon
+	lda #13			;<ctrl>-S
+	eor pause
+	sta pause		;toggle pause flag
+	bra 20$			;setup slight delay
+
+10$	lda shflag
+	beq repeat		;	branch if none depressed, 'keytab' already set up
+	cmp #$10
+	beq 40$			;	branch if <caps-lock> only
+	cmp #$08
+	beq 50$			;	branch if <alt> only
+	and #$07
+	cmp #3			;<commodore><shift> combination?
+	bne 30$			;	branch if not
+	bbs7 locks,repeat	;	branch if disabled
+	lda lstshf		;has there been enough delay since last time?
+	bne repeat		;	branch if more delay needed
+
+15$	lda vm1			;toggle case by redirecting VIC character base register
+	eor #%00000010		; VIC(cb11)
+	sta vm1			;change will occur at next display frame *********????
+	sta vic+24
+
+20$	lda #%00001000		;provide a delay between toggles
+	sta lstshf		; (reset by 'ckit2' shifting 'lstshf' right)
+	bra repeat		;always
+
+
+
+30$	asl a			;make flag value a table pointer
+	cmp #8			;<control> key?		(overrides all other modes)
+	bcc 50$			;   branch if not down	(.a points to correct matrix)
+
+	lda #6			;set table pointer to <ctrl> matrix
+	ldx sfdx		;check for <ctrl>-S combination (pause output)
+	cpx #13
+	bne 50$			;	branch if not 'S'
+	bbs6 locks,50$		;	branch if disabled
+	stx pause		;set flag for pause
+99$	bra scnrts		;					[900517]
+
+40$	lda #10			;set table pointer to <caps-lock> matrix
+
+50$	tax			;.a = table pointer
+	lda decode,x
+	sta keytab		;setup vector to that table
+	lda decode+1,x
+	sta keytab+1		;fall thru to 'repeat' handler & 'ckit2'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+repeat				;handler for key repeats
+	ldy sfdx		;get key index
+	lda (keytab),y  	;lookup key value from proper table
+	tax			;save key value for 'ckit2' in .x
+
+	cpy lstx		;is the index the same as found during last key scan?
+	beq 20$			;	branch if it is
+	ldy #16
+	sty delay		;reset the delay before a key repeats	(16 = 1 second)
+	ldy #3
+	sty kount		;reset between_key_repeats counter	(3 = .2 second)
+	bra ckit2		;always
+
+
+20$	and #$7f		;mask off shift bit
+	bit rptflg		;are key repeats enabled?
+	bmi 30$			;	branch if all keys repeat
+	bvs scnrts		;	branch if no  keys repeat
+	cmp #$7f
+	beq ckit2		;	branch if nothing to repeat (no real key down)
+
+	cmp #$14		;repeat only cursor keys, space bar, and delete key
+	beq 30$			;	branch if <inst/del>
+	cmp #space
+	beq 30$			;	branch if <space>
+	cmp #$1d
+	beq 30$			;	branch if <crsr l/r>
+	cmp #$11
+	bne scnrts		;	branch if not <crsr u/d>
+
+30$	ldy delay		;repeat this key
+	beq 40$			;	branch if key has been down long enough to repeat
+	dec delay		;else keep counting down
+	bne scnrts
+
+40$	dec kount
+	bne scnrts		;	branch if between key repeats
+	ldy #3
+	sty kount		;reset between_key_repeats counter	(3 = .2 second)
+	ldy ndx
+	dey			;got a repeating key- is there room for it in buffer?
+	bpl scnrts		;	branch if no room (ignore it)
+				;	else fall into 'ckit2' & put key (in .x) into buffer
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+ckit2				;key is in .x
+	lsr lstshf		;do <cbm><shift> delay  (if any)
+
+	ldy sfdx		;get index of current key
+	sty lstx		;update last_key_found value
+	cpx #$ff		;.x has the key code (from 'repeat' or main loop if no key)
+	beq scnrts		;	branch if it's null (nothing down)
+
+	lda #0
+	sta pause		;any key clears the <ctrl>-S pause flag
+
+	txa			;decoded key
+	ldx shflag		;status of special keys
+;	jmp (keychk)		;.a=character, .y=keycode, .x=shift status	[ASCII systems]
+	jmp national_keychk	;						[National systems]
+
+keyput
+	bbs5 locks,scnbuf	;skip function key check if fkeys are "off"	[900725]
+
+	pha			;save character
+	tya			;use key matrix position, not character code
+	ldx #8			;check for (unshifted) function keys, <help>, or <shift><run>
+1$	cmp funtab1,x		;compare with function key matrix codes
+	beq dopfky		;	branch if it is a function key
+	dex
+	bpl 1$
+	pla			;retrieve character
+
+scnbuf	ldx ndx			;finally put key into the damn buffer!
+	cpx xmax
+	bcs scnrts		;	branch if buffer is full (ignore key)
+	sta keyd,x		;put it in
+	inc ndx			;update key queue count
+
+scnrts	lda #$7f
+	sta colm		;restore scan to last column (run/stop)
+	sta e_keys
+	rmb7 keyboard_lock	;allow next keyscan
+	rts
+
+	.page
+dopfky
+;  Fixes the problem of function keys overwriting previous function key
+;  string still in buffer.  Also exits via 'scnrts', as it should have.
+
+	pla			;character code
+	ldx #15			;get pointer to index of function key buffer
+1$	cmp funtab2,x		;compare with function key character codes
+	beq 2$			;	branch when found (it should be)
+	dex
+	bpl 1$
+	bra scnbuf		;	user must be handing us bad data- just use chr code
+
+2$	lda kyndx		;function key buffer in use?
+	bne 5$			;	branch if active- ignore this scan
+
+	lda pkybuf,x    	;set length of new function key string
+	sta kyndx
+	clc
+	lda #0			;index to start of string
+3$	dex			;pointer to string = sum(len(string(0-X)))
+	bmi 4$
+	adc pkybuf,x
+	bra 3$			;	always
+
+4$	sta keyidx		;set pointer to active function key string
+5$	bra scnrts		;restore scan to last column & rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+
+blink			;////////// VIC cursor blinker \\\\\\\\\\\\\
+	php
+	sei		;BLINK is called at IRQ time, so just in case someone calls BLINK...
+	lda vic+48
+	pha		;save!
+	ora #%00000001
+	sta vic+48	;enable attributes at $DC00 (for 80 col)
+	lda blnsw
+	bne 3$		;	branch if cursor not enabled (rts)
+	dec blnct
+	bne 3$		;	branch if not time to blink	(rts)
+	lda blnon
+	and #$c0
+	cmp #$c0
+	beq 3$		;	branch if solid cursor & 'gdbln' is correct
+
+	lda #16		;reset blink counters	(16 = 1sec, same as repeat delay)
+	sta blnct
+	ldy pntr	;get current cursor position
+	ldx gdcol	;get correct attributes & color
+	lda (pnt),y	;get screen character at cursor
+	bit blnon
+	bmi 1$		;	branch if cursor was on
+
+	sta gdbln	;cursor was off, save good character
+	jsr scolor	;????is this safe?  (VIC20, C64, and C128 do it...)
+	lda (user),y	;get screen attributes/color at cursor
+	sta gdcol	;save atrtributes/color
+	ldx color	;cursor always appears in current fgnd color
+	lda gdbln	;character under cursor
+
+1$	eor #$80	;toggle character field bit to 'blink' cursor
+	sta (pnt),y	;display this character ('displ' inline)
+	bit mono
+	bmi 2$		;display color (skip if monochrome display)
+	txa
+	sta (user),y
+2$	lda blnon
+	eor #$80
+	sta blnon	;toggle cursor
+
+3$	pla
+	sta vic+48	;restore whatever was at $DC00
+	plp		;restore IRQ mask
+	rts
+
+;.end
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;	1351 Proportional Mouse Driver
+;
+;	MOUSE_CMD is called to install or remove mouse driver.
+;	  enter with:
+;		.a= B7,6 set to install mouse in game port 2 ($80) or 1 ($40)
+;		.a= 0 to disable mouse driver
+;		.x= 0-7 sprite pointer
+;
+;	MOUSE_IRQ is called during system's 60Hz IRQ to update mouse position.
+;	There are no error returns; .X is masked to 4 bits, and the caller
+;	must set up the VIC sprite pointer in the video matrix himself.
+;	It is possible to install the driver for both joy ports simulaneously,
+;	but each port drives the same sprite and erratic results will result
+;	from the use of two active mice.  It is possible to "re-install" the
+;	driver to add or change joy ports or change sprite pointers, but a
+;	sprite thereby "cut loose" must be turned off by the caller.  Removing
+;	the driver will disable the currently associated sprite.
+
+mouse_cmd
+	sta mouse_enable
+	tay
+	beq 10$		;branch if mouse to be disabled
+	txa
+	and #7		;mask sprite pointer to 3 bits				[910122]
+	tax
+	asl a		;*2 for VIC sprite pointer
+	sta mouse_pointer
+	lda mbits,x
+	ora vic+21
+	sta vic+21	;enable sprite
+	rts
+
+10$	lda mouse_pointer
+	lsr a
+	tax
+	lda mbits,x
+	eor #$ff
+	and vic+21	;disable sprite
+	sta vic+21
+	rts
+
+
+mbits	.byte $01,$02,$04,$08,$10,$20,$40,$80		
+
+	.page
+mouse_irq
+	lda mouse_enable
+	bit #$c0
+	beq mouse_rts	;driver is not enabled, exit
+
+	ldx d1pra
+	phx
+	sta d1pra	;connect appropriate port to SID1				[910418]
+	lda #$16	;	delay 1.6ms (24*65us) to let lines settle & get sync-ed
+	jsr serial_delay
+	lda vic+49	;	must go slow to talk to SID
+	pha
+	and #%10111111
+	sta vic+49
+
+	ldx #0		;get position change for X
+	jsr movchk
+	sty opotx
+	ldy mouse_pointer
+	clc		;	update low order X position
+	adc xpos,y
+	sta xpos,y
+	txa
+	adc #$00
+	and #$01
+	lsr a
+10$	rol a		;	update high order X position
+	dey
+	dey
+	bpl 10$
+	eor xposmsb
+	sta xposmsb
+
+	ldx #1		;get position change for Y
+	jsr movchk
+	sty opoty
+	ldy mouse_pointer
+	neg a		;	update Y position (decrease Y for increase in pot)
+	tax
+	clc
+	adc ypos,y
+	bmi 15$		;	(problem- because a small positive delta will cause a big Y
+	bcc 15$		;	 to wrap, we need to trap this and keep Y from wrapping.)
+	inx
+	dex		;	need to know which way we're going, saved in .x
+	bmi 15$
+	lda #255	;		Y wrapped, so force to end of screen
+15$	sta ypos,y
+
+	plx
+	stx vic+49	;restore system speed
+	plx
+	stx d1pra
+
+	.page
+; At this point, the VIC sprite register contains the updated sprite position.
+; We now have to make sure the pointer is on-screen and adjust it if it's not.
+; A=ypos, Y=index*2
+
+	cmp mouse_top		;top line of sprite at topmost visible raster of screen?
+	bcs 20$			;	good (default=50)	
+	lda mouse_top
+	sta ypos,y		;	bad- force it to top raster
+
+20$	lda mouse_bottom	;top line of sprite at bottommost visible raster of screen?
+	cmp ypos,y
+	bcs 30$			;	good (default=250)
+	dec a
+	sta ypos,y		;	bad- put it on bottommost raster
+
+30$	tya			;now check left & right
+	lsr a
+	tax
+	lda xposmsb		;	xmsb
+	and mbits,x
+	bne 40$			;	branch if on right half of screen
+
+	lda xpos,y		;left edge of sprite at leftmost visible edge of screen?
+	cmp mouse_left
+	bcs mouse_rts		;	good (default=24)
+	lda mouse_left
+	sta xpos,y		;	bad- put it at leftmost edge
+	rts
+
+40$	lda mouse_right		;left edge of sprite at rightmost edge of screen?
+	cmp xpos,y
+	bcs mouse_rts		;	good
+	sta xpos,y		;	bad- put it at rightmost edge
+
+mouse_rts
+	rts
+
+	.page
+; MOVCHK
+;	entry	.x    = 0 for X, 1 for Y
+;	exit	.y    = value to use for old value
+;		.x,.a = delta value for position
+
+movchk	lda potx,x	;read appropriate pot register
+	ldy opotx,x
+	sta newvalue	;save old & new values
+	sty oldvalue
+
+	ldx #0		;preload x w/ 0
+	sec		;a = mod64(new-old)
+	sbc oldvalue
+	and #%01111111	
+	cmp #%01000000	;if a > 0
+	bcs 50$
+	asr a		;   then a = a/2 (drop noise bit, keeping msb same)
+	beq 80$		;      if a <> 0
+	ldy newvalue	;         then y = newvalue
+	rts		;              return
+
+50$	ora #%11000001	;   else or-in high order bits & noise bit
+	cmp #$ff	;      if a <> -1
+	beq 80$
+	asr a		;   then a = a/2 (drop noise bit, keeping msb same)
+	ldx #$ff	;              x = -1
+	ldy newvalue	;              y = newvalue
+	rts		;              return
+
+80$	lda #0		;a = 0
+	rts		;return w/ y = old value
+
+;.end
+	.page
+	.subttl  Print Routines
+
+; //////////////////  P R I N T   C H A R A C T E R   \\\\\\\\\\\\\\\\\\\\\\
+
+print			;print character in .a on the screen & rts to 'loop2'
+	sta datax	;save a copy of character to print
+	pha		;save all registers
+	phx
+	phy
+
+10$	lda pause	;is there a pause (<ctrl>-S) in effect?
+	bne 10$		;	loop if so (IRQ key routine must clear it @ckit2)
+	sta crsw
+
+loop2v	= loop2-1
+
+	lda #>loop2v	;push 'loop2' onto stack for common return mechanism
+	pha
+	lda #<loop2v
+	pha
+
+	ldy pntr	;screen column to print to
+	lda datax	;character to print
+	cmp #cr		;is it <cr> or <shift><cr>?
+	beq prtcr	;	branch if so
+	cmp #cr+$80
+	beq prtcr
+
+	ldx lstchr	;was previous character an <escape>?
+	cpx #esc
+	beq escchr	;	go to escape handler & rts to 'loop2'
+
+20$	tax		;sets processor status per current character
+	bmi shfchr	;	go process shifted character
+
+30$	cmp #space
+	bcc ctlchr	;	branch if it was <ctrl> character
+
+40$	cmp #$60	;convert character to CBM screen code
+	bcc 50$
+	and #$df	;convert ($60-$7f to $40-$5f)
+	.byte $2c
+50$	and #$3f	;convert ($40-$5f to $00-$1f)
+
+	jsr qtswc	;if quote char, toggle quote switch
+	bra nxt3	;put character on screen & do rts to 'loop2'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+prtcr			;print a <cr><lf>
+	jsr fndend	;find the end of the current line
+	inx
+	jsr clrbit	;set next line as non-continued
+	ldy sclf	;point to first column of next line
+	sty pntr
+	jsr nxln	;set up next line & fall thru to 'togm'
+
+
+
+reset_modes		;reset all editor modes
+	lda #$f0
+	trb color	;reset blink, reverse, bold & underline attribute modes
+	lda #0
+	sta insrt	;reset insert mode
+	sta rvs		;reset reverse mode
+	sta qtsw	;reset quote mode
+	rts
+
+
+
+ctltbs	.byte $02,$07,$09,$0a,$0b,$0c,$0e,$0f
+	.byte $11,$12,$13,$14,$15,$17,$18,$1a,$1d
+
+control_vectors			;dispatch table for <ctrl> characters
+
+	.word undron-1		; b ($02) set underline mode
+	.word beep-1		; g ($07) bell
+	.word tab-1		; i ($09) tab
+	.word lfeed-1		; j ($0a) line feed
+	.word lock-1		; k ($0b) lock out <C=><shift>
+	.word unlock-1		; l ($0c) unlock   <C=><shift>
+	.word lower-1		; n ($0e) lower case
+	.word flshon-1		; o ($0f) set flash mode
+	.word crsrdn-1		; q ($11) cursor down
+	.word rvson-1		; r ($12) set reverse field mode
+	.word homtst-1		; s ($13) home cursor
+	.word delete-1		; t ($14) delete
+	.word backword-1	; u ($15) backup word
+	.word word-1		; w ($17) word advance
+	.word tabset-1		; x ($18) toggle tab stop
+	.word backtab-1		; z ($1a) backup tab
+	.word crsrrt-1		; ] ($1d) cursor right
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+ctlchr	jmp (ctlvec)	;'contrl' indirect
+
+contrl			;print a <ctrl> character & rts to 'loop2' always
+	cmp #esc
+	beq ctlrts	;	branch if <escape> & ignore
+
+	ldx insrt	;if insert or quote mode, show character as rvs field 
+	bne 1$		;	branch if insert mode
+	cmp #$14
+	beq 2$		;	branch if <delete> to allow them in quote mode
+	bbr7 qtsw,2$	;	branch if not quote mode
+1$	ldx #0
+	stx datax	;squash 'lstchr' (eg: used to detect double <home>'s)
+	bra nc3		;print character in reverse field
+
+2$	ldx #control_vectors-ctltbs-1
+3$	cmp ctltbs,x	;test if character is a functional <ctrl> character
+	beq ctlexe	;	yes- go handle it
+	dex
+	bpl 3$
+
+colchk			;////// 'shiftd' exits thru here too
+	ldx #15		;test if character is a color
+1$	cmp coltab,x
+	beq 2$		;	yes- change color
+	dex
+	bpl 1$
+	rts		;an unrecognized character...ignore it, rts to 'loop2'
+
+2$	lda #$0f
+	trb color	;preserve non-color attributes
+	txa
+	tsb color	;set color
+ctlrts	rts
+
+
+ctlexe
+	txa
+	asl a		;index into ctrl dispatch table
+	tax
+	lda control_vectors+1,x
+	pha
+	lda control_vectors,x
+	pha
+	rts		;do <ctrl> function, rts to 'loop2'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+shfchr	jmp (shfvec)	;'shiftd' indirect
+
+shiftd			;process shifted keycodes & return to 'loop2'
+	and #$7f	;mask off msb
+	cmp #$20	;immediate function key?
+	bcc 2$		;	yes
+
+	cmp #$7f	;pi?
+	bne nxt33	;	no, print it
+	lda #$5e	;
+	bra nxt33	;	yes, translate it and print it
+
+2$	bbr7 qtsw,4$	;if quote mode,  show character in rvs field
+			;	branch not quote mode
+3$	ora #$40	;make it shifted
+	bra nc3		;make it reversed and print it
+
+4$	cmp #$14	;<insert>?  (must check before 'insrt' flag test!)
+	beq insert	;	yes
+5$	ldx insrt	;if insert mode, show character in rvs field
+	bne 3$		;	branch if insert mode
+
+	cmp #$11	;<crsr-up>?
+	beq crsrup
+
+	cmp #$1d	;<crsr-lf>?
+	beq crsrlf
+
+	cmp #$0e	;'set upper case'?
+	beq upper
+
+	cmp #$12	;<rvs-off>?
+	beq rvsoff
+
+6$	cmp #$02	;'disable underline'?
+	beq undrof
+
+7$	cmp #$0f	;'disable flash'?
+	beq flshof
+
+8$	cmp #$13	;<clr>?
+	beq clear_screen
+
+9$	ora #$80	;restore msb
+	bra colchk	;(always) test for color & rts to 'loop2'
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+crsrrt
+	jsr nxtchr	;cursor right
+	bcs crsrw1	;	branch if wrap
+	rts
+
+
+
+crsrdn
+	jsr nxln	;cursor down
+
+crsrw1	jsr getbit	;a wrapped line?
+	bcs crsrok	;	yes
+	smb7 lsxp	;	no- flag we left line
+
+crsrok	clc
+crsrts	rts		;return to 'loop2' (except 'crsrlf' call from 'delete')
+
+
+
+crsrup
+	ldx sctop	;cursor up
+	cpx tblx	;at top of window?
+	bcs crsrts	;	yes- do nothing
+
+crsrw2	jsr crsrw1	;about to wrap?
+	dec tblx	;up a line
+	bra setup_line	;	setup pointers & return to 'loop2' (unless 'delete')
+
+
+
+crsrlf
+	jsr backspace	;cursor left (////// called also by 'delete')
+	bcs crsrts	;	abort if at top left
+	bne crsrok	;	no- exit
+	inc tblx
+	bra crsrw2	;(always) go set flag if needed
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+lower			;set lower character set
+	lda vm1		;get character base
+	ora #$02	;set VIC cb11: (point to lower case)
+	bra uprts	;always
+
+
+upper			;set upper character set
+	lda vm1		;get character base
+	and #$fd	;clear VIC cb11: (point to upper case)
+
+uprts	sta vm1		;change will occur at next display frame ************
+	sta vic+24
+	rts		;returns to 'loop2'
+
+
+
+lock
+	smb7 locks	;lock keyboard in current mode (disable C=/shift)
+	rts		;return to loop2
+
+
+unlock
+	rmb7 locks	;unlock keyboard mode (enable C=/shift)
+	rts		;return to loop2
+
+
+
+homtst
+	lda lstchr
+	cmp #$13		;is this the 2nd consecutive <home>?
+	bne 1$			;	no
+	jsr reset_screen	;	yes- reset window to full screen
+1$	bra home		;home cursor
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+rvsoff
+	rmb7 rvs	;turn off reverse field mode
+	rts
+
+rvson
+	smb7 rvs	;turn on reverse field mode
+	rts
+
+
+
+undron
+	smb7 color	;enable underline attribute
+	rts
+
+undrof
+	rmb7 color	;disable underline attribute
+	rts
+
+
+flshon
+	smb4 color	;enable flash attribute
+	rts
+
+flshof
+	rmb4 color	;disable flash attribute
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+insert				;insert one character on screen
+	jsr savpos		;save column & row position
+	jsr fndend		;move to last char on the line
+	cpx sedt2		;last row equal to starting row?
+	bne 1$			;	no- skip ahead
+
+	cpy sedt1		;is last position before starting position?
+1$	bcc 3$			;	yes- no need to move anything
+	jsr advance_cursor	;move to next char position
+	bcs delout		;	abort if scroll needed but disabled
+
+2$	jsr backspace
+	jsr get1ch		;move char forward 1 position
+	jsr nxtchr
+	jsr displt
+	jsr backspace
+	ldx tblx
+	cpx sedt2		;at original position?
+	bne 2$
+	cpy sedt1
+	bne 2$			;	no- loop until we are
+	jsr blank		;insert a blank
+
+3$	inc insrt		;add one to insert count
+	bne delout		;	failsafe- only count up to 255
+	dec insrt		; (notice we already did the actual insert though...)
+	bra delout		;restore original position
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+delete			;delete one character on screen
+	jsr crsrlf	;move cursor back one position
+	jsr savpos	;save column & row position
+	bcs delout	;abort if at top left corner of window
+
+deloop	cpy scrt	;at right margin?
+	bcc delchr	;	no- skip ahead
+	ldx tblx
+	inx		;is next line a wrapped line?
+	jsr getbt1
+	bcs delchr	;	yes- continue with delete
+	jsr blank	;	no- blank last character
+
+
+delout
+	lda sedt1	;restore column and row position (entry from 'insert')
+	sta pntr
+	lda sedt2
+	sta tblx
+	bra setup_line	;restore 'pnt', 'user'  & rts to 'loop2'
+
+
+delchr
+	jsr nxtchr
+	jsr get1ch	;get next character
+	jsr backspace	;move pointers back one position
+	jsr displt	;display character
+	jsr nxtchr	;set up for next character
+	bra deloop	;	loop until end of line
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+tab
+	ldy pntr	;TAB function
+1$	iny
+	cpy scrt	;at rightmost side of window?
+	bcs 2$		;	yes
+	jsr tabget	;find next tabstop
+	beq 1$		;	branch if not there yet
+	.byte $2c
+
+2$	ldy scrt	;put cursor at right margin
+	sty pntr
+	rts
+
+
+
+backtab
+	ldy pntr	;backTAB function
+1$	dey
+	bmi 2$		;	wrapped from 0->255
+	cpy sclf	;at leftmost side of window?
+	bcc 2$		;	yes
+	jsr tabget	;find next tabstop
+	beq 1$		;	branch if not there yet
+	.byte $2c
+
+2$	ldy sclf	;put cursor at left margin
+	sty pntr
+	rts
+
+	.page
+tabget			;return <> if column in .y is a tabstop
+	tya		;       .a returns bits, .x index to tabmap
+	and #$07
+	tax
+	lda bits,x
+	sta bitmsk
+	tya
+	lsr a
+	lsr a
+	lsr a
+	tax
+	lda tabmap,x
+	bit bitmsk	;set = flag accordingly
+	rts
+
+
+
+tabset
+	ldy pntr
+	jsr tabget	;toggle tabstop at current cursor position
+	eor bitmsk
+	sta tabmap,x
+	rts
+
+
+
+tabclr
+	lda #0		;clear all tab stops
+	.byte $2c
+
+taball	lda #$80	;set default tab stops
+	ldx #9
+1$	sta tabmap,x
+	dex
+	bpl 1$
+	rts
+
+	.page
+word			;Word advance function
+	ldy pntr
+	lda (pnt),y	;	save current character
+	pha
+	jsr crsrrt	;	advance a character position
+	ldy pntr
+	cpy sclf
+	beq 10$		;		done- wrapped to next line
+
+	plx
+	lda (pnt),y	;	get new character
+	cmp #':'
+	beq word	;		colon, loop
+	cmp #' '
+	beq word	;		space, loop
+	cpx #':'
+	beq 20$		;		previous char colon, exit
+	cpx #' '
+	bne word	;		previous char space, exit
+	.byte $24
+
+10$	plx
+20$	bra reset_modes	;done
+	
+
+backword		;Word backspace function
+	jsr crsrlf	;	backup a character position
+	ldy pntr
+	cpy sclf
+	beq 10$		;		done- at left margin
+
+	lda (pnt),y
+	pha
+	dey
+	lda (pnt),y	;	
+	iny
+	tax		;	preceeding character
+	pla		;	new character
+	cmp #':'
+	beq backword	;		colon, loop
+	cmp #' '
+	beq backword	;		space, loop
+	cpx #':'
+	beq 10$		;		preceeding char colon, exit
+	cpx #' '
+	bne backword	;		preceeding char space, exit
+
+10$	bra reset_modes	;done
+
+	.page
+beep
+	bbs7 beeper,10$	;generate 'bell' tone for <ctrl>-G if enabled
+
+	php
+	sei
+	lda vic+49
+	pha		;save speed
+	lda #%01000000
+	trb vic+49	;SLOW mode
+
+	lda #$0f	;volume
+	sta sid2+24
+	lda #$0f	;attack/decay
+	sta sid2+5
+	lda #$07	;sustain/release
+	sta sid2+6
+	lda #$22	;frequency (approx. C6)
+	sta sid2+1
+	lda #$10
+	sta sid2+4	;waveform & ungate
+	lda #$11
+	sta sid2+4	;gate (begin attack)
+
+	ldy #8		;delay approx 1ms
+	jsr slowmo
+
+	lda #$10	;ungate (begin release)
+	sta sid2+4	;set waveform & ungate
+
+	pla
+	sta vic+49	;restore speed
+	plp
+
+10$	rts
+
+
+
+lfeed
+	lda pntr	;move to next logical line but retain current column pointer
+	pha
+	jsr fndend	;move to end of current logical line
+	jsr nxln	;move down one physical line
+	pla
+	sta pntr	;restore cursor column pointer
+	rts
+
+;.end
+	.page
+	.subttl  Escape Sequence Handler
+
+;/////////////   E S C A P E     F U N C T I O N S   \\\\\\\\\\\\\\
+
+;  escape sequence handler.   entry: character following <escape> in .a
+
+escchr	jmp (escvec)	;'escape' indirect
+
+escape	cmp #esc
+	bne 1$		;	branch if not double <escape>
+	lsr datax	;	else cancel <escape> sequencer by fucking up lstchr
+	bra reset_modes	;	and exit via 'toqm' to cancel all other modes too
+
+1$	and #$7f
+	sec
+	sbc #'@'	;table begins at ASCII '@' & ends at ']'
+	cmp #30		;']'-'@'+1
+	bcs 2$		;	invalid char, ignore sequence
+
+	asl a		;character is index to dispatch table
+	tax		;get address of escape routine, push it, & rts to it
+	lda escape_vectors+1,x
+	pha
+	lda escape_vectors,x
+	pha
+2$	rts
+
+escape_vectors
+	.word esc_clear_eos-1	;@ erase to end of screen
+	.word auton-1		;a auto insert
+	.word sethtb-1		;b set bottom-right screen margin
+	.word autoff-1		;c cancel auto insert
+	.word dline-1		;d delete line
+	.word crsrnf-1		;e select non-flashing cursor
+	.word crsrbl-1		;f flashing cursor
+	.word bellon-1		;g enable bell
+	.word bellof-1		;h disable bell
+	.word iline-1		;i insert line
+	.word fndsol-1		;j move to start of line
+	.word fndeol-1		;k move to end of line
+	.word scroll_enable-1	;l enable scrolling
+	.word scroll_disable-1	;m disable scrolling
+	.word dspnml-1		;n normal (un-reversed) screen
+	.word reset_modes-1	;o cancel insert, quote, rvs, ul & flash modes
+	.word esc_clear_bol-1	;p erase to beginning of line
+	.word esc_clear_eol-1	;q erase to end of line
+	.word dsprvs-1		;r reverse screen
+	.word crsral-1		;s set bold attribute
+	.word sethtt-1		;t set top-left screen margin
+	.word crsrul-1		;u unset bold attribute
+	.word esc_scroll_up-1	;v scroll up
+	.word esc_scroll_down-1	;w scroll down
+	.word swap-1		;x switch between 40/80 display modes
+	.word taball-1		;y set default tab stops
+	.word tabclr-1		;z clear all tab stops
+	.word esc_mono_dsply-1	;[ set monochrome display (disable attributes)
+	.word reset_modes-1	;\ cancel insert, quote, rvs, ul & flash modes
+	.word esc_color_dsply-1	;] set color display (enable attributes)
+	.page
+;*****************************
+;
+;  window modes
+;
+;*****************************
+
+sethtt
+	clc		;set top of window
+	.byte $24
+sethtb
+	sec		;set bottom of window
+	ldx pntr
+	lda tblx
+window	bcc sttop	;//////entry from editor jump table here!
+
+
+stbot
+	sta scbot
+	stx scrt
+	bra rewrap
+
+
+reset_screen		;reset screen to full window
+	lda lines	;max # of rows
+	ldx columns	;max # of columns
+	jsr stbot
+	lda #0
+	tax		;fall thru to set top
+
+
+sttop
+	sta sctop	;set top of window
+	stx sclf
+
+
+rewrap
+	lda #0		;make all lines non-continued
+	ldx #4
+1$	sta bitabl-1,x
+	dex
+	bne 1$
+	sta lstchr	;kill pending 'home' from previous window
+	rts
+
+	.page
+;*****************************
+;
+;  insert line
+;
+;*****************************
+
+iline
+	jsr scroll_down	;insert a blank line
+	jsr stu10	;move to start of line
+	inx
+	jsr getbt1
+	php
+	jsr putbit	;set continuation same as in previous line
+	plp
+	bcs 1$		;skip if was wrapped
+	sec
+	ror lsxp	;set flag - new line
+1$
+	rts
+
+
+
+;**************************
+;
+; delete line
+;
+;**************************
+
+dline
+	jsr fistrt	;find start of line
+	lda sctop	;save logical screen top margin
+	pha
+	lda tblx	;temporarily make current line the top margin
+	sta sctop
+	lda scroll	;temporarily turn scrolling off
+	pha
+	smb7 scroll
+	jsr scru15	;scroll the top line away
+	pla
+	sta scroll	;restore scroller status
+	lda sctop	;restore previous line pointer
+	sta tblx
+	pla
+	sta sctop	;restore top margin
+	sec
+	ror lsxp	;flag this as a new line
+	bra stu10	;adjust line pointers & rts
+
+	.page
+;******************************
+;
+; erase to end of line
+;
+;******************************
+
+esc_clear_eol
+	jsr savpos
+
+10$	jsr clear_eol	;blank rest of line
+	inc tblx	;move to next line
+	jsr setup_line
+	ldy sclf
+	jsr getbit	;check if this is a wrapped line
+	bcs 10$		;	yes- blank the next physical line too
+
+	bra delout	;exit and restore original position
+
+
+
+;*****************************
+;
+; erase to beginning of line
+;
+;*****************************
+
+esc_clear_bol
+	jsr savpos
+
+10$	jsr blank	;do a blank
+	cpy sclf	;done a line?
+	bne 20$		;	no
+	jsr getbit	;at top of line?
+	bcc delout	;	yes- exit
+
+20$	jsr backspace	;back up
+	bcs delout	;	can't- at top left	[901029] FAB
+	bra 10$		;always
+
+	.page
+;******************************
+;
+; erase to end of screen
+;
+;******************************
+
+esc_clear_eos
+	jsr savpos
+
+10$	jsr clear_eol	;blank rest of line
+	inc tblx	;move to next line
+	jsr setup_line
+	ldy sclf
+	jsr getbit	;is this a wrapped line?
+	bcs 10$		;	yes- blank the next physical line too
+
+	lda tblx
+	cmp scbot	;is this the end of screen?
+	bcc 10$
+	beq 10$		;	loop until end
+
+	bra delout	;exit and restore original position
+
+	.page
+;*****************************
+;
+; scroll up
+;
+;*****************************
+
+esc_scroll_up
+	jsr savpos
+	phx
+	jsr scroll_up
+	pla
+	sta sedt2
+	bra delout
+
+
+
+;*****************************
+;
+; scroll down
+;
+;*****************************
+
+esc_scroll_down
+	jsr savpos
+	jsr getbit	;wrapped line?
+	bcs 10$		;	yes
+	sec
+	ror lsxp	;	no- set flag that we left line
+
+10$	lda sctop
+	sta tblx	;scroll from screen top
+	jsr scroll_down
+	jsr clrbit	;make first line non-continued
+	bra delout
+
+	.page
+;********************************
+;
+; scrolling enable/disable
+;
+;********************************
+
+scroll_enable
+	rmb7 scroll	;enable scrolling
+	rts
+
+scroll_disable
+	smb7 scroll	;disable scrolling
+	rts
+
+
+
+;*******************************
+;
+;  auto insert on/off
+;
+;*******************************
+
+autoff
+	rmb7 insflg
+	rts
+
+auton
+	smb7 insflg
+	rts
+
+	.page
+;*******************************
+;
+;  cursor modes
+;
+;*******************************
+
+crsrnf
+	lda #$40	;select non-blinking cursor
+	tsb blnon
+	rts
+
+crsrbl
+	lda #$40	;select blinking cursor
+	trb blnon
+	rts
+
+	.page
+;*******************************
+;
+;   bell (ctrl-g) on/off
+;
+;*******************************
+
+bellon
+	rmb7 beeper
+	rts
+
+bellof
+	smb7 beeper
+	rts
+
+
+
+
+crsral
+	smb6 color	;set bold attribute
+	rts		;	(was 8563 solid cursor)
+
+
+crsrul
+	rmb6 color	;unset bold attribute mode
+	rts		;	(was 8563 underline cursor)
+
+
+dsprvs
+dspnml
+	rts		;was (un)reverse 8563 display
+
+
+
+fndeol
+	jsr fndend		;move to last character in line
+	bra advance_cursor	;move past it & start a wrapped line if necessary
+
+
+
+esc_mono_dsply
+	lda #$80		;monochrome mode (disable attributes)
+	tsb mono
+	rts
+
+esc_color_dsply
+	lda #$80		;color mode (enable attributes)
+	trb mono
+	rts
+
+;.end
+	.page
+	.subttl  Editor Subroutines
+
+get1ch			;get a character & its color from text screen
+	ldy pntr	;current column (char/color index)
+	lda #%00000001
+	tsb vic+48	;enable color at $DC00 (for 80 col)
+	lda (user),y	;get screen color at cursor
+	sta tcolor
+	lda #%00000001
+	trb vic+48	;disable color at $DC00 (for 80 col)
+	lda (pnt),y	;get the character
+	rts
+
+
+
+;  wrap table subroutines
+
+getbit
+	ldx tblx	;current line
+
+getbt1	jsr bitpos	;get byte & bit positions
+	and bitabl,x
+	cmp #1		;make carry clear if zero (not a wrapped line)
+	ldx bitmsk
+	rts
+
+
+
+; putbit - set bit according to carry
+
+putbit	ldx tblx	;current line
+putbt1	bcs setbit	;go to mark as wrapped line, else clear wrap bit
+
+
+
+; clrbit - clear wrap bit
+
+clrbit	jsr bitpos	;get byte & bit positions
+	eor #$ff	;invert bit position
+	and bitabl,x    ;clear bit
+	bra bitsav
+
+
+
+; setbit  -  set bit to mark as wrapped line
+
+setbit
+	bbs6 scroll,getbt1	;check for line-link disable
+	jsr bitpos	;get byte & bit position
+	ora bitabl,x    ;set wrap bit
+
+bitsav	sta bitabl,x
+	ldx bitmsk
+	rts
+
+	.page
+; bitpos - get byte & bit position of wrap bit
+;	input:		.x = line number
+;
+;	output:		.x = byte number
+;			.a = bit mask
+
+bitpos
+	stx bitmsk	;line number
+	txa
+	and #$07	;get bit position
+	tax
+	lda bits,x	;get bit mask
+	pha
+	lda bitmsk
+	lsr a
+	lsr a		;shift to get byte position
+	lsr a
+	tax
+	pla
+	rts
+
+	.page
+; ****** move to end/start of line
+;
+fndsol
+	ldy sclf	;will move to start of line...
+	sty pntr	;set to leftmost column
+
+
+; ****** find beginning of line
+;
+fistrt
+	jsr getbit	;find start of current line
+	bcc 1$		;	branch if found
+	dec tblx	;wrapped line, so move up one physical line
+	bpl fistrt	;	always (assumes top line is never continued)
+	inc tblx	;whoops went too far- top line was a continued line
+
+1$	bra setup_line	;set line base adr
+
+
+; ****** find last non-blank character of current line
+;
+; pntr= column #
+; tblx= line #
+
+fndend
+	inc tblx
+	jsr getbit	;is this line continued
+	bcs fndend	;	branch if so
+	dec tblx	;found it- compensate for inc tblx
+	jsr setup_line	;(note .x has tblx)
+	ldy scrt	;get right margin
+	sty pntr	;point to right margin
+
+1$	jsr get1ch
+	cmp #space
+	bne 3$		;yes
+	cpy sclf	;are we at the left margin?
+	bne 2$		;	no- keep going
+	jsr getbit	;are we on a wrapped line?
+	bcc 3$		;	no- get out
+
+2$	jsr backspace
+	bcc 1$		;ok- not at top left
+
+3$	sty indx	;remember this
+	rts
+
+	.page
+; ****** move to next char
+;
+; scroll if enabled, else wrap to top
+
+nxtchr
+	pha
+	ldy pntr
+	cpy scrt	;are we at the right margin?
+	bcc 1$		;	branch if not
+
+	jsr nxln	;point to next line
+	ldy sclf	;point to first char of 1st line
+	dey
+	sec		;set to show moved to new line
+1$	iny		;increment char index
+	sty pntr
+	pla
+	rts
+
+
+; ****** backup one char
+;
+; wrap up and stop at top left
+
+backspace
+	ldy pntr
+	dey
+	bmi 1$
+	cpy sclf	;are we at the left margin
+	bcs 2$		;no - past it
+
+1$	ldy sctop
+	cpy tblx	;are we at top line last character?
+	bcs 3$		;leave with carry set
+	dec tblx	;else backup a line
+	pha
+	jsr setup_line	;set line base adr
+	pla
+	ldy scrt	;move cursor to right side
+
+2$	sty pntr
+	cpy scrt	;set z-flag if moved to new line
+	clc		;always clear
+3$	rts
+
+
+; ****** save row & column position
+;
+savpos
+	ldy pntr
+	sty sedt1
+	ldx tblx
+	stx sedt2
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  ///////// put a character on the screen \\\\\\\\\\\
+;
+;	enter 'disply' with .a= character,  .x= color
+
+
+blank	lda color	;display a blank
+	and #$0f	; (strip off rvs, underline, bold & flash attributes)
+	tax
+	lda #space
+	.byte $2c
+
+
+displc	ldx color	;use current fgnd color
+	.byte $2c
+
+
+displt	ldx tcolor	;use saved color
+
+
+disply	tay		;save character to display
+	lda #2
+	sta blnct	;force a cursor blink
+	jsr scolor	;setup color pointers
+	tya		;restore character
+	ldy pntr	;get cursor position
+
+
+displ	sta (pnt),y	;put character on screen
+	bit mono	;monochrome screen?
+	bmi 10$
+
+	lda #%00000001
+	tsb vic+48	;enable color at $DC00 (for 80 col)
+	txa		;get color
+	sta (user),y	;put the color on screen
+	lda #%00000001
+	trb vic+48	;disable color at $DC00 (for 80 col)
+
+10$	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;	SCRORG	returns active window's size (maximum row & column #) & origin
+;	                       ^^^^^^^^
+; entry:	nothing required.
+;
+; exit:		.c = maximum screen width  (0=80, 1=40)		default = 0
+;		.x = maximum column number (# columns minus 1)	default = 79
+;		.y = maximum line   number (# lines   minus 1)	default = 24
+;
+;		.a = window address (home position), low 	default = $0800
+;		.z = window address,		     high
+
+scrorg
+	ldx sctop	;get address of home position
+	lda ldtb1,x
+	bbr7 mode,10$	;	(halve table values for 40-col mode)
+	lsr a
+10$	ora ldtb1_sa	;	customize
+	sta sedt2	;	temp
+	lda ldtb2,x
+	bbr7 mode,20$
+	ror a
+20$	clc
+	adc sclf
+	sta sedt1	;	low
+	bcc 30$
+	inc sedt2	;	save for now: sedt has window origin address
+
+
+30$	sec		;get active window size  (maximum row & column #)
+	lda scbot
+	sbc sctop
+	tay		;.y = # lines in current window - 1
+
+	sec
+	lda scrt
+	sbc sclf
+	tax		;.x = # columns in current window - 1
+
+	lda mode
+	asl a		;.c = screen width (0=80, 1=40)
+
+	lda sedt1	;.a = address of home poision, low
+	ldz sedt2	;.z = address of home poision, high
+
+	rts
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+;	PLOT		Reads or sets the cursor position within current window
+;
+; Entry:	.c = 1	Returns the cursor position (.y=column, .x=line)
+;			relative to the current window origin (NOT screen origin).
+;
+;		.c = 0	Sets the cursor position (.y=column, .x=line) relative
+;			to the current window origin (NOT screen origin).
+;
+; Exit:		When reading position,      .X=line, .Y=column, .C=1 if wrapped line
+;
+;		When setting new position,  .X=line, .Y=column, and
+;		.c = 0	Normal exit.  The cursor has been moved to the position
+;			contained in .x & .y relative to window origin (see SCRORG).
+;
+;		.c = 1	Error exit.  The requested position was outside the
+;			current window (see SCRORG).  The cursor has not been moved.
+
+plot
+	bcc 1$		;branch to set position, continue to read position
+	jsr 30$		;get relative line & column numbers
+	phx		;	save line
+	jsr getbit	;get wrap status
+	plx
+	rts
+
+1$	txa		;get line position relative to window origin
+	adc sctop
+	bcs 15$
+	cmp scbot
+	beq 10$		;	good if within window (position <= scbot)
+	bcs 15$		;	branch if error (.c=1)
+
+10$	pha		;save
+	clc
+	tya		;get column position relative to window origin
+	adc sclf
+	bcs 14$		;	branch if error (.c=1)
+	cmp scrt
+	beq 20$		;	good if within window (position <= scrt)
+	bcc 20$
+14$	pla
+15$	rts		;error return (.c=1)
+
+20$	sta pntr	;set column position
+	sta lstp
+	pla
+	sta tblx	;set line position
+	sta lsxp
+	jsr setup_line	;position cursor there
+;	jsr cursor	;enable cursor????
+
+30$	lda tblx	;read current line position
+	sbc sctop
+	tax		;return cursor line # relative to window top
+	sec
+	lda pntr	;read current column position
+	sbc sclf
+	tay		;return cursor column # relative to window left
+	clc		;normal return
+	rts
+
+	.page
+;*************************************************************************
+;
+;	KEYSET - redefine a programmable function key
+;
+;	entry:	.a= pointer to new string adr (lo,hi,bank)
+;		.x= key number (1-16)
+;		.y= length of new string
+;
+;	exit:	.c= 0 if good,  1 if no room (no change made)
+;
+;**************************************************************************
+
+keyset
+	dex
+	stx keynum	;save key number (0-15)
+	sty keysiz	;save string length
+	tax
+	lda $00,x	;string address
+	sta t1		;copy pointer to string address & bank
+	lda $01,x
+	sta t1+1
+	lda $02,x
+	sta keybnk
+
+	ldx #pkynum	;(note: 'help' & <shft/run> are strings too)
+	jsr findky	;find end of all strings
+	sta keylen	;save offset
+	ldx keynum
+	inx
+	jsr findky	;find end of function key (beginning of next)
+	sta keynxt	;save offset
+	ldx keynum
+	lda keysiz
+	sec
+	sbc pkybuf,x	;get (new size) - (old size)
+	beq keyins	;	skip if the same
+	bcc 2$		;	skip if new is shorter
+	clc
+	adc keylen	;get new ending offset for all keys
+	bcs keyerr	;	error if wrapped
+
+	tax		;destination address+1
+	ldy keylen	;source address+1
+
+1$	cpy keynxt
+	beq keyins	;done if all following keys have been moved
+	dey		;expand key area
+	dex		;move source to destination
+	lda pkydef,y
+	sta pkydef,x
+	bcs 1$
+
+
+2$	adc keynxt	;get destination offset
+	tax
+	ldy keynxt	;get source address
+
+3$	cpy keylen	;compact key area
+	bcs keyins	;exit if moved all
+	lda pkydef,y
+	sta pkydef,x
+	iny
+	inx
+	bra 3$		;always
+
+	.page
+;  keyins  --  insert new key definition
+
+keyins
+	ldx keynum	;get key number
+	jsr findky	;get starting offset
+	tax
+	ldy keynum
+	lda keysiz	;get new size
+	sta pkybuf,y	;set new size
+
+	ldy #0		;copy string into function key area
+1$	lda keysiz
+	beq keyrts	;	exit- end of string (allow null strings)
+	dec keysiz
+	phx
+	phz
+	ldz keybnk
+	ldx #t1
+	jsr lda_far	;lda (t1),y
+	plz
+	plx
+	sta pkydef,x
+	inx
+	iny
+	bne 1$		;	always (use 'bne' for failsafe)
+
+keyrts	clc		;good return
+
+keyerr	rts
+
+
+
+findky
+	lda #0
+	clc
+
+1$	dex
+	bmi 2$
+	adc pkybuf,x
+	bcc 1$
+2$	rts
+
+;.end
+	.page
+	.subttl  80-column Editor Routines
+
+swap	php			;toggle 40/80 device mode flag
+	sei
+
+	lda #<sprite_ptrs_40	;init vectors for copying sprite pointers
+	sta sedsal
+	sta sedeal
+	lda #>sprite_ptrs_40
+	ora ldtb1_sa
+	sta sedsal+1
+	sta sedeal+1
+
+	lda #%10000000
+	bbs7 mode,10$		;	branch if currently 40-col
+
+	smb7 mode		;CHANGE TO 40-COL WIDE SCREEN
+	trb vic+49		;mode was 0 (80 col), so make it 40 col
+	dec vic+22		;set x-scroll to 0
+	lsr columns
+	ldx #0
+	bra 20$
+
+10$	rmb7 mode		;CHANGE TO 80-COL WIDE SCREEN
+	tsb vic+49		;mode was 1 (40 col), so make it 80 col
+	inc vic+22		;set x-scroll to 1
+	sec
+	rol columns
+	ldx #2
+
+20$	lda #>sprite_ptrs_80	;copy sprite pointers
+	ora sedsal+1,x
+	sta sedsal+1,x
+	ldy #7
+30$	lda (sedsal),y
+	sta (sedeal),y
+	dey
+	bpl 30$
+
+	jsr reset_modes		;reset all attribute modes, quote mode, etc.
+	jsr reset_screen	;reset all margins, clear wrap table
+	jsr clear_screen	;clear screen & fix cursor
+	plp
+	rts
+
+	.page
+
+cursor	bcs crsroff		;/////////// entry from jump table
+
+
+crsron	lda #0
+	sta blnsw		;enable software cursor
+	rts
+
+
+
+crsroff	php
+	sei
+	lda #16
+	sta blnsw		;disable software cursor ( <>0 )
+	lda blnon
+	bpl 1$			;	branch if cursor not visible at this time
+	and #$40
+	sta blnon		;flag VIC cursor as not visible
+	lda gdbln		;get saved character
+	ldx gdcol		;get saved color
+	jsr disply		;restore corrected screen data at cursor position
+1$	plp
+	rts
+
+;.end
+	.page
+	.subttl  Editor Tables & Data
+
+coltab	.byte $90,$05,$1c,$9f,$9c,$1e,$1f,$9e		;color key codes
+	.byte $81,$95,$96,$97,$98,$99,$9a,$9b
+
+bits	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
+localzp	.byte $00,$08,$00,$d8,$18,$00,$00,$4f		;local variable init table	[910722]
+	.byte $00,$00,$00,$00,$00,$18,$4f,$00
+	.byte $00,forcol,forcol,$00,$00,$00,$00
+	.byte $00,$00,$00,$00
+localzpend
+
+mouse_window						;				[910307]
+	.byte 50,250,24,87				;mouse window (at sprite 0,0)
+
+	.page
+pkytbl				;pre-programmed function key definitions
+	.byte pky2-pky1
+	.byte pky3-pky2
+	.byte pky4-pky3
+	.byte pky5-pky4
+	.byte pky6-pky5
+	.byte pky7-pky6
+	.byte pky8-pky7
+	.byte pky9-pky8
+	.byte pky10-pky9
+	.byte pky11-pky10
+	.byte pky12-pky11
+	.byte pky13-pky12
+	.byte pky14-pky13
+	.byte helptb-pky14
+	.byte runtb-helptb
+	.byte pkyend-runtb
+
+pky1	.byte $1b,'X'			;toggle 40/80 mode
+pky2	.byte $1b,'@'			;del eos
+pky3	.byte 'DIR',cr
+pky4	.byte 'DIR "*=PRG"',cr
+pky5	.byte $15			;word backspace (word left)
+pky6	.byte 'KEY6',cr+$80
+pky7	.byte $17			;word advance (word right)
+pky8	.byte 'MONITOR',cr
+pky9	.byte $10			;autoscroll up (screen up, next section)
+pky10	.byte 'KEY10',cr+$80
+pky11	.byte $16			;autoscroll down (screen down, previous section)
+pky12	.byte 'KEY12',cr+$80
+pky13	.byte $1d,$14			;delete current character (crsr-rt,del)
+pky14	.byte 'KEY14',cr+$80
+helptb	.byte 'HELP',cr
+runtb	.byte 'RUN "*"',cr
+pkyend
+
+
+funtab1
+	.byte   4,5,6,3,68,69,70,67,63		;f1-f14, <help>, <shift><run>
+funtab2
+	.byte   $85,$89,$86,$8a,$87,$8b,$88,$8c	;f1-f8
+	.byte	$10,$15,$16,$17,$19,$1a,$84,$83	;f9-f14, <help>, <shift><run>
+
+	.page
+mode1						;ASCII normal keys
+
+	.byte $14,$0d,$1d,$88,$85,$86,$87,$11  ;del ret rt  f7  f1  f3  f5  dn
+	.byte $33,$57,$41,$34,$5a,$53,$45,$01  ; 3   w   a   4   z   s   e  shf
+	.byte $35,$52,$44,$36,$43,$46,$54,$58  ; 5   r   d   6   c   f   t   x
+	.byte $37,$59,$47,$38,$42,$48,$55,$56  ; 7   y   g   8   b   h   u   v
+	.byte $39,$49,$4a,$30,$4d,$4b,$4f,$4e  ; 9   i   j   0   m   k   o   n
+	.byte $2b,$50,$4c,$2d,$2e,$3a,$40,$2c  ; +   p   l   -   .   :   @   ,
+	.byte $5c,$2a,$3b,$13,$01,$3d,$5e,$2f  ;lb.  *   ;  hom shf  =   ^   /
+	.byte $31,$5f,$04,$32,$20,$02,$51,$03  ; 1  <-- ctl  2  spc  C=  q stop
+	.byte $ff,$09,$08,$84,$10,$16,$19,$1b  ;scl tab alt hlp  f9 f11 f13 esc
+	.byte $ff
+
+	.page
+mode2						;ASCII shifted keys (right keycap graphics)
+
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91  ;ins RTN lft f8  f2  f4  f6  up
+	.byte $23,$d7,$c1,$24,$da,$d3,$c5,$01  ; #   W   A   $   Z   S   E  shf
+	.byte $25,$d2,$c4,$26,$c3,$c6,$d4,$d8  ; %   R   D   &   C   F   T   X
+	.byte $27,$d9,$c7,$28,$c2,$c8,$d5,$d6  ; '   Y   G   (   B   H   U   V
+	.byte $29,$c9,$ca,$30,$cd,$cb,$cf,$ce  ; )   I   J   0   M   K   O   N
+	.byte $db,$d0,$cc,$dd,$3e,$5b,$ba,$3c  ;+gr  P   L  -gr  >   [  @gr  <
+	.byte $a9,$c0,$5d,$93,$01,$3d,$de,$3f  ;lbg *gr  ]  clr shf  =  pi   ?
+	.byte $21,$5f,$04,$22,$a0,$02,$d1,$83  ; !  <-- ctl  "  SPC  C=  Q  run
+	.byte $ff,$1a,$08,$84,$15,$17,$1a,$1b  ;scl TAB alt hlp f10 f12 f14 esc
+	.byte $ff
+
+	.page
+mode3						;ASCII C= keys (left keycap graphics)
+
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91  ;ins RTN lft f8  f2  f4  f6  up
+	.byte $96,$b3,$b0,$97,$ad,$ae,$b1,$01  ;red  W   A  cyn  Z   S   E  shf
+	.byte $98,$b2,$ac,$99,$bc,$bb,$a3,$bd  ;pur  R   D  grn  C   F   T   X 
+	.byte $9a,$b7,$a5,$9b,$bf,$b4,$b8,$be  ;blu  Y   G  yel  B   H   U   V
+	.byte $29,$a2,$b5,$30,$a7,$a1,$b9,$aa  ; )   I   J   0   M   K   O   N
+	.byte $a6,$af,$b6,$dc,$3e,$5b,$a4,$3c  ;+gr  P   L  -gr  >   [  @gr  <
+	.byte $a8,$df,$5d,$93,$01,$3d,$de,$3f  ;lbg *gr  ]  clr SHF  =  pi   ?
+	.byte $81,$5f,$04,$95,$a0,$02,$ab,$03  ;blk <-- ctl wht spc  C=  Q  run
+	.byte $ff,$18,$08,$84,$15,$17,$1a,$1b  ;scl TAB alt hlp f10 f12 f14 esc
+	.byte $ff
+
+	.page
+mode4						;ASCII control keys
+
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff  ; ~   ~   ~   ~   ~   ~   ~   ~
+	.byte $1c,$17,$01,$9f,$1a,$13,$05,$ff  ;red /w  /a  cyn /z  /s  /e   ~
+	.byte $9c,$12,$04,$1e,$03,$06,$14,$18  ;pur /r  /d  grn /c  /f  /t  /x
+	.byte $1f,$19,$07,$9e,$02,$08,$15,$16  ;blu /y  /g  yel /b  /h  /u  /v
+	.byte $12,$09,$0a,$92,$0d,$0b,$0f,$0e  ;ron /i  /j  rof /m  /k  /o  /n
+	.byte $ff,$10,$0c,$ff,$ff,$1b,$00,$ff  ; ~  /p  /l   ~   ~  /[  /@   ~
+	.byte $1c,$ff,$1d,$ff,$ff,$1f,$1e,$ff  ;/lb  ~  /]   ~   ~  /=  /pi  ~
+	.byte $90,$1f,$ff,$05,$ff,$ff,$11,$ff  ;blk /<-  ~  wht  ~   ~  /q   ~
+	.byte $ff,$09,$08,$84,$ff,$ff,$ff,$1b  ;scl tab alt hlp  ~   ~   ~  esc
+	.byte $ff
+
+	.page
+mode5						;ASCII caps lock mode
+
+	.byte $14,$0d,$1d,$88,$85,$86,$87,$11  ;del ret rt  f7  f1  f3  f5  dn
+	.byte $33,$d7,$c1,$34,$da,$d3,$c5,$01  ; 3   w   a   4   z   s   e  shf
+	.byte $35,$d2,$c4,$36,$c3,$c6,$d4,$d8  ; 5   r   d   6   c   f   t   x
+	.byte $37,$d9,$c7,$38,$c2,$c8,$d5,$d6  ; 7   y   g   8   b   h   u   v
+	.byte $39,$c9,$ca,$30,$cd,$cb,$cf,$ce  ; 9   i   j   0   m   k   o   n
+	.byte $2b,$d0,$cc,$2d,$2e,$3a,$40,$2c  ; +   p   l   -   .   :   @   ,
+	.byte $5c,$2a,$3b,$13,$01,$3d,$5e,$2f  ;lb.  *   ;  hom shf  =   ^   /
+	.byte $31,$5f,$04,$32,$20,$02,$d1,$03  ; 1  <-- ctl  2  spc  C=  q stop
+	.byte $ff,$09,$08,$84,$10,$16,$19,$1b  ;scl tab alt hlp  f9 f11 f13 esc
+	.byte $ff
+
+;.end
+	.page
+	.subttl  National Screen Editor Tables: GERMANY/AUSTRIA
+
+	* = $fc00				;????
+
+national_mode
+	.byte $01				;0=ASCII, 1=GERMAN
+
+national_mode1					;Germany
+
+	.byte $14,$0d,$1d,$88,$85,$86,$87,$11	;unshifted keys
+	.byte $33,$57,$41,$34,$59,$53,$45,$01
+	.byte $35,$52,$44,$36,$43,$46,$54,$58
+	.byte $37,$5a,$47,$38,$42,$48,$55,$56
+	.byte $39,$49,$4a,$30,$4d,$4b,$4f,$4e
+	.byte $be,$50,$4c,$af,$2e,$bc,$bd,$2c
+	.byte $5b,$2b,$bb,$13,$01,$23,$5d,$2d
+	.byte $31,$3c,$04,$32,$20,$02,$51,$03
+	.byte $ff,$09,$08,$84,$10,$16,$19,$1b  ;scl tab alt hlp  f9 f11 f13 esc
+	.byte $ff
+
+	.page
+national_mode2					;Germany
+
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;shifted keys
+	.byte $40,$d7,$c1,$24,$d9,$d3,$c5,$01
+	.byte $25,$d2,$c4,$26,$c3,$c6,$d4,$d8
+	.byte $2f,$da,$c7,$28,$c2,$c8,$d5,$d6
+	.byte $29,$c9,$ca,$3d,$cd,$cb,$cf,$ce
+	.byte $3f,$d0,$cc,$c0,$3a,$dc,$dd,$3b
+	.byte $5e,$2a,$db,$93,$01,$27,$5c,$5f
+	.byte $21,$3e,$04,$22,$a0,$02,$d1,$83
+	.byte $ff,$1a,$08,$84,$15,$17,$1a,$1b  ;scl TAB alt hlp f10 f12 f14 esc
+	.byte $ff
+
+	.page
+national_mode3					;Germany
+
+	.byte $94,$8d,$9d,$8c,$89,$8a,$8b,$91	;C= keys
+	.byte $96,$a7,$a8,$97,$a2,$aa,$a3,$01
+	.byte $98,$a9,$c4,$99,$c5,$d3,$ce,$a4
+	.byte $9a,$c2,$df,$9b,$a1,$c9,$d6,$d7
+	.byte $d1,$c3,$d5,$c1,$cb,$da,$d8,$cd
+	.byte $ab,$d9,$c8,$bf,$ba,$ca,$b0,$ac
+	.byte $ad,$a6,$db,$93,$01,$dd,$de,$b9
+	.byte $81,$b1,$04,$95,$a0,$02,$a5,$03
+	.byte $ff,$18,$08,$84,$15,$17,$1a,$1b  ;scl TAB alt hlp f10 f12 f14 esc
+	.byte $ff
+
+	.page
+national_keycod
+	.word national_mode1			;decode matrix for normal keys
+	.word national_mode2			;decode matrix for shifted keys
+	.word national_mode3			;decode matrix for C= keys
+	.word mode4				;decode matrix for control keys
+	.word national_mode1			;decode matrix for alt keys
+	.word national_mode1			;decode matrix for caps lock  (none)
+
+dktbl	.byte $af,$c0,$bf,$00,$00		;dead keys
+
+deadp	.byte $01,$03,$07,$0c,$0c,$0c		;pointers to 'build' keys
+
+oldead	.byte $45,$c0				;GERMAN new key table #1
+	.byte $41,$45,$55,$af			;GERMAN new key table #2
+	.byte $41,$45,$49,$4f,$55		;GERMAN new key table #3
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff	;unused
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+
+nwdead	.byte $ac,$bf				;GERMAN substitute table #1
+	.byte $b2,$ae,$b3,$bf			;GERMAN substitute table #2
+	.byte $b4,$b5,$b6,$b7,$b8		;GERMAN substitute table #3
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff	;unused
+	.byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+
+	.page
+	.subttl  National Screen Editor Routines: GERMANY/AUSTRIA
+
+check_keyboard_mode		;Check ASC/DIN status, update key decode & chrset
+	bit dead_keys
+	bmi 40$			;	branch if national mode disabled
+
+	ldy decode+1
+	lda shflag		;test ASC/DIN key (caps_lock) for national selection
+	and #$10
+	beq 10$			;	branch if up- use ASCII
+
+	lda #%01000000
+	tsb vic+48		;	setup national character set
+	smb6 vic48		;	 (set both in case non-IRQ user keyscan)
+	cpy #>national_mode1
+	beq 40$			;branch if national mode already setup
+	lda #<national_keycod
+	ldy #>national_keycod	;	setup national keyboard
+	bra 20$
+
+10$	lda #%01000000
+	trb vic+48		;	setup ASCII character set
+	rmb6 vic48		;	 (set both in case non-IRQ user keyscan)
+	cpy #>mode1
+	beq 40$			;branch if ASCII mode already setup
+	lda #<keycod
+	ldy #>keycod		;	setup ASCII keyboard
+
+20$	sta keytab		;a,y contain address of appropriate decode tables
+	sty keytab+1
+
+	ldy #keyend-keycod-1	;install decode tables
+30$	lda (keytab),y
+	sta decode,y
+	dey
+	bpl 30$
+
+40$	rts
+
+	.page
+national_keychk
+	ldx decode+1		;Determine if national mode & current key requires action
+	cpx #>national_mode1
+	bne 50$			;	branch to normal keyscan if ASCII mode
+	ldx dead_keys
+	bmi 50$			;	branch to normal keyscan if national scan disabled
+	beq 25$			;	branch if previous key was not a dead key
+
+	ldy deadp,x		;Previous key was a dead key- index in .x
+	dex
+10$	dey
+	pha			;	save .a (current character)
+	tya
+	cmp deadp,x		;	see if index (.y) is out of range
+	pla			;	restore current character
+	bcc 20$			;		branch if not in table (out of range)
+	cmp oldead-1,y		;	see if current key can be substituted
+	bne 10$			;		branch if not
+
+	lda nwdead-1,y		;	yes- substitute it
+20$	pha
+	and #$7f		;		weed out control codes
+	cmp #$20
+	pla
+	bcc 45$			;		branch if control code & ignore it
+
+25$	ldx #5
+30$	cmp dktbl-1,x		;Is current key a dead key?
+	beq 40$			;	branch if it is
+	dex
+	bne 30$
+
+40$	stx dead_keys		;	save current status for next time
+	cpx #0
+	beq 50$			;if current key is not a dead key we are done
+	ldy blnsw		;it is a dead key, but...
+	bne 45$			;	cannot display if cursor is off
+	bbs7 insflg,45$		;	cannot display if auto-insert mode
+
+	ora #$40		;Display dead key using screen code & Exit--------------------->
+	and #$7f		;	convert dead key character to screen code
+	jsr displc		;	put character on screen at cursor without moving cursor
+				;	and without buffering dead key (dead key flag is set)
+45$	bra scnrts		;exit keyscan properly
+
+
+50$	ldx shflag		;Key was not a national key, Exit------------------------------>
+	ldy lstx
+	jmp (keychk)		;resume normal keyscan thru indirect
+
+	.page
+
+keyboard_report
+	jsr primm
+	.byte 'DEUTSCH TASTATUR',cr,0							[910729]
+;	.byte 'GERMAN/AUSTRIAN KEYBOARD',cr,0
+	rts
+
+
+;.end

@@ -86,6 +86,15 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [MONITOR_C128](MONITOR_C128)                                 | 1985 | |
 | [CHARSET_C128_NATIONAL](CHARSET_C128_NATIONAL)               | 1985 | |
 
+## C65
+
+| Directory                                                    | Year | Comments    |
+|--------------------------------------------------------------|------|-------------|
+| [BASIC_C65](BASIC_C65)                                       | 1991 | final C65 BASIC |
+| [GRAPHICS_C65](GRAPHICS_C65)                                 | 1991 | final C65 BASIC Graphics lib |
+| [KERNAL_C65](KERNAL_C65)                                     | 1991 | final C65 KERNAL, EDITOR, MONITOR |
+| [DOS_C65](DOS_C65)                                           | 1991 | final C65 DOS |
+
 ## Disk Drives
 
 | Directory                                                    | Year | Comments    |
@@ -301,6 +310,23 @@ The PET BASIC V2 source (1978) as built by Microsoft.
 * Microsoft built all versions up this one with its own tools and sent the binary (together with the LST) to Commodore.
 * On the PET, this was called BASIC V2, Microsoft called it V1.1.
 * It includes the "WAIT6502,1" easter egg (symbol `ZSTORDO`).
+
+### BASIC_C65
+
+The final version of C65 BASIC V10 (1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+
+### GRAPHICS_C65
+
+The final version of the C65 GRAPHICS BASIC (1991), the graphics library that is part of BASIC 10. Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+
+### KERNAL_C65
+
+The final version of the C65 KERNAL (called "KERNEL"; 1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+
+### DOS_C65
+
+The final version of the C65 CBDOS (Computer-Based DOS; 1991). Source: folder system/9 in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+
 
 ### BASIC_CBM2&#x5f;&#x2a;, KERNAL_CBM2&#x5f;&#x2a;, EDITOR_CBM2&#x5f;&#x2a;
 

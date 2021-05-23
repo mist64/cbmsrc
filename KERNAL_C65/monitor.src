@@ -1,0 +1,2750 @@
+;	.nam C65 Development Monitor (C)1991 CBM
+	.subttl *** Copyright (C) 1991  by  Commodore Business Machines, Inc. ***
+
+;  ***************************************************************************
+;  *                               //                                        *
+;  *              CCCCCCC         //    6666666     555555555                *
+;  *             CCC   CCC       //    666   666    555                      *
+;  *            CCC             //    666           555                      *
+;  *            CCC            //     666 6666      55555555                 *
+;  *            CCC           //      6666   666          555                *
+;  *            CCC          //       666     666          555               *
+;  *             CCC   CCC  //         666   666    555   555                *
+;  *              CCCCCCC  //           6666666      5555555                 *
+;  *                      //                                                 *
+;  *                                                                         *
+;  * MMM   MMM    OOOOOOO    NNN    NN  III  TTTTTTTTT  OOOOOOO    RRRRRRRR  * 
+;  * MMMM MMMM   OOO   OOO   NNNN   NN  III     TTT    OOO   OOO   RRR   RRR * 
+;  * MMMMMMMMM  OOO     OOO  NNNNN  NN  III     TTT   OOO     OOO  RRR   RRR * 
+;  * MMM M MMM  OOO     OOO  NNN NN NN  III     TTT   OOO     OOO  RRRRRRRR  * 
+;  * MMM   MMM  OOO     OOO  NNN  NNNN  III     TTT   OOO     OOO  RRR RRR   * 
+;  * MMM   MMM   OOO   OOO   NNN   NNN  III     TTT    OOO   OOO   RRR  RRR  * 
+;  * MMM   MMM    OOOOOOO    NNN    NN  III     TTT     OOOOOOO    RRR   RRR * 
+;  *									     * 
+;  *        Copyright (C)1991  by   Commodore Business Machines, Inc.        *
+;  *									     *
+;  *			    All  Rights  Reserved			     *
+;  *									     *
+;  ***************************************************************************
+  
+;			ROM VERSION  911112  (ver 0.9B)
+  
+;	****************************************************************** 
+;	*                                                                * 
+;	* This listing contains confidential and proprietary information *
+;	* of CBM, Inc.  The reproduction, dissemination or disclosure to *
+;	* others without express written permission is prohibited.  This *
+;	* software is intended for use in  Commodore C/65 systems only.  *
+;	*                                                                * 
+;	*  The  information  in  this  document  is  subject  to change  * 
+;	*                       without notice.                          * 
+;	*                                                                * 
+;	*  No  responsibility  is  assumed  for the reliability of this  * 
+;	*                          software.                             * 
+;	*                                                                * 
+;	****************************************************************** 
+
+;	This version written and assembled by Fred Bowen using BSO format.
+	.page
+;	Based upon the following C128 files, 318019_04
+;
+;	.include  disclaim
+;	.include  sysdoc
+;	.include  relnotes
+;	.include  monnotes
+;	.include  declare
+;	.include  monitor0
+;	.include  monitor1
+;	.include  monitor2
+;	.include  monitor3
+;	.include  monitor4
+;	.include  monitor5
+;	.include  monitor6
+;	.include  tables
+
+	.page
+	.subttl Monitor0 - MAIN
+
+;///////////   M O N I T O R   J U M P   E N T R Y   P O I N T S   \\\\\\\\\\\\
+
+; Monitor
+
+	jmp call_entry		;JMP entry
+	jmp break_entry		;BRK entry
+	jmp monitor_parser	;command parser
+
+
+break_entry			;////// entry from Kernel BRK
+	pha
+	lda #0
+	tab			;use system base page but user stack page????		[911112]
+	lda #1
+	trb vic+48		;turn on CIA's????
+
+	pla			;Preserve memory configuration from Kernel
+	sta config
+	stx config+1
+	sty config+2
+	stz config+3
+
+	pla			;eat stacked basepage info????				[911112]
+	ldx #6
+10$	pla			;pull pc, registers & status off stack...
+	sta pc_hi,x		;...and preserve them for display
+	dex
+	bpl 10$			;	(notice pc will be +1)
+
+	lda pc_lo		;adjust PC
+	bne 15$
+	dec pc_hi
+15$	dec pc_lo
+
+	ldy #1			;determine memory address & bank			[911112]
+	lda pc_hi
+	bpl 20$			;	get hi/lomem
+	ldy #3
+20$	rol a			;	get 8k block, convert into an index (0-3)
+	rol a
+	rol a
+	rol a
+	and #$03
+	tax
+	lda mbits+4,x		;	convert into bit mask 16,32,64,128
+	and config,y
+	beq 30$			;	branch if this block not mapped
+	lda config,y
+	and #$0f		;	else extract bank offset
+30$	sta bank
+	
+	jsr primm
+	  .byte cr,'BREAK',7,0
+
+	bra monitor_start
+
+	.page	
+call_entry			;////// entry from Kernel call (JMP,JSR, or SYS)
+;	lda #0			;******(the caller should have done this...)
+;;	sta mmucr		;must have system roms, ram0, & i/o in
+;	sta bank		;init bank pointer to system
+;	sta a_reg		;clear everything up for user
+;	sta x_reg
+;	sta y_reg
+;	sta z_reg
+;	sta s_reg
+;	lda #<monitor		;init PC to ourselves
+;	ldy #>monitor
+;	sta pc_lo
+;	sty pc_hi
+
+	jsr primm
+	  .byte cr,'MONITOR',0
+
+
+monitor_start
+	cld
+	tsx
+	stx stkptr		;get stack pointer for register display
+	lda #$c0
+	jsr setmsg		;enable Kernel control & error messages
+
+	lda #0
+	sta sid1+4		;kill any BASIC music in progress			[911112]
+	sta sid1+11
+	sta sid1+18
+;	sta sid2+4		; (except bell tone from BRK!)
+	sta sid2+11
+	sta sid2+18
+
+	cli			;start Monitor: fall thru 'dspreg' to 'main'
+	nop			;						[910117]
+
+	.page
+;***********************************************************
+;
+;	Display contents of processor registers
+;
+;***********************************************************
+
+dspreg	jsr primm	;register legends
+	  .byte cr,'    PC   SR AC XR YR ZR SP'
+	  .byte cr,semi,space,esc,'Q',0
+
+	lda bank
+;	and #$0f
+	jsr puthex	;display bank		(A16-A19)
+	lda pc_hi
+	jsr puthex	;display pc high	(A15-A8)
+
+	ldy #0
+1$	lda pc_lo,y
+	jsr puthxs	;display rest, separated by spaces
+	iny
+	cpy #7
+	bcc 1$
+
+
+
+main	jsr crlf
+	ldx #0
+	stx txtptr
+
+1$	jsr basin	;read one line (up to <cr>) into buffer
+	sta buf,x
+	inx
+	cpx #161
+	bcs error	;...branch if 'line too long'
+	cmp #cr
+	bne 1$		;loop until end of line
+
+	lda #0
+	sta buf-1,x	;flag end of line
+
+2$	jsr gnc		;get a character from buffer
+	beq main	;...end of line
+	cmp #space	;...skip leading spaces
+	beq 2$
+
+	jmp (exmon)	;lookup command
+
+	.page
+monitor_parser
+
+	ldx #cmdqty-1	;compare first char to list of valid commands
+10$	cmp cmdchr,x
+	beq main1	;...found it
+	dex
+	bpl 10$
+			;checked entire list, not found. fall into 'error'
+
+
+error
+	jsr primm	;general error message: print <crsr-rt><question mark>
+	  .byte esc,'O',right,'?',0
+	bra main
+
+
+
+main1
+	cpx #cmdls	;is command 'L'oad, 'S'ave, or 'V'erify?
+	bcs 10$		;...branch if so:  can't use parse!
+
+	cpx #cmdno	;is it a number to evaluate?
+	bcs convert	;...branch if so and do it
+
+	txa		;multiply index by two
+	asl a
+	tax
+
+	lda cmdtbl+1,x	;push address of command on stack
+	pha
+	lda cmdtbl,x
+	pha
+	bra parse	;parse first arg, and rts to correct command routine
+
+
+10$	sta verify	;save copy of what command was,
+	bra lodsav	;...and jump to common load/save/verify routine
+
+
+;exit	jmp (system_vector)	;exit monitor, return to system
+exit	jmp monitor_exit	;exit monitor, return to system
+
+	.page
+cmdchr
+	.byte 'A'	;Assemble
+	.byte 'C'	;Compare
+	.byte 'D'	;Disassemble
+	.byte 'F'	;Fill
+	.byte 'G'	;Go (jmp to program)
+	.byte 'H'	;Hunt
+	.byte 'J'	;Jsr to subroutine
+	.byte 'M'	;Memory dump
+	.byte 'R'	;display Registers, pc & stack pointer
+	.byte 'T'	;Transfer
+	.byte 'X'	;eXit (jmp to basic warm start)
+
+	.byte '@'	;disk status/command
+	.byte '.'	;alter assembly
+	.byte '>'	;alter memory
+	.byte semi	;alter regs
+
+cmdno	= *-cmdchr
+cmdnum
+	.byte '$'	;base-16 (hex)
+	.byte '+'	;base-10 (dec)
+	.byte '&'	;base-8  (oct)
+	.byte '%'	;base-2  (bin)
+	.byte $27	;ASCII							[910228]
+
+cmdls	= *-cmdchr	;  (l, s & v must be last in table)
+
+	.byte 'L'	;load memory
+	.byte 'S'	;save memory
+	.byte 'V'	;verify memory
+
+cmdqty	= *-cmdchr
+
+
+
+cmdtbl
+	.word assemble-1
+	.word compar-1
+	.word disassemble-1
+	.word fill-1
+	.word go-1
+	.word hunt-1
+	.word gosub-1
+	.word dspmem-1
+	.word dspreg-1
+	.word trnsfr-1
+	.word exit-1
+
+	.word disk-1
+	.word assemble-1
+	.word setmem-1
+	.word setreg-1
+
+	.page
+fetch
+	bbr7 m2+2,10$	;(anything >15 means NOMAP)
+	lda (m2),y
+	rts
+
+10$	phz
+	phx
+	ldz m2+2	;bank
+	ldx #m2		;vector
+	jsr lda_far
+	plx
+	plz
+	and #$ff
+	rts
+	
+
+stash
+	bbr7 m2+2,10$	;(anything >15 means NOMAP)
+	sta (m2),y
+	rts
+
+10$	php
+	phz
+	phx
+	ldz m2+2	;bank
+	ldx #m2		;vector
+	jsr sta_far
+	plx
+	plz
+	plp
+	rts
+
+cmpare
+	pha
+	jsr fetch
+	sta mtemp
+	pla
+	cmp mtemp
+	rts
+
+;.end
+	.page
+	.subttl Monitor1 - Commands
+
+;********************************************
+;
+;	Display memory command
+;
+;********************************************
+
+dspmem
+	bcs 1$		;no range, do about 1/2 screenful
+	jsr m0tom2	;else move 'from' value into place
+	jsr parse
+	bcc 2$		;got 'to' value, go dump
+
+1$	lda #15		;do 16 lines (1 block in 80-col, 1/2 block in 40)
+	sta m0
+	bra 4$		;always
+
+
+; Calculate number of lines
+
+2$	jsr sub0m2	;calculate # bytes, put result in m0 (msb goes in .a)
+	bcc error	;...branch if sa > ea
+	
+	ldx #4
+	bbr7 mode,3$	;divide by 8 if 40-col, 16 if 80-col
+	dex
+
+3$	lsr m0+2	;shift msb right,
+	ror m0+1	;..into middle byte,
+	ror m0		;..and finally into lsb
+	dex
+	bne 3$
+
+4$	jsr stop	;is stop key down?
+	beq 6$		;..if so, exit
+
+	jsr dmpone
+	lda #16
+	bbr7 mode,5$	;add 8 (16 if 80-col) to line start address
+	lsr a
+
+5$	jsr addm2
+	jsr decm0	;test if dump finished
+	bcs 4$		;loop until underflow
+6$	bra main
+
+	.page
+;********************************************
+;
+;	Set register command
+;
+;********************************************
+
+setreg
+	jsr m0topc	;copy adr & bank to pcl,h & pcb,  if given
+
+	ldy #0
+1$	jsr parse
+	bcs 2$		;quit anytime arg list is empty
+	lda m0
+	sta s_reg,y
+	iny
+	cpy #6
+	bcc 1$
+2$	bra main
+
+	.page
+;********************************************
+;
+;	Alter memory command
+;
+;********************************************
+
+setmem
+	bcs 30$		;...branch if no arguments- just regurgitate existing data
+	jsr m0tom2	;destination bank, addr in 'm2'
+
+	ldy #0
+10$	jsr parse	;scan for next argument
+	php
+	lda count	;catch ASCII input and handle differently	new	[910228]
+	cmp #$27
+	beq 35$
+	plp
+	bcs 30$		;...branch if eol
+
+15$	lda m0		;get the byte to stash
+	jsr stash	;stash it
+	iny
+;	cpy #16
+;	bbr7 mode,20$
+;	cpy #8
+;20$	bcc 10$
+	bne 10$		;allow input of more than 8 or 16 bytes per line	[911031]
+
+30$	jsr primm	;clear all modes & cursor up
+	  .byte  esc,'O',up,0
+	jsr dmpone
+	bra main
+
+
+35$	plp		;ASCII input from parse				new	[910228]
+	dec txtptr	;	point to 2nd character
+	lda m0		;	get value of 1st char
+40$	jsr stash	;stash it
+	iny
+;	cpy #16		;accept 8/16 characters
+;	bbr7 mode,50$
+;	cpy #8
+;50$	bcs 30$		;done 8/16 characters
+	beq 30$		;allow input of more than 8 or 16 bytes per line	[911031]
+	ldx txtptr
+	lda buf,x	;get next char
+	beq 30$		;	eol- exit
+	inc txtptr
+	cmp #$27
+	bne 40$		;	char- continue
+
+	jsr gnc		;	closing quote- check delimiter
+	beq 30$		;		eol- exit
+	cmp #space
+	beq 10$		;		space or comma ok, loop back to beginning
+	cmp #comma
+	beq 10$
+	bra error	;		anything else is an error
+
+	.page
+;********************************************************************
+;
+;	Go command- start executing at either the supplied address,
+;	   or (default) the current contents of the PC reg
+;
+;********************************************************************
+
+go
+	jsr m0topc	;copy adr & bank to pcl,h & pcb,  if given
+	ldx stkptr	;set up stack pointer
+	txs
+	jmp jmp_far	;go, we'll not come back except by break
+
+
+
+
+;********************************************************************
+;
+;	Jsr command- start executing at either the supplied address,
+;	   or (default) the current contents of the PC reg.
+;	   return is to monitor 'main' loop.
+;
+;********************************************************************
+
+gosub
+	jsr m0topc	;copy adr & bank to pcl,h & pcb,  if given
+	ldx stkptr	;set up stack pointer
+	txs
+	jsr jsr_far	;call it
+	tsx
+	stx stkptr	;get stack pointer for register display
+	bra main	;we're back (kernel updated register store)
+
+	.page
+;**************************************************************
+;
+;	Subroutine to dump one line of memory onto screen
+;
+;**************************************************************
+
+dmpone
+	jsr crlf
+dmpone_1		;(entry from autoscroll down routine)
+	lda #'>'	;print dump prompt
+	jsr bsout
+	jsr putm2	;print address, space
+	ldy #0
+	bra 2$		;always (skip first space)
+
+1$	jsr putspc
+2$	jsr fetch	;get a byte from memory
+	jsr puthex	;print hex byte
+	iny
+	cpy #16		;16 bytes/line for 80-column mode
+	bbr7 mode,3$
+	cpy #8		;8 bytes/line for 40-column mode
+3$	bcc 1$
+
+	jsr primm	;block off ASCII dump & turn rvs on
+	  .byte ':',reverse,0
+
+	ldy #0
+4$	jsr fetch	;re-get byte from memory
+	pha
+	and #$7f	;mask control characters ($00-$1f and $80-$9f)
+	cmp #$20
+	pla
+	bcs 5$
+	lda #'.'	;print control characters as '.'
+
+5$	jsr bsout
+	iny
+	cpy #16
+	bbr7 mode,6$
+	cpy #8
+6$	bcc 4$
+	rts
+
+	.page
+;********************************************
+;
+;	Transfer/Compare routines.
+;
+;	T starting-from,thru,to
+;	C starting-from,thru,with
+;
+;********************************************
+
+compar
+	rmb7 verify	;flag 'compare'
+	  .byte $2c
+
+trnsfr
+	smb7 verify	;flag 'transfer'
+	rmb6 verify	;assume direction is 'forward'
+	jsr range	;get source in m2, length in m1
+	bcs error
+	jsr parse	;get destination in m0
+	bcs error
+	bit verify
+	bpl 20$		;...branch if compare (can't use DMA device)
+
+	sec		;determine direction of transfer (to avoid stepping on ourselves!)
+	lda m2
+	sbc m0		;source - destination (ignore banks...there might be bleed-thru)
+	lda m2+1
+	sbc m0+1
+	bcs 15$		;branch if source >= destination
+
+;	clc
+	lda m1		;source < destination, must work from back to front
+	adc m0
+	sta m0
+	lda m1+1	;add length to destination
+	adc m0+1
+	sta m0+1
+	lda m1+2
+	adc m0+2
+	sta m0+2
+
+	ldx #2
+10$	lda temps,x	;restore ea as source (saved @ 'range')
+	sta m2,x
+	dex
+	bpl 10$
+	smb6 verify	;flag backwards direction
+
+15$				;transfer- use DMA device		[910815]
+	lda #0			;DMA copy from startpoint
+	bbr6 verify,16$
+	lda #$30		;DMA copy from endpoint
+16$	sta dma_list
+
+	lda m2			;where to copy from
+	sta dma_list_source_lo
+	lda m2+1
+	sta dma_list_source_hi
+	lda m2+2
+	sta dma_list_source_bank
+
+	lda m0			;where to copy to
+	sta dma_list_dest_lo
+	lda m0+1
+	sta dma_list_dest_hi
+	lda m0+2
+	sta dma_list_dest_bank
+
+	lda m1+2		;how many to copy
+	bne error		;	>64k
+	inw m1			;	else length=length+1
+	lda m1
+	sta dma_list_count_lo
+	lda m1+1
+	sta dma_list_count_hi
+
+	lda #0
+	sta dma_list_cmd2
+	sta dma_ctlr+2
+	lda #>dma_list
+	sta dma_ctlr+1
+	lda #<dma_list
+	sta dma_ctlr		;do the copy
+	bra main
+
+20$	jsr crlf	;start with a new line
+
+	ldy #0
+30$	jsr stop
+	beq main	;...exit cleanly if user requests abort
+
+	jsr fetch	;get a byte
+	pha
+	jsr swapm2
+	pla
+	bbr7 verify,40$
+	jsr stash	;copy byte
+
+40$	jsr cmpare	;compare bytes
+	php
+	jsr swapm2
+	plp
+	beq 50$
+
+	jsr putm2	;report mismatch
+	jsr putspc	;make each number 8 bytes to look pretty
+
+50$	bbs6 verify,60$	;test direction of transfers
+
+	inw m0		;normal
+	bne 70$
+	inc m0+2
+	bra 70$
+;	bra error	;	disallow wrap from highest bank to lowest ????
+
+60$	jsr decm0	;backwards
+	jsr decm2
+	bra 80$
+
+70$	jsr incm2
+80$	jsr decm1
+	bcs 30$
+	bra main
+
+;.end
+	.page
+	.subttl Monitor2 - Commands
+
+;******************************************************************
+;
+;	Hunt command - hunt for bytes or string
+;
+; syntax:  h 0000 1111 'ascii...   <or>   h 0000 1111 22 33 44 ...
+;
+;******************************************************************
+
+hunt
+	jsr range	;get sa in m2, calculate length, put in m1
+	bcs error	;	error if eol
+	ldy #0
+	jsr gnc		;get first char
+	cmp #$27	;is it an <'>
+	bne 2$		;	no-  must be hex
+	jsr gnc		;	yes- get first string chr
+	cmp #0
+	beq error	;		branch if true eol (error)
+
+1$	sta xcnt,y	;save in buffer
+	iny
+	jsr gnc		;get next
+	beq 4$		;	end of string
+	cpy #32		;32 char limit yet?
+	bne 1$		;	no-  get more
+	beq 4$		;	yes- go look for it
+
+2$ ;	sty bad		;zero for rdob			????			[911112]
+	jsr pargot	;finish hex read
+
+3$	lda m0
+	sta xcnt,y
+	iny
+	jsr parse	;get next character
+	bcs 4$		;	no more- go look for bytes
+	cpy #32		;32 char limit yet?
+	bne 3$		;	no- get more
+
+4$	sty verify	;start search
+	jsr crlf	;next line
+
+5$	ldy #0
+6$	jsr fetch	;get a byte from memory
+	cmp xcnt,y
+	bne 7$		;	branch if no match
+	iny
+	cpy verify	;checked full string?
+	bne 6$		;	no- check on
+
+	jsr putm2	;print address found
+	jsr putspc	;pretty up to 8 bytes
+
+7$	jsr stop
+	beq main	;...exit cleanly if user requests abort
+	jsr incm2	;increment m2
+	jsr decm1	;decrement byte counter
+	bcs 5$		;loop if not done
+	bra main
+
+	.page
+;************************************************************
+; load/save/verify
+;
+; l ["name"] [,device_number] [,alt_load_address]
+; v ["name"] [,device_number] [,alt_load_address]
+; s "name", device_number, starting_address, ending_address
+;************************************************************
+
+lodsav
+	ldy default_drive						[900522]
+	sty fa		;setup defaults: disk, fixed_load, no filename
+	ldy #8
+	sty sa
+	ldy #0
+	sty ba		;default l/s/v from/to RAM 0
+	sty fnlen	;default no filename
+	sty fnbank	;filename is always in RAM 0 for Monitor
+	sty status
+	lda #>xcnt
+	sta fnadr+1
+	lda #<xcnt
+	sta fnadr
+
+1$	jsr gnc		;look for name
+	beq error	;...branch if no name
+	cmp #space
+	beq 1$		;skip spaces
+	cmp #quote
+	bne error	;...if no quoted name
+
+	ldx txtptr
+2$	lda buf,x	;get chr
+	beq 6$		;...eol, must be load
+	inx
+	cmp #quote	;pass everything up to closing quote
+	beq 4$
+	sta (fnadr),y	;okay- always bank 0
+	inc fnlen
+	iny
+	cpy #19		;check length of name (16 max.)	*** allow '0:' ????
+	bcc 2$
+3$	bra error
+
+4$	stx txtptr
+	jsr gnc		;trash delimitor
+	beq 6$		;...eol, use default
+	jsr parse	;get device #
+	bcs 6$		;...eol, use default
+	lda m0
+	sta fa		;device # in 'fa' (let kernel catch invalid devices)
+
+	jsr parse	;get starting address
+	bcs 6$		;none, must be load
+	jsr m0tom2	;save start_addr in m2
+	sta ba		;set bank
+
+	jsr parse	;get ending address
+	bcs 8$		;...none, must be 'alternate load'
+	jsr crlf	;prep for 'saving...' msg
+	ldx m0		;pickup end addr
+	ldy m0+1
+	lda verify
+	cmp #'S'	;check that this is a save
+	bne error
+	lda #0
+	sta sa
+	lda #m2		;pointer to start addr
+	jsr save	;do save
+
+5$	bra main	;exit
+
+
+6$	lda verify	;check for load
+	cmp #'V'	;..or verify
+	beq 7$
+	cmp #'L'
+	bne error
+	lda #0		;flag load
+7$	jsr load	;do load/verify, preserve .c=error
+	bbr4 status,5$	;exit if successful (Kernel did not set read error bit)
+
+	lda verify	;load and verify have different error messages
+	beq error	;	branch if zero (load)
+	bcs main	;	verify failed due to out of memory error
+	jsr primm
+	  .byte ' ERROR',0
+	bra main
+
+8$	ldx m2		;set up new address for load (bank already put in 'ba')
+	ldy m2+1
+	lda #0		;flag 'non-default load'
+	sta sa
+	bra 6$		;go check for V or L, then doit
+
+	.page
+;******************************************************************
+;
+;	Fill command - F starting-address ending-address value
+;
+;	max count=65536
+;******************************************************************
+
+fill
+	jsr range		;sa in m2, length in m1
+	bcs error		;	error if eol
+	lda m1+2		;check length
+	bne error		;	error if >65535
+	jsr parse		;get fill value in m0
+	bcs error		;	error if eol
+
+	lda #3			;DMA fill command
+	sta dma_list
+;	lda dma_ctlr+3		;dma controller version			[910520] F018A
+;	and #1			;	(removed)			[910815] F018B
+;	tay
+
+	lda m2			;where to put it
+	sta dma_list_dest_lo
+	lda m2+1
+	sta dma_list_dest_hi
+	lda m2+2
+;	dey			;	(removed)			[910815] F018B
+;	bpl 10$			;	(dma version, y=1=F018A)	[910520] F018A
+;	and #%10001111		;	(allow b7=I/O ????)		[910102]
+10$	sta dma_list_dest_bank
+
+	inw m1			;how many to put (dest-start+1)
+	lda m1			;	wrap okay (0=65536)
+	sta dma_list_count_lo
+	lda m1+1
+	sta dma_list_count_hi
+
+	lda m0			;what to put
+	sta dma_list_source_lo
+
+	lda #0
+	sta dma_list_cmd2	;					[910520] F018A
+	sta dma_ctlr+2
+	lda #>dma_list
+	sta dma_ctlr+1
+	lda #<dma_list
+	sta dma_ctlr		;do the fill
+	bra main
+
+;.end
+	.page
+	.subttl Monitor3 - Assembler
+
+;*******************************************************************************
+;		Simple Line Assembler
+;
+;  Syntax:	a 1234 lda ($12,x)
+;		a 1234 lda ($12,sp),y
+;		a 1234 bbs7 $12,$1234
+;		a 1234 lsr:		(':' = optional terminator)
+;		a 1234 12 34 56 nop	(object code is ignored)
+;*******************************************************************************
+
+; The assembly line begins with the 'A'ssembly command itself and a starting
+; address, followed by an opcode mnemonic and an optional operand.  At this
+; point, the command is good (else we would not be here), and the starting
+; address should have already been evaluated and its value placed in m0.
+
+assemble
+	bcs error	;...error exit if missing starting address
+	jsr m0tom2	;else save starting address for assembly
+
+; First we have to get a 3 character mnemonic, which must be crunched into a
+; 2-byte token (simply for time and space reasons).  The assemble mode is
+; exited cleanly upon input of a null line.
+
+1$	ldx #0		;initialize line assembler
+	stx hulp+1	;	clear left mnemonic
+	stx numbers	;	clear number count
+	stx operand_size ;	clear byte count
+
+2$	jsr get_next_character
+	bne 3$		;	...branch if not EOL
+	cpx #0		;
+	beq main	;	...exit cleanly if null input
+
+3$	cmp #' '	;white space?
+	beq 1$		;	...ignore it (passes over object code, if any,
+			;		      which is only 2-chars wide)
+
+	sta msal,x	;append character to mnemonic string
+	inx		;	increment character pointer
+	cpx #3		;
+	bne 2$		;	...loop until we have 3 characters
+
+4$	lda msal-1,x	;compress mnemonic, lifo
+	sec
+	sbc #$40	;	normalize ASCII
+	ldy #5		;	shift in 5 bits from left (3*5bit=15bits)
+5$	lsr a		;		shift into carry
+	ror hulp+1	;		shift into mnemonic msb
+	ror hulp	;		shift into mnemonic lsb
+	dey
+	bne 5$		;		...loop until 5 shifts done
+	dex
+	bne 4$		;	...loop until 3 characters done
+	ror hulp+1	;	leaves msb empty for now
+	ror hulp
+
+; At this point, we have a crunched opcode (which has yet to be validated).
+; Let's look it up- no sense going any further if it's bad.  The hash table
+; msb's are sorted, so we can assume an error if input>hash_table_entry.
+
+	ldx #$ff	;scan through 91 entries of hashed msb table
+10$	lda hulp+1	;	for this value
+12$	inx
+	cpx #91
+	bcs error	;		...not found, table exceeded
+	cmp opcode_hash_msb,x
+	bcc error	;		...not found, value exceeded
+	bne 12$		;	...loop until done
+
+13$	lda hulp	;	must find lsb too
+	cmp opcode_hash_lsb,x
+	bne 10$		;		...not found, continue msb scan
+
+	stx hash_pointer	;here is where it was found
+
+; While we're at it, let's convert the pointer into a base opcode
+
+	txa		;hash_pointer
+	ldx #0
+8$	cmp opcode_table,x
+	beq 9$		;	...found
+	inx
+	bne 8$		;	...loop until found (has to exist)
+
+9$	stx opcode	;here is the root opcode
+
+; Now we can start parsing the operand field.  If the opcode was one of the
+; 4502 bit instructions, BBR,BBS,RMB,SMB, pick up bit# first.
+
+	cpx #$0f	;...BBR
+	beq 14$
+	cpx #$8f	;...BBS
+	beq 14$
+	cpx #$07	;...RMB
+	beq 14$
+	cpx #$87	;...SMB
+	bne 6$		;	...none of these special cases
+
+14$	jsr eval	;evaluate the next parameter as a bit#
+	bcs error	;	...bad input
+	beq error	;	...no number
+	cmp #$27
+	beq error	;	...ascii not allowed
+	lda m0		;  note: eval ate any space preceeding the bit#
+	and #$f8
+	ora m0+1
+	ora m0+2
+	bne error	;	...number not in range (0-7)
+	lda m0
+	asl a		;merge bit# with base opcode to form true opcode
+	asl a
+	asl a
+	asl a
+	ora opcode
+	sta opcode
+
+	jsr get_last_character
+	cmp #' '	;allow space or comma to separate bit# and operand
+	beq 6$		;	(satisfies users of either style)
+	cmp #','
+	bne error	;	...syntax error
+
+; Until the operand is parsed, it is not possible to determine what the ML
+; opcode will be.  Here we parse the operand, whose syntax can be one of those
+; listed in the opmode_table.  A format mask is built as each part of the
+; operand is read.  This mask will be used to determine the exact opcode,
+; along with the size of any number.  Errors are handled immediately.
+
+6$	lda #%00000000	;init operand mask
+
+15$	sta operand_mask
+	jsr eval	;evaluate next parameter.  if it is a number, crunch it
+	bcs error	;	...branch if bad input
+	beq 40$		;	...branch if not a number
+;	cmp #$27	;								[910228]
+;	beq error	;	...ascii not allowed
+	lda m0+2
+	bne error	;	...branch if number too large ( >$FFFF )
+
+	ldy #2		;determine size of number (assume absolute (2 bytes))
+	lda shift	;	kludge to allow user to force absolute over zero page
+	cmp #8
+	bcc 20$		;	...allow only hex or octal bases to force absolute
+	lda count	;	eval stores # chars input in count
+	cmp #4		;	4 digits?
+	beq 30$		;	...branch to force absolute	
+20$	lda m0+1
+	bne 30$		;	...branch if absolute (2 bytes)
+	dey		;	else zero page or byte relative (1 byte)
+30$	ldx numbers
+	tya		;store the number
+	sta operand_size,x ;	store its size too
+	inc numbers
+	txa
+	bne 40$		;	is this the first or second number?
+	jsr m0tom1	;	...first, so move it up in case we return for more
+
+40$	dec txtptr	;re-get last character, which delimited number
+50$	jsr get_next_character
+	beq 70$		;	...branch if EOL
+	cmp #space
+	beq 50$		;	...ignore white space
+
+	cmp #'#'	;immediate?
+	bne 51$		;	...no
+	lda operand_mask
+	bne error
+	lda #%10000000
+	bra 15$		;	...get number
+
+51$	cmp #'('	;open paren?
+	bne 52$		;	...no
+	lda operand_mask
+	bne error
+	lda #%01000000
+	bra 15$		;	...get number
+
+52$	cmp #','	;comma?
+	bne 54$		;	...no
+	lda numbers
+	beq error	;	...no number input
+	ldx #%00000100	;it's a comma, but where it is is critical:
+	lda operand_mask
+	beq 53$		;	number,
+	cmp #%01111000
+	beq 53$		;	(,SP), (second comma)
+	cmp #%01001000
+	beq 53$		;	(),
+	ldx #%00100000
+	cmp #%01000000
+	bne error
+53$	txa
+	ora operand_mask
+	bra 15$		;	...bra, next item can be anything
+
+54$	cmp #'S'	;SP, stack relative?
+	bne 55$		;	...no
+	jsr get_next_character
+	cmp #'P'
+	bne error	;	...missing 'SP'
+	lda operand_mask
+	cmp #%01100000	;	 (,SP
+	bne error	;	...bad form
+	ora #%00010000
+	bra 15$		;	...but there should be no more numbers
+
+55$	cmp #')'	;closing paren?
+	bne 57$
+	lda numbers
+	beq error	;	...missing number
+	lda operand_mask
+	cmp #%01000000	;
+	beq 56$		;	()
+	cmp #%01100001
+	beq 56$		;	(,X)
+	cmp #%01110000
+	bne error	;	...bad form
+56$	ora #%00001000
+	bra 15$		;	...but there should be no more numbers
+
+57$	cmp #'X'	;index by X?
+	bne 59$		;	...no
+	lda numbers
+	beq error	;	...missing number
+	lda operand_mask
+	cmp #%01100000
+	beq 58$		;	(,X
+	cmp #%00000100	;	,X
+	bne error	;	...bad form
+58$	ora #%00000001
+	bra 15$		;	...but there should be no more numbers
+
+59$	cmp #'Y'	;index by Y?
+	bne 61$		;	...no
+	lda numbers
+	beq error	;	...missing number
+	lda operand_mask
+	cmp #%01001100
+	beq 60$		;	(),Y
+	cmp #%00000100
+	beq 60$		;	,Y
+	cmp #%01111100	;	(,SP),Y
+	bne error	;	...bad form
+60$	ora #%00000010
+	bra 15$		;	...should be EOL next
+
+61$	cmp #'Z'	;index by Z?
+	bne error	;	...no, must be an error
+	lda numbers
+	beq error	;	...missing number
+	lda operand_mask
+	cmp #%01001100	;	(),Z
+	bne error	;	...bad form
+	ora #%00000011
+	bra 15$		;	...should be EOL next
+
+; If we got this far, we have most everything we need, and syntax errors have
+; been weeded out.  There may still be value errors & illegal modes for opcodes.
+;
+;	hash_pointer	contains pointer to hashed opcode
+;	opcode		contains the root opcode (BBR/BBS/RMB/SMB are final)
+;	operand_mask	contains all the syntactical features of the input
+;	operand_size	contains the number of bytes in number(s)
+;	numbers		contains the number of numbers
+;
+; We usually cannot distinguish among the addressing modes by syntax alone- the
+; value of the operand must be examined to determine if it is a byte or word
+; value.  Furthermore, this assembler accepts actual addresses for relative
+; instructions, and calculates the byte or word-relative offset for the user.
+; 
+; So at this point, we can divide the task into three pieces, based upon the
+; number of numbers in the operand:  0 (implied),  1 (most everything else), or
+; 2 (BBR/BBS instructions which require special handling anyway).
+
+70$	lda hash_pointer ;this points to opcode, which will be merged
+	ldx numbers	 ;with format and # of bytes for final lookup
+	beq 100$	;	...branch if no numbers
+	dex
+	beq 90$		;	...branch if 1 number
+	dex
+	bne error	;	...error if more than 2 numbers
+
+; two numbers: must be bit test & branch relative instruction (special case)
+
+	cmp #5		;check opcode (use hash pointer)
+	beq 71$
+	cmp #6
+	bne error	;	...illegal mode for this opcode
+
+71$	lda m1+1
+	bne error	;	...error, number not base page
+	jsr eval_relative_3
+	cpy #2
+	bcs error	;	...error, branch out of range
+
+	lda opcode
+	ldy m0
+	ldx m1		;make m0=base page adr, m0+1=relative offset
+	stx m0
+	sty m0+1
+	ldy #2		;output opcode in .A plus two bytes in m0
+	bra 200$
+
+; zero or one number: could be anything, including relative instruction
+
+90$	ldx m1		;first copy number into our working register
+	ldy m1+1
+	stx m0
+	sty m0+1
+
+	ldx #10		;weed out the 10 relative instructions
+91$	cmp relative_opcodes-1,x
+	beq 95$		;	...found it, it is a relative instruction
+	dex
+	bne 91$		;	...loop until done
+	bra 100$	;	...not found, it is not a relative instruction
+
+95$	lda operand_mask ;relative instructions have simple operands			[910117]
+	bne error	 ;	syntax error if any specified (eg., bra ($1234))
+	jsr eval_relative
+	lda opcode
+	cpy #1
+	beq 92$
+	ora #3
+92$	bra 200$	;output opcode in .A, .Y bytes at m0
+
+100$	jsr format_mask
+110$	jsr find_opcode
+	beq 120$	;	found it
+
+	lda operand_size ;		not found- try absolute form
+	beq error	;		...error, opcode was implied
+	lda operand_mask
+	bmi error	;		...error, that was absolute
+	and #$3f
+	sta operand_mask
+	inc operand_size
+	jsr format_abs
+	bra 110$
+
+120$	ldy operand_size
+	txa		;output opcode in .A, number of m0 bytes in .Y
+200$	pha		;save opcode
+	iny
+	sty length
+	dey
+	beq 220$
+210$	lda m0-1,y	;output operand ( .Y>0 )
+	jsr stash	;write byte to memory  (sta (m2),y )
+	dey
+	bne 210$
+220$	pla
+	jsr stash	;output opcode ( .Y=0 )
+
+	jsr cronly	;get ready to overstrike line
+	jsr primm	;print 'A ' & erase eol
+	  .byte 'A',space,esc,'Q',0
+	jsr dis400	;disassemble one line
+
+	inc length
+	lda length
+	jsr addm2	;update address
+
+	lda #'A'	;set up next line with 'a bbnnnn ' for convenience
+	sta keyd	;put it in the keyboard buffer
+	lda #' '
+	sta keyd+1
+	sta keyd+8
+	lda m2+2	;get the bank number
+	jsr makhex
+	sta keyd+2
+	stx keyd+3
+	lda m2+1	;next get mid byte of address
+	jsr makhex
+	sta keyd+4	;..and put in buffer,
+	stx keyd+5
+	lda m2		;then get the low byte of address,
+	jsr makhex
+	sta keyd+6	;..and put that in the buffer, too.
+	stx keyd+7
+	lda #9		;signal that we put 9 char's in the buffer
+	sta ndx
+	bra main
+
+
+
+; Calculate a relative branch
+;
+; Assumes PC is in m2, destination address is in m0.  Converts m0 into a
+; 6502 relative offset.  .Y=1 if byte, =2 if word.  No errors possible.
+
+eval_relative_3		;	offset = -3 + value - pc  (BBS/BBR)
+	lda #$fd
+	  .byte $2c
+eval_relative
+	lda #$fe	;	offset = -2 + value - pc  (normal)
+
+	clc
+	adc m0
+	sta m0
+	lda #$ff
+	adc m0+1
+	sta m0+1
+	sec
+	lda m0
+	sbc m2
+	sta m0
+	lda m0+1
+	sbc m2+1
+	sta m0+1
+
+	ldy #1		;byte or word relative?  (assume byte)
+	lda m0
+	asl a
+	lda m0+1
+	bcc 96$
+	eor #$ff
+96$	bne 97$		;	word relative (out of range -128 to +127)
+
+	lda hash_pointer ;	byte relative
+	cmp #16		;	...BSR is an exception, it's always word-rel
+	bne 98$
+	
+97$	ldy #2		;	...word relative
+98$	rts		;.Y =1 if byte, =2 if word relative, m0 has value
+
+
+
+; Confirm that operand is correct for current opcode.  If it is not, scan
+; opcode_table for same opcode but different operand mode.  Returns Z flag
+; =1 (BEQ) if found, else Z=0 (BNE).  .X=opcode, .A=operand mask
+
+find_opcode
+	ldx opcode	;find match in operand_table for this opcode
+10$	lda operand_table,x
+	cmp operand_mask
+	beq 40$		;	...match found
+	lda hash_pointer
+	bra 30$		;	...match not found
+
+20$	cmp opcode_table,x
+	beq 10$		;	...found another candidate
+30$	inx
+	bne 20$		;	...loop until end of table
+	dex		;	...error, illegal operand for this opcode
+
+40$	rts		;return .Z=1 if found (.X=opcode,.A=mask), .Z=0 not found
+
+
+; Convert operand_mask into a form compatible with the operand_table.  This
+; requires us to obtain an index number for the mask, and merge it with the
+; number of bytes in the operand.
+
+format_mask
+	lda operand_mask
+	ldx #0
+10$	cmp opmode_table,x
+	beq 20$
+	inx
+	cpx #16
+	bcc 10$
+	txa		;return .V=0
+	rts		;error, format not legal
+
+20$	stx operand_mask
+
+format_abs
+	lda operand_size ;merge mode (zp,abs) with mask
+	lsr a
+	ror a
+	ror a
+	ora operand_mask
+	sta operand_mask
+	ldx #0
+	rts		;return .V=1
+
+;.end
+	.page
+	.subttl Monitor4 - Disassembler
+
+;*******************************************************************************
+;		Simple Disassembler
+;
+;  Syntax:	d 1234 [5678]	disassemble memory beginning at address '1234'
+;				and ending at address '5678'.
+;		d		disassemble memory beginning at current address
+;				for approximately 12 display lines.
+;*******************************************************************************
+
+; The disassemble line begins with the 'D'isassembly command itself and the
+; optional starting and ending addresses.  At this point, the command is good
+; (else we would not be here), and the starting address if given should have
+; already been evaluated and its value placed in m0.  The ending address, if
+; given, has to be evaluated.  If there is no ending address, output about 10
+; screen lines beginning with the current line.
+
+disassemble
+	bcs 1$		;branch if no addresses specified (use value in m0)
+	jsr m0tom2	;else save given starting address
+
+	jsr parse	;look for ending address, and evaluate it if given
+	bcc 2$		;...found it, use it
+1$	lda #20		;...else guess at the number of bytes that would result
+	sta m0		;   in about 12 lines of disassembly
+	bra 3$
+
+2$	jsr sub0m2      ;subtract start and end addresses, get byte count in m0
+	bcc error	;...error if start > end
+
+3$	jsr primm	;print <cr> & delete to end of line for neatness
+	  .byte cr,esc,'Q',0
+	jsr stop
+	beq main	;...exit cleanly if user requests abort
+
+	jsr dis300      ;disassemble 1 line
+
+	inc length	;add length of last instruction to address
+	lda length
+	jsr addm2
+	lda length
+	jsr subm0	;subtract length from byte count
+	bcs 3$		;...loop until we reach or exceed ending address
+	bra main
+
+
+; Disassemble one line of code and print it.  The line consists of:
+;
+;	<disasm prompt> <address> <object code> <disassembly>
+
+dis300
+	lda #'.'	;start of line.  print prompt
+	jsr bsout
+	jsr putspc
+
+; Enter here from Assembler to print the newly assembled line.  The appropriate
+; prompts have already been printed, so we begin by outputing the 4 character
+; address and three 2 character byte fields, padding with spaces as needed.
+
+dis400
+	jsr putm2	;print hex address
+	jsr putspc
+
+	ldy #0		;some init
+	sty wrap
+	jsr fetch	;get next byte- this is the opcode
+	sta opcode	;	...save it
+	tax
+	ldy operand_table,x ;	get # bytes and format
+	tya
+	and #$0f	;		pointer to format
+	tax
+	lda opmode_table,x
+	sta format	;		format (addressing mode, etc.)
+	tya
+	and #$c0
+	asl a
+	rol a
+	rol a
+	sta length	;		number of operand bytes (0-2)
+
+	ldy #0		;print object code
+10$	cpy length
+	beq 20$
+	bcs 30$
+20$	jsr fetch	;	always print at least 1 byte (opcode)
+	jsr puthxs	;		prints <hexchr><hexchr><space>
+	bra 40$
+
+30$	jsr primm
+	  .byte '   ',0	;	else pad with spaces if no byte
+	
+40$	iny
+	cpy #3
+	bcc 10$		;	...loop until done 3 bytes worth
+
+; Next we print the mnemonic.  We already have the actual opcode, which serves
+; as an index into an array of pointers to the compressed, 3 character mnemonic.
+
+50$	jsr putspc
+	ldx opcode	;print mnemonic
+
+	ldy opcode_table,x ;	get pointer to mnemonic in hash table
+	lda opcode_hash_msb,y ;	get compressed mnemonic (2 bytes)
+	sta m1+1
+	lda opcode_hash_lsb,y
+	sta m1
+	asl m1
+	rol m1+1
+
+	ldx #3
+60$	lda #0		;	de-compress mnemonic
+	ldy #5
+
+70$	asl m1		;		shift 5 bits for each character into .A
+	rol m1+1
+	rol a
+	dey
+	bne 70$
+
+	adc #$40	;		make it ASCII
+	jsr bsout	;	print it
+	dex
+	bne 60$		;	...loop until 3 characters output
+
+	lda opcode	;	check for special bit instructions
+	and #$0f
+	cmp #$07	;		RMB/SMB
+	beq 80$
+	cmp #$0f	;		BBR/BBS
+	bne 90$
+	dec wrap	;			remember BBR/BBS in particular
+80$	lda opcode
+	and #%01110000
+	asl a
+	rol a
+	rol a
+	rol a
+	rol a
+	ora #'0'
+	jsr bsout	;		print bit #
+	bra 95$
+
+90$	jsr putspc	;		else print a space
+95$	jsr putspc	;	finish with space
+
+; At this point, we have printed everything up to and including the mnemonic.
+; Now we have to examine the format and print the operand portion accordingly.
+; There are some things that must be printed before a number, the number itself
+; (in hex always), some things that can follow a number, and in some cases,
+; there are two numbers.  Some numbers are absolute, some are relative, and
+; in the case of BBR/BBS there are both types of numbers.
+
+	ldx length
+	beq 200$	;if no additional bytes, it's implied mode and we are done
+
+99$	bit format	;	else print prefixes, if any
+	bpl 100$	;
+	lda #'#'	;		immediate mode
+	bne 110$
+
+100$	bvc 120$
+	lda #'('	;		indirect mode
+110$	jsr bsout
+
+120$	lda #'$'	;the next item must be a number, print hex precursor
+	jsr bsout
+
+125$	ldy #0		;load m1 with operand bytes (assume single byte operand)
+	sty m1+1	;(the implied/accumulator modes have already been done)
+130$	iny
+	jsr fetch
+	sta m1-1,y
+	cpy length
+	bcc 130$
+
+	ldx opcode	;	if relative address, convert to effective address
+	lda operand_table,x
+	and #%00100000
+	bne 150$	;		...is relative
+
+
+; Direct address can be absolute (2-byte) or base page (1-byte), as determined
+; by LENGTH.  The only exceptions are the BBR/BBS instructions, flagged by WRAP.
+; The direct address is in m1.
+
+	ldy length	; 1 or 2 bytes
+	bit wrap
+	bpl 140$
+	ldy #1		;	BBR/BBS base page reference
+140$	lda m1-1,y
+	jsr puthex	;print high byte first
+	dey
+	bne 140$
+
+; Now print suffixes.
+
+	lda format
+	and #%00100000	;	(,
+	beq 145$
+	lda #','
+	jsr bsout
+
+	lda format
+	and #%00010000	;	(,SP
+	beq 144$
+	lda #'S'
+	jsr bsout
+	lda #'P'
+	jsr bsout
+144$	lda format
+	and #%00000001	;	(,X
+	beq 145$
+	lda #'X'
+	jsr bsout
+
+145$	lda format	;	(-)
+	and #%00001000
+	beq 146$
+	lda #')'
+	jsr bsout
+
+146$	lda format	;	(-), or -,
+	and #%00000100
+	beq 148$
+	lda #','
+	jsr bsout
+
+	lda format	;	index register
+	and #%00000011
+	beq 148$
+	tay
+	lda register-1,y
+	jsr bsout
+
+148$	bit wrap
+	bpl 200$	;	BBR/BBS bit,branch special case
+	lda #','
+	jsr bsout	;	$,$
+	lda #'$'
+	jsr bsout
+	ldy #2
+	jsr fetch	;		get branch offset
+	sta m1
+	lda #0
+	sta m1+1	;		make msb null &
+	dey		;		fake single byte
+	sty length
+	lda #3		;	address= pc + operand + 3
+	  .byte $2c
+
+; Relative addresses are counted from different places by different opcodes.
+; m1 has the operand (byte or word), m2 has the current PC.  Calculate the
+; destination address as PC + operand + offset.
+
+150$	lda #2		;	address= pc + operand + 2
+	pha
+	lda length	;		1 byte negative branch?
+	lsr a
+	ror a
+	and m1
+	bpl 155$
+	lda #$ff	;		...yes, make msb=$FF
+	sta m1+1
+
+155$	pla
+	clc
+	adc m1
+	sta m1
+	lda #0
+	adc m1+1
+	sta m1+1
+	clc
+	lda m1
+	adc m2
+	pha
+	lda m1+1
+	adc m2+1
+	tax
+	pla
+	jsr putwrd	;print physical address in .a, .x
+
+	bit wrap	;restore proper length if BBR/BBS
+	bpl 200$
+	inc length
+
+200$	rts
+
+
+register
+	.byte 'XYZ'
+;.end
+	.page
+	.subttl Monitor5 - Misc. Routines
+
+;  parse entry when 1st character has already been read
+;
+
+
+
+pargot
+	dec txtptr
+
+
+;  Parse the next item in buffer & put its value into  m0, m0+1 & m0+2
+;
+;	.z=1 if no value found
+;	.c=1 if EOL
+;	.x & .y are preserved, .a contains # digits read
+;
+;	If there is an error, call is popped & 'jmp error' performed
+
+
+parse
+	jsr eval	;evaluate ASCII input as a number
+	bcs 10$		;...branch if error
+
+	lda count	;catch ASCII input and handle differently			[910228]
+	cmp #$27
+	beq 20$		;	ASCII input- fake eol
+
+	jsr glc		;re-get last character
+	bne 5$		;...branch if not EOL
+	dec txtptr	;point to EOL: make next 'gnc' see EOL
+	lda count
+	bne 30$		;...valid number input, treat EOL as a delimiter
+	beq 20$		;...the well is very dry
+
+5$	cmp #space	;parse delimiters (only allow <space> or <comma>)
+	beq 30$
+	cmp #comma
+	beq 30$		;...fall into error if bad delimiter
+
+10$	pla		;pop this call
+	pla
+	bra error
+
+20$	sec		;set .c=1 for EOL
+	  .byte $89
+
+30$	clc		;clear .c for not-EOL
+	lda count	;set .z=1 for valid number
+	rts
+
+	.page
+;  Evaluate the next item in buffer & put its value into  m0, m0+1 & m0+2.
+;
+;	.c=0  normal return
+;	.c=1  error  return
+;	.z=1  null input
+;	.x & .y are preserved
+
+eval
+	lda #0
+	sta m0		;clear value
+	sta m0+1
+	sta m0+2
+	sta count	;reset digit counter (flags valid number vs. null input)
+	phx		;preserve .x & .y
+	phy
+
+10$	jsr gnc		;get next character
+	beq eval_ok	;...branch if end of line
+15$	cmp #space
+	beq 10$		;...branch & ignore leading spaces
+
+	ldx #3
+20$	cmp cmdnum,x	;is first character a base prefix?
+	beq 30$		;...yes
+	dex
+	bpl 20$
+
+	cmp #$27	;is it ASCII prefix?				new	[910228]
+	bne 25$		;...no
+	sta count	;...yes- flag ASCII input while faking number
+	ldx txtptr
+	lda buf,x	;	get the character
+	bne 21$		;	 	got it
+	lda #' '	;	 	eol- substitute space character
+	dec txtptr	;		     and backup so we point 1 past eol
+21$	inc txtptr
+	inc txtptr
+	sta m0		;	 save value
+	ldy #2		;	 fake base 2
+	bra eval_ok
+
+25$	inx		;...no: default base to hex
+	dec txtptr	;to reget digit
+
+30$	ldy bases,x	;this is the base
+	lda shifts,x	;this is the # of shifts required for given base
+	sta shift
+
+40$	jsr gnc		;get next character
+	beq eval_ok	;...branch if eol
+
+	cmp #'0'	;convert to binary, assume delimiter if bad value
+	bcc eval_ok	;	bad if < '0'				[900530]
+	cmp #':'	;	'9'+1
+	bcc 50$		;	ok if in '0'..'9'
+	cmp #'A'
+	bcc eval_ok	;	bad if > '9' & < 'A'
+	cmp #'G'
+	bcs eval_ok	;	bad if > 'F'
+
+	sbc #7		;adjust if in 'a'..'f'
+50$	sbc #$2f	;adjust to $00..$0f
+
+	sta number	;binary value of current digit
+	cpy number
+	bcc eval_ng	;...branch if number out of range of given base
+	beq eval_ng
+	inc count	;flag valid digit
+	cpy #10
+	bne 70$		;...branch if not base 10
+
+	ldx #2
+60$	lda m0,x	;save a copy of current total for base 10 calc
+	sta temps,x
+	dex
+	bpl 60$
+
+70$	ldx shift
+80$	asl m0		;multiply current value by base using binary shifts
+	rol m0+1
+	rol m0+2
+	bcs eval_ng	;...branch if overflow error
+	dex
+	bne 80$		;...next shift
+
+	cpy #10
+	bne 90$		;...branch if not base 10
+
+	asl temps	;more base 10 calc: first one more shift
+	rol temps+1
+	rol temps+2
+	bcs eval_ng	;...overflow
+	lda temps
+	adc m0		;add 'em up
+	sta m0
+	lda temps+1
+	adc m0+1
+	sta m0+1
+	lda temps+2
+	adc m0+2
+	sta m0+2
+	bcs eval_ng	;...overflow
+
+90$	clc		;add current digit (all bases)
+	lda number
+	adc m0
+	sta m0
+	txa		;.x=0
+	adc m0+1
+	sta m0+1
+	txa
+	adc m0+2
+	sta m0+2
+	bcc 40$		;...next character
+;	bcs eval_ng	;...overflow
+;	and #$f0
+;	bne eval_ng	;...overflow
+
+	.page
+eval_ng
+	sec
+	  .byte $89
+
+eval_ok
+	clc
+	sty shift	;return input base (used by 'assem')
+	ply		;restore .x & .y
+	plx
+	lda count
+	rts
+
+
+
+bases	.byte 16,10, 8, 2
+shifts	.byte  4, 3, 3, 1
+
+	.page
+;  Print m2 as 6 hex digits:	BBHHLL
+;
+
+putm2	lda m2+2	;get bank (a19-a16) anything over a19 means "I/O"
+	jsr puthex	;print bank
+	lda m2		;get address (a15-a0)
+	ldx m2+1
+
+
+putwrd	pha		;print address:  msb first, then lsb
+	txa
+	jsr puthex
+	pla
+
+
+puthxs	jsr puthex	;print byte in .a as two hex digits
+
+
+putspc	lda #space	;print <space>
+	jmp bsout
+
+
+
+cronly	jsr primm	;print <cr><crsr-up>
+	  .byte cr,up,0
+	rts
+
+
+
+crlf	lda #cr
+	jmp bsout
+
+
+
+new_line
+	jsr primm	;print <cr><clear_eol><space>
+	  .byte cr,esc,'Q',space,0
+	rts
+
+	.page
+;  Print .a as 2 hex digits
+;
+
+puthex	stx sxreg
+	jsr makhex
+	jsr bsout
+	txa
+	ldx sxreg
+	jmp bsout
+
+
+
+;  Convert .a to 2 hex digits & put msb in .a, lsb in .x
+;
+
+makhex	pha
+	bsr 1$
+	tax
+	pla
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+
+1$	and #$0f
+	cmp #$0a
+	bcc 2$
+	adc #6
+
+2$	adc #'0'
+	rts
+
+
+;  Get Last Character
+;
+
+glc
+get_last_character
+	dec txtptr
+
+
+;  Get Next Character: return in .a  (return = if buffer empty or EOL)
+;
+
+gnc
+get_next_character
+	stx sxreg
+	ldx txtptr
+	lda buf,x
+	beq 10$		;EOL- return with z=1
+	cpx #0
+	beq 5$
+	cmp #semi
+	beq 10$		;EOL- return with z=1
+5$	cmp #':'
+	beq 10$		;EOL- return with z=1
+	cmp #'?'
+10$	php
+	inc txtptr
+	ldx sxreg
+	plp
+	rts
+
+	.page
+;  Move m0,m0+1,m0+2 to m2,m2+1,m2+2
+;
+
+m0tom2	lda m0
+	sta m2
+	lda m0+1
+	sta m2+1
+	lda m0+2
+	sta m2+2
+	rts
+
+m0tom1	lda m0
+	sta m1
+	lda m0+1
+	sta m1+1
+	lda m0+2
+	sta m1+2
+	rts
+
+;  Swap m2 and m0
+;
+
+swapm2	lda m2
+	ldx m0
+	sta m0
+	stx m2
+	lda m2+1
+	ldx m0+1
+	sta m0+1
+	stx m2+1
+	lda m2+2
+	ldx m0+2
+	sta m0+2
+	stx m2+2
+	rts
+
+
+;  Subtract m2 from m0, result in m0
+;
+
+sub0m2	sec
+	lda m0
+	sbc m2
+	sta m0
+	lda m0+1
+	sbc m2+1
+	sta m0+1
+	lda m0+2
+	sbc m2+2
+	sta m0+2	;note .c=0 indicates m0 < m2, thus m0 is negative!
+	rts
+
+
+;  Decrement m0
+;
+
+decm0	lda #1
+
+subm0	sta sxreg	;subtract .a from m0
+	sec
+	lda m0
+	sbc sxreg
+	sta m0
+	lda m0+1
+	sbc #0
+	sta m0+1
+	lda m0+2
+	sbc #0
+	sta m0+2
+	rts
+
+
+;  Decrement m1
+;
+
+decm1	sec
+	lda m1
+	sbc #1
+	sta m1
+	lda m1+1
+	sbc #0
+	sta m1+1
+	lda m1+2
+	sbc #0
+	sta m1+2
+	rts
+
+
+; Increment m2
+;
+
+incm2	lda #1
+
+addm2	clc		;add .a to m2
+	adc m2
+	sta m2
+	bcc 1$
+	inc m2+1
+	bne 1$
+	inc m2+2
+1$	rts
+
+
+;  Decrement m2
+;
+
+decm2	sec
+	lda m2
+	sbc #1
+	sta m2
+	lda m2+1
+	sbc #0
+	sta m2+1
+	lda m2+2
+	sbc #0
+	sta m2+2
+	rts
+
+
+
+; Copy m0 to PC registers
+;
+
+m0topc	bcs 1$		;no arg given, just exit
+	lda m0
+	ldy m0+1
+	ldx m0+2
+	sta pc_lo
+	sty pc_hi
+	stx bank
+1$	rts
+	.page
+;  Read a range - put sa in m2, count in m1   (save ea in 'temps')
+;
+;  Returns .c=0 if okay, .c=1 if error (missing parameter or sa < ea)
+;
+
+range
+	bcs 1$		;...branch if missing sa
+	jsr m0tom2	;move sa from m0 to m2
+	jsr parse	;get ea
+	bcs 1$		;...branch if missing ea
+
+	lda m0		;save ea (for 'transfer' cmd)
+	sta temps
+	lda m0+1
+	sta temps+1
+	lda m0+2
+	sta temps+2
+
+	jsr sub0m2	;calculate length = ea - sa  (.c=0 if sa<ea)
+	jsr m0tom1	;move length from m0 to m1
+
+	bcc 1$		;invert .c from subtraction above
+	clc		;good stuff exits here
+	rts
+
+1$	sec		;bad  stuff exits here
+	rts
+
+	.page
+;  Convert given number from its base to hex
+;
+
+convert
+	jsr pargot	;parse number & put its value in m0
+	jsr new_line
+	lda #'$'	;print hexidecimal conversion of m0
+	jsr bsout
+	lda m0+2	;how big a number is it?
+	beq 10$		;...branch if 'bank' nybble unnecessary
+	jsr puthex
+;	jsr makhex
+;	txa
+;	jsr bsout	;print lsd of this byte
+10$	lda m0
+	ldx m0+1
+	jsr putwrd	;print hex word
+
+	jsr new_line
+	lda #'+'	;print decimal conversion of m0
+	jsr bsout
+	jsr bindec	;convert m0 into packed BCD in hulp
+	lda #0		;no leading zeros
+	ldx #8		;number of digits
+	ldy #3		;number of shifts-1
+	jsr unpack	;convert packed BCD in hulp to ASCII & print it
+
+	jsr new_line
+	lda #'&'	;print octal conversion of m0
+	jsr bsout
+	lda #0		;no leading zeros
+	ldx #8		;number of digits
+	ldy #2		;number of shifts-1
+	jsr unpack_m0	;convert binary in hulp to ASCII & print it
+
+	jsr new_line
+	lda #'%'	;print binary conversion of m0
+	jsr bsout
+	lda #0		;no leading zeros
+	ldx #24		;number of digits
+	ldy #0		;number of shifts-1
+	jsr unpack_m0	;convert binary in hulp to ASCII & print it
+
+	bra main
+
+	.page
+;  Convert from binary to decimal (BCD)
+;
+;	input :	binary value (3 bytes) in m0
+;	output:	decimal value (4 bytes) in HULP as packed BCD
+
+
+bindec
+	jsr m0tom2	;copy from m0 to m2 (lo/mid/hi)
+
+	lda #0
+	ldx #7
+1$	sta hulp,x	;initialize working registers
+	dex
+	bpl 1$
+	inc hulp+7	;seed value_of_bit with 1
+
+	ldy #23		;loop index (3 bytes = 24 bits)
+	php		;save caller's processor mode
+	sei		;disable IRQ's (but beware NMI's!)
+	sed		;put processor into decimal mode (for ADC's & SBC's)
+
+
+;  Main loop.  Rotate bits right 1 at a time, and if
+;  carry is set add the current value_of_bit to the sum.
+
+
+10$	lsr m2+2	;hi
+	ror m2+1	;mid
+	ror m2		;lo
+	bcc 30$		;...branch if bit not set (its value is 0)
+
+	clc
+	ldx #3
+20$	lda hulp+4,x	;add current value_of_bit (decimal arithmetic)
+	adc hulp,x
+	sta hulp,x
+	dex
+	bpl 20$
+
+30$	clc
+	ldx #3
+40$	lda hulp+4,x	;calculate value of next bit (decimal arithmetic)
+	adc hulp+4,x
+	sta hulp+4,x
+	dex
+	bpl 40$
+	dey
+	bpl 10$		;loop until done conversion
+
+	plp		;restore processor IRQ mode
+	rts
+
+	.page
+;  Unpack a binary value in m0 by first copying it to HULP
+;
+
+unpack_m0
+	pha		;save .a
+	lda m0
+	sta hulp+2	;copy m0 (lo/mid/hi) to hulp (hi/mid/lo)
+	lda m0+1
+	sta hulp+1
+	lda m0+2
+	sta hulp
+	lda #0
+	sta hulp+3
+	pla		;restore .a & fall into unpack...
+
+
+;  Unpack a base encoded number, convert it to ASCII & print it
+;
+;  Enter:  packed number in HULP  (hi/mid/lo)
+;	   # digits in .x,  # shifts/digit in .y
+;	   .a=0 to trim leading 0's, else .a>0 to print them
+
+
+unpack
+	sta count
+	sty shift
+10$	ldy shift	;# bits per digit, .x is digit counter
+	lda #0
+20$	asl hulp+3	;lo
+	rol hulp+2	;mid lo
+	rol hulp+1	;mid hi
+	rol hulp	;hi
+	rol a		;shift a digit into .a
+	dey
+	bpl 20$
+
+	tay		;set flags for .a
+	bne 30$
+	cpx #1
+	beq 30$		;...print zero if it's the last digit
+	ldy count
+	beq 40$		;...else skip leading zeros
+
+30$	inc count	;flag a non-zero digit
+	ora #'0'	;make it ASCII
+	jsr bsout	;print it
+
+40$	dex
+	bne 10$		;...loop until all digits printed
+	rts
+	
+;.end
+	.page
+	.subttl Monitor6 - Disk Commands
+
+;********************************************
+;
+;	Disk Command/Status Operations
+;
+;	@[device-number][,command-string]
+;
+;********************************************
+
+disk
+	bne 10$		;...branch if given device #
+	ldx #8		;default device number
+	  .byte $2c
+
+10$	ldx m0		;get given device #
+	cpx #4
+	bcc error	;...branch if bad device #
+	cpx #31
+	bcs error
+	stx m0
+
+	lda #0
+	sta m0+2	;clear line # register (in case DIR cmd)
+	sta fnlen
+	tax
+	jsr setbnk	;cmd string in in ram0 (in case DIR cmd)	[900719]
+
+	jsr gnc		;peek at first character of disk command
+	dec txtptr	;backup so we will re-get this character later
+	cmp #'$'
+	beq disk_dir	;...branch if directory read
+	cmp #$5f
+	beq disk_dir	;...or directory of recoverable files
+
+;  Open disk command channel & pass it given command
+
+	pha		;save 1st character of command
+	lda #0		;la
+	ldx m0		;fa
+	ldy #15		;sa
+	jsr setlfs
+	jsr open	;open disk command channel
+	bcs disk_done	;...branch on error
+	pla
+	beq disk_st	;recall 1st character, exit if EOL (no command)
+	ldx #0		;else, get an output channel and send command
+	jsr ckout
+	bcs disk_done	;...branch on bus error
+
+20$	ldx txtptr	;get next character
+	inc txtptr
+	lda buf,x
+	beq disk_st	;...branch if EOL
+	jsr bsout	;xmit character to disk
+	bcc 20$		;...loop until error or EOL
+
+	.page
+disk_st
+	jsr clrch	;read & report CBM disk status message
+	jsr crlf
+	ldx #0
+	jsr chkin	;get an input channel
+	bcs disk_done	;...branch on bus error
+
+10$	jsr basin	;get a character from disk
+	jsr bsout	;print it
+	cmp #cr
+	beq disk_done
+	bbr6 status,10$	;...loop until timeout or logical EOL
+
+
+
+disk_done
+	jsr clrch
+	lda #0
+	sec		;not a real close
+	jsr close
+	bra main
+
+	.page
+;  Read & display the disk directory
+
+disk_dir
+	ldy #$ff	;determine directory string length
+	ldx txtptr
+	dex
+	
+10$	iny
+	inx
+	lda buf,x	;get a character
+	bne 10$		;...loop until EOL
+
+	tya		;length
+	ldx txtptr	;fnadr low
+	ldy #>buf	;fnadr high
+	jsr setnam
+	lda #0		;la
+	ldx m0		;fa
+	ldy #$60	;sa
+	jsr setlfs
+	jsr open	;open directory channel
+	bcs disk_done	;...branch on error
+	ldx #0
+	jsr chkin	;make it an input channel
+
+	jsr crlf
+
+	ldy #3		;first pass only- trash first two bytes read
+
+20$	sty m1		;loop counter
+25$	jsr basin
+	sta m0		;get # blocks low
+	lda status
+	bne disk_done	;...branch if error
+	jsr basin
+	sta m0+1	;get # blocks high
+	lda status
+	bne disk_done	;...branch if error
+	dec m1
+	bne 25$		;...loop until done
+
+	jsr bindec	;convert # blocks to decimal
+	lda #0		;no leading zeros
+	ldx #8		;max digits
+	ldy #3		;required # shifts for decimal value
+	jsr unpack	;print # blocks
+	lda #space
+	jsr bsout	;print space  (to match loaded directory display)
+
+30$	jsr basin	;read & print filename & filetype
+	beq 40$		;...branch if eol
+	ldx status
+	bne disk_done	;...branch if error
+	jsr bsout
+	bcc 30$		;...loop always
+
+40$	jsr crlf	;start a new line
+	jsr stop
+	beq disk_done	;...branch if user hit STOP
+	ldy #2
+	bne 20$		;...loop always
+
+;.end
+	.page
+	.subttl Monitor AutoScroll
+; Monitor AutoScroll Routines
+;
+
+ScrollMon
+	pha			;save character for Editor
+	lda dflto		;is output redirected?
+	eor #3
+	bne ScrollMon_no	;	yes- can't do scroll (need to read screen)
+
+ScrollMon_yes
+	ror t1+2		;save .c=direction (character already on stack)
+	sec
+	jsr plot		;get current cursor position & save it
+	stx t1
+	sty t1+1
+	bbr7 t1+2,ScrollMon_up	;branch according to direction of scroll...
+	bra ScrollMon_dn
+
+
+ScrollMon_done
+	lda #16			;Make M2 address point to next line
+	bbr7 mode,10$
+	lsr a
+10$	jsr addm2
+ScrollMon_done1
+	jsr primm		;kill special Editor modes
+	  .byte $1b,$1b,0
+	ldx t1			;restore cursor position
+	ldy t1+1
+	clc
+	jsr plot
+	lda #0			;reset Monitor's buffer pointer
+	sta txtptr
+	pla			;restore character
+	clc			;return to Editor, with flag we handled character
+	rts
+
+
+ScrollMon_ng
+	ldx t1			;restore cursor position
+	ldy t1+1
+	clc
+	jsr plot
+ScrollMon_no
+	lda #0			;reset Monitor's buffer pointer
+	sta txtptr
+	pla			;restore character
+	sec			;return to Editor with no action taken
+	rts
+
+	.page
+ScrollMon_up			;wanting to scroll up
+	sec
+	lda scbot		;put cursor at bottom of screen
+	sbc sctop
+	sta t1+4		;	save where it is- we'll be printing line there
+	tax
+	jsr ScrollMon_search	;search for prompt & address on screen, put it in M0
+	bcs ScrollMon_ng	;	none found
+
+	ldx t1+4		;put cursor back at bottom of screen (search moved it)
+	ldy #0
+	clc
+	jsr plot
+	lda t1+3
+	cmp #'>'		;	dump or disassembly?
+	bne 10$			;	must be disassembly
+
+	jsr m0tom2		;address to dump
+	lda #16
+	bbr7 mode,5$		;	add 8 (16 if 80-col) to line start address
+	lsr a
+5$	jsr addm2
+	jsr dmpone		;dump a line
+	bra ScrollMon_done
+
+10$	jsr primm		;disassemble
+	  .byte cr,0		;scroll screen up, get a line to print to
+	jsr m0tom2		;address to disassemble
+	ldy #0
+	jsr fetch		;get next byte- this is the opcode
+	tax
+	ldy operand_table,x 	;	look up # bytes for operand for
+	tya			;	 line already on screen
+	and #$c0
+	asl a
+	rol a
+	rol a
+	cmp #3			;	 special case- BBS/BBR
+	beq 20$
+	inc a			;	add one more byte for the opcode
+20$	sta length
+	jsr addm2		;length+address to get address we want
+Scrolldasm
+	jsr dis300		;disasm & print one line
+	inc length
+	lda length		;adjust length for subsequent 'D' command
+	jsr addm2
+	bra ScrollMon_done1	;that's all folks
+	
+	.page
+ScrollMon_dn			;wanting to scroll down
+	ldx #0			;	put cursor at top of screen
+	jsr ScrollMon_search	;search for prompt & address on screen, put it in M0
+	bcs ScrollMon_ng	;	none found
+	lda t1+3
+	cmp #'>'		;	dump or disassembly?
+	bne ScrollMon_ng	;		disallow backwards disassembly
+
+	ldx #0			;get a blank line to print on
+	ldy #0			;	put cursor at top of screen
+	clc
+	jsr plot
+	jsr primm		;	and scroll screen (kill any pending Editor modes, too)
+	  .byte $1b,$1b,$1b,"W",0
+
+; Dump backwards
+
+	lda #16			;problem in 40-col mode: double spaces
+	bbr7 mode,5$		;	sub 8 (16 if 80-col) to line start address
+	lsr a
+	smb6 scroll		;	if 40-col, temporarily disable linker
+5$	jsr subm0
+	jsr m0tom2		;address to dump
+	jsr dmpone_1		;dump a line
+	rmb6 scroll
+	bra ScrollMon_done
+
+	.page
+;; Disassemble backwards
+;
+;10$	jsr m0tom1		;save target address in M1
+;	lda #16			;how far back to go (arbitrary starting point)
+;	sta length
+;15$	lda length
+;	neg a
+;20$	sta count
+;	lda m1			;disassemble forwards from M0, aiming for M1
+;	ldx m1+1
+;	ldy m1+2
+;	sta m0
+;	stx m0+1
+;	sty m0+2
+;	lda count
+;	neg a
+;	jsr subm0
+;	jsr m0tom2		;trial address to disassemble (M2)
+;	ldy #0
+;	jsr fetch		;	get the opcode
+;	tax
+;	ldy operand_table,x 	;	get # bytes for operand
+;	tya
+;	and #$c0
+;	asl a
+;	rol a
+;	rol a
+;	cmp #3			;	 special case- BBS/BBR
+;	beq 25$
+;	inc a			;	add one for the opcode (1-3)
+;25$	clc
+;	adc count
+;	bmi 20$			;below target, continue this thread
+;	beq Scrolldasm		;bullseye
+;	dec length
+;?	bra 15$			;passed target, start a new thread ???? no good
+
+	.page
+ScrollMon_search
+1$	ldy #0			;search for DUMP or DISASM prompt on screen in leftmost column
+	clc
+	jsr plot		;	move to beginning of next line
+	bcs 30$			;		exit if no more lines
+	sec
+	jsr plot		;		else check if wrapped line
+	bcs 10$			;			it's wrapped- move up one line
+	ldy sclf		;	get first character on this line in window
+	lda (pnt),y
+	cmp #'>'
+	beq 20$			;		it's a dump
+	cmp #'.'
+	beq 20$			;		it's a disassembly
+
+10$	bbs7 t1+2,15$		;	nothing on this line- move to next line
+	dex			;		move up one line
+	  .byte $89
+15$	inx			;		move down one line
+	bra 1$			;loop until we find a prompt or run out of lines
+
+20$	sta t1+3		;save prompt
+	ldx #0
+25$	iny			;copy number from screen into buffer
+	cpy scrt
+	bmi 26$
+	bne 28$			;	exit loop if outside window (real small window?)
+26$	lda (pnt),y
+	and #$7f		;	convert to ASCII for eval
+	cmp #$20
+	bcs 27$
+	ora #$40
+27$	sta buf,x		;	put into buffer
+	inx
+	cpx #7			;	assume number is reasonable (bbhhll)
+	bcc 25$			;	   (allow for leading space, as in '. 001234')
+
+28$	lda #0
+	sta buf,x		;	terminate it with a null
+	sta txtptr		;	set buffer pointer
+	jsr eval		;evaluate number (ignores leading spaces & zeros)
+30$	rts			;	exit with .c=1 if no good, .z=1 if null input
+
+;.end
+	.page
+	.subttl Monitor Table Data
+;	Opcode Hash Tables
+;
+;	Each 3-character mnemonic has been crunched into 2 bytes
+;	using the following algorithm:
+;
+;		defop	.macro %str
+;	opcode_hash_value = 0
+;		.irpc %char,%str
+;	opcode_hash_value = %00100000*opcode_hash_value+%00011111!.'%char'
+;		.endr
+;		.word  opcode_hash_value	;%str
+;		.endm
+;
+;	For simplicity and speed, the resulting value has been divided
+;	into two halves, msb and lsb.  The mnemonics are in lexicographic
+;	order.  The opcode_table values point into here.
+
+
+opcode_hash_msb
+	.byte  $04,$05,$06,$06,$06,$08,$08,$08
+	.byte  $08,$08,$09,$09,$09,$0A,$0A,$0A
+	.byte  $0A,$0A,$0A,$0D,$0D,$0D,$0D,$0D
+	.byte  $0D,$0E,$0E,$0E,$10,$10,$10,$10
+	.byte  $10,$15,$25,$25,$25,$25,$25,$29
+	.byte  $2A,$30,$30,$30,$30,$32,$34,$38
+	.byte  $39,$3E,$41,$41,$41,$41,$41,$41
+	.byte  $41,$41,$41,$41,$41,$49,$49,$49
+	.byte  $49,$4A,$4A,$4C,$4C,$4C,$4C,$4C
+	.byte  $4D,$4E,$4E,$4E,$4E,$50,$50,$50
+	.byte  $50,$50,$52,$52,$52,$52,$53,$53
+	.byte  $53,$53,$53
+
+opcode_hash_lsb
+	.byte  $83,$C4,$6C,$72,$77,$52,$53,$63
+	.byte  $73,$B1,$34,$A9,$C5,$0C,$41,$4B
+	.byte  $72,$C3,$D3,$83,$84,$85,$89,$96
+	.byte  $B0,$18,$19,$1A,$A3,$B7,$B8,$B9
+	.byte  $BA,$F2,$C3,$D7,$D8,$D9,$DA,$B0
+	.byte  $72,$81,$98,$99,$9A,$72,$30,$A7
+	.byte  $F0,$41,$01,$10,$17,$18,$19,$1A
+	.byte  $81,$90,$98,$99,$9A,$A2,$EC,$F2
+	.byte  $F7,$89,$93,$43,$A3,$A4,$A5,$A9
+	.byte  $A2,$81,$98,$99,$9A,$22,$38,$39
+	.byte  $3A,$41,$42,$62,$78,$79,$01,$13
+	.byte  $21,$33,$41
+	.page
+opcode_table
+;		pointers to hashed mnemonic
+
+;	       0  1  2  3  4  5  6  7  8  9  A  B  C  D  E F
+	.byte 15,49,21,70,83,49, 2,61,51,49, 2,85,83,49, 2,5	;0
+	.byte 13,49,49,13,82,49, 2,61,19,49,34,38,82,49, 2,5	;1
+	.byte 40, 1,40,40,10, 1,62,61,57, 1,62,89,10, 1,62,5	;2
+	.byte 11, 1, 1,11,10, 1,62,61,68, 1,28,32,10, 1,62,5	;3
+	.byte 65,33,47, 3, 3,33,45,61,50,33,45,80,39,33,45,5	;4
+	.byte 17,33,33,17, 3,33,45,61,22,33,54,77,46,33,45,5	;5
+	.byte 66, 0,66,16,76, 0,63,61,56, 0,63,90,39, 0,63,5	;6
+	.byte 18, 0, 0,18,76, 0,63,61,71, 0,59,81,39, 0,63,5	;7
+	.byte 14,73,73,14,75,73,74,72,31,10,86,75,75,73,74,6	;8
+	.byte  7,73,73, 7,75,73,74,72,88,73,87,74,76,73,76,6	;9
+	.byte 43,41,42,44,43,41,42,72,79,41,78,44,43,41,42,6	;A
+	.byte  8,41,41, 8,43,41,42,72,23,41,84,44,43,41,42,6	;B
+	.byte 26,24,27,29,26,24,28,72,37,24,30, 4,26,24,28,6	;C
+	.byte 12,24,24,12,27,24,28,72,20,24,53,55,27,24,28,6	;D
+	.byte 25,67,41,35,25,67,34,72,36,67,48,64,25,67,34,6	;E
+	.byte  9,67,67, 9,52,67,34,72,69,67,58,60,52,67,34,6	;F
+
+
+relative_opcodes
+;		pointers to relative instructions
+
+	.byte	7,8,9,11,12,13,14,16,17,18
+	.page
+operand_table
+;		+---+---+---+---+---+---+---+---+	bytes= 00: implied
+;		| bytes |rel| - | opmode pointer|	       01: zpage, imm, brel
+;		+---+---+---+---+---+---+---+---+	       10: abs, wrel
+;							       11: bit test+branch
+
+;	       0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+	.byte $00,$44,$00,$00,$40,$40,$40,$40,$00,$41,$00,$00,$80,$80,$80,$c0	;0
+	.byte $60,$45,$46,$a0,$40,$47,$47,$40,$00,$88,$00,$00,$80,$87,$87,$c0	;1
+	.byte $80,$44,$8b,$84,$40,$40,$40,$40,$00,$41,$00,$00,$80,$80,$80,$c0	;2
+	.byte $60,$45,$46,$a0,$47,$47,$47,$40,$00,$88,$00,$00,$87,$87,$87,$c0	;3
+	.byte $00,$44,$00,$00,$40,$40,$40,$40,$00,$41,$00,$00,$80,$80,$80,$c0	;4
+	.byte $60,$45,$46,$a0,$47,$47,$47,$40,$00,$88,$00,$00,$00,$87,$87,$c0	;5
+	.byte $00,$44,$41,$a0,$40,$40,$40,$40,$00,$41,$00,$00,$8b,$80,$80,$c0	;6
+	.byte $60,$45,$46,$a0,$47,$47,$47,$40,$00,$88,$00,$00,$84,$87,$87,$c0	;7
+	.byte $60,$44,$4d,$a0,$40,$40,$40,$40,$00,$41,$00,$87,$80,$80,$80,$c0	;8
+	.byte $60,$45,$46,$a0,$47,$47,$48,$40,$00,$88,$00,$88,$80,$87,$87,$c0	;9
+	.byte $41,$44,$41,$41,$40,$40,$40,$40,$00,$41,$00,$80,$80,$80,$80,$c0	;A
+	.byte $60,$45,$46,$a0,$47,$47,$48,$40,$00,$88,$00,$87,$87,$87,$88,$c0	;B
+	.byte $41,$44,$41,$40,$40,$40,$40,$40,$00,$41,$00,$80,$80,$80,$80,$c0	;C
+	.byte $60,$45,$46,$a0,$40,$47,$47,$40,$00,$88,$00,$00,$80,$87,$87,$c0	;D
+	.byte $41,$44,$4d,$40,$40,$40,$40,$40,$00,$41,$00,$80,$80,$80,$80,$c0	;E
+	.byte $60,$45,$46,$a0,$81,$47,$47,$40,$00,$88,$00,$00,$80,$87,$87,$c0	;F
+	.page
+opmode_table
+;		+---+---+---+---+---+---+---+---+	reg= 00: none
+;		| # | ( | , | S | ) | , |  reg  |	     01: x
+;		+---+---+---+---+---+---+---+---+	     10: y
+;							     11: z
+
+	.byte %00000000		;implied or accumulator mode		0
+	.byte %10000000		;#		immediate		1
+	.byte %00000000		;$xx		zero page		2
+	.byte %00000000		;$xxxx		absolute		3
+	.byte %01101001		;(zp,x)		indexed indirect	4
+	.byte %01001110		;(zp),y		indirect indexed y	5
+	.byte %01001111		;(zp),z		indirect indexed z	6
+	.byte %00000101		;zp,x		zero page indexed x	7
+	.byte %00000110		;zp,y		zero page indexed y	8
+	.byte %00000101		;abs,x		absolute indexed x	9
+	.byte %00000110		;abs,y		absolute indexed y	A
+	.byte %01001000		;(abs)		indirect		B
+	.byte %01101001		;(abs,x)	indexed abs indirect	C
+	.byte %01111110		;(d,SP),y	stack indirect indexed	D
+	.byte %00000000		;offset		relative (byte or word)	E
+	.byte %00000100		;bit#,offset	bit test relative	F
+
+;.end

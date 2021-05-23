@@ -1,0 +1,4918 @@
+;	.nam C65 Development Kernel (C)1991 CBM
+	.subttl *** Copyright (C) 1991  by  Commodore Business Machines, Inc. ***
+
+;  ***************************************************************************
+;  *                               //                                        *
+;  *              CCCCCCC         //    6666666     555555555                *
+;  *             CCC   CCC       //    666   666    555                      *
+;  *            CCC             //    666           555                      *
+;  *            CCC            //     666 6666      55555555                 *
+;  *            CCC           //      6666   666          555                *
+;  *            CCC          //       666     666          555               *
+;  *             CCC   CCC  //         666   666    555   555                *
+;  *              CCCCCCC  //           6666666      5555555                 *
+;  *                      //                                                 *
+;  *                                                                         *
+;  *     KKK   KKK  EEEEEEEEE  RRRRRRRR   NNN    NN  EEEEEEEEE  LLL          *
+;  *     KKK  KKK   EEE        RRR   RRR  NNNN   NN  EEE        LLL          *
+;  *     KKK KKK    EEE        RRR   RRR  NNNNN  NN  EEE        LLL          *
+;  *     KKKKK      EEEEEE     RRRRRRRR   NNN NN NN  EEEEEE     LLL          *
+;  *     KKK KKK    EEE        RRR RRR    NNN  NNNN  EEE        LLL          *
+;  *     KKK  KKK   EEE        RRR  RRR   NNN   NNN  EEE        LLL          *
+;  *     KKK   KKK  EEEEEEEEE  RRR   RRR  NNN    NN  EEEEEEEEE  LLLLLLLLL    *
+;  *									     *
+;  *        Copyright (C)1991  by   Commodore Business Machines, Inc.        *
+;  *									     *
+;  *			    All  Rights  Reserved			     *
+;  *									     *
+;  ***************************************************************************
+ 
+;			ROM VERSION  911119  (ver 0.9B)
+ 
+;	******************************************************************
+;	*                                                                *
+;	* This listing contains confidential and proprietary information *
+;	* of CBM, Inc.  The reproduction, dissemination or disclosure to *
+;	* others without express written permission is prohibited.  This *
+;	* software is intended for use in  Commodore C/65 systems only.  *
+;	*                                                                *
+;	*  The  information  in  this  document  is  subject  to change  *
+;	*                       without notice.                          *
+;	*                                                                *
+;	*  No  responsibility  is  assumed  for the reliability of this  *
+;	*                          software.                             *
+;	*                                                                *
+;	******************************************************************
+
+;	This version written and assembled by Fred Bowen using BSO format.
+	.page
+
+;	Adapted from the following C128 files, ROM part number 318020_05:
+;
+;	.include  disclaim
+;	.include  sysdoc
+;	.include  relnotes
+;	.include  declare
+;	.include  entries
+;	.include  init
+;	.include  serial
+;	.include  rs232xmit
+;	.include  rs232rcvr
+;	.include  rs232io
+;	.include  rs232nmi
+;	.include  tapefile
+;	.include  tapectlr
+;	.include  taperead
+;	.include  tapewrite
+;	.include  tapeirq
+;	.include  channelio
+;	.include  open
+;	.include  openchnl
+;	.include  close
+;	.include  clall
+;	.include  load
+;	.include  save
+;	.include  time
+;	.include  errors
+;	.include  messages
+;	.include  routines
+;	.include  interrupt
+;	.include  patches
+;	.include  vectors
+
+	.page
+	.subttl  C65 System Initialization
+;////////////  S Y S T E M     I N I T I A L I Z A T I O N   \\\\\\\\\\\\
+
+start				;This code must be in common ROM  ($C000-$CFFF)
+	lda #%00000000
+	ldx #%11100011		;MAP in C65 BASIClo, common RAM-0 at $0002-$1FFF
+	ldy #%00000000
+	ldz #%10110011		;MAP in C65 OS, BASIChi, & I/O
+	aug
+	see			;Disable extended stack mode (sp is 8 bits)
+	cld			;Disable decimal mode
+	ldx #<stack_top
+	ldy #>stack_top		;Setup uP base page & stack
+	txs
+	tys			;	stack = page one
+	lda #0			;	base page = page zero
+	tab
+	sta init_status		;Flag a reset (vs. NMI) for initialization routines
+;	jsr secure		;an ounce of protection for RAM-based software
+;	jsr poll		;examine cartridge slots (& go if autostart)
+
+; *** problems- ioinit will setup stuff (eg., dflto) that ramtas will later
+; wipe out (no biggie).  also, where exactly to locate test for additional
+; memory & map it for system use???  for now, it's in ramtas.  It would be
+; nice to display the results of the memory check (& peripheral scan) but
+; at this point the editor has yet to be initialized (cint).
+
+	jsr ioinit		;Initialize I/O devices, determine NTSC or PAL
+	jsr ScanStopKey		;Test for Monitor key (STOP)
+	pha			;	(save for monitor mode test later)
+	bpl 20$			;	branch if STOP key down
+
+	cmp #$df		;Test for C64 key (C=)
+	beq c64mode		;	branch to GO64 code if down
+	bne 25$			;	branch if not down, do normal init
+
+20$	lda #$a5
+	cmp dejavu		;For Monitor mode, test init status & do minimal init necessary
+	beq 30$			;	warm: do partial init then begin Monitor
+;	bne 25$			;	cold: do full    init then begin Monitor
+
+25$	jsr ramtas		;Init system        RAM and				[910117]
+30$	jsr install		;Download Kernel    RAM code & config data		   "
+	jsr restor		;Initialize Kernel  RAM vectors
+	lda #$80
+	tsb init_status		;Flag Kernel initialization complete
+
+	jsr cint		;Initialize video, editor
+	jsr ColdStartDOS	;Initialize newDOS
+	cli			;Start system
+	nop			;EndMap & allow interrupts
+
+	pla
+	bpl monitor_call	;...branch if <run/stop> key at <reset> to Monitor
+
+	jmp (system_vector)	;...start BASIC (usually)
+
+	.page
+	.subttl  BOOT LOADER
+;//////////////////     A U T O   B O O T   L O A D E R     \\\\\\\\\\\\\\\\\
+
+;	1/ Read disk block at Track 1 Sector 0 into RAM at BOOT_BUFFER.
+;	2/ Check for auto-boot signature, RTS if not found.  The relative format is:
+;
+;	$00  $01 $02  $03 $04 $05  $06 ----------  A  ----------  B  ----- >
+;	 |    |   |    |   |   |    |  (optional)  |  (optional)  |
+;	$00 adrl adrh  C   B   M  #blk  diskname   0   filename   0  6502 code
+;
+;	3/ IF  #blk > 0  THEN   block_read sequential sectors into RAM at
+;				given (adrl,adrh) location.
+;	4/ IF  filename  THEN	load filename into RAM (normal load).
+;	5/ JSR to user code following filename (system map).
+;
+
+boot
+	lda shflag		;ALT key?					[910110]
+	and #$08
+	bne bootsys		;	yes- attempt to boot an alternate system
+;	rts
+
+;	ldx default_drive	;default device #
+;	lda #'0'		;default drive #	(note it is ASCII)
+;
+boot_call		;//////user entry: enter with .x=device, .a=drive (ASCII)
+;	sta drive
+;	stx fa
+;	txa		;device#
+;	jsr close_all	;close all open channels on boot device
+;
+;1$	jsr debpia	;wait for datahi (delay for 1541 reset/init)
+;	bcc 1$
+;
+;	ldx #0
+;	stx t2		;init filename length to zero
+;	stx sector	;init to track 1 sector 0
+;	inx
+;	stx track
+;
+;	ldx #disk_bufr-block_data-1
+;10$	lda block_data,x
+;	sta bad,x	;setup for disk block read: download cmd string
+;	dex
+;	bpl 10$
+;
+;	lda drive
+;	sta bad+6	;setup drive number
+;
+;	lda #0		;********** open command channel & init drive **********
+;	ldx #3		;???? force fnbank to system bank ????
+;	jsr setbnk	;set up bank parameters
+;;	lda #0
+;;	ldx #<disk_init
+;;	ldy #>disk_init
+;	jsr setnam	;set up address & length of command string
+;;	lda #0		;la: use reserved
+;	ldy #15		;sa: use command channel
+;	ldx fa		;fa: use given device
+;	jsr setlfs
+;	jsr open	;open command channel & send command string: 'I'
+;	bcs boot_close	;...branch if any problem (abort), probably dvc not present
+;
+;	lda #1		;********** open data channel to a disk buffer **********
+;	ldx #<disk_bufr
+;	ldy #>disk_bufr	;'#' string
+;	jsr setnam	;set up address & length of command string
+;	lda #13
+;	tay
+;	ldx fa
+;	jsr setlfs	;setup device #, data channel
+;	jsr open	;open data channel & send command string: '#'
+;	bcs boot_close	;...branch if problem (abort)
+;
+;; ********** read disk track 1 sector 0 into RAM **********
+;
+;16$	lda #0
+;	ldy #>boot_block
+;	sta sal		;destination address of 1st block read
+;	sty sal+1
+;	jsr block_read
+;
+;	ldx #3		;bootable disk?  look for 'CBM' key
+;20$	lda boot_block+2,x
+;	cmp cbmkey-1,x
+;	bne boot_close	;...branch & quit if not
+;	dex
+;	bne 20$
+;
+;	jsr primm	;bootable disk- tell user
+;	.byte cr,'BOOTING ',0
+;
+;30$	lda boot_block+1,x	;get sector load address
+;	sta sal
+;	lda boot_block+2,x
+;	sta sah
+;
+;	ldx #7
+;40$	lda boot_block,x
+;	beq 45$
+;	jsr bsout	;print optional disk name
+;	inx
+;	bne 40$
+;45$	stx t1		;save index into boot_block
+;
+;	jsr primm
+;	.byte '...',cr,0
+;
+;; ********** load sequential disk blocks into memory **********
+;
+;50$	lda boot_block+6	;# of blocks remaining to load
+;	beq 60$			;...branch if no more
+;	dec boot_block+6	;one less disk block
+;	jsr block_next		;increment track & sector and perform block_read
+;	inc sal+1		;increment address
+;	bne 50$			;bra
+;
+;60$	jsr boot_close	;done block loads: close all files
+;
+;
+;; ********** bload given filename from disk **********
+;
+;	ldx t1
+;	.byte $2c	;skip 1st increment
+;
+;70$	inc t2		;find end of filename to load
+;	inx
+;	lda boot_block,x
+;	bne 70$
+;
+;	jsr 80$		;execute boot code as a subroutine, in case BOOT wasn't.
+;	clc		;if boot code RTS's, clear error flag & return to call.
+;	rts
+;
+;80$	clc
+;	lda #>boot_block
+;	pha		;msb   of address to call
+;	phx		;lsb-1 of address to call
+;
+;	ldx t1
+;	lda #colon	;pre-pend drive # '0:' to filename in buffer
+;	sta boot_block,x
+;	dex
+;	lda drive
+;	sta boot_block,x
+;	ldy #>boot_block	;fnadr (.x already holds lsb)
+;	lda t2		;fnlen
+;	beq 99$		;...branch if null filename: nothing else to load
+;	inc a		;pad fnlen to accomodate drive #
+;	inc a
+;	jsr setnam	; (fa=device, sa>0 already)
+;	lda #0
+;	tax
+;	jsr setbnk
+;	jsr load	;load disk file to RAM
+;
+99$	rts		;execute boot code at address on stack in bank 0 (????)
+;
+;
+;
+;boot_close
+;	php		;save error flag (.c)
+;	pha		;save error code (if any)
+;	jsr clrch	;in case this is an error exit
+;	lda #13
+;	clc
+;	jsr close
+;;	ldx #0		;send 'UI' to clear things up
+;;	jsr ckout
+;;	bcs 10$		;...unless channels never established
+;;	lda #'U'
+;;	jsr bsout
+;;	lda #'I'
+;;	jsr bsout
+;;10$	jsr clrch
+;	lda #0
+;	sec
+;	jsr close
+;	pla		;restore error code (if any)
+;	plp		;restore error flag (.c)
+;	rts
+;
+;block_next
+;	ldx sector	;********** increment track & sector **********
+;	inx		;select next sector assuming minimal (worst case) disk:
+;	cpx #21		;1541: tracks 1-17 have 21 sectors (0-20)
+;	bcc 1$
+;	ldx #0		;start a new track
+;	inc track
+;1$	stx sector
+;	txa
+;	jsr dec_asc	;convert sector # to decimal ASCII
+;	sta bad+0
+;	stx bad+1
+;	lda track
+;	jsr dec_asc	;convert track # likewise
+;	sta bad+3
+;	stx bad+4	;fall into 'block_read'
+;
+;
+;block_read
+;	ldx #0		;********** command disk to read a block **********
+;	jsr ckout
+;	ldx #disk_bufr-block_data-1
+;1$	lda bad,x
+;	jsr bsout	;send command string: 'U1:13 0 tt ss' via cmd channel
+;	dex
+;	bpl 1$
+;	jsr clrch
+;	ldx #13
+;	jsr chkin	;********** move block from disk to RAM **********
+;	ldy #0
+;2$	jsr basin	;read bytes via data channel
+;	jsr sta_far_sal	;sta (sal),y
+;	iny
+;	bne 2$
+;	bra clrch
+;
+;block_data	.byte '00 10 0 31:1U'		;block read cmd (reversed!)
+;; disk_init	.byte 'I'			;initialize cmd
+;disk_bufr	.byte '#'			;get buffer cmd
+;
+;dec_asc
+;	ldx #'0'	;convert hex byte to 2-digit ASCII decimal
+;	sec
+;1$	sbc #10
+;	bcc 2$
+;	inx
+;	bcs 1$
+;2$	adc #'9'+1
+;	rts
+
+;.end
+	.page
+	.subttl  Serial Bus Driver
+
+				;COMMAND SERIAL BUS DEVICE TO TALK.	Enter with .a = sa
+talk	ora #$40		;make a talk address
+	  .byte $2c
+
+				;COMMAND SERIAL BUS DEVICE TO LISTEN.	Enter with .a = sa
+listen	ora #$20		;make a listen address
+
+
+attention			;SEND BYTE UNDER ATTENTION.		Enter with .a= command+sa
+	pha
+	lda #2
+	jsr serial_delay
+
+				;SEND BUFFERED CHARACTER FIRST, if there is one.
+	bbr7 buf_flag,10$	;branch if the buffer is empty
+	smb7 eoi_flag		;set EOI flag
+	jsr isour		;send the last character with EOI handshake
+	rmb7 buf_flag		;reset the buffered character flag
+	rmb7 eoi_flag		;clear EOI flag
+	lda #2
+	jsr serial_delay
+
+10$	jsr disk_sei		;disable IRQ, enable fast
+	jsr datahi		;release data
+	pla			;restore & buffer (un)talk/(un)listen address
+	sta bsour
+
+	lda d2pra		;						(*fs*)
+	and #%00001000		;						(*fs*)
+	bne 30$			;want slow serial if under attention		(*fs*)
+	jsr spout		;set fast serial port to output mode		(*fs*)
+	lda #$ff		;						(*fs*)
+	sta d1sdr		;send $ff (HRF: host request fast)		(*fs*)
+	jsr slowb		;await transmission, restore input mode		(*fs*)
+	lda #1			;slight delay before asserting ATN		(*fs*)
+	jsr serial_delay
+
+30$	lda #%00001000		;assert attention & output byte via 'isoura'
+	tsb d2pra
+
+	.page
+				;OUTPUT ONE SERIAL BYTE UNDER ATTENTION
+isoura	jsr disk_sei		;disable IRQ, enable fast
+	jsr clocklo		;bring clock low
+	jsr datahi		;release data
+
+	lda #16			;allow time for ATN response (max 1ms, (16*63us/line))
+	jsr serial_delay
+
+
+				;OUTPUT ONE SERIAL BYTE
+isour	jsr disk_sei		;disable IRQ, enable fast
+	jsr datahi		;make sure data is released
+	jsr debpia		;data should be low
+	bcs nodev		;	branch if no response: device not present
+	bit d1icr		;clear pending					(*fs*)
+	jsr clockhi		;clock line high
+	bbr7 eoi_flag,10$	;	branch if not EOI
+
+				;Do the EOI
+1$	jsr debpia		;wait for data high
+	bcc 1$
+2$	jsr debpia		;wait for data low
+	bcs 2$
+
+				;Send the byte...
+10$	lda d2pra		;wait for data high
+	cmp d2pra
+	bne 10$
+	pha
+	lda d1icr		;DRF (device request fast)?			(*fs*)
+	and #%00001000		;						(*fs*)
+	beq 20$			;	no					(*fs*)
+	lda #%11000000		;	yes, set fast serial flags		(*fs*)
+	sta serial		;						(*fs*)
+20$	pla
+	bpl 10$			;loop until data high				(*fs*)
+
+	pha
+	lda #1			;(Tne, Try: min 20us, max 200us)
+	jsr serial_delay
+	pla
+	ora #%00010000		;pull clock low					(*fs*)
+	sta d2pra		;						(*fs*)
+	and #%00001000		;under attention?				(*fs*)
+	bne 35$			;	yes, send slow byte (was 30$)		(*fs*)
+
+	.page
+				;...Send byte fast
+25$	bbr7 serial,35$		;	branch if not fast serial		(*fs*)
+	jsr spout		;set fast port direction to output		(*fs*)
+	lda bsour		;get the data					(*fs*)
+	sta d1sdr		;send the data					(*fs*)
+	jsr slowb		;await transmission, return to input mode	(*fs*)
+	bra 70$			;						(*fs*)
+
+
+				;...Send byte slow
+;30$	bit vic+17		;need DMA-free zone for 1581's 40us ACK signal (NTSC & PAL)
+;	bpl 30$			; (only when under attention????)
+;32$	bit vic+17
+;	bmi 32$			;we are looking for true raster zero (transition 1 to 0)
+
+35$	lda #8			;count 8 bits
+	sta count
+40$	lda #1			;hold data setup (Ts: 20us min)
+	jsr serial_delay
+
+45$	lda d2pra		;make sure data is released
+	cmp d2pra
+	bne 45$
+	asl a
+	bcc frmerr		;	frame error: data must be high
+
+	ror bsour		;load next bit to send into carry & send it
+	bcs 50$
+	jsr datalo		;	send 0 bit
+	bra 60$
+50$	jsr datahi		;	send 1 bit
+
+60$	jsr clockhi		;bring clock high to signal data valid
+	lda #1			;hold data valid (Tv: 20us min)
+	jsr serial_delay
+
+	lda d2pra
+	ora #%00010000		;drop clock to signal end of bit
+	and #%11011111		;release data
+	sta d2pra
+	
+	dec count
+	bne 40$			;...loop until all 8 bits sent
+
+	.page
+				;Byte has been sent, do the frame handshake
+70$	phx			;save .x (user's data, not ours)		(*fs*)
+	clc
+	lda vic+18		;frame handshake (Tf: min 20us, max 1ms)
+	adc #16
+	tax
+
+80$	jsr debpia		;wait for data low (byte acknowledge)		(*fs*)
+	bcc 90$			;	got ack					(*fs*)
+	cpx vic+18		;						(*fs*)
+	bne 80$			;	no response yet				(*fs*)
+	plx			;						(*fs*)
+	bra frmerr		;timeout (framing error)			(*fs*)
+
+90$	plx			;						(*fs*)
+	bra disk_cli		;leave with .c=0				(*fs*)
+
+	.page
+				;OUTPUT A BYTE TO SERIAL BUS
+ciout	bbs7 buf_flag,10$	;buffered character?  branch to send last if so
+	smb7 buf_flag		;set buffered char flag
+	bra 20$
+
+10$	pha			;save current char
+	jsr isour		;send buffered char
+	pla			;restore current char
+
+20$	sta bsour		;buffer current char
+	clc			;good exit
+	rts
+
+	.page
+				;INPUT A BYTE FROM SERIAL BUS
+acptr	jsr disk_sei		;disable IRQ, enable fast
+	lda #0
+	sta count		;clear EOI error flag
+	bit d1icr		;clear pending					(*fs*)
+	phx			;save .x					(*fs*)
+	phy			;save .y					(*fs*)
+
+				;Foreplay
+	jsr clockhi		;release clock line
+10$	jsr debpia		;wait for talker to signal RTS (Ready To Send)
+	bpl 10$			;	wait for clock low
+
+20$	lda #%00100000		;signal RFD (listener Ready For Data)
+	trb d2pra		;	release data
+
+	ldy #3			;(Tne, Try: min 20us, max 200us.  3 rasters= 190us)
+25$	ldx vic+18
+
+30$	lda d2pra		;wait for clock low (non-EOI response to RFD)	(*fs*)
+	cmp d2pra		;	debounce				(*fs*)
+	bne 30$			;						(*fs*)
+	asl a
+	bpl 50$			;	got it, exit timeout loop		(*fs*)
+	cpx vic+18		;						(*fs*)
+	beq 30$			;	loop until timeout			(*fs*)
+	dey
+	bne 25$
+	lda count
+	bne 40$			;	loop if error (twice through timeout loop)
+
+				;Timer ran out-  do an EOI thing
+	smb6 status		;set EOI status bit
+	jsr datalo		;yank data low
+	jsr clockhi		;release clock
+	lda #1			;			(Tei: min 80us)
+	jsr serial_delay
+	inc count
+	bne 20$			;always-  go around again for EOI error check
+
+40$	ply			;restore .y					(*fs*)
+	plx			;restore .x					(*fs*)
+	lda #2			;error status = 2 for read timeout
+	bra csberr
+
+	.page
+				;Receive a byte... could be fast, could be slow
+50$	ply
+	ldx #8			;set up bit counter
+
+60$	lda d1icr		;is there fast byte to read?			(*fs*)
+	and #%00001000		;						(*fs*)
+	bne 75$			;	yes					(*fs*)
+
+65$	lda d2pra		;is there a slow byte to read?			(*fs*)
+	cmp d2pra
+	bne 65$
+	asl a			;	shove data bit (if any) into carry
+	bpl 60$			;	no- loop until clock high (signals data valid)
+
+
+				;...receive a slow byte (lsb first)
+69$	ror bsour1		;slide data bit in from carry
+70$	lda d2pra		;wait for end of bit (clock low)
+	cmp d2pra
+	bne 70$
+	asl a
+	bmi 70$			;	loop
+
+	dex			;more bits to follow?
+	beq 80$			;	no
+71$	lda d2pra		;wait for next bit
+	cmp d2pra
+	bne 71$
+	asl a			;	shove data bit (if any) into carry
+	bpl 71$			;	loop until clock high (signals data valid)
+	bra 69$			;always
+
+
+				;...receive a fast byte
+75$	lda d1sdr		;get a byte					(*fs*)
+	sta bsour1		;got a byte					(*fs*)
+	lda #%11000000		;						(*fs*)
+	sta serial		;flag fast device & exit			(*fs*)
+
+	.page
+				;Byte has been received, do the frame handshake
+80$	plx			;restore .x					(*fs*)
+	jsr datalo		;signal byte acknowledge
+	bbr6 status,90$		;	branch if not EOI
+
+	lda #1			;non-EOI hold off, wait for clock release
+	jsr serial_delay	;			(Tbb: 100us)
+	jsr datahi		;release all lines	(clock is already high)
+
+90$	jsr disk_cli		;enable IRQ, speed
+	lda bsour1		;don't forget what we came for!
+	clc			;good exit
+	rts
+
+	.page
+				;SEND SECONDARY ADDRESS AFTER LISTEN COMMAND
+second	sta bsour		;buffer character
+	jsr isoura		;send it
+;	lda #1			;delay ????	(Tr: frame to release of atn, 20us)
+;	jsr serial_delay	;		(note IRQ is enabled)
+	bra scatn		;release atn
+
+
+
+				;SEND SECONDARY ADDRESS AFTER TALK COMMAND
+talksa	sta bsour		;buffer character
+	jsr isoura		;send second addr
+	bbs7 status,dlabye	;...branch if error sending sa
+;	lda #1			;delay ????	(Tr: frame to release of atn, 20us)
+;	jsr serial_delay	;		(note IRQ is enabled)
+
+
+
+talkatn				;SHIFT OVER TO LISTENER AFTER TALK COMMAND
+	jsr disk_sei		;disable IRQ, enable fast
+	jsr datalo		;pull data		(Tr:  delay 20us before calling talkatn)
+	jsr scatn		;release attention
+	jsr clockhi		;release clock		(Ttk: delay min 20us, max 100us)
+
+10$	bit d2pra		;wait for talker to acknowledge
+	bvs 10$			;			(Tdc: talk/atn acknowledge)
+;	lda #1
+;	jsr serial_delay	;			(Tda: min 90us before talker ready)
+	bra disk_cli		;enable IRQ, restore speed & rts with data held low
+				;(data will be released when we're ready to get data)
+
+	.page
+				;SEND UNTALK COMMAND ON SERIAL BUS
+untalk	jsr disk_sei		;disable IRQ, enable fast
+	jsr clocklo		;pull attention & clock, should be nothing buffered
+	lda #%00001000
+	tsb d2pra
+
+	lda #$5f		;untalk command
+	  .byte $2c
+
+
+
+unlisten			;SEND UNLISTEN COMMAND ON SERIAL BUS
+	lda #$3f		;unlisten command
+	rmb7 serial		;reset fast serial flag				(*fs*)
+	jsr attention		;send command & release all lines
+
+
+
+
+				;RELEASE ALL LINES
+dlabye	jsr scatn		;release attention, delay, release everything else, & exit
+	lda #1			;(delay at least 60us (note IRQ is unmasked))
+	jsr serial_delay	;			(Ttk: hold min 20us)
+	jsr clockhi
+	jsr datahi
+	lda #16
+	bra serial_delay
+
+	.page
+;  SERIAL BUS ERROR HANDLER.   Update I/O status byte
+;
+
+
+frmerr	lda #$03		;framing error
+	  .byte  $2c
+
+
+
+nodev	lda #$80		;device not present error
+
+
+
+csberr	tsb status		;update I/O status per .A
+	rmb7 serial		;reset fast serial flag				(*fs*)
+	jsr disk_cli		;restore IRQ & speed
+	clc			;don't want any Kernel error returned
+	bra dlabye		;turn ATN off & release all lines
+
+	.page
+;  SERIAL BUS SUBROUTINES
+;
+
+clockhi		 		;set clock line high (inverted)
+	lda #%00010000
+	trb d2pra
+	rts
+
+
+
+clocklo		 		;set clock line low (inverted)
+	lda #%00010000
+	tsb d2pra
+	rts
+
+
+
+datahi		 		;set data line high (inverted)
+	lda #%00100000
+	trb d2pra
+	rts
+
+
+
+datalo		 		;set data line low (inverted)
+	lda #%00100000
+	tsb d2pra
+	rts
+
+
+
+scatn	lda #%00001000		;release attention (inverted)
+	trb d2pra
+	rts
+
+
+
+debpia
+	lda d2pra		;debounce
+	cmp d2pra
+	bne debpia
+	asl a			;shift the data bit into the carry and the clock into neg flag
+	rts
+
+	.page
+disk_sei
+	sei			;disable IRQ
+
+	lda #%01000000
+	tsb vudeja
+	bne 99$			;...branch if already done!
+
+	tsb vic+49		;enable fast
+	bne 10$			;...was fast
+	lda #0			;...was slow
+
+10$	sta speed		;save speed
+
+99$	rts
+
+
+
+
+
+disk_cli			;restore IRQ & system speed
+	lda vudeja
+	beq 99$			;already restored
+
+	lda speed		;restore speed (or lack thereof)
+	bne 10$
+	lda #%01000000
+	trb vic+49
+
+10$	lda #0
+	sta speed
+	sta vudeja
+
+99$	cli
+	rts
+
+	.page
+slowb
+	lda d1icr
+	and #%00001000		;wait SDR flag
+	beq slowb
+	lda #15			;???? workaround for 4510R2 ????  datalo/spout/slowb/datahi
+10$	dec a
+	bne 10$
+
+
+
+spinp
+	lda d1cra
+	and #%10000000		;preserve 50/60Hz TOD flag
+	ora #%00001000		;kill output on 6526
+	sta d1cra
+	lda #%01000000		;fast serial in
+	trb fsdir
+	rts
+
+
+
+spin_spout
+	bcc spinp		;user wants spinp...
+;	bcs spout		;user wants spout...
+
+
+
+spout
+	lda fsdir		;fast serial out
+	asr a			;(only if fast serial is enabled)
+	sta fsdir
+	lda #%01111111
+	sta d1icr		;no IRQs
+	lda #>$0004
+	sta d1t1h		;output rate 5us*2 per bit
+	lda #<$0004
+	sta d1t1l
+ 	lda d1cra
+	and #%10000000		;preserve 50/60Hz TOD
+	ora #%01010101		;set tod,spout,phi,frc,cont,tgl,pb6=off,start
+	sta d1cra
+	bit d1icr		;clear pending
+	rts
+
+	.page
+serial_delay			;.a=#raster lines, at 63us per line
+	php
+	sei
+	phx
+10$	ldx vic+18
+20$	cpx vic+18
+	beq 20$
+	dec a
+	bne 10$
+	plx
+	plp			;preserves IRQ mask and carry flag
+	rts
+
+;.end
+ 	.page
+	.subttl  RS-232 driver
+; Initialize RS-232 variables & pointers
+;
+;	rsstat			- traditional c64/128 status	(reset)
+;	rs232_status		- uart status			(reset)
+;	rs232_flags		- b7: channel open		(reset)
+;				- b6: flow control (1=x-line)
+;				- b5: duplex       (1=half)
+;				- b1: XOFF received
+;				- b0: XOFF sent
+;	rs232_jam		- system character to xmit	(null)
+;	rs232_xon_char		- XON character			(control-Q)
+;	rs232_xoff_char		- XOFF character		(control-S)
+;	rs232_rcvr_head		- pointer to end of buffer	(start=end)
+;	rs232_rcvr_tail		- pointer to start of buffer
+;	rs232_xmit_head		- pointer to end of buffer	(start=end)
+;	rs232_xmit_tail		- pointer to start of buffer
+;	rs232_rcvr_buffer_lo	- lowest page of input buffer	(1 page)
+;	rs232_rcvr_buffer_hi	- highest page of input buffer
+;	rs232_xmit_buffer_lo	- lowest page of output buffer	(1 page)
+;	rs232_xmit_buffer_hi	- highest page of output buffer
+;	rs232_high_water	- point at which receiver XOFFs
+;	rs232_low_water		- point at which receiver XONs
+;	rs232_xmit_empty	- empty xmit buffer for close	(0=empty)
+
+
+rs232_init
+	php				;cannot allow rs-232 interruptions
+	sei
+
+	lda #%00000110			;init user port for rs-232 via uart
+	sta d2ddrb
+	sta d2prb			;assert DTR, RTS
+	lda #%00000100			;output high pa2
+	tsb d2pra
+
+	lda #0
+	sta uart_control		;remove IRQ enables & clear pending
+	sta uart_status
+	sta uart_irq_mask
+	bit uart_data
+
+	lda #>rs232_input_buffer	;allocate C65 RS-232 buffers
+	sta rs232_rcvr_head+1		;and init buffer pointers
+	sta rs232_rcvr_tail+1
+	sta rs232_rcvr_buffer_lo
+	inc a
+	sta rs232_rcvr_buffer_hi
+
+	lda #>rs232_output_buffer
+	sta rs232_xmit_head+1
+	sta rs232_xmit_tail+1
+	sta rs232_xmit_buffer_lo
+	inc a
+	sta rs232_xmit_buffer_hi
+
+	lda #xon			;init XON/XOFF characters
+	sta rs232_xon_char
+	lda #xoff
+	sta rs232_xoff_char
+
+	lda #10				;quit when this much room left
+	sta rs232_high_water
+;	lda #255-80
+	sta rs232_low_water		;resume when this much room left
+
+	lda #8
+	sta rs232_baud	;default to 1200 baud, 8-word, no par, fulldup, no xline
+	ldx #4
+	lda #0
+10$	sta rs232_word,x
+	dex
+	bpl 10$
+
+;	lda #0				;reset
+	sta rsstat
+	sta rs232_status
+	sta rs232_flags
+	sta rs232_jam
+	sta rs232_rcvr_head
+	sta rs232_rcvr_tail
+	sta rs232_xmit_head
+	sta rs232_xmit_tail
+	sta rs232_xmit_empty
+
+	plp				;restore IRQ enable
+	rts				;exit with .a=0
+	.page
+rs232_baud_rate_ntsc			;clk= 7.15909MHz
+
+	.word	$0007		;56000			0
+	.word	$22f4		;   50			1
+	.word	$174d		;   75			2
+	.word	$0fe3		;  110			3
+	.word	$0cfe		;  134.5		4	
+	.word	$0ba6		;  150			5
+	.word	$05d2		;  300			6
+	.word	$02e9		;  600			7
+	.word	$0174		; 1200			8
+	.word	$00f8		; 1800			9
+	.word	$00b9		; 2400			10
+	.word	$007b		; 3600			11
+	.word	$005c		; 4800			12
+	.word	$003d		; 7200			13
+	.word	$002e		; 9600			14
+	.word	$0016		;19200			15
+	.word	$000d		;31250	MIDI		16	
+
+rs232_baud_rate_pal			;clk= 7.09375MHz
+
+	.word	$0007		;56000			0
+	.word	$22a2		;   50			1
+	.word	$1716		;   75			2
+	.word	$0fbe		;  110			3
+	.word	$0cdf		;  134.5		4	
+	.word	$0b8b		;  150			5
+	.word	$05c5		;  300			6
+	.word	$02e2		;  600			7
+	.word	$0170		; 1200			8
+	.word	$00f5		; 1800			9
+	.word	$00b8		; 2400			10
+	.word	$007a		; 3600			11
+	.word	$005b		; 4800			12
+	.word	$003d		; 7200			13
+	.word	$002d		; 9600			14
+	.word	$0016		;19200			15
+	.word	$000d		;31250	MIDI		16
+
+	.page
+; RS-232 interrupt-driven handler
+;
+; How it works:  when an RS232 channel is OPENed, buffers are flushed, all
+; flags and states are reset, and the receiver IRQ is enabled.  When a byte
+; is put into the xmit buffer by BSOUT, the xmit IRQ is enabled.  The xmit
+; IRQ is disabled whenever the xmit buffer is found to be empty or an XOFF
+; is received (it is enabled whenever an XON is received).  CLOSE will hang
+; until the xmit buffer is empty, and BSOUT will hang when the xmit buffer
+; is full.  IRQs must be allowed by the user at all times (and especially
+; during BSOUT calls) for proper operation (The RS232 channel will work even
+; if IRQs are disabled by the user, but thoughput will be reduced to the
+; frame rate (normal system raster IRQ) and the system can hang forever should
+; the xmit buffer become full and BSOUT is called with a byte to xmit).  A
+; sucessful CLOSE will disable all RS232 interrupts and re-init everything.
+
+rs232_irq
+	bbs7 rs232_flags,10$		;channel active?  continue if so
+	lda uart_data			;else clear pending I/O just in case
+	sta uart_data			;	(simply echo anything????)
+	rts				;and return
+
+10$	lda uart_status			;get & save UART status
+	sta rs232_status
+	lsr a				;emulate the C64/128 (6551) status byte
+	lsr a
+	and #3				;(we got frm/par in .A, ovr in .C)
+	bcc 20$
+	ora #4
+20$	tsb rsstat
+
+	lda #$10			;get & save x-line status (cleared by a read)
+	bit d2prb
+	bmi 30$
+	smb6 rsstat			;*DSR
+30$	bne 40$
+	smb5 rsstat			;*DCD (was unused bit in C64/128????)
+40$	bvs 50$
+	smb4 rsstat			;*CTS
+50$
+	.page
+; RS-232 Receiver
+
+rs232_rcvr
+	lda rs232_status		;byte received?
+	and #$0f
+	beq 130$			;...branch if not			[901016] ????
+
+	lda uart_data			;read byte (resets hardware status bits)
+	bne 10$
+	bbr3 rs232_status,10$
+	smb7 rsstat			;break (null+framing error)
+
+10$	ldy #0
+	sta (rs232_rcvr_head),y		;buffer character, but don't bump pointers yet
+
+	bbs6 rs232_flags,40$		;check incoming xon/xoff flow control, skip if x-line
+	tay
+	lda rs232_xon_char
+	ora rs232_xoff_char
+	beq 40$				;skip if flow control disabled
+	tya
+	cmp rs232_xoff_char		;xoff?
+	bne 30$
+	smb1 rs232_flags		;...yes, set xoff status & don't buffer char
+	lda #%10000000			;        disable xmit interrupt
+	trb uart_irq_mask
+	bra 100$
+30$	cmp rs232_xon_char		;xon?
+	bne 40$
+	rmb1 rs232_flags		;...yes, reset xoff status & don't buffer char
+	lda #%10000000			;        enable xmit interrupt
+	tsb uart_irq_mask
+	bra 100$
+
+40$	ldy rs232_rcvr_head+1		;increment head pointer (in registers)
+	ldx rs232_rcvr_head
+	inx
+	bne 50$
+	iny
+	cpy rs232_rcvr_buffer_hi	;apogee?
+	bcc 50$
+	ldy rs232_rcvr_buffer_lo	;...yes, now perigee.
+
+50$	cpx rs232_rcvr_tail+1		;buffer overflow?
+	bne 60$
+	cpy rs232_rcvr_tail
+	bne 60$
+	inc $d020			;????					test????[910312]
+	bra 100$
+;	beq 100$			;????
+;;	bne 60$
+;;	smb3 rs232_status		;...flag buffer overrun & don't buffer character
+;;	bra 100$
+
+60$	stx rs232_rcvr_head		;increment buffer pointer
+	sty rs232_rcvr_head+1
+
+100$	sec				;manage buffer size: high/low water marks?
+	lda rs232_rcvr_tail
+	sbc rs232_rcvr_head
+	tax				;	buffer remaining (low)
+	lda rs232_rcvr_tail+1
+	sbc rs232_rcvr_head+1
+	bpl 110$			;...head > tail
+	clc				;...head < tail
+	adc rs232_rcvr_buffer_hi
+	sbc rs232_rcvr_buffer_lo
+
+110$	tay				;	buffer remaining (high)
+	bne 130$			;...lots of room  ( >1 page )
+	txa				;special case
+	beq 130$			;...pointers =, so buffer is empty
+	cpx rs232_high_water		;buffer_left_high.  at high water?
+	bcs 130$			;...no
+;	bbs0 rs232_flags,130$     	;...yes, but xoff already sent (send it anyway????))
+
+	smb0 rs232_flags		;set XOFF status
+	bbs6 rs232_flags,120$		;what kind of flow control is in effect?
+	lda rs232_xoff_char
+	sta rs232_jam			;...XOFF
+	bra 150$
+
+120$	lda #%00000010			;...de-assert rts
+	trb d2prb
+	bra 150$
+
+
+130$	bbr0 rs232_flags,150$     	;pending an xon?......branch if not
+	lda rs232_rcvr_buffer_lo
+	inc a
+	cmp rs232_rcvr_buffer_hi	;at low water?
+	beq 135$			;...branch if 1 page buffer
+	cpy rs232_low_water		;buffer_left_high.  at low water?
+	bra 136$
+135$	cpx rs232_low_water
+136$	bcc 150$			;...not yet, maintain xoff state
+
+	rmb0 rs232_flags		;clear XOFF flag, then do it
+	bbs6 rs232_flags,140$		;what kind of flow control is in effect?
+	lda rs232_xon_char
+	sta rs232_jam			;...xon
+	bra 150$
+
+140$	lda #%00000010			;...assert rts
+	tsb d2prb
+;	bra 150$
+
+150$
+	.page
+; RS-232 Transmitter
+
+rs232_xmit
+	bbr6 rs232_status,100$		;transmit register free?... exit if xmit busy,
+	bbr6 rs232_flags,10$		;check lines for X-LINE mode only
+	bit d2prb
+	bpl 100$			;...DSR gone, don't transmit
+	bvc 100$			;...CTS gone, don't transmit
+
+10$	lda rs232_jam			;send jam character?.......branch if yes
+	bne 50$
+
+30$	bbs1 rs232_flags,100$		;skip if XOFF received
+	ldx rs232_xmit_head		;anything in buffer?
+	ldy rs232_xmit_head+1
+	cpx rs232_xmit_tail
+	bne 40$				;	yes
+	cpy rs232_xmit_tail+1
+	bne 40$				;	yes
+	lda #%10000000
+	trb uart_irq_mask		;	no- disable xmit interrupt
+	trb rs232_xmit_empty		;	    and clear flag for close
+;	bra 100$			;	xmit buffer empty- reset flag & exit
+	rts
+
+40$	ldy #0
+	lda (rs232_xmit_tail),y		;get character from buffer
+
+50$	sta uart_data			;transmit the byte
+	trb rs232_jam			;exit if byte not from buffer, after
+	bne 100$			;clearing jam buffer
+
+	inw rs232_xmit_tail
+	lda rs232_xmit_tail+1
+	cmp rs232_xmit_buffer_hi	;apogee?
+	bcc 100$
+	lda rs232_xmit_buffer_lo
+	sta rs232_xmit_tail+1
+
+100$
+	rts
+
+;.end
+	.page
+	.subttl  DOS banking routines
+
+; These BANKing routines *must* be in common ROM ($C000-$CFFF)
+
+; DOS passes parameters between itself and the Kernel via unused VIC attribute
+; bytes, because they are accessible in any memory configuration in I/O space.
+;
+;
+;dos_safe_place	= $e000-14		;interface used in both C64 & c65 modes
+;					;(image of RAM at $1FFFx, top of second RAM bank)
+;
+;.a1		= dos_safe_place+0	;save .a here
+;.x1		= dos_safe_place+1	;save .x here
+;.y1		= dos_safe_place+2	;save .y here
+;.z1		= dos_safe_place+3	;save .z here
+;.status	= dos_safe_place+4	;I/O status here, to be merged with ST
+;.pcl		= dos_safe_place+5	;Get_DOS saves caller's PC here
+;.pch		= dos_safe_place+6
+;.pclss		= dos_safe_place+7	;Set_DOS_ST saves callers PC here
+;.pchss		= dos_safe_place+8
+;.sp		= dos_safe_place+9	;save system stack pointer here
+;.config	= dos_safe_place+10	;save system configuration here (4 bytes)
+
+	.page
+Get_DOS
+	sei
+	pha
+	lda #1			;Enable color RAM @ $DFxx
+	tsb vic+48
+	pla
+	sta .a1			;Save uP registers
+	stx .x1			;	(saved in unused color bytes in I/O space)
+	sty .y1
+	stz .z1
+	pla			;Save return address
+	sta .pcl
+	pla
+	sta .pch
+	tsx			;Save stack pointer
+	stx .sp
+
+;	jsr restore_environment	;Get & save current configuration
+;	sta .config
+;	stx .config+1
+;	sty .config+2
+;	stz .config+3
+
+	lda dos_map		;Get & install DOS' configuration
+	ldx dos_map+1
+	ldy dos_map+2
+	ldz dos_map+3
+	aug
+
+	ldx #$ff		;Reset DOS' stack pointer
+	txs
+	lda .pch		;Move return address to DOS' stack
+	pha
+	lda .pcl
+	pha
+	lda .a1			;Restore uP registers
+	ldx .x1
+	ldy .y1
+	ldz .status
+;	nop			;???? do not allow interrupts ????
+	rts			;Done
+
+	.page
+
+Leave_DOS
+	pla			;Save return address
+	sta .pcl		;	(saved in unused color bytes in I/O space)
+	pla
+	sta .pch
+
+	lda #%00000000		;UnMap system to access system RAM
+	tax
+	tay			;	(assumes this code in $C000 ROM!)
+	taz
+	aug			;	map
+
+	ldx .sp			;Restore...
+	txs			;	stack pointer
+	lda .pch
+	pha			;	return address
+	lda .pcl
+	pha
+	jsr restore_environment	;	memory map
+;	lda .config
+;	ldx .config+1
+;	ldy .config+2
+;	ldz .config+3
+;	aug
+	lda .a1			;	registers
+	ldx .x1
+	ldy .y1
+	ldz .status
+	rts			;Done	(NOTE- this returns to DOS, not to Kernel)
+
+	.page
+Set_DOS_Status			;Called with DOS mapped in
+	pla			;Save return address while we ReMap
+	sta .pclss
+	pla
+	sta .pchss
+	jsr Leave_DOS		;Restore system Map, but leave I/O mapped out
+	rmb7 DOS_flag		;assume it was for me
+
+	tza			;Check status- was it for me?
+	bpl Leave_DOS_1		;   it's me, merge status with OS's & RTS directly to user
+
+	lda #0			;   it's not me, so don't pass status to Kernel,
+	smb7 DOS_flag
+	ldx .pchss		;      restore return addr & JMP() to Kernel serial handler
+	phx
+	ldx .pclss
+	phx
+
+Leave_DOS_1			;Really leave the DOS environment, restore system I/O
+	tsb status		;serial bus I/O status byte
+	ldx .x1
+	ldy .y1
+	ldz .z1
+	lda .a1			;restore .a last to return flags of data in .a (if any)
+	pha
+	lda #1			;restore CIAs
+	trb vic+48
+	pla
+	nop			;Release interrupt latch
+	cli
+	clc			;in case we return directly to Kernel
+	rts
+
+	.page
+ColdStartDOS			;Assumes DOS indirects have already been set up
+	jsr Get_DOS		;(does SEI)
+	jsr ($8000)
+	jsr Leave_DOS
+	lda #1			;restore CIAs
+	trb vic+48
+	nop			;Release interrupt latch (but IRQ still disabled until CLI)
+	rts
+
+
+
+WarmStartDOS
+	jsr Get_DOS
+	jsr ($8002)
+	jsr Leave_DOS
+	lda #1			;restore CIAs
+	trb vic+48
+	nop			;Release interrupt latch (but IRQ still disabled until CLI)
+	rts
+
+	.page
+DOS_talk	jsr Get_DOS
+		jsr ($8006)
+		jsr Set_DOS_Status
+		jmp talk
+
+DOS_listen	jsr Get_DOS
+		jsr ($8008)
+		jsr Set_DOS_Status
+		jmp listen
+
+DOS_talksa	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($800a)
+		jsr Set_DOS_Status
+10$		jmp talksa
+
+DOS_second	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($800c)
+		jsr Set_DOS_Status
+10$		jmp second
+
+DOS_acptr	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($800e)
+		jsr Set_DOS_Status
+10$		jmp acptr
+
+DOS_ciout	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($8010)
+		jsr Set_DOS_Status
+10$		jmp ciout
+
+DOS_untalk	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($8012)
+		jsr Set_DOS_Status
+10$		jmp untalk
+
+DOS_unlisten	bbs7 DOS_flag,10$
+		jsr Get_DOS
+		jsr ($8014)
+		jsr Set_DOS_Status
+10$		jmp unlisten
+
+	.page
+; FastLoad must be in an area of memory that remains resident along with DOS
+
+FastLoad			;Load memory from internal DOS		    re-enabled-	[910129]
+	jsr Get_DOS		;	make the DOS resident
+	lda #0
+	jsr ($8004)		;	init FastLoad on DOS side & get 1st block
+	jsr Leave_DOS		;	get kernel memory back
+	jsr FastReadByte	;	waste load address which we handled already
+	dex
+	jsr FastReadByte
+	dex
+
+5$	stx count		;Number of bytes to read in this block
+10$	lda count		;Number of bytes to read in this block
+	beq 40$			;	none left, get next block
+	jsr FastReadByte	;Get a byte, directly from chip buffer
+	ldy verify		;	what do we do with it?
+	beq 20$
+	sta cmp_byte		;		VERIFY memory
+	ldy #0
+	jsr lda_far_eal
+	cmp cmp_byte
+	beq 30$			;			branch if good compare
+	smb4 status		;			else flag 'verify error'
+	bra 95$			;				quit			[910228]
+
+20$	jsr sta_far_eal		;		LOAD memory
+
+30$	inw eal 		;Increment load address
+	bne 10$			;	branch if okay
+
+	jsr 95$			;	else,	close the file properly, restore interrupts
+	bra error16		;		and report 'out of memory'
+
+40$	lda #1			;Check for <stop> key, abort load if down (IRQ is not running)
+	trb vic+48		;	enable CIAs
+	jsr ScanStopKey		;	scan stop key
+	beq FastBreak		;		exit if user STOP request
+	lda #1			;		else map out CIAs and continue
+	tsb vic+48
+
+	lda .a1			;save EOF status
+	jsr Get_DOS
+	lda #1
+	jsr ($8004)		;Wait for chip busy & check media errors from previous sector
+	bcc 60$			;	ok
+	jsr Leave_DOS		;	error occurred
+	lda #$10
+	jsr Leave_DOS_1
+	bra error41		;		'file read' error (BASIC will say 'load error')
+
+60$	lda .a1			;Is there another block?  check last block's EOF status
+	beq 90$			;	no-  we're done
+	lda #128		;	yes- get next sector via DOS (.a=8x)
+	jsr ($8004)
+	jsr Leave_DOS
+	bra 5$
+
+90$	jsr Leave_DOS		;Done:
+95$	lda #$40		;	fake end-of-file status for software
+	jsr Leave_DOS_1		;	restore I/O space & interrupts
+	bra load_done		;	close file & return end address as usual
+
+
+FastReadByte			;Read byte immediately from chip buffer
+	lda #%00100000
+10$	bit dos_ctlr+3		;Is this from floppy or buffer?
+	bpl 20$			;	buffer (RDREQ=0)
+	bit dos_ctlr+2		;Has FDC put a byte into chip buffer?
+	bne 10$			;	no (EQ=1) stick around & wait for it
+
+20$	lda dos_ctlr+7		;Read it (clears DRQ)
+	dec count		;Decrement number of bytes in buffer
+	rts			; (must allow 14us delay between FDC buffer reads)
+
+
+FastBreak
+	jsr Leave_DOS_1		;Restore I/O space & interrupts
+	jsr stop		;Exit via kernel STOP routine
+	bra break		;						[910301]
+
+;.end
+	.page
+	.subttl  Boot System
+
+; BOOT SYS	Boot an alternate system.  Reads the "home" sector of any	[910110]
+;		diskette (physical track 0 sector 1, 512 bytes) into memory
+;		at $00400, turns off BASIC, and JMPs to it.  Nothing done if
+;		disk not present.  JMP not made if first byte is not $4C.
+;
+;	Note:	This code must reside in "unMAPed" ROM at $C000 !		F. Bowen
+;		It forces the "system" memory map, not user environment.
+
+bootsys
+	lda #0			;Select internal drive
+	sta dos_ctlr
+	jsr BusyWait_fdc
+	lda dos_ctlr+3		;Is a diskette present?
+	and #%00001000
+	beq 99$			;	no, exit
+
+	lda #96			;Initialize the controller
+	sta dos_ctlr+9		;	step rate
+	lda #255
+	sta dos_ctlr+8		;	clock
+	lda #0
+	sta dos_ctlr+6		;	side
+	sta dos_ctlr+4		;	track
+	inc a
+	sta dos_ctlr+5		;	sector
+	sta dos_ctlr+1		;	buffer
+	ldz #%00101000		;	motor+LED, head(side), internal drive		[910417] F011D
+10$	jsr BusyWait_fdc
+
+	stz dos_ctlr		;		try 1581 first(side-1), then MS-DOS(side-0)
+;	lda #%00100000		;			(1581 has sides swapped from norm)
+;	sta dos_ctlr+1		;		spinup delay (F011B chip bug- sets RNF ?!?)
+	lda #255		;			(a wimpy 32ms delay)
+	jsr serial_delay
+
+	lda #%00010000		;Seek track 0
+20$	jsr BusyWait_fdc
+ 	lsr dos_ctlr+2		;	are we there?
+	bcs 30$			;		yes
+	sta dos_ctlr+1		;		no-	step out
+	bra 20$			;			loop until track 0 found
+
+30$	lda #%01000000		;Read a sector (512 bytes max)
+	sta dos_ctlr+1
+	jsr BusyWait_fdc	;	Wait for sector to be found & read
+	lda dos_ctlr+2
+	and #%00010000		;
+	bne 80$			;		RNF=1, sector not found, try MS-DOS
+
+	lda dos_ctlr+2		;	Data CRC check
+	and #%00001000
+	bne 90$			;		read error, exit
+
+	lda #>bootsys_block	;	Init pointers, index, & loop counter
+	ldy #<bootsys_block	;		0
+	ldx #2			;		two blocks worth
+	sta sah
+	sty sal
+
+	jsr ByteRead_fdc	;Load sector into memory
+	cmp #$4c		;	is first byte a JMP?
+	beq 50$			;		yes,	procede to load memory
+	bne 90$			;		no,	exit
+	
+40$	jsr ByteRead_fdc	;	xfer sector from chip to ram buffer
+50$	sta (sal),y
+	iny			;		next byte
+	bne 40$
+	inc sah			;		next block
+	dex
+	bne 40$
+
+	lda init_status		;Execute program
+	sta save_status		;	turn off BASIC (save status in case of return)
+	lda #1
+	trb init_status
+	lda #%00000000
+	ldx #%00000000		;	map in RAM-0
+	ldy system_map+2
+	ldz system_map+3	;	map in C65 OS & I/O
+	aug			;		(assumes this code is in ROM at $C000 ????)
+	jsr bootsys_block	;	BOOT SYS
+
+	jsr restore_system	;Program returned to us, restore configuration & exit
+	lda save_status		;	restore BASIC's init status
+	sta init_status
+	jsr WarmStartDOS	;	fix things for DOS, too (does NOP)
+	clc			;	I assume everything's okay...		[910624]
+	bra 100$
+;	jmp (system_vector)	;	return to C65 system
+
+
+80$	tza			;Attempt to boot from either 1581 or MS-DOS disk
+	and #%00001000		;	check which side was read
+	beq 90$			;		failed both
+	lda #2			;		failed 1581 (side 1), try MS-DOS (side 0)
+	tsb dos_ctlr		;	toggle drive to clear RNF error
+	ldz #%00100000		;						[910417] F011D
+	bra 10$
+
+90$	jsr WarmStartDOS	;Exit, could not boot.  Patch things up for DOS
+99$	sec			;Error flag
+100$	lda #0			;Turn FDC off (????blink led-  no DOS msg)	[910624]
+	sta dos_ctlr
+	rts
+
+	.page
+
+ByteRead_fdc			;Read byte from chip buffer
+;10$	lda dos_ctlr+2		;	(min 8 cycles)
+;	and #%00100000		;Is there data in chip buffer?	want EQ=0
+;	bne 10$			;	no- wait for it
+	lda dos_ctlr+7		;	yes- read it
+	rts
+
+
+
+
+BusyWait_fdc
+	bit dos_ctlr+2		;Wait for fdc op to finish
+	bmi BusyWait_fdc
+	rts
+
+;.end
+	.page
+	.subttl  C64 and Monitor Mode Routines
+
+; These BANKing routines *must* be in common ROM ($C000-$CFFF)
+; Other related routines are located in higher ROM ($F000-$FFFF)
+
+monitor_call
+	lda init_status		;Save BASIC's init status
+	sta save_status
+	lda #1			;Turn off BASIC (receipt of IRQ)
+	trb init_status
+	lda monitor_map		;MAP in Monitor
+	ldx monitor_map+1
+	ldy monitor_map+2
+	ldz monitor_map+3
+	aug
+	sta environment		;Let system know configuration
+	stx environment+1
+	sty environment+2
+	stz environment+3
+	nop
+	jmp monitor		;Monitor's CALL entry ????(make indirect)????
+
+monitor_brk
+	lda environment		;Save memory configuration
+	pha
+	ldx environment+1
+	phx
+	ldy environment+2
+	phy
+	ldz environment+3
+	phz
+	lda init_status		;Save BASIC's init status
+	sta save_status
+	lda #1			;Turn off BASIC (receipt of IRQ)
+	trb init_status
+	lda monitor_map		;MAP in Monitor
+	ldx monitor_map+1
+	ldy monitor_map+2
+	ldz monitor_map+3
+	aug
+	sta environment		;Let system know configuration
+	stx environment+1
+	sty environment+2
+	stz environment+3
+	plz			;Pass memory configuration to Monitor in registers
+	ply			; (assumes stack in same environment!)
+	plx
+	pla
+	nop
+	jmp monitor+3		;Monitor's BREAK entry ????(make indirect)????
+
+	.page
+; These BANKing routines *must* be in common ROM ($C000-$CFFF)
+
+nmi_exit
+	lda init_status
+	sta save_status
+
+monitor_exit
+	jsr restore_system	;Restore system configuration
+;	sta environment		;Let system know current configuration		[910710]
+;	stx environment+1
+;	sty environment+2
+;	stz environment+3
+	lda save_status		;Restore BASIC's init status
+	sta init_status
+	nop
+	jmp (system_vector)	;Return to system
+
+	.page
+; These BANKing routines *must* be in common ROM ($C000-$CFFF)
+
+				;???? need a pointer to this routine ????
+c65mode				;Get default C65 memory configuration
+	lda #%00000000
+	ldx #%11100011		;MAP in C65 BASIClo, common RAM-0 at $0002-$1FFF
+	ldy #%00000000
+	ldz #%10110011		;MAP in C65 OS, BASIChi, & I/O
+	aug
+	rts
+
+	.page
+; These BANKing routines *must* be in common ROM ($C000-$CFFF)
+
+dos_brk				;???? debug only- allows BRK in DOS configuration ????	[911113]
+	sta .z1
+	stx .y1			;Save registers  (backwards because that's the way it is)
+	sty .x1
+	stz .a1
+	pla			;Grab uP status  (we're going to a different stack page)
+	sta .status		;		 (and we won't be coming back)
+	pla			;Grab pc
+	sta .pcl
+	pla
+	sta .pch
+
+	lda #%00000000		;???? (DOS config's hardware vectors point here)  ????
+	ldx #%00000000		;MAP in C65 common RAM-0 at $0002-$7FFF
+	ldy #%00000000
+	ldz #%10110011		;MAP in C65 OS, BASIChi, & I/O
+	aug
+
+	ldx .sp			;Restore system's stack pointer
+	txs
+	jsr ($fff6)		;Restore system's configuration
+
+	ldx #6			;Transfer BRK stuff & registers to system stack
+10$	lda .a1,x		;(order: pch,pcl,st,a,x,y,z)
+	pha
+	dex
+	bpl 10$
+
+	tba			;Base page (just for consistancy)
+	pha
+	jmp Monitor_BRK		;Get Monitor
+
+;.end
+	.page
+	.subttl  Kernel $F000 Code
+
+	* = $f000
+
+	.page
+;//////////////////////   R E S T O R E   \\\\\\\\\\\\\\\\\\\\\\\\\\
+
+restor				;initialize Kernel system indirect vectors
+	ldx #<Kernel_vectors
+	ldy #>Kernel_vectors
+	clc
+
+; VECTOR - Set Kernel indirect vectors
+;
+;	Enter with .c=0 to initialize,  .c=1 to copy
+;	.x/.y must contain the hi/lo source|destination address
+
+vector
+	stx memuss		;x & y specify address low & high
+	sty memuss+1
+	ldy #Kernel_vectors_end-Kernel_vectors-1
+
+1$	lda iirq,y		;get from storage
+	bcs 2$			;...c=1, want storage to user
+	lda (memuss),y		;...c=0, want user to storage (note: non-banking)
+
+2$	sta iirq,y		;put in storage
+	bcc 3$
+	sta (memuss),y		;put in user (note: non-banking)
+
+3$	dey
+	bpl 1$
+
+	bit init_status		;exit ahead if NMI or user call		????
+	bmi vector_rts
+
+vector_dos			;initialize serial bus indirect vectors	????
+	lda #0
+	sta dos_ctlr		;Is the DOS chip present?
+	lda dos_ctlr
+	bne vector_serial_bus	;	no- set up vectors for serial bus
+
+	ldy #DOS_vectors_end-DOS_vectors-1
+1$	lda DOS_vectors,y
+	sta italk,y
+	dey
+	bpl 1$
+	rts
+
+vector_serial_bus
+	ldy #Serial_vectors_end-Serial_vectors-1
+1$	lda Serial_vectors,y
+	sta italk,y
+	dey
+	bpl 1$
+
+vector_rts
+	rts
+
+	.page
+;///////////////////////   R A M T A S   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+ramtas				;system RAM initialization
+	lda #0
+	ldx #2
+1$	sta $00,x		;clear all base page RAM
+	inx
+	bne 1$
+
+	clc			;set top of memory
+	ldy #>basic
+	ldx #<basic
+	sty system_vector+1
+	stx system_vector
+	jsr settop
+
+	ldy #>user_memory	;set bottom of memory
+	ldx #<user_memory
+	jsr setbot
+
+	lda #$a5		;system RAM now initialized, set 'warm' flag
+	sta dejavu
+	rts
+
+	.page
+;///////////////////////   I N S T A L L   \\\\\\\\\\\\\\\\\\\\\\\\\\
+
+; Initialize common system RAM area in bottom of RAM bank 0
+
+install
+	ldx #dlcode_end-dlcode_begin-1		;Code
+10$	lda dlcode_begin,x
+	sta ram_code,x
+	dex
+	bpl 10$
+
+	ldx #dldata_end-dldata_begin-1		;Data				[910117]
+20$	lda dldata_begin,x
+	sta system_map,x
+	dex
+	bpl 20$
+
+	rts
+
+	.page
+;////////////////////////   I O I N I T   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+ioinit	lda #165		;put VIC into newVIC mode
+	sta vic+47
+	lda #150
+	sta vic+47
+	lda #%01100100
+	sta vic+48		;enable PALette, ROM$C000 (this code!), I/O, AltChrSet
+
+	lda #%01111111		;kill timer interrupts
+	sta d1icr
+	sta d2icr
+	sta d1pra		;turn on stop key
+
+	lda #%00001000		;turn off timers
+;	sta d1cra
+;	sta d2cra
+	sta d1crb
+	sta d2crb
+
+	lda #%00000000
+	sta d1ddrb		;set up keyboard rows (inputs)
+	sta d2ddrb		;set up user port
+	sta e_keys_ddr		;set up extended key lines
+	dec a			;($ff)
+	sta d1ddra		;set up keyboard columns (drivers)
+	sta e_keys
+
+;	lda #%11111111		;initialize 6510 port: ROM control
+	sta r6510
+	sta d6510
+	sta fsdir		;enable fast serial (mode=1 fsdir=1)
+
+	lda #%00000111		;set serial bus, TXD (pa2), VA14/15 (clockhi)
+	sta d2pra
+	lda #%00111111		;set serial in, TXD(mark) & VA14/15 out
+	sta d2ddra
+	
+	jsr rs232_init		;initialize uart
+
+	ldx #$ff		;setup for PAL/NTSC test
+10$	lda vic+17
+	bpl 10$			;...branch until raster at bottom
+20$	lda #$08
+	cmp vic+18
+	bcc 30$			;...branch if >264: PAL system
+	lda vic+17
+	bmi 20$			;...branch until raster wraps to top
+	inx
+30$	stx palnts		;NTSC=0, PAL=$FF
+	txa
+	and #%10000000		;Set 50/60Hz TOD bit				[910228]
+	ora #%00001000
+	sta d1cra
+	sta d2cra
+
+	lda #0
+	sta ram_ctlr		;reset REC ????  (checkout diddles with this)	[910422]
+	sta vicbank		;reset VIC memory to internal RAM ????
+;	sta hold_off		;clear user VIC control flag
+	sta vudeja
+;	sta palcnt		;init counter for PAL adjustment		[910730]
+
+	sta dfltn		;set default input  device (keyboard)
+	lda #3
+	sta dflto		;set default output device (screen)
+
+	ldx #46
+40$	lda victbl,x		;initialize VIC
+	sta vic,x
+	dex
+	bpl 40$
+;	stx vic+62		;pre-R5 VIC, init Horz.Position		[901210]
+
+	lda #%10100000
+	sta vic+49		;enable 80-columns, SLOW, ATRibutes
+	bit init_status		;skip ahead if NMI or user call		????
+	bmi 70$
+
+;-------------------------------------------------------------------------------
+; The following code runs only following a Reset, thus a user call or NMI
+; (STOP/Restore) will not change current setups.
+;
+;	lda #5			;provide delay for 1541 reset to finish
+;	jsr serial_delay	;(about 300ms)
+
+	lda #default_fa		;set default disk drive # (8=internal drive)
+	sta default_drive
+	jsr dos_ctlr_init	;initialize DOS controller chip
+
+	jsr palette_init
+
+	lda #0
+	sta expansion		;init to unexpanded system (phoenix inits too)	[910107]
+
+				;start TOD clock at 00:00:00:0 (midnight)
+	sta d1todh		;	(latch TOD)
+	sta d1todm
+	sta d1tods
+
+;-------------------------------------------------------------------------------
+
+70$	lda d1tod1
+	sta d1tod1		;	(unlatch TOD)
+
+	lda #0
+	ldx #24
+80$	sta sid1,x		;initialize SID chips (must be in SLOW mode)
+	sta sid2,x
+	dex
+	bpl 80$
+
+	lda #%11100000
+	sta vic+49		;enable 80-columns, FAST, ATRibutes
+	sta speed		;init FAST/SLOW flag to FAST
+
+	.page
+iokeys			;////// former entry to restore normal IRQ's
+	lda #%00000001
+	sta vic+26		;enable VIC raster IRQ (for 60Hz keyscan, etc.)
+
+	dec a			;($00)
+	sta serial		;reset fast serial flags to slow
+
+	dec a			;($ff)
+	sta d1t2l		;unleash one timer for BASIC (random # generator)
+	sta d1t2h
+	lda #%00010001
+	sta d1crb
+
+	jsr spinp		;toggle serial I/O (for fast drives)
+	jsr spout		;...out
+	jmp spinp		;...in
+;	jsr WarmStartDOS	;turn off NewDOS motors ???? CAN'T- RAMTAS not done
+;	jmp clocklo		;release the clock line & rts (C64 & C128????)
+;	rts
+
+
+palette_init
+	ldx #15			;install default palette
+10$	lda red,x
+	sta palette_r,x
+	lda green,x
+	sta palette_g,x
+	lda blue,x
+	sta palette_b,x
+	dex
+	bpl 10$
+	rts
+
+
+
+dos_ctlr_init
+	lda #%00000000		;reset DOS chip
+	sta dos_ctlr+1		;	(command= cancel)
+	sta dos_ctlr		;	(control= all off, internal drive)
+;	lda dos_ctlr
+;	bne 10$			;		exit if chip not present????
+	jsr BusyWait_fdc
+	inc a
+	sta dos_ctlr		;	(control= all off, external drive)
+10$	rts
+
+	.page
+;////////////////////////   S E C U R E   \\\\\\\\\\\\\\\\\\\\\\\\\\\
+;
+;	1/ IF  the system has just powered up, install a key & init vector.
+;	   This is recognized by the missing 'CBM' key planted in 2nd RAM bank.
+;
+;	2/ IF  a RESET entry (i.e., key was found)  JMP indirectly
+;	   through the SYSTEM vector in the 2nd RAM bank.
+;	   a/  At power-up the Kernel will initialize this vector to
+;	       affect a return to the normal C128 INIT mechanisms.
+;	   b/  A RESET from C64 mode will go wherever the SYSTEM vector
+;	       indicates, normally back to C128 INIT.
+;	   c/  C128 users may aim this vector much the same way the NMI
+;	       indirect is manipulated, thus providing C128 software with
+;	       RESET control and the means to protect themselves.
+;
+;	Note that the jump thru the SYSTEM vector occurs from within a
+;	Kernel ROM subroutine. An RTS will continue normal initialization.
+;
+
+;secure
+;	ldx #<locker
+;	ldy #>locker
+;	stx tmp2
+;	sty tmp2+1
+;	lda #tmp2
+;	sta fetvec
+;	ldy #2
+;1$	ldx #$7f	;the key is in ram1
+;	jsr fetch	;look for key
+;	cmp cbmkey,y
+;	bne c128mode	;not there, can only assume this is power-up
+;	dey
+;	bpl 1$
+;
+;	ldx #<system	;the vector is in ram1- move it to common ram
+;	ldy #>system
+;	stx tmp2
+;	sty tmp2+1
+;	ldy #1
+;2$	ldx #$7f
+;	jsr fetch
+;	sta bank,y
+;	dey
+;	bpl 2$
+;
+;	jmp (bank)	;got the key, take 'er out for a spin!
+;
+;	.page
+;
+;c128mode
+;	lda #$40	;want ram1
+;	sta mmucr
+;
+;	lda #<c128mode	;default 'system' /reset vector points to here!
+;	ldy #>c128mode
+;	sta system	; (still bleeding thru)
+;	sty system+1
+;
+;	ldx #3		;plant 'CBM' key in ram1
+;1$	lda cbmkey-1,x
+;	sta locker-1,x	; (bleeds thru)
+;	dex
+;	bne 1$
+;
+;	stx mmucr	;restore system configuration (.x=0) & continue initialization
+;	rts
+
+	.page
+;////////////////////////     P O L L     \\\\\\\\\\\\\\\\\\\\\\\\\\\
+;
+;	1/ IF  any C64 cards installed  GOTO  C64 mode now. They are
+;	   recognized by either /game or /exrom lines pulled low.
+;
+;	2/ IF  any C128 cards installed  THEN:
+;	   a/  log its ID into the Physical Address Table (PAT).
+;	   b/  IF its ID=1  CALL  its cold_start vector (it may RTS).
+;
+;	   note: there are 4 slots (2 internal, 2 external, 16k each).
+;		 the signature must match the following format:
+;
+;		 $x000 --> cold_start vector
+;		 $x003 --> warm_start vector (unused)
+;		 $x006 --> ID. (any ID=1 indicates an auto-start card)
+;		 $x007 --> CBM
+;
+;		 where  x= $8000 and $C000  16k blocks.
+;
+;		 non-autostart cards & any autostarters RTSing to POLL
+;		 will be called by PHOENIX routine after Kernel inits.
+
+
+;poll
+;	lda mmumcr	;(port sensitized prior to call!)
+;	and #$30	;examine /game & /exrom lines for c/64 cartridges
+;	cmp #$30
+;	beq poll_128	;...branch if none
+;	bne c64mode
+
+;poll_128
+;	ldx #3		;poll for c128 function key roms, in following order:
+;	stx curbnk	;  1/ext-lo  2/ext-hi  3/int-lo  4/int-hi
+;	lda #0
+;1$	sta pat,x	;initialize 'Physical Address Table'
+;	dex
+;	bpl 1$
+;
+;	sta t1		;addr lo	($00 always)
+;
+;2$	ldy #9
+;	ldx curbnk
+;	lda fkaddr,x
+;	sta t1+1	;addr hi	(function rom high or low)
+;	lda fkbank,x
+;	sta bank	;bank		(function rom internal or external)
+;
+;3$	ldx bank
+;	lda #t1
+;	jsr indfet	; LDA (t1),Y  from bank BA
+;	cmp cbmkey-7,y
+;	bne 4$		;...branch if no key found here
+;	dey
+;	cpy #7
+;	bcs 3$		;...loop until entire key matches
+;
+;	ldx bank	;key found, log it in
+;	lda #t1
+;	jsr indfet	;id
+;	ldx curbnk
+;	sta pat,x
+;	cmp #1
+;	bne 4$		;...branch if not an auto-start function ROM
+;
+;	lda t1
+;	ldy t1+1
+;	sta pc_lo
+;	sty pc_hi
+;	jsr jsrfar	;call its cold-start routine
+;
+;4$	dec curbnk
+;	bpl 2$		;...loop until all function ROMs polled
+;	rts
+;
+;fkaddr	.byte $c0,$80,$c0,$80		;function ROM lo/hi table
+;fkbank	.byte   4,  4,  8,  8		;function ROM banks (see 'config')
+
+	.page
+	.subttl  Initialization Tables
+
+;cbmkey	.byte 'CBM'						;key string		[911001]
+
+victbl	.byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0			;reg  0-16 (sprite pos)
+	.byte $1b,$ff,0,0,0,$09,0,$24,$ff,1,0,0,0,0,0		;reg 17-31 (control)
+	.byte bodcol,bakcol,1,2,3,1,2,0,1,2,3,4,5,6,7		;reg 32-46 (colors)
+
+red	.byte 16,15,15,00,15,00,16,15,15,10,15,05,08,09,09,11	;palette		[910624]
+green	.byte 00,15,00,15,00,15,00,15,06,04,07,05,08,15,09,11	; (FG bit set on black & blue only)
+blue	.byte 00,15,00,15,15,00,15,00,00,00,07,05,08,09,15,11
+
+;.end
+
+	.page
+	.subttl  C64 Mode RAM Code
+; The following code is downloaded to RAM, therefore it need not be located
+; in common ROM ($C000-$CFFF).
+
+
+c64mode
+	sei
+	ldx #c64end-c64beg
+1$	lda c64beg-1,x		;download 'go_to_64_mode_code'
+	sta $01,x
+	dex
+	bne 1$
+	jmp $02			;abracadabra, we're a 64!
+
+
+
+c64beg
+	lda #0
+	sta fsdir		;disable fast serial hardware
+	sta dejavu		;reset C65mode status indicators
+	sta init_status
+	sta vic+49		;disable all new VIC modes
+	sta vic+48
+	sta vic+47		;disable new VIC mode
+	tax			;completely unmap system
+	tay
+	taz
+	aug			;	(C64 ROMs are now active)
+	nop
+	jsr ($fff6)		;simulate a reset in C64 mode
+	jmp ($fffc)		;in case C64 ROM not present????
+c64end
+
+	.page
+	.subttl  Kernel RAM code: DMA/JSR/JMP Far Code
+
+; The following code (dlcode_begin thru dlcode_end) and data (dldata_begin thru dldata_end)
+; is downloaded into "common" RAM area ($0000-$1FFF) by the Install routine.
+
+
+dlcode_begin
+
+
+restore_system_code		;restore system memory configuration
+
+restore_system		= *-dlcode_begin+ram_code
+	lda system_map
+	ldx system_map+1	;MAP in C65 BASIClo, common RAM-0
+	ldy system_map+2
+	ldz system_map+3	;MAP in C65 OS, BASIChi & I/O
+	aug
+
+
+set_environment		= *-dlcode_begin+ram_code
+	sta environment		;Let system know current configuration		[910710]
+	stx environment+1
+	sty environment+2
+	stz environment+3
+	rts			;return *without* releasing mapper holds
+
+
+
+restore_environment	= *-dlcode_begin+ram_code
+	lda environment
+	ldx environment+1	;Who knows where we go?
+	ldy environment+2
+	ldz environment+3
+	aug
+	rts			;return *without* releasing mapper holds
+
+	.page
+jsr_far_code			;Enter with all data in $02-$09 and
+				; bank/adrhi/adrlo/status in a/x/y/z
+
+jsr_far	=		*-dlcode_begin+ram_code
+
+;	lda environment		;Save current configuration, we plan to come back
+;	ldx environment+1
+;	ldy environment+2	;???? allows "nested" jsr_fars ????)
+;	ldz environment+3
+	jsr restore_environment	;						[910710]
+	pha
+	phx
+	phy
+	phz
+	jsr jmp_far		;Call jmp_far as a subroutine
+	sta a_reg		;We're back
+	stx x_reg
+	sty y_reg		;		Save registers
+	stz z_reg
+	php			;		Save uP status
+	pla
+	sta s_reg
+	plz			;Restore memory configuration
+	ply
+	plx
+	pla
+	aug
+;	sta environment
+;	stx environment+1
+;	sty environment+2
+;	stz environment+3
+	jsr set_environment	;						[910710]
+	lda s_reg
+	pha
+	lda a_reg		;		Restore registers
+	ldx x_reg
+	ldy y_reg
+	ldz z_reg
+	plp			;		Restore uP status
+	nop
+	rts
+	
+	.page
+jmp_far_code			;Enter with all data in $02-$09 and
+				; bank/adrhi/adrlo/status in a/x/y/z
+
+jmp_far	=		*-dlcode_begin+ram_code
+
+	phd pc_hi		;Push JMP address & uP status as if interrupt
+	lda s_reg
+	pha
+	lda bank		;Want to JMP to which bank?
+	bmi 10$			;	Use current configuration (environment)
+	and #$0f		;	Configure lower section ($2000-$7FFF)	[910710]
+	ora #$e0		;		memory bank/offset for lower section
+	tax			;		  (leave RAM-0, this code, at $0-$1FFF)
+	ora #$f0		;	Configure upper section ($8000-$FFFF)
+	taz			;		memory bank/offset for upper section
+	lda #0			;		  (16-bit offset- _far does not relocate)
+	tay
+;	sta environment		;	Save new configuration			[910710]
+;	stx environment+1
+;	sty environment+2
+;	stz environment+3
+	jsr set_environment	;						[910710]
+	aug			;	MAP it
+
+10$	lda a_reg
+	ldx x_reg
+	ldy y_reg
+	ldz z_reg		;	????
+	nop			;	release interrupts (caller must be prepared for them!)
+	rti			;	go to it
+
+
+dlcode_end
+
+
+end_far	= *-dlcode_begin+ram_code	;just curious????
+
+	.page
+	.subttl  Kernel MAP data: Default memory configurations
+
+
+dldata_begin
+
+;  System memory MAP configurations	(4 lists @ 4 bytes each = 16 bytes)
+
+system_map_default			;The Operating System
+	.word %1110001100000000		;	MAP in C65 BASIClo, common RAM-0 at $0002-$1FFF
+	.word %1011001100000000		;	MAP in C65 OS, BASIChi, & I/O
+
+
+monitor_map_default			;The Debugging System
+	.word %1000001010100000		;	MAP out BASIC, MAP/relocate Monitor to $6000
+	.word %1000001100000000		;	MAP in C65 OS & I/O	($6000 + $2A000 = $30000)
+
+
+dos_map_default				;The DOS
+	.word %0001000100000000		;	Map in DOS RAM	(8K @ $010000), map out BASIC
+	.word %1011000110000000		;	MAP in DOS & I/O	($8000 + $18000 = $20000)
+
+
+environment_default			;The current environment
+	.word %1110001100000000		;	MAP in C65 BASIClo, common RAM-0 at $0002-$1FFF
+	.word %1011001100000000		;	MAP in C65 OS, BASIChi, & I/O
+
+	.page
+	.subttl  Kernel DMA data: DMA RAM Allocations
+
+
+;  System DMA lists			(3 lists @ 12 bytes each = 36 bytes)
+
+
+;dma_lda_list				;This list used by LDA_FAR routine
+	.byte 0				;command
+	.byte 1,0			;count
+	.byte 0,0,0			;source		<<< (set up each use)
+	.word dma_byte			;destination
+	.byte 0				;destination bank
+	.byte 0				;subcommand
+	.byte 0,0			;mod lo/hi
+
+
+;dma_sta_list				;This list used by STA_FAR routine
+	.byte 0				;command
+	.byte 1,0			;count
+	.word dma_byte			;source
+	.byte 0				;source bank
+	.byte 0,0,0			;destination	<<< (set up each use)
+	.byte 0				;subcommand
+	.byte 0,0			;mod lo/hi
+
+
+;dma_list		= *+12		;This list used by Editor & Monitor
+dma_list_count_lo	= dma_list+1
+dma_list_count_hi	= dma_list+2	;	(entire list set up each use, no need to DL)
+dma_list_source_lo	= dma_list+3
+dma_list_source_hi	= dma_list+4
+dma_list_source_bank	= dma_list+5
+dma_list_dest_lo	= dma_list+6
+dma_list_dest_hi	= dma_list+7
+dma_list_dest_bank	= dma_list+8
+dma_list_cmd2		= dma_list+9
+dma_list_mod_lo		= dma_list+10
+dma_list_mod_hi		= dma_list+11
+
+;dma_byte		= *+1		;Source/destination for LDA/STA far DMA routines
+
+dldata_end
+
+	.page
+	.subttl  LDA/STA Far DMA Routines
+;////////////////////////   D M A   R O U T I N E S   \\\\\\\\\\\\\\\\\\\\\\\\
+
+lda_far				;enter with .a=????, .x=vecptr, .y=index, .z=bank
+	php			;save .c
+	tya			;set up DMA RAM list for LDA (X),Y from bank Z
+	clc
+	adc $00,x
+	sta dma_lda_list+3	;source lo
+	lda #0
+	sta dma_ctlr+2
+	adc $01,x
+	sta dma_lda_list+4	;source hi
+	bcc 10$			;increment bank????					[910226]
+	inz			;						newREC	[910702]
+10$
+;	and #%10001111		;(mask dir/mod/hold)					[910116]
+;	sta dma_lda_list+5	;source bank						[910116]
+	stz dma_lda_list+5	;source bank					newREC	[910702]
+
+;	tza			;if bank >15, flip expansion bank			[901127]
+;	and #$f0
+;	beq 1$
+;	lsr a
+;	ora vicbank
+;	taz
+;	lda #$40
+;	and vic+49
+;	trb vic+49
+;	stz ram_ctlr
+;	tsb vic+49
+;	ldz dma_lda_list+5
+;1$
+	lda #>dma_lda_list	;set up DMA controller (list in bank 0 always)
+	sta dma_ctlr+1
+	lda #<dma_lda_list
+	sta dma_ctlr		;(triggers DMA op)
+	plp			;restore .c
+	lda dma_byte		;data
+	rts
+	
+	.page
+sta_far				;enter with .a=data, .x=vecptr, .y=index, .z=bank
+	php			;save .c
+	sta dma_byte		;save data
+	tya
+	clc			;set up DMA RAM list for STA (X),Y from bank Z
+	adc $00,x
+	sta dma_sta_list+6	;destination lo
+	lda #0
+	sta dma_ctlr+2
+	adc $01,x
+	sta dma_sta_list+7	;destination hi
+	bcc 10$			;increment bank????					[910226]
+	inz			;						newREC	[910702]
+10$
+;	and #%10001111		;(mask dir/mod/hold)					[910116]
+;	sta dma_sta_list+8	;destination bank					[910116]
+	stz dma_sta_list+8	;destination bank				newREC	[910702]
+
+;	tza			;if bank >15, flip expansion bank			[901127]
+;	and #$f0
+;	beq 1$
+;	lsr a
+;	ora vicbank
+;	taz
+;	lda #$40
+;	and vic+49
+;	trb vic+49
+;	stz ram_ctlr
+;	tsb vic+49
+;	ldz dma_sta_list+8
+;1$
+	lda #>dma_sta_list	;set up DMA controller
+	sta dma_ctlr+1
+	lda #<dma_sta_list
+	sta dma_ctlr		;(triggers DMA op)
+	plp			;restore .c
+	lda dma_byte		;data
+	rts
+
+cmp_far	pha			;enter with .a=data, .x=vecptr, .y=index, .z=bank
+	jsr lda_far
+	pla
+	cmp dma_byte		;data
+	rts
+
+	.page
+
+lda_far_fnadr
+	phx		;	preserve .x & .z
+	phz
+	ldz fnbank	; LDA (FNADR),Y  from bank FNBANK
+	ldx #fnadr
+	jsr lda_far
+	plz		;	restore registers
+	plx
+	and #$ff	;	set processor status per .a
+	rts
+
+
+
+sta_far_sal
+	ldx #sal	; STA (SAL),Y  to bank BA
+	  .byte $2c
+
+sta_far_eal
+	ldx #eal	; STA (EAL),Y  to bank BA
+	phz
+	ldz ba
+	jsr sta_far
+	plz
+	rts
+
+
+
+lda_far_eal
+	ldx #eal	; LDA (EAL),Y  from bank BA
+	  .byte $2c
+
+lda_far_sal
+	ldx #sal	; LDA (SAL),Y  from bank BA
+	phz
+	ldz ba
+	jsr lda_far
+	plz
+	and #$ff
+	rts
+
+;	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;indfet
+;	sta fetvec	; LDA (fetvec),Y  utility
+;	lda config,x
+;	tax
+;	jmp fetch
+;
+;indsta
+;	pha		; STA (stavec),Y  utility
+;	lda config,x
+;	tax
+;	pla		; (*note* user must setup 'stavec')
+;	jmp stash
+;
+;indcmp
+;	pha		; CMP (cmpvec),Y  utility
+;	lda config,x
+;	tax
+;	pla		; (*note*  user must setup 'cmpvec')
+;	jmp cmpare
+;
+;
+;
+;getcfg
+;	lda config,x	;convert bank (0-15) in .x to mmu configuration in .a
+;	rts
+;
+;
+;
+;config
+;	.byte %00111111	;ram0 only
+;	.byte %01111111	;ram1 only
+;	.byte %10111111	;ram2 only
+;	.byte %11111111	;ram3 only
+;
+;	.byte %00010110	;int rom, ram0, i/o
+;	.byte %01010110	;int rom, ram1, i/o
+;	.byte %10010110	;int rom, ram2, i/o
+;	.byte %11010110	;int rom, ram3, i/o
+;
+;	.byte %00101010	;ext rom, ram0, i/o
+;	.byte %01101010	;ext rom, ram1, i/o
+;	.byte %10101010	;ext rom, ram2, i/o
+;	.byte %11101010	;ext rom, ram3, i/o
+;
+;	.byte %00000110	;Kernel & int_lo, ram0, i/o
+;	.byte %00001010	;Kernel & ext_lo, ram0, i/o
+;	.byte %00000001	;Kernel & basic,  ram0, charrom
+;	.byte %00000000 ;Kernel & basic,  ram0, i/o
+;
+	.page
+;/////////////////////   K E R N A L   R A M   C O D E  \\\\\\\\\\\\\\\\\\\\\\\
+
+;  FETCH  ram code      ( LDA (fetch_vector),Y  from any bank )
+;
+;  enter with 'fetvec' pointing to indirect adr & .y= index
+;             .x= memory configuration
+;
+;  exits with .a= data byte & status flags valid
+;             .x altered
+
+;dl_beg	lda mmucr	;save current memory configuration
+;	stx mmucr	;configure memory this way
+;	tax
+;	lda ($ff),y	;get the byte ($ff here is a dummy address, 'FETVEC')
+;	stx mmucr	;restore previous memory configuration
+;	rts
+;
+;
+
+;  STASH  ram code      ( STA (stash_vector),Y  to any bank )
+;
+;  enter with 'stavec' pointing to indirect adr & .y= index
+;             .a= data byte to store
+;             .x= memory configuration (writes to rom bleed thru to ram)
+;
+;  exits with .x & status altered
+
+;	pha
+;	lda mmucr	;save current memory configuration
+;	stx mmucr	;configure memory this way
+;	tax
+;	pla
+;	sta ($ff),y	;put the byte ($ff here is a dummy address, 'STAVEC')
+;	stx mmucr	;restore previous memory configuration
+;	rts
+;
+
+
+;  CMPARE  ram code      ( CMP (cmpare_vector),Y  to any bank )
+;
+;  enter with 'cmpvec' pointing to indirect adr & .y= index
+;             .a= data byte to compare to memory
+;             .x= memory configuration
+;
+;  exits with .a= data byte & status flags valid, .x is altered
+
+;	pha
+;	lda mmucr	;save current memory configuration
+;	stx mmucr	;configure memory this way
+;	tax
+;	pla
+;	cmp ($ff),y	;compare bytes ($ff here is a dummy address, 'CMPVEC')
+;	stx mmucr	;restore previous memory configuration
+;	rts
+       
+; LONG CALL  utility
+;
+
+;	jsr jmpfar	;execute jmp_long routine as a subroutine
+;	sta a_reg
+;	stx x_reg
+;	sty y_reg
+;	php
+;	pla
+;	sta s_reg
+;	tsx
+;	stx stkptr
+;	lda #sysbnk
+;	sta mmucr
+;	rts
+
+
+
+; LONG JUMP utility
+;
+
+;	ldx #0
+;1$
+;	lda pc_hi,x	;put address & status on stack
+;	pha
+;	inx
+;	cpx #3
+;	bcc 1$
+;
+;	ldx bank
+;	jsr get_cfg	;convert 'bank' to mmu data	??????????? rom routine ??????????
+;	sta mmucr	;set up memory configuration
+;	lda a_reg
+;	ldx x_reg	;set up registers
+;	ldy y_reg
+;	rti		;goto it
+;
+;dl_end
+
+	.page
+	.subttl  Channel I/O
+
+;  ***********************************************
+;  * getin -- get a character from open channel  *
+;  *						 *
+;  *      channel is determined by dfltn. 	 *
+;  *						 *
+;  *   the keyboard and rs-232 (dfltn= 0 or 2)   *
+;  *   are serviced here by taking a character   *
+;  *   from the appropriate buffer. if nothing   *
+;  *   is available then = is returned.          *
+;  *						 *
+;  *   all other devices advance to 'basin'.	 *
+;  ***********************************************
+
+ngetin
+	lda dfltn	;check default input device
+	bne 1$		;...branch if not keyboard
+
+; Get a character from keyboard queue...
+
+	lda ndx		;keyboard queue index
+	ora kyndx	;function key index
+	beq getrts	;...branch if nothing to get
+	sei		;freeze buffer
+	jmp lp2		;go to Editor to remove a character
+
+1$	cmp #2
+	bne bn10	;...branch if not rs-232
+
+; Get a character from rs-232 input buffer...
+
+get232	php
+	sei	
+	phy				;preserve registers
+	phx
+
+	ldy rs232_rcvr_tail+1		;check buffer
+	ldx rs232_rcvr_tail
+	cpx rs232_rcvr_head
+	bne 10$
+	cpy rs232_rcvr_head+1
+	beq 30$				;...exit if empty, return a null????
+
+10$	rmb3 rsstat			;buffer status- reset 'empty' bit
+	phy
+	ldy #0				;get character
+	lda (rs232_rcvr_tail),y
+	ply
+	inx				;increment tail pointer (in registers)
+	bne 20$
+	iny
+	cpy rs232_rcvr_buffer_hi	;apogee?
+	bcc 20$
+	ldy rs232_rcvr_buffer_lo	;...yes, now perigee.
+20$	stx rs232_rcvr_tail
+	sty rs232_rcvr_tail+1
+	bra 40$
+
+30$	smb3 rsstat			;buffer empty- set 'empty' bit
+	lda #0				;and return a null character
+
+40$	plx
+	ply
+	plp
+
+getrts
+	clc		;signal a good return
+	rts
+
+	.page
+;  **************************************************************
+;  *  BASIN - Input a character from previously OPENed channel	*
+;  *								*
+;  *  Channel is determined by dfltn.				*
+;  *								*
+;  *  Input from keyboard or RS-232 channels is different than	*
+;  *  a Get.  Input requires buffering an entire line which is	*
+;  *  then passed to BASIN a character at a time up to a <cr>.	*
+;  *								*
+;  *  The device assignments are:				*
+;  *								*
+;  *		   0 = keyboard					*
+;  *		   1 = reserved (default device @OPEN)		*
+;  *		   2 = RS-232					*
+;  *		   3 = video display				*
+;  *		4-31 = serial bus				*
+;  *								*
+;  **************************************************************
+
+nbasin
+	lda dfltn	;check default input device
+	bne bn10	;...branch if not the keyboard
+
+; Input from keyboard...
+
+	lda pntr	;save current cursor position
+	sta lstp	;column
+	lda tblx
+	sta lsxp	;row
+	jmp loop5	;goto screen editor, which will pass chr & rts
+
+; Input from screen...
+
+bn10	cmp #3		;input from screen?		/////entry from GETIN
+	bne 10$		;	branch if not
+	smb0 crsw	;	else fake a <cr> to force editor to pass characters
+	lda tblx	;current cursor row
+	sta lintmp	;fixes several problems: input after clear, screen swap, etc
+	lda scrt
+	sta indx	;point to right window margin as eol
+	jmp loop5	;go to screen Editor to pick up characters
+
+
+; Input from RS-232 channel... (eats nulls)
+
+10$	cmp #2		;branch if not RS-232
+	bne 15$
+
+12$	jsr get232	;get a buffered character, if any
+	cmp #0
+	bne 13$		;...branch if valid data (.c=0, rts)
+
+	lda rsstat
+	and #$60	;check for DSR or DCD error
+	beq 12$		;...branch if lines okay, wait for character
+
+	lda #cr		;...error- fake a return
+13$	clc
+	rts
+	
+
+; Input from serial bus...
+
+15$	bcc error5	;...branch if not serial bus, device not present
+
+20$	lda status	;recall status from last serial operation
+	beq _acptr	;	ok...read a character off serial bus & rts
+
+30$	lda #cr		;bad prior...fake null input
+40$	clc		;         ...fake valid data
+	rts
+
+	.page
+;  ***********************************************
+;  * BASOUT - Output a character to open channel *
+;  *						 *
+;  *   Channel is determined by dflto:		 *
+;  *						 *
+;  *		   0 = keyboard	<invalid>	 *
+;  *		   1 = internal drive ????	 *
+;  *		   2 = rs-232			 *
+;  *		   3 = video display		 *
+;  *		4-31 = serial bus		 *
+;  *						 *
+;  ***********************************************
+
+nbsout
+	pha		;preserve .a (character to output)
+	lda dflto	;check default output device
+;	beq error7	;...error if not an output device (keyboard)
+	cmp #3
+	bne 1$		;...branch if not the screen
+
+
+; Output to video display device...
+
+	pla		;restore data
+	jmp print	;the Editor will print to display
+
+
+; Output to serial bus...
+
+1$	bcc 2$		;...branch if not serial (it's 0, 1 or 2)
+	pla		;restore character to output
+	bra _ciout	;transmit character via serial bus
+
+
+; Output to rs-232...
+
+2$	cmp #2
+	bne 3$			;...branch if not rs-232 (toss into bit bucket)
+
+	pla			;character to transmit
+	pha
+	php
+	sei
+	phy			;preserve registers for user
+	phx
+
+	ldy #0
+	sta (rs232_xmit_head),y	;buffer character
+
+	ldx rs232_xmit_head	;increment head pointer (in registers)
+	ldy rs232_xmit_head+1
+	inx
+	bne 20$
+	iny
+	cpy rs232_xmit_buffer_hi	;apogee?
+	bcc 20$
+	ldy rs232_xmit_buffer_lo	;...yes, now perigee.
+
+20$	cli
+25$	cpx rs232_xmit_tail	;check for buffer full
+	bne 30$
+	cpy rs232_xmit_tail+1	;...avoid buffer overrun,
+	beq 25$			;...hang until room (IRQ must be running!)
+
+30$	sei	
+	stx rs232_xmit_head	;update buffer pointer
+	sty rs232_xmit_head+1
+	lda #%10000000
+	tsb rs232_xmit_empty	;set flag for close	(reset by rs232_xmit)
+	bbs1 rs232_flags,40$	;don't enable xmit interrupt if xoffed
+	tsb uart_irq_mask	;enable xmit interrupt	(reset by rs232_xmit)
+40$	plx			;restore registers
+	ply
+	plp			;restore interrupt enable
+
+3$	pla			;pop data off stack
+	clc			;signal good return
+	rts
+
+
+;	bbr6 rs232_flags,10$	;check for X-LINE, exit if no hardwire checks
+;	bit d2prb
+;	bpl dsrerr		;...dsr error   
+;	bvc ctserr		;...cts error   
+;
+;10$	...
+;
+;dsrerr	smb6 rsstat		;dsr gone error  
+;	.byte $2c   
+;ctserr	smb4 rsstat		;cts gone error  
+
+;.end
+	.page
+	.subttl  OPEN
+
+; ***************************************************************
+; *			      OPEN				*
+; *								*
+; * Creates an entry in the logical file tables consisting of:	*
+; *								*
+; * 		  LA - logical file number			*
+; *		  FA - device number (0-31)			*
+; *		  SA - secondary address (command)		*
+; *								*
+; * Preparation:						*
+; *								*
+; *  		> call SETLFS to set LA/FA/SA up.		*
+; *  		> call SETNAM to set up filename.		*
+; *  		> call SETBNK to specify filename bank.		*
+; *								*
+; ***************************************************************
+
+nopen	ldx la		;get logical channel number
+	jsr lookup	;see if in table
+	beq error2	;	branch if already open
+
+	ldx ldtnd	;logical channel table end
+	cpx #10		;check for maximum # of open channels
+	bcs error1	;	branch if too many channels
+
+	inc ldtnd	;one more entry in table
+	lda la
+	sta lat,x	;store logical channel #
+	lda sa
+	ora #$60	;make SA a serial bus command
+	sta sa
+	sta sat,x	;store command #
+	lda fa
+	cmp #1		;default device #?
+	bne 10$		;	branch if not
+	lda default_drive
+	sta fa		;	yes- substitute	system default		[911119]
+10$	sta fat,x	;store device #
+
+	.page
+;  Perform device specific open tasks
+
+	cmp #0		;						[911119]
+	beq opnrts	;...branch if keyboard (done)
+	cmp #2
+	beq opn232	;...branch if rs-232
+	bcc error5	;...branch if cassette (device not present)
+	cmp #3
+	beq opnrts	;...branch if screen (done)
+
+	cmp #32		;						[910220]
+	bcs error5
+	jsr openi	;open serial file
+
+opnrts	clc		;signal good return
+	rts
+
+	.page
+;  Open an rs-232 channel
+;
+;  --------------- control ----------------   ----------------- setup ---------------------
+;   1    2     3        4          5     6     7    8     9  10      11  12     13      14
+;  baud/word/parity/stop(unused)/duplex/xline xon/xoff/inbuf(l/h)/outbuf(l/h)/hiwater/lowater
+
+opn232
+	jsr rs232_init		;initialize channel & all parameters, buffers to default
+
+	ldy #0			;copy command string to our parameter area
+10$	cpy fnlen
+	beq 11$			;...branch if end of command string
+	jsr lda_far_fnadr
+	sta rs232_params,y
+	iny
+	cpy #6			;6 possible control bytes
+	bcc 10$
+
+11$	lda rs232_baud		;lookup baud rate & install
+;	and #$0f		;	add rate#16 = MIDI				[910311]
+	bit palnts
+	bpl 12$
+	clc
+	adc #17			;	PAL table follows NTSC table
+12$	asl a			;	make index a word pointer
+	tay
+	lda rs232_baud_rate_ntsc,y
+	sta uart_baud
+	lda rs232_baud_rate_ntsc+1,y
+	sta uart_baud+1
+
+	lda #%11000000		;lookup control bits & install
+	sta rs232_temp		;	enable xmit & rcvr, async mode
+	lda rs232_word
+	and #%00000011
+	asl a
+	asl a
+	tsb rs232_temp		;	merge with word length
+	lda rs232_parity
+	and #%00000011
+	ora rs232_temp		;	merge with parity mode
+	sta uart_control	;	enable uart
+
+	lda rs232_duplex
+	beq 13$
+	smb5 rs232_flags
+13$	lda rs232_xline
+	beq 20$
+	smb6 rs232_flags
+
+	.page
+;  baud/word/parity/stop(unused)/duplex/xline xon/xoff/inbuf(l/h)/outbuf(l/h)/hiwater/lowater
+
+20$	ldy #6			;read rest of channel params & install them		[910312]
+30$	cpy fnlen
+	bcs 80$			;...branch if end of command string
+	jsr lda_far_fnadr
+	sta rs232_xon_char-6,y	;init XON/XOFF characters (2 bytes)
+	iny
+	cpy #6+2
+	bcc 30$
+
+40$	cpy fnlen		;init buffer pointers, hi/lowater marks
+	bcs 50$			;...branch if end of command string
+	jsr lda_far_fnadr
+	sta rs232_rcvr_buffer_lo-8,y
+	iny
+	cpy #14
+	bcc 40$
+
+50$	lda rs232_rcvr_buffer_lo
+	sta rs232_rcvr_head+1
+	sta rs232_rcvr_tail+1
+
+	lda rs232_xmit_buffer_lo
+	sta rs232_xmit_head+1
+	sta rs232_xmit_tail+1
+
+; Start the UART
+
+80$	php			;the receiver always runs
+	sei
+	smb7 rs232_flags	;flag channel as open
+	lda #%01000000
+	tsb uart_irq_mask	;enable rcvr IRQ interrupts
+
+	bbr6 rs232_flags,90$	;check DSR for X-LINE mode only
+	bit d2prb
+	bmi 90$			;...DSR okay
+	smb6 rsstat
+
+90$	bit uart_data		;clear pending
+	plp
+
+opnrts_1
+	clc			;good return
+	rts
+
+	.page
+; Open a serial bus channel
+
+openi
+	bbs7 sa,opnrts_1	;...done if no sa to xmit (tables already updated)
+	lda fnlen
+	beq opnrts_1		;...done if no filename to xmit
+
+	lda #0			;reset serial bus status
+	sta status
+	lda fa
+	jsr _listen		;command device la to listen
+	bbs7 status,10$		;check status, branch if no response to command
+
+	lda sa
+	ora #$f0
+	jsr _second		;send secondary address
+	bbs7 status,10$		;check status, branch if bad
+
+	ldy #0			;send filename
+5$	cpy fnlen
+	beq cunlsn		;branch when done- unlisten/clc/rts
+	jsr lda_far_fnadr
+	jsr _ciout
+	iny
+	bra 5$
+
+
+
+;  This routine is called by other Kernel routines which are called
+;  directly by OS.  Their return address must be popped to return to OS.
+
+10$	pla
+	pla
+	bra error5	;'device not present' error
+
+
+;.end
+
+	.page
+	.subttl  Chkin/Chkout
+
+;  ******************************************************
+;  *		chkin -- open channel for input		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), write-only files, & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dfltn= device # from table	*
+;  *		 or .c=1 if error			*
+;  ******************************************************
+
+nchkin
+	jsr lookup	;search table for la (passed in .x)
+	bne error3	;	error if 'file not open'
+	jsr getlfs	;copy table info into la, fa, sa
+	beq ckirts	;	done if keyboard device
+	cmp #3
+	beq ckirts	;	done if display device
+	cmp #2
+	beq cki232	;	go check rs-232
+	bcc error5	;	error if not an input device
+
+;  open serial device for input (make it a talker)
+
+ckiser
+	tax		;preserve fa (device #)
+;	jsr untalk	;and clear all channels
+;	txa		;
+;	jsr unlisten	;
+;	txa
+	jsr _talk	;establish device as a talker
+	bbs7 status,30$	;	error if no response
+
+	lda sa		;get secondary adr (command)
+	bmi 10$		;	branch if nothing to send
+	jsr _talksa	;send command
+	bra 20$		;always
+
+10$	jsr talkatn	;switch from talker to listener & let go
+
+20$	txa		;restore fa (device #)
+	bbr7 status,ckirts
+30$
+ckidnp	bra error5	;error exit if no response
+
+
+;  Check that an rs-232 OPEN was performed, then check hardware states
+
+cki232
+	bbr7 rs232_flags,ckidnp
+	bbr6 rs232_flags,ckirts	;check for X-LINE, exit if no turnaround needed
+	bbr5 rs232_flags,ckirts	;check duplex, exit if full duplex (no handshake)
+
+; Turn around logic: check if DSR and not RTS
+
+	tax		;preserve FA
+	lda #$02	;b1=RTS
+	bit d2prb
+	bpl 2$		;...branch if no DSR, error
+	beq 3$		;...branch if RTS low, already in correct mode
+
+	trb d2prb	;turn off RTS & wait for DTR to go high per spec
+	lda #$04
+1$	bit d2prb
+	beq 1$
+	bmi 3$
+
+2$	smb6 rsstat	;'data set ready'  error	
+
+3$	txa		;restore FA
+
+
+ckirts	sta dfltn	;make all future input come from FA in .a
+	clc
+	rts
+	.page
+;  ******************************************************
+;  *	     ckout -- open channel for output		*
+;  *							*
+;  * looks up given logical file  in table and performs	*
+;  * device specific open tasks.  checks for files  not	*
+;  * opened (not in table), read-only files,  & devices	*
+;  * not present, reporting any errors.			*
+;  *							*
+;  *	>enter with .x = logical file # 		*
+;  *	>exits with .c=0 & dflto= device # from table	*
+;  *		 or .c=1 if error			*
+;  ******************************************************
+
+nckout
+	jsr lookup	;search table for la (passed in .x)
+	bne error3	;	error if 'file not open'
+	jsr getlfs	;copy table info into la, fa, sa
+	cmp #3
+	beq ckorts	;	done if display device
+	cmp #2
+	beq cko232	;	go check rs-232
+	bcc error7	;	error if not an output device
+
+; Open serial bus device for output (make it a listener)
+
+ckoser	tax		;preserve fa (device #)
+;	jsr unlisten	;and clear all channels
+;	txa		;
+;	jsr untalk	;
+;	txa
+	jsr _listen	;establish device as a listener
+	bbs7 status,30$	;	branch if no response
+
+	lda sa		;get secondary adr (command)
+	bmi 10$		;	branch if nothing to send
+	jsr _second	;send command
+	bra 20$		;always
+
+10$	jsr scatn	;let go
+
+20$	txa		;restore fa (device #)
+	bbr7 status,ckorts	;...branch if device responded
+30$
+ckodnp	bra error5		;...branch if device not present (always)
+
+
+; Check that an rs-232 OPEN was performed, then check hardware status
+
+cko232
+	bbr7 rs232_flags,ckodnp	;error exit if not opened
+	bbr6 rs232_flags,ckorts	;check for X-LINE, exit if no turnaround needed
+
+; Turn around logic:  check for DSR and RTS
+
+	tax		;preserve fa (device #)
+	lda #$02	;b1=RTS, b7=DSR
+1$	bit d2prb
+	bpl 3$		;...branch if DSR low, error
+	bne 4$		;...branch if RTS high, already outputting or full duplex	
+	bvs 1$		;...wait for CTS to be off, as spec requires
+
+	tsb d2prb	;turn on RTS & wait for CTS to go on
+2$	bit d2prb
+	bvs 4$		;...got it
+	bmi 2$		;...wait for CTS, error if DSR goes away
+
+3$	smb6 rsstat	;'data set ready'  error	
+
+4$	txa		;restore FA
+
+
+ckorts	sta dflto	;make all future output go to FA in .a
+	clc
+	rts
+
+;.end
+	.page
+	.subttl  Close
+
+; ****************************************************************
+; *		 		CLOSE				 *
+; *								 *
+; * Closes the channel whose LA is in .a and updates the logical *
+; * file tables.						 *
+; *								 *
+; * The keyboard, screen and unOPENed files simply pass through. *
+; * RS-232 channels will hang here until the output buffer has	 *
+; * been emptied.  Regular serial channels are closed by sending *
+; * a CLOSE command if an SA was specified when it was opened.	 *
+; * Serial command channels are handled specially:		 *
+; * 								 *
+; *	IF (.c=1) AND (FA=serial bus) AND (SA=15)		 *
+; *		THEN don't do a real close, just remove the	 *
+; *			table entry.  This allows the disk	 *
+; *			command channel to come and go without	 *
+; *			the disk closing ALL files on its end.	 *
+; *								 *
+; ****************************************************************
+
+nclose
+	ror partial	;save .c for serial close
+	jsr jltlk	;look file up
+	bne jxrts	;	branch if file not open (simply clc/rts)
+	jsr getlfs	;extract table data
+	phx		;	save table index
+	cmp #2
+	bne 5$
+
+
+; Close RS-232 channel
+
+1$	bbs7 rs232_xmit_empty,1$	;loop until xmit buffer empty
+	jsr rs232_init			;shut it down completely
+;	bra 30$				;(exits with .a=0)
+
+
+5$	cmp #4
+	bcc 30$		;	done if keyboard, display device
+
+
+; Close serial bus channel
+
+10$	bbr7 partial,20$	;...branch if not special close for BASIC DOS
+	cmp #8		;.a=fa
+	bcc 20$		;...branch if device not a serial disk (i.e., printer)
+	lda sa
+	and #$0f
+	cmp #$0f
+	beq 30$		;...branch if sa=disk cmd chnl & skip real close
+
+20$	jsr clsei	;close serial file, fall into routine to remove table entry
+
+30$	pla		;restore table index
+
+
+; JXRMV removes a given logical file entry (in .a) from
+; the table of logical, primary and secondary addresses.
+
+jxrmv
+	tax
+	dec ldtnd	;one less entry in table
+	ldy ldtnd	;swap last entry with one to be closed
+	lda lat,y
+	sta lat,x
+	lda fat,y
+	sta fat,x
+	lda sat,y
+	sta sat,x
+jxrts	clc		;signal good close
+	rts
+
+
+lookup			;lookup logical file in .x
+	lda #0
+	sta status	;reset I/O status
+	txa
+
+jltlk			;entry from CLOSE
+	ldx ldtnd
+1$	dex
+	bmi 2$		;...branch if entry not found
+	cmp lat,x
+	bne 1$
+2$	rts
+
+
+getlfs
+	lda lat,x	;routine to fetch table entries
+	sta la
+	lda sat,x
+	sta sa
+	lda fat,x
+	sta fa		; (return with .p status of fa!)
+	rts
+
+;.end
+	.page
+	.subttl  Close All
+
+;  **********************************************
+;  * 	clall -- clear all logical files	*
+;  *						*
+;  *	   > deletes all table entries		*
+;  *	   > clears serial port channels	*
+;  *	   > restores default i/o channels	*
+;  *						*
+;  *	***WARNING: this call DOES NOT CLOSE	*
+;  *		    open files!!!		*
+;  *						*
+;  **********************************************
+
+nclall
+	lda #0
+	sta ldtnd	;reset table index, fall into 'clrch'
+
+
+
+
+
+
+;  **********************************************
+;  *	     clrch -- clear I/O channels	*
+;  *						*
+;  *	 > unlisten or untalk serial devices	*
+;  *	 > restore default I/O channels		*
+;  *						*
+;  **********************************************
+
+nclrch
+	ldx #3
+	cpx dflto	;check default output channel
+	bcs 1$		;	branch if not serial bus
+	jsr _unlisten	;unlisten serial device
+
+1$	cpx dfltn	;check default input channel
+	bcs 2$		;	branch if not serial bus
+	jsr _untalk	;untalk serial device
+
+; Restore default I/O channels
+
+2$	stx dflto	;default output channel = 3 (screen)
+	lda #0
+	sta dfltn	;default input  channel = 0 (keyboard)
+	rts		; (return with .A=0)
+
+	.page
+;  **********************************************
+;  *	close_all   - closes all files on a	*
+;  *		      given device.		*
+;  *						*
+;  *	 > search tables for given fa & do a	*
+;  *	   proper close for all matches.	*
+;  *						*
+;  *	 > IF one of the closed entries is the	*
+;  *	   current I/O channel THEN the default	*
+;  *	   channel will be restored.		*
+;  *						*
+;  *	entry:  .a = device (fa) to close	*
+;  **********************************************
+
+close_all
+	sta fa		;save device to shut down
+	cmp #1		;default device #?
+	bne 1$		;	branch if not
+	lda default_drive
+1$	sta fa		;	yes- substitute	system default		[911119]
+
+;	cmp dflto
+;	bne 10$		;...branch if not current output device
+;	ldx #3
+;	stx dflto	;restore screen output
+;	  .byte $2c
+;
+;10$	cmp dfltn
+;	bne 20$		;...branch if not current input device
+;	ldx #0
+;	stx dfltn	;restore keyboard input
+
+	jsr clrch	;restore normal I/O channels			[911119]
+
+20$	lda fa
+	ldx ldtnd	;lat, fat, sat table index
+30$	dex
+	bmi 40$		;...branch if end of table
+	cmp fat,x
+	bne 30$		;...loop until match or end
+
+	lda lat,x	;a match- extract logical channel data
+	clc
+	jsr close	;close it via indirect
+	bra 20$		;always
+
+40$	rts
+	
+
+;.end
+	.page
+	.subttl  Load
+
+;  **********************************************
+;  *	   Load Memory from Mass Storage	*
+;  *						*
+;  *	 fa:	0= keyboard	<invalid>	*
+;  *		1= default device		*
+;  *		2= screen	<invalid>	*
+;  *		3= rs-232	<invalid>	*
+;  *		4-31= serial			*
+;  *						*
+;  *	 sa:	0= alternate load		*
+;  *		   (.x, .y = starting addr)	*
+;  *		1= normal load			*
+;  *		   (load starting addr)		*
+;  *						*
+;  *	 ba:	destination bank		*
+;  *						*
+;  *	 .a:	 0= load memory			*
+;  *		>0= verify only			*
+;  *						*
+;  *	 ending address returned in .x, .y	*
+;  *						*
+;  **********************************************
+
+load				;////////// jump table entry: .x & .y have load address
+	stx memuss
+	sty memuss+1
+	jmp (iload)
+
+nload	sta verify		;preserve load/verify flag (load if = 0, else verify)
+	lda #0
+	sta status		;reset status
+
+	lda fa			;load from serial bus devices only
+	cmp #1			;default device?
+	bne 10$			;	branch if not
+	lda default_drive
+	sta fa
+	cmp #1
+	beq error5		;	branch if cassette (device not present)
+10$	cmp #4
+	bcc error9		;	else bad device (illegal device)
+	cmp #32
+	bcs error5		;							[910220]
+
+;  Load memory from serial device (disk)
+
+lddisk				;assume slow load
+	rmb6 serial		;	reset 'fast' flag
+	rmb0 serial		;	reset 'burst' flag
+
+	ldx sa
+	stx t1			;save sa: flags normal/alternate load
+	ldy fnlen
+	beq error8		;	branch if missing filename
+	sty t2			;save fnlen
+
+	jsr luking		;print 'searching for...'
+	jsr burst		;attempt a burst load
+	bcc load_exit		;	branch if successful
+
+	ldy t2
+	sty fnlen		;restore fnlen
+	sta t2			;'$' in the case burst fails due to directory load	[910401]
+	lda #$60
+	sta sa			;pass 'load' command to disk via sa
+
+	jsr openi		;open the file
+	lda fa
+	jsr _talk		;establish the channel
+	lda sa
+	jsr _talksa		;send 'load' command
+
+	jsr _acptr		;get first byte (load adr lo)
+	sta eal
+	jsr _acptr		;get second byte (load adr hi)
+	sta eah
+
+	bbr1 status,5$
+	bra error4		;	exit if 'file not found'
+
+5$	lda t1			;(sa) has caller specified an alternate load address?
+	bne 10$			;	branch if we are to use load address read from disk
+	lda memuss
+	sta eal			;	else use load address given by user
+	lda memuss+1
+	sta eah
+
+10$	lda eal			;save file load address
+	ldy eah
+	sta sal
+	sty sah
+	jsr loding		;print 'loading...'
+
+	bbs1 status,timeout	;file read error
+	bbs7 DOS_flag,20$	;branch if DOS is external (serial bus)
+	lda t2
+	cmp #'$'		;							[910401]
+	beq 20$			;branch if directory load
+	bra FastLoad		;branch if DOS is internal
+
+20$	jsr stop		;check for <stop> key, abort load if down
+	beq break
+	jsr _acptr		;else read a byte from serial bus
+25$	bbs1 status,timeout	;	file read error					[900731]
+
+	ldy verify		;got a byte, what do we do with it?
+	beq 30$
+	sta cmp_byte		;verify memory
+	ldy #0
+	jsr lda_far_eal
+	cmp cmp_byte
+	beq 40$			;	branch if good compare
+	smb4 status		;	else set 'read error' bit to flag 'verify error'
+	bra load_done		;	and exit with mismatch address			[910229]
+
+30$	jsr sta_far_eal		;load memory
+
+40$	inw eal 		;increment address for next data byte
+	bne 50$			;	branch if not 'out of memory'
+	jsr load_done		;	else,	close the file properly
+	bra error16		;		report 'out of memory'
+
+50$	bbr6 status,20$		;	loop until end_of_file
+
+
+load_done
+	jsr _untalk		;close channel
+	jsr clsei		;close the file
+load_exit
+	ldx eal			;load done, return ending address in x & y
+	ldy eah
+	clc			;	signal good load
+	rts			;	return to call
+
+
+timeout
+	bra error41		;go directly to 'file read' error, leaves file open
+
+	.page
+burst
+	ldy #0		;examine filename
+	jsr lda_far_fnadr
+	cmp #'$'
+	beq 31$		;	branch if directory load (rts with .c=1 to load slow)
+
+	ldx fa		;	fa: device #
+	ldy #15		;	sa: disk command channel
+	lda #0		;	la: use reserved la
+	sta fnlen	;	no name just yet
+	jsr setlfs
+	jsr open	;open command channel to disk
+	ldx la
+	jsr ckout	;make it an output channel
+	bcs burst_err5	;	branch if device not present
+
+10$	ldy #3
+20$	lda burst_cmd-1,y
+	jsr bsout	;send burst_load command
+	dey
+	bne 20$
+
+30$	jsr lda_far_fnadr
+	jsr bsout	;send filename
+	iny
+	cpy t2		;fnlen
+	bcc 30$
+
+	jsr clrch	;release clock & drop disk channel
+	bbs6 serial,35$	;	branch if we got a fast handshake
+	jsr burst_end
+31$	sec		;	else return with .c=1 and attempt a slow load
+	rts
+
+35$	lda t2
+	sta fnlen	;restore user fnlen
+	jsr disk_sei
+	jsr clockhi	;clk must be high
+	jsr spinp	;setup for input
+	bit d1icr	;clear byte pending
+	jsr wiggle	;toggle clk
+	jsr burst_byt	;read status byte
+	cmp #2
+	beq burst_err4	;	branch if file not found (timeout)
+
+40$	pha		;save last burst status
+	cmp #$1f	;	was it EOI?
+	bne 45$		;		no
+	jsr wiggle	;	EOI:	toggle clk
+	jsr burst_byt	;		get # bytes to follow
+	sta count
+	bra 46$
+
+45$	cmp #2		;	any other error?
+	bcc 46$
+	pla		;		yes
+	bra burst_err
+
+46$	jsr loding	;print 'loading...'
+	jsr wiggle	;toggle clk
+	jsr burst_byt	;read load address from disk
+	sta eal
+	jsr wiggle	;toggle clk
+	jsr burst_byt
+	sta eah
+
+	ldx t1		;recall sa
+	bne 50$		;...branch if default load (use disk load adr)
+	lda memuss
+	ldx memuss+1
+	sta eal		;replace load address with user's
+	stx eah
+
+50$	lda eal		;preserve load address for BASIC
+	ldx eah
+	sta sal
+	stx sah
+
+	pla		;pop last burst status
+	cmp #$1f
+	beq burst_eoi	;...branch if current (first) block is the last block
+
+60$	jsr wiggle	;toggle clk
+	lda #252	;********** load first sector **********
+	sta count
+
+70$	jsr ScanStopKey	;scan stop key (with IRQ disabled so is keyscan)
+	jsr stop
+	beq burst_brk	;	abort if user pressing <stop>
+
+	jsr burst_blk	;load a block (.x = # bytes to load)
+	bcs burst_err16	;	branch on error (out of memory)
+	jsr burst_byt	;check burst status
+	cmp #2
+	bcc 80$		;	branch if good
+	cmp #$1f
+	beq 90$		;	branch if next block is the last block (EOI)
+	bne burst_err	;...branch on any other error (read error)
+
+80$	jsr wiggle
+	lda #254	;********** load middle sectors **********
+	sta count
+	bra 70$		;	loop until EOI or <stop>
+
+90$	jsr wiggle
+	jsr burst_byt	;EOI: read # bytes to load from last sector
+	sta count
+
+burst_eoi
+	jsr wiggle
+	jsr burst_blk	;load the last sector
+	bcs burst_err16	;	branch on error (memory)
+	smb6 status	;set EOI status bit
+
+burst_end
+	jsr clockhi	;wave goodbye
+	jsr disk_cli	;shed a tear
+	lda la
+	sec		;not a full close
+	jsr close	;just clean up tables
+	clc		;signal successful burst load
+	rts
+
+
+
+burst_err
+	smb1 status	;all errors 'timeout'
+	jsr burst_end	;shut down
+	pla
+	pla
+	lda #41		;signal 'file read' error
+burst_sec
+	sec
+	rts		;return directly to user
+
+burst_brk
+	jsr burst_end	;shut down
+	lda #0
+	sta sa		;kludge to prevent closing cmd channel
+	pla
+	pla
+	bra break	;unlisten disk & return break error
+
+burst_err4
+	jsr burst_end	;file not found error
+	pla
+	pla
+	bra error4
+
+burst_err5
+	jsr burst_end	;device not present error
+	pla
+	pla
+	bra error5
+
+burst_err16
+	jsr burst_end	;out of memory error
+	pla
+	pla
+	bra error16
+
+
+burst_byt
+	lda #$08
+1$	bit d1icr	;wait for byte ready
+	beq 1$
+	lda d1sdr	;get byte
+	rts
+
+
+burst_blk
+	lda #$08
+99$	bit d1icr	;wait for byte ready
+	beq 99$
+	ldy d1sdr	;get byte
+	lda d2pra	;handshake (toggle clock)
+	eor #$10
+	sta d2pra
+
+	tya		;put data in .a
+	ldy verify
+	beq 1$		;...branch if loading
+
+	sta cmp_byte
+	ldy #0
+	jsr lda_far_eal	;verify memory
+	cmp cmp_byte
+	beq 2$		;	branch if match
+	smb4 status	;	else verify error: set 'read error' status bit
+	bra 2$
+
+1$	jsr sta_far_eal	;load memory
+
+2$	inw eal		;increment address for next byte
+	beq burst_sec	;	branch if out of memory error (.c=1)
+	dec count
+	bne burst_blk	;	loop until all bytes in this block read
+	clc
+	rts		;.c=0 for normal return. .c=1 for error return
+
+
+
+wiggle	lda d2pra	;handshake (toggle clock)
+	eor #$10
+	sta d2pra
+	rts
+
+;???? cmd=$1f to restrict load to PRG filetype like C128)
+burst_cmd	.byte %10011111,'0U'	;burst cmd string (backwards!)		[910801]
+
+	.page
+; Subroutine to print to display: 'searching for <filename>'
+
+luking
+	bbr7 msgflg,lurts	;don't print if Kernel messages disabled
+	ldy #ms5-ms1
+	jsr msg		;print 'searching for '
+
+
+; Subroutine to print filename
+
+outfn
+	ldy #0		;print filename
+1$	cpy fnlen
+	beq lurts
+	jsr lda_far_fnadr
+	jsr bsout
+	iny
+	bra 1$
+
+lurts	rts
+
+
+; Subroutine to print: 'loading' or 'verifying'
+
+loding
+	ldy #ms10-ms1	;setup 'loading'
+	lda verify
+	beq 1$		;...branch if loading
+	ldy #ms21-ms1	;setup 'verifying'
+1$	bra spmsg	;test for display enabled, print it, rts
+
+;.end
+	.page
+	.subttl  Save
+
+;  **********************************************
+;  *	     Save Memory to Mass Storage	*
+;  *						*
+;  *	  fa:	0= keyboard	<invalid>	*
+;  *		1= default device		*
+;  *		2= rs-232	<invalid>	*
+;  *		3= screen	<invalid>	*
+;  *		4-31= serial device		*
+;  *						*
+;  *	  sa:	(unused)			*
+;  *						*
+;  *	.a points to start address, lo/hi/bank	*
+;  *	.x & .y point to end address		*
+;  *						*
+;  **********************************************
+
+save			;////// jump table entry
+	stx eal
+	sty eah		;setup ending address	(in .x & .y)
+	tax
+	lda $00,x	;setup starting address	(.a points to indirect)
+	sta stal
+	lda $01,x
+	sta stah
+	jmp (isave)
+
+nsave	lda fa		;dispatch per device number
+	cmp #1		;default device?
+	bne 1$		;	branch if not
+	lda default_drive
+	sta fa
+	cmp #1
+	beq error5	;	branch if cassette (device not present)
+1$	cmp #4
+	bcc error9	;	if not serial bus device, report illegal device
+	cmp #32
+	bcs error5		;					[910220]
+
+;  Save memory to serial bus device
+
+	ldy fnlen	;must have filename
+	beq error8	;	exit if missing filename
+
+	lda #$61	;pass 'save' command to disk in sa
+	sta sa
+	jsr openi	;open the file
+	jsr saving	;print 'saving'
+	lda fa
+	jsr _listen	;establish the channel
+	lda sa
+	jsr _second	;send 'save' command
+
+	lda stal
+	sta sal
+	jsr _ciout	;send starting address lo
+	lda stah
+	sta sah
+	jsr _ciout	;send starting address hi
+
+	bbr0 status,5$	;Check communications
+	jsr clsei	;	shut down
+	bra error3	;	exit and report 'file not open'
+
+5$	ldy #0
+10$	sec		;compare starting address to ending address ????
+	lda sal
+	sbc eal		;	Note:   this is why you cannot save across banks!
+	lda sah		;		and there is no way to specify both banks...
+	sbc eah
+	bcs 20$		;	exit if start>end
+
+	jsr lda_far_sal	;fetch a byte  lda (sal),y
+	jsr _ciout	;send a byte
+	jsr stop	;	abort if user hit <stop> key
+	beq break
+	inw sal		;increment address for next byte
+	bbr7 status,10$	;loop until done or device not ready
+
+20$	jsr _unlisten	;close channel, fall into file close routine: save done
+
+clsei			;////// entry from other Kernel routines
+	bbs7 sa,clsrts	;branch if file not properly opened
+	lda fa
+	jsr _listen	;get the channel
+	lda sa
+	and #$ef	;make sa a 'close' command
+	ora #$e0
+	jsr _second	;send 'close' command
+
+cunlsn			;////// entry from 'openi'
+	jsr _unlisten	;close channel
+
+clsrts	clc		;signal good return
+svrts	rts
+
+
+
+break
+	jsr clsei	;close the file
+	lda #0		;return =
+	sec		;signal error return
+	rts
+
+
+
+;  Subroutine to output  'saving <filename>'
+
+saving
+	bbr7 msgflg,svrts	;don't print anything if Kernel messages disabled
+	ldy #ms11-ms1
+	jsr msg		;print 'saving '
+	bra outfn	;print filename & rts
+
+	.page
+	.subttl  Time Functions
+
+; ***************************************************************************************
+; *			TIME consists of two functions:					*
+; *											*
+; * Set_Time	.y=hrs(0-23), .x=min(0-59), .a=sec(0-59), .z=10ths(0-9)	   24-hr (BCD) 	*
+; *											*
+; * Read_Time	.y=hrs(0-23), .x=min(0-59), .a=sec(0-59), .z=10ths(0-9)	   24-hr (BCD) 	*
+; *											*
+; ***************************************************************************************
+
+Read_Time		;.rdtim
+	lda d1todh	;hours (BCD)			(latch TOD registers)
+	cmp #$12	;	determine AM/PM
+	bne 10$
+	lda #$00	;	 (6526 12:00 chip bug workaround)
+10$	cmp #$00
+	bpl 20$		;			branch if AM      $00-$11 (BCD)
+	and #$1f	;	strip PM flag, number is in range $00-$12 (BCD)
+	cmp #$12	;
+	bcs 20$		;			branch if 12noon
+	php
+	sei
+	sed		;			else add 12 (BCD) hours
+	clc
+	adc #$12
+	cld
+	plp
+20$	tay		;hours
+	ldx d1todm	;minutes
+	lda d1tods	;seconds
+	ldz d1tod1	;tenths				(release TOD latch)
+	rts
+
+	.page
+Set_Time		;.settm
+	pha		;save seconds to free .a
+	tya
+	cmp #$13	;hours
+	bcc 10$		;	skip if AM
+	php
+	sei
+	sed
+	sec
+	sbc #$12	;	else subtract 12 (BCD) hours & set PM flag
+	cld
+	plp
+	ora #$80
+10$	tay
+	pla
+	sty d1todh	;hours				(latch TOD registers)
+	stx d1todm	;minutes
+	sta d1tods	;seconds
+	stz d1tod1	;tenths				(release TOD latch)
+	rts
+
+	.page
+ClockTick
+;	inc time+2	;increment the time registers
+;	bne 1$
+;	inc time+1
+;	bne 1$
+;	inc time
+;
+;1$	sec		;check for roll-over 23:59:59
+;	lda time+2
+;	sbc #$01
+;	lda time+1
+;	sbc #$1a
+;	lda time
+;	sbc #$4f
+;	bcc 2$
+;
+;	ldx #0		;time has rolled- reset (zero) time registers
+;	stx time
+;	stx time+1
+;	stx time+2
+;2$
+	lda timer	;decrement FRAME counter				[910730]
+	bne 4$		;(not currently used by OS or BASIC)
+	lda timer+1
+	bne 3$
+	dec timer+2
+3$	dec timer+1
+4$	dec timer
+	
+;	bit palnts	;(removed- this counter noew counts FRAMES)		[910730]
+;	bpl 5$		;...branch if not PAL mode
+;	dec palcnt
+;	bpl 5$		;...branch if no correction needed at this time
+;	lda #5
+;	sta palcnt
+;	bra ClockTick	;always...give one extra tick to 50Hz systems
+;
+;5$			;fall into ScanStopKey
+
+	.page
+ScanStopKey		;.ud60
+	lda rows	;assumes keyboard columns left driving C7 only
+;	cmp rows
+;	bne ud60	;still bouncing
+;	tax		;set flags...
+	bmi 2$		;no stop key...exit  (stop key=$7f)
+
+	ldx #$ff-$42	;check for a shift key
+	stx colm
+
+1$	ldx rows	;wait to settle...
+;	cpx rows
+;	bne 1$
+	sta colm 	;watch out... .a=$7f...same as colms was...
+	inx		;any key down aborts
+	bne 3$		;leave same as before...
+
+2$	sta stkey	;save for other routines
+3$	rts
+
+
+;.end
+	.page
+	.subttl  Error Handlers
+
+; *******************************************************
+; *			STOP				*
+; *							*
+; *  Check stop key flag and return = if true. If true  *
+; *  then close active channels & flush keyboard queue  *
+; *							*
+; *  Note: returns scan from last keyboard row in .a	*
+; *******************************************************
+
+nstop
+	lda stkey	;value of last row
+	cmp #$7f	;check last scanned position of stop key
+	bne 1$		;	branch if not down
+	php
+	jsr clrch	;clear channels
+	sta ndx		;flush keyboard queue (assumes .A=0)
+	sta kyndx	;flush function key queue
+	plp
+1$	rts
+
+	.page
+; *******************************************************
+; *		   Error Handler			*
+; *							*
+; *   Print Kernel error message if display enabled.	*
+; *   Return with error # in .a and .c=1		*
+; *******************************************************
+
+error1	lda #1		;too many files
+	  .byte $2c
+error2	lda #2		;file open
+	  .byte $2c
+error3	lda #3		;file not open
+	  .byte $2c
+error4	lda #4		;file not found
+	  .byte $2c
+error5	lda #5		;device not present
+	  .byte $2c
+error6	lda #6		;not input file
+	  .byte $2c
+error7	lda #7		;not output file
+	  .byte $2c
+error8	lda #8		;missing file name
+	  .byte $2c
+error9	lda #9		;bad device #
+
+error_do		;						[910228]
+	pha		;save error number on stack
+	jsr clrch	;restore default I/O channels
+
+	bbr6 msgflg,1$	;	done if display disabled
+	ldy #ms1-ms1
+	jsr msg		;print 'I/O error #'
+	pla
+	pha
+	ora #$30	;make error # ASCII 1-9
+	jsr bsout	;print it
+
+1$	pla		;restore error code
+	sec		;signal error
+	rts
+
+
+error16	lda #1		;out of memory error 16
+	jsr error_do
+	bbr6 msgflg,1$	;	done if display disabled
+	lda #'6'
+	jsr bsout
+1$	lda #16
+	sec
+	rts
+
+error41	lda #4		;file read error 41
+	jsr error_do
+	bbr6 msgflg,1$	;	done if display disabled
+	lda #'1'
+	jsr bsout
+1$	lda #41
+	sec
+	rts
+
+;.end
+	.page
+msgtbl
+ms1	.byte  cr,'I/O ERROR ','#'+$80
+ms5	.byte  cr,'SEARCHING FOR',' '+$80
+ms10	.byte  cr,'LOADIN','G'+$80
+ms11	.byte  cr,'SAVING',' '+$80
+ms21	.byte  cr,'VERIFYIN','G'+$80
+ms17	.byte  cr,'FOUND',' '+$80
+ms18	.byte  cr,'OK',cr+$80
+
+ram0m	.byte 'N','O'+$80		;for expansion RAM report		[910702]
+ram1m	.byte '1024','K'+$80
+ram2m	.byte '2048','K'+$80
+ram4m	.byte '4096','K'+$80
+
+	.page
+; Print message to screen (if facility enabled)
+
+spmsg
+	bbr7 msgflg,msgrts	;don't print anything if Kernel messages disabled
+
+msg	lda msgtbl,y
+	php
+	and #$7f
+	jsr bsout
+	iny
+	plp
+	bpl msg
+
+msgrts	clc
+	rts
+
+;.end
+	.page
+	.subttl  Kernel Subroutines
+
+;//////////////////   J U M P   T A B L E   R O U T I N E S   \\\\\\\\\\\\\\\\\
+
+setnam	sta fnlen	;set up a filename
+	stx fnadr
+	sty fnadr+1
+	rts
+
+
+
+setlfs	sta la		;set up la, fa & sa variables
+	stx fa
+	sty sa
+	rts
+
+
+
+setbnk	sta ba		;set up ba variable & filename bank
+	stx fnbank
+	rts
+
+
+
+readss	lda fa		;read I/O status for last operation
+	cmp #2
+	beq 10$
+	lda status	;	serial bus status
+	rts
+
+10$	php		;	rs-232 status
+	sei		;		???? this will not work if NMI used ????
+	lda rsstat
+	trb rsstat	;		reset status like 6551 hardware
+	plp
+	rts
+
+
+
+setmsg	sta msgflg	;enable/disable Kernel messages
+	rts
+
+
+
+settmo
+;	sta timout	;??????????? left over from ieee days ??????????????
+	rts
+
+
+memtop	bcc settop	;/////jump entry to read/set top of user RAM
+
+gettop	ldx memsiz	;read top of memory (.c=1)
+	ldy memsiz+1
+
+settop	stx memsiz	;set top of memory (.c=0)
+	sty memsiz+1
+	rts
+
+
+
+
+
+membot	bcc setbot	;///// jump entry to read/set bottom of user RAM
+
+getbot	ldx memstr	;read bottom of memory (.c=1)
+	ldy memstr+1
+
+setbot	stx memstr	;set bottom of memory (.c=0)
+	sty memstr+1
+	rts
+
+
+
+
+
+iobase	ldx #<$d000	;return base address of I/O block in x & y
+	ldy #>$d000
+	rts
+
+	.page
+;  Look up Secondary Address:
+;
+;	Enter with sa sought in y.  Routine looks for match in tables.
+;	Exits with .c=1 if not found, else .c=0 & .a=la, .x=fa, .y=sa
+
+lkupsa
+	tya
+	ldx ldtnd	;get lat, fat, sat table index
+
+1$	dex
+	bmi lkupng	;...branch if end of table (not found)
+	cmp sat,x
+	bne 1$		;...keep looking
+
+lkupok	jsr getlfs	;set up la, fa, sa   (** lkupla enters here **)
+	tax
+	lda la
+	ldy sa
+	clc		;flag 'we found it'
+	rts
+
+
+
+;  Look up Logical file Address:
+;
+;	Enter with la sought in a.  Routine looks for match in tables.
+;	Exits with .c=1 if not found, else .c=0 & .a=la, .x=fa, .y=sa
+
+lkupla
+	tax
+	jsr lookup	;search lat table
+	beq lkupok	;...branch if found
+;	bne lkupng	;else return with .c=1
+
+lkupng	sec		;flag 'not found'
+	rts
+
+	.page
+	.subttl  Print Immediate Routine
+
+;     *** print immediate ***
+;  a JSR to this routine is followed by an immediate ASCII string,
+;  terminated by a $00. the immediate string must not be longer
+;  than 255 characters including the terminator.
+
+primm
+	pha		;save registers
+	phx
+	phy
+
+	ldy #0
+1$	tsx		;increment return address on stack
+	inc $104,x	;and make imparm = return address
+	bne 2$
+	inc $105,x
+2$	lda $104,x
+	sta imparm
+	lda $105,x
+	sta imparm+1
+
+	lda (imparm),y	;fetch character to print (*** always system bank ***)
+	beq 3$		;null= eol
+	jsr bsout	;print the character
+	bcc 1$
+
+3$	ply		;restore registers
+	plx
+	pla
+	rts		;return
+
+;.end
+	.page
+	.subttl  NMI/IRQ Interrupt Handlers
+
+;/////////////////   N M I   I N T E R R U P T   C O D E   \\\\\\\\\\\\\\\\\\\\
+
+nnmi
+	cld			;just in case there's a nerd out there
+
+	lda vic+48
+	pha
+	and #%11111110
+	sta vic+48		;be sure we have I/O (not color) at $DC00
+
+	lda #$7f
+	sta d2icr		;disable NMIs by clearing mask register
+				; (whoever wants them must re-enable them- Kernel doesn't)
+	ldy d2icr		; (must save ICR in .y!)
+	bmi 10$			;...branch if CIA2 interrupt (basic sound stuff)	[910515]
+
+	bit rows		;ScanStopKey. assumes keyboard columns left driving C7
+	bmi prend_1		;...branch if no <stop> key				[910307]
+
+	pla			;forget vic+48
+	lda #0			;restore system base page ????				[910307]
+	tab			; (eg., B65 graphics change base page)
+	jsr restor		;restore system indirects
+	jsr ioinit		;restore default I/O parameters
+	jsr WarmStartDOS	;turn off NewDOS motors, etc.
+	jsr cint		;restore default screen parameters
+
+	jmp nmi_exit		;exit via monitor_exit in case Monitor was mapped in ????
+;	jmp (system_vector)	;<stop><restore> key convention- warm start BASIC
+
+
+
+10$	lda init_status		;call BASIC only if it's installed			[910515]
+	lsr a
+	bcc prend_1		;	BASIC not installed
+	jsr basic_nmi		;	else call BASIC's NMI handler
+	bra prend_1		;rti
+
+	.page
+;/////////////   I R Q   &   B R K   I N T E R R U P T   C O D E   \\\\\\\\\\\\
+
+nirq				;////// Kernel IRQ handler (assumes I/0 at $DC00)
+	cld			;just in case there's a nerd out there
+
+;	lda vic+25		;is this a VIC IRQ?					[910225]
+	ldx #$1a		;				Gardei is an asshole	[910416]
+	lda $cfff,x		;							"
+	bpl 5$			;	no
+	tsb vic+25		;	reset register (write 1's to clear bits)
+	sta vicIRQ		;	but save copy of it for others
+
+5$	lda vic+48
+	sta vic48		;save for updating during IRQ
+	and #%11111110
+	sta vic+48		;be sure we have I/O (not color) at $DC00
+
+	jsr rs232_irq		;rs232 controller
+	jsr editor_irq		;blink cursor, scan keyboard, reset IRQ if Raster, etc.
+	bcc 10$			;	IRQ was not the 50/60Hz raster
+	jsr ClockTick		;decrement FRAME counter & scan stop key
+
+10$	lda init_status		;call BASIC only if it's installed
+	lsr a
+	bcc prend		;	BASIC not installed
+	jsr basic_irq		;do BASIC's IRQ stuff
+
+;20$	bit d1icr		;clear alien IRQs????
+	bra prend		;rti
+
+	.page
+;//////////////   I N T E R R U P T   D I S P A T C H   C O D E   \\\\\\\\\\\\\
+
+nmi
+	sei		;disable IRQ
+	pha		;save registers
+	phx
+	phy
+	phz
+
+;	lda mmucr	;save current memory configuration
+;	pha
+;	lda #sysbnk	;configure memory for system
+;	sta mmucr
+
+	tba		;save user base page, get system base page		[910405]
+	pha
+	lda #0		; (????make this a variable)
+	tab
+
+
+	jmp (inmi)	;nmi indirect	(????assumes RAM-0 in context)
+
+	.page
+irq_kernel		;////// hardware IRQ always comes here!
+	pha
+	phx
+	phy
+	phz
+
+;	lda mmucr	;save current memory configuration
+;	pha
+;	lda #sysbnk	;configure memory for system
+;	sta mmucr
+
+	tba		;save user base page, get system base page		[910405]
+	pha
+	lda #0		; (????make this a variable)
+	tab
+
+	tsy		;locate the stack, so we can directly address it
+	tsx
+	phy		; (push stack pointer)
+	phx
+	ldy #6		;determine if interrupt was an IRQ or BRK		[910405]
+	lda (1,SP),y	;get processor status at interrupt time
+	plx		; (pop stack pointer)
+	ply
+	and #$10	;test BReaK flag
+	bne 1$		;	taken if BRK
+	jmp (iirq)	;	taken if IRQ
+
+
+1$	jsr ($fff6)	;restore system????   (assumes $C000 ROM in)		[910117]
+			;	This is necessary in cases (such as DOS) where RAM-0
+			;	is not in context (hence page-3 indirects are out).
+			;	The problem this presents is primarily the loss of
+			;	the stack (hence BRK bank, address, registers, etc.) 
+	nop		;	Let there be interrupts
+	jmp (ibrk)	;...taken if BRK (go to Monitor)
+
+	.page
+prend			;////// entry from other Kernel routines
+;	pla
+;	sta mmucr	;restore memory configuration
+	lda vic48	;restore color at $DC00 (IRQ)				[901211]
+	  .byte $89
+
+
+prend_1	pla		;restore color at $DC00 (NMI)
+	sta vic+48
+	pla		;restore user base page					[910405]
+	tab
+	plz		;restore registers
+	ply
+	plx
+	pla
+	rti
+
+
+
+
+reset	sei
+	lda #165		;put VIC into newVIC mode
+	sta vic+47
+	lda #150
+	sta vic+47
+	lda #%00100000
+	sta vic+48		;be sure we have ROM at $C000
+	jmp start
+
+
+	.page
+;  This code was moved from above $FE00 to make room up there			[910422]
+;  Print .a as 2 hex digits
+;
+
+print_hex_byte
+;	phx
+;	bsr convert_to_hex
+;	jsr bsout
+;	txa
+;	jsr bsout
+;	plx
+;	rts
+
+
+;  Convert .a to 2 hex digits & print them
+;
+;convert_to_hex
+	pha		;							[910212] FAB
+	lsr a		;msb first
+	lsr a
+	lsr a
+	lsr a
+	bsr 1$
+	pla		;lsb last
+
+1$	and #$0f
+	cmp #$0a
+	bcc 2$
+	adc #6
+2$	adc #'0'
+;	rts
+	bra bsout
+
+;.end
+	.page
+	.subttl  Kernel Diagnostic Routines
+
+	* = $fe00	;???? Need room for this, leave in Dvlpmt System only ????
+
+;			*** PHOENIX ***
+;
+;	> call every logged cartridge's cold start routine.
+;	> check default serial disk unit for 'boot' disk.
+;
+;	order: external low/high, internal low/high, boot disk.
+
+phoenix
+
+;	sei
+;	ldx #3
+;	stx curbnk
+;
+;1$	ldx curbnk
+;2$	lda pat,x
+;	beq 3$		;...branch if this slot empty
+;
+;	ldy #0
+;	lda fkaddr,x
+;	sta pc_hi	;cold start address hi
+;	sty pc_lo	;cold start address lo  ($00 always)
+;	lda fkbank,x
+;	sta bank	;card slot
+;	jsr jsrfar	;call its cold start routine
+;
+;3$	dec curbnk
+;	bpl 1$		;...loop until all function cards called
+;	cli
+;
+;
+;  fall into BOOT and attempt an auto-load/run from disk
+;
+	.page
+;//////////////////      S Y S T E M   C H E C K O U T     \\\\\\\\\\\\\\\\\
+
+	lda #13
+	jsr bsout
+	jsr keyboard_report	;					[901210]
+
+;  This Expansion Memory checker works for the final REC only.		[910702]
+;  Expansion RAM is 1MB, 2MB, or 4MB, starting at bank $40 (64).
+
+;	sei
+	lda ram_ctlr		;save current setup
+	pha
+	ldy #0
+	sty ram_ctlr		;init REC, clear CART bit
+	sty expansion		;init exp bank counter			[910107]
+
+	bit ram_ctlr		;test to see if it's there
+	bmi 30$			; (old REC will fail because it's not R/W)
+
+;	tay			;init External RAM address
+;	sty sal			;		A7-0
+;	sty sah			;		A15-8
+	ldz #$40		;		A22-16
+	ldx #sal
+10$	jsr lda_far		;for each bank	take it out
+	pha			;		save it
+	tza
+	jsr sta_far		;		change it
+	clc
+	adc #$08
+	taz
+	bpl 10$			;		next bank
+
+	ldz #$40		;check it
+	jsr lda_far		;		$40=4MB, $60=2MB, $70=1MB
+	and #$30		;		strip A22
+	neg a			;		subtract from $40
+	adc #$40		;		yields # available banks
+	sta expansion	
+	
+	ldz #$78		;put it back as it was				[911001]
+20$	pla			;for each bank	remember it
+	jsr sta_far		;		put it back
+	tza
+	sec
+	sbc #$08
+	taz
+	cpz #$40
+	bcs 20$			;		next bank
+
+30$	pla			;restore REC as it was, too
+	sta ram_ctlr
+	lda expansion		;report
+	ldy #ram4m-msgtbl
+	cmp #64
+	bcs 40$
+	ldy #ram2m-msgtbl
+	cmp #32
+	bcs 40$
+	ldy #ram1m-msgtbl
+	cmp #16
+	bcs 40$
+	ldy #ram0m-msgtbl
+40$	jsr msg
+	jsr primm
+	  .byte ' EXPANSION RAM',13,0
+
+;	bra scan_devices	;was 'boot'
+
+	.page
+scan_devices			;just scan newDOS drives for now		[910212] FAB
+;	lda #0
+;	sta dos_ctlr
+;	lda dos_ctlr
+;	bne 30$			;must be missing controller chip????
+;					can't happen- F011C decodes DMA chip!
+;	lda #$20
+;	sta dos_ctlr
+;	lda #$18
+;	sta dos_ctlr+1		;	test no good
+;	jsr busywait_fdc	;	no way to tell if drive is there
+;	lda dos_ctlr+2
+;	and #1
+;	beq 20$
+;	jsr primm		;missing internal drive????
+;	.byte 'NO BUILT-IN F011 DRIVE',13,0
+
+20$	lda #$21		;motor+drive
+	sta dos_ctlr
+	lda #$18		;step in
+	sta dos_ctlr+1
+	jsr busywait_fdc
+	lsr dos_ctlr+2		;if trk-0 set...
+	bcc 25$
+	jsr primm		;	no external drive
+	  .byte 'NO ',0
+
+25$	jsr primm		;	else it's there
+	  .byte 'C1565 DRIVE',13,0
+	lda #1
+	sta dos_ctlr		;	turn off motor & led
+;	bra checksum_rom
+	
+;30$	jsr primm
+;	.byte 'NO F011 FDC PRESENT',13,0
+;	bra checksum_rom
+
+	.page
+;scan_devices
+;	jsr primm
+;	.byte 13,'DEVICES PRESENT:',13,' ',0
+;
+;	lda #3			;for device numbers 4 to 15
+;	sta sal
+;	sta sah
+;110$	jsr _unlisten		;	unlisten everybody
+;	lda #0
+;	sta status
+;	inc sal
+;	lda sal
+;	cmp #16
+;	bcs 200$		;		branch if done
+;
+;	jsr _listen		;	get this one's attention
+;	lda #$7f
+;	jsr _second		;	send it a dummy secondary address
+;	bbs7 status,110$	;		next device if no response
+;
+;	smb7 sah		;		flag
+;	lda sal			;	print its number
+;	cmp #10
+;	bcs 115$
+;	lda #' '
+;	jsr bsout
+;	lda sal
+;	bra 120$		;???? problem: internal drives 8&9 always
+;				;     present, even if 9 isn't
+;115$	lda #'1'
+;	jsr bsout		;		>9
+;	clc
+;	lda sal
+;	sbc #10
+;
+;120$	ora #'0'		;		<10
+;	jsr bsout
+;
+;	lda sal			;	print what it is
+;	cmp #8
+;	bcs 130$
+;	jsr primm
+;	.byte ' PRINTER ',0
+;	bra 140$
+;130$	jsr primm
+;	.byte ' DISK ',0
+;
+;140$	bbs7 DOS_flag,150$	;	print where it is
+;
+;	jsr primm
+;	.byte '(INT)',0
+;
+;150$	jsr primm
+;	.byte 13,32,0
+;	bra 110$
+;
+;200$	bbs7 sah,210$		;say 'none' if nothing found
+;	jsr primm
+;	.byte 'NONE FOUND',cr,0
+;
+;210$	lda #13
+;	jsr bsout
+;
+	.page
+checksum_rom			;						[910212] FAB
+	ldy #0
+	sty eal			;simple 16-bit checksum, ignore carries
+	sty eah
+	sty sal			;address range $20000-$3FFFF
+	sty sah
+	ldz #2			;2 Internal ROM banks
+	ldx #sal
+	jsr lda_far		;dummy call to prime DMA list
+
+	ldx #<dma_lda_list
+10$	stx dma_ctlr		;(triggers DMA op)
+	lda dma_byte		;data
+	clc
+	adc eal			;add to checksum
+	bcc 20$
+	inc eah
+20$	sta eal
+	inc dma_lda_list+3	;	next byte
+	bne 10$
+	inc dma_lda_list+4	;	next page
+	bne 10$
+	inc dma_lda_list+5	;	next bank
+	dez
+	bne 10$
+
+	jsr primm
+	  .byte 'ROM CHECKSUM $',0
+	lda eah
+	bsr print_hex_byte
+	lda eal
+	bsr print_hex_byte
+	lda #13
+	jsr bsout
+
+	bra boot		;and fall into boot loader
+
+	.page
+	.subttl  C65 System Vectors
+
+	* = $ff80-51-24-16-32	;indirects to Kernel routines
+
+Kernel_vectors
+	.word  nirq		;IRQ handler
+	.word  monitor_brk	;BRK handler (Monitor)
+	.word  nnmi		;NMI handler
+	.word  nopen		;open
+	.word  nclose		;close
+	.word  nchkin		;chkin
+	.word  nckout		;ckout
+	.word  nclrch		;clrch
+	.word  nbasin		;basin
+	.word  nbsout		;bsout
+	.word  nstop		;stop key scan
+	.word  ngetin		;getin
+	.word  nclall		;clall
+	.word  monitor_parser	;monitor command parser
+	.word  nload		;load
+	.word  nsave		;save
+Kernel_vectors_end
+
+	* = $ff80-51-24-16	;indirects to low level serial bus routines
+
+Serial_vectors
+	.word  talk
+	.word  listen
+	.word  talksa
+	.word  second
+	.word  acptr
+	.word  ciout
+	.word  untalk
+	.word  unlisten
+Serial_vectors_end
+
+	* = $ff80-51-24		;indirects to low level newDOS routines
+
+DOS_vectors
+	.word  DOS_talk
+	.word  DOS_listen
+	.word  DOS_talksa
+	.word  DOS_second
+	.word  DOS_acptr
+	.word  DOS_ciout
+	.word  DOS_untalk
+	.word  DOS_unlisten
+DOS_vectors_end
+
+
+DOS_jumps
+	.word  Get_DOS
+	.word  Leave_DOS
+	.word  ColdStartDOS	;						[910320]
+	.word  WarmStartDOS	;						[910320]
+
+	.page
+	.subttl  C65 OS Jump Table
+;///////////////////   K E R N E L   J U M P   T A B L E   \\\\\\\\\\\\\\\\\\\\
+
+
+	* = $ff80-51	;new 'jmps' for C65 (3*17), conforms to C128 jump table
+
+
+	jmp spin_spout		;setup fast serial port for input or output
+	jmp close_all		;close all logical files for a given device
+	jmp c64mode		;reconfigure system as a c/64 (no return!)
+	jmp monitor_call	;map in Monitor & call it
+;????	jmp dma_call		;initiate DMA request
+	jmp bootsys		;boot alternate system from disk			[910110]
+	jmp phoenix		;call carts' cold start routines, disk boot loader
+	jmp lkupla		;search tables for given la
+	jmp lkupsa		;search tables for given sa
+	jmp swapper		;swap to alternate display device			(editor)
+;????	jmp dlchr  palette?	;init 80-col character ram				(editor)
+	jmp pfkey		;program function key					(editor)
+	jmp setbnk		;set bank for load/save/verify/open
+;????	jmp getcfg restore_sys?	;convert bank to MMU configuration
+	jmp jsr_far		;JSR to any bank, RTS to calling bank
+	jmp jmp_far		;JMP to any bank
+	jmp lda_far		;LDA (X),Y from bank Z
+	jmp sta_far		;STA (X),Y to   bank Z
+	jmp cmp_far		;CMP (X),Y to   bank Z
+	jmp primm		;print immediate  (always JSR to this routine!)
+
+	.page
+	* = $ff80		;conforms to C64 jump table
+
+		.byte $ff	;release number of C65 Kernel ($FF=not released)
+
+		jmp cint	;init screen editor & display chips			(editor)
+		jmp ioinit	;init I/O devices (ports, timers, etc.)
+		jmp ramtas	;initialize RAM for system
+		jmp restor 	;restore vectors to initial system
+		jmp vector 	;change vectors for user
+		jmp setmsg 	;control o.s. messages
+_second		jmp (isecond)	;send sa after listen
+_talksa		jmp (italksa)	;send sa after talk
+		jmp memtop 	;set/read top of memory
+		jmp membot 	;set/read bottom of memory
+		jmp key		;scan keyboard						(editor)
+		jmp settmo	;old IEEE set timeout value				(unused)
+_acptr		jmp (iacptr)	;read a byte from active serial bus talker
+_ciout		jmp (iciout)	;send a byte to active serial bus listener
+_untalk		jmp (iuntalk)	;command serial bus device to stop talking
+_unlisten	jmp (iunlisten)	;command serial bus device to stop listening
+_listen		jmp (ilisten)	;command serial bus device to listen
+_talk		jmp (italk)	;command serial bus device to talk
+		jmp readss 	;return I/O status byte
+		jmp setlfs 	;set la, fa, sa
+		jmp setnam 	;set length and fn adr
+open		jmp (iopen) 	;open logical file
+close		jmp (iclose) 	;close logical file
+chkin		jmp (ichkin) 	;open channel in
+ckout		jmp (ickout) 	;open channel out
+clrch		jmp (iclrch) 	;close I/O channel
+basin		jmp (ibasin) 	;input from channel
+bsout		jmp (ibsout) 	;output to channel
+		jmp load	;load from file
+		jmp save	;save to file
+		jmp Set_Time	;set internal clock
+		jmp Read_Time	;read internal clock
+stop		jmp (istop) 	;scan stop key
+getin		jmp (igetin) 	;get char from queue
+clall		jmp (iclall) 	;clear all logical files (see close_all)
+		jmp ScanStopKey	;(was increment clock) & scan stop key
+		jmp scrorg 	;return current screen window size			(editor)
+		jmp plot 	;read/set x,y coord					(editor)
+		jmp iobase 	;return I/O base
+
+
+	* = $fff6
+
+		.word c65mode								[910115]
+		.word c64mode
+
+
+	* = $fffa
+
+		.word nmi	;processor hardware vectors
+		.word reset
+		.word irq_kernel
+
+
+;.end

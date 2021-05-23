@@ -82,6 +82,8 @@ build2 KERNAL_C128_03 kernal
 build2 KERNAL_C128_05 kernal
 build2 KERNAL_C128_06 kernal
 
+build2 KERNAL_C65 system
+
 build1 KERNAL_CBM2_1982-11-19 newkernal
 build1 KERNAL_CBM2_1983-05-31 kernal
 build1 KERNAL_CBM2_1983-07-07 kernal
@@ -113,6 +115,9 @@ build2 BASIC_TED basic
 
 build2 BASIC_C128_03 basic
 build2 BASIC_C128_04 basic
+
+build2 BASIC_C65 b65
+build2 GRAPHICS_C65 graphics
 
 build1 BASIC_CBM2_1982-11-19 bas256 # or bas64 bas128 bas192 bas256
 build1 BASIC_CBM2_1983-05-31 cbm256 # or cbm128
@@ -156,6 +161,8 @@ build2 DOS_1551 d1551
 build2 DOS_1541_05 1541
 build2 DOS_1541C_02 serlib
 build2 DOS_1541C_03 serlib
+
+build2 DOS_C65 dos
 
 build1 PRINTER_8023P us.ptr.src
 

@@ -1,0 +1,1005 @@
+	.nam SYSTEM/65 DEVELOPMENT (C)1991 CBM
+	.subttl *** Copyright (C) 1991  by  Commodore Business Machines, Inc. ***
+
+;  ***************************************************************************
+;  *                               //                                        *
+;  *              CCCCCCC         //    6666666     555555555                *
+;  *             CCC   CCC       //    666   666    555                      *
+;  *            CCC             //    666           555                      *
+;  *            CCC            //     666 6666      55555555                 *
+;  *            CCC           //      6666   666          555                *
+;  *            CCC          //       666     666          555               *
+;  *             CCC   CCC  //         666   666    555   555                *
+;  *              CCCCCCC  //           6666666      5555555                 *
+;  *                      //                                                 *
+;  *                                                                         *
+;  *    SSSSSSS   YYY   YYY   SSSSSSS   TTTTTTTTT  EEEEEEEEE  MMM      MMM   *
+;  *   SSS   SSS   YY   YY   SSS   SSS     TTT     EEE        MMMM    MMMM   *
+;  *   SSS          YY YY    SSS           TTT     EEE        MMMMM  MMMMM   *
+;  *    SSSSSSS      YYY      SSSSSSS      TTT     EEEEEE     MMM MMMM MMM   *
+;  *         SSS     YYY           SSS     TTT     EEE        MMM  MM  MMM   *
+;  *   SSS   SSS     YYY     SSS   SSS     TTT     EEE        MMM      MMM   *
+;  *    SSSSSSS      YYY      SSSSSSS      TTT     EEEEEEEEE  MMM      MMM   *
+;  *									     * 
+;  *        Copyright (C)1991  by   Commodore Business Machines, Inc.        *
+;  *									     *
+;  *			    All  Rights  Reserved			     *
+;  *									     *
+;  ***************************************************************************
+  
+;			ROM VERSION  911112  (ver 0.9B)
+  
+;	****************************************************************** 
+;	*                                                                * 
+;	* This listing contains confidential and proprietary information *
+;	* of CBM, Inc.  The reproduction, dissemination or disclosure to *
+;	* others without express written permission is prohibited.  This *
+;	* software is intended for use in  Commodore C/65 systems only.  *
+;	*                                                                * 
+;	*  The  information  in  this  document  is  subject  to change  * 
+;	*                       without notice.                          * 
+;	*                                                                * 
+;	*  No  responsibility  is  assumed  for the reliability of this  * 
+;	*                          software.                             * 
+;	*                                                                * 
+;	****************************************************************** 
+
+
+;	This version written and assembled by Fred Bowen using BSO format.
+	.page
+	.subttl C65 Macro Definitions
+
+;	.blist
+;
+;phw	.macro %a
+;	phd %a
+;	.endm
+;
+;
+;map	.macro
+;	aug		;map
+;	.endm
+;
+	.page
+	.subttl  C/65 Kernel & Editor Declarations
+
+; Based upon C128 declare
+
+	* = $0000
+
+d6510		*=*+1		;6510 data direction register
+r6510		*=*+1		;6510 data register
+
+bank		*=*+1		;Monitor & Kernel JSR/JMP_FAR registers
+pc_hi		*=*+1
+pc_lo		*=*+1
+s_reg		*=*+1
+a_reg		*=*+1
+x_reg		*=*+1
+y_reg		*=*+1
+z_reg		*=*+1
+stkptr		*=*+1
+
+
+	* = $0059		;Monitor base page allocations
+
+m0		*=*+3		; (uses BASIC temp area)
+m1		*=*+3
+m2		*=*+3
+txtptr		= $7a
+
+
+	* = $0090		;Kernel/Editor base page allocations
+
+status		*=*+1		;serial bus status byte
+stkey		*=*+1		;stop key flag
+partial		*=*+1		;signals partial close for close
+verify		*=*+1		;signals verify mode for load
+buf_flag	*=*+1		;serial buffered char flag (was c3p0)
+bsour		*=*+1		;char buffer for serial
+serial		*=*+1		;fast serial internal/external flag
+count		*=*+1		;temp used by serial routines
+ldtnd		*=*+1		;index to end of logical file table
+dfltn		*=*+1		;current (default) input device #
+dflto		*=*+1		;current (default) output device #
+keyboard_lock	*=*+1		;locks keyboard during scan
+cmp_byte	*=*+1		;used as a temp by verify routines (moved from C128)
+msgflg		*=*+1		;os message flag enable
+t1		*=*+1		;temporary 1, used by load, save, & editor keyset
+t2		*=*+1		;temporary 2, used by load, save, & editor keyset
+vicIRQ		*=*+1		;VIC IRQ flags at time of IRQ (was 3-byte jiffie clock)
+vic48		*=*+1		;VIC reg 48 at time of IRQ
+DOS_flag	*=*+1		;internal/external DOS device			[910710]
+EOI_flag	*=*+1		;temp used by serial routine (was r2d2)
+bsour1		*=*+1		;temp used by serial routine
+
+rs232_temp	*=*+1		;temp used by rs232 OPEN
+rsstat		*=*+1		;traditional c64/128 (6551) status byte
+rs232_status	*=*+1		;rs232 status byte
+rs232_flags	*=*+1		;rs232 open flag, xon/xoff status
+rs232_jam	*=*+1		;rs232 system character
+rs232_xon_char	*=*+1		;rs232 XON character (null=disabled)
+rs232_xoff_char	*=*+1		;rs232 XOFF character (null=disabled)
+
+sal		*=*+1
+sah		*=*+1
+eal		*=*+1
+eah		*=*+1
+
+rs232_xmit_empty 	*=*+1	;rs232 xmit buffer empty flag (for close)
+rs232_rcvr_buffer_lo	*=*+1	;rs232 lowest page of input buffer
+rs232_rcvr_buffer_hi	*=*+1	;rs232 highest page of input buffer
+rs232_xmit_buffer_lo	*=*+1	;rs232 lowest page of output buffer
+rs232_xmit_buffer_hi	*=*+1	;rs232 highest page of output buffer
+rs232_high_water	*=*+1	;rs232 point at which receiver XOFFs
+rs232_low_water		*=*+1	;rs232 point at which receiver XONs
+
+fnlen		*=*+1		;length current file n str
+la		*=*+1		;current file logical addr
+sa		*=*+1		;current file 2nd addr
+fa		*=*+1		;current file primary addr
+fnadr		*=*+2		;addr current file name str
+ba		*=*+1		;bank for current load/save/verify operation
+fnbank		*=*+1		;bank where current filename is found (at 'fnadr')
+vicbank		*=*+1		;bank for VIC (0=internal, else external expansion RAM)
+stal		*=*+1		;save (start address)
+stah		*=*+1		;save (start address)
+
+memuss		*=*+2		;alternate load address, also used by vector routine
+
+rs232_rcvr_head	*=*+2		;rs232 pointer to end of buffer
+rs232_rcvr_tail	*=*+2		;rs232 pointer to start of buffer
+rs232_xmit_head	*=*+2		;rs232 pointer to end of buffer
+rs232_xmit_tail	*=*+2		;rs232 pointer to start of buffer
+
+	.page
+;  40/80 column   S C R E E N   E D I T O R   declarations
+;
+;  GLOBAL Editor variables
+
+keytab		*=*+2		;keyscan table pointer
+imparm		*=*+2		;PRIMM utility string pointer
+
+ndx		*=*+1		;index to keyboard queue
+kyndx		*=*+1		;pending function key flag
+keyidx		*=*+1		;index into pending function key string
+shflag		*=*+1		;keyscan shift key status
+sfdx		*=*+1		;keyscan current key index
+lstx		*=*+1		;keyscan last    key index
+crsw		*=*+1		;<cr> input flag
+
+mode		*=*+1		;40/80 column mode flag ($00=80 column mode, default)
+graphm		*=*+1		;text/graphic mode flag
+
+charen		*=*+1		;RAM/ROM VIC character character fetch flag (bit-2)
+
+
+
+; The following locations are shared by several Editor routines...
+
+.share
+sedsal		*=*+2		;pointers for MOVLIN	???? unused (used by swap)
+sedeal		*=*+2		;			???? unused (used by swap)
+sedt1		*=*+1		;SAVPOS
+sedt2		*=*+1		;
+.unshare
+
+	*=.share
+keysiz		*=*+1		;programmable key variables
+keylen		*=*+1		;
+keynum		*=*+1		;
+keynxt		*=*+1		;
+keyadr		*=*+1		;???? unused
+keybnk		*=*+1		;
+
+	*=.share
+bitmsk		*=*+1		;temporary for TAB & line wrap routines
+
+	*=.unshare
+
+	.page
+;  LOCAL Editor variables
+
+pnt		*=*+2		;pointer to current line (text)
+user		*=*+2		;pointer to current line (attribute)
+
+scbot		*=*+1		;window lower limit
+sctop		*=*+1		;window upper limit
+sclf		*=*+1		;window left  margin
+scrt		*=*+1		;window right margin
+
+lsxp		*=*+1		;current input column start
+lstp		*=*+1		;current input line   start
+indx		*=*+1		;current input line   end
+
+tblx		*=*+1		;current cursor line
+pntr		*=*+1		;current cursor column
+
+lines		*=*+1		;maximum number of screen lines
+columns		*=*+1		;maximum number of screen columns
+
+datax		*=*+1		;current  character to print
+lstchr		*=*+1		;previous character printed  (for <esc> test)
+color		*=*+1		;current  attribute to print (default fgnd color)
+tcolor		*=*+1		;saved attribute to print    ('insert' & 'delete')
+
+rvs		*=*+1		;reverse mode flag	B7
+qtsw		*=*+1		;quote mode flag	B7
+insrt		*=*+1		;insert mode flag	# chars to insert, 0=not insert mode
+insflg		*=*+1		;auto-insert mode flag
+
+locks		*=*+1		;disables  <c=><shift>,   <ctrl>-S,  Function keys
+scroll		*=*+1		;disables  screen scroll, line linker, autoscroll
+beeper		*=*+1		;disables  <ctrl>-G
+
+lintmp		*=*+1		;temporary pointer to last line for LOOP4		[910722]
+
+;  remaining  ZERO PAGE  to be reserved for application software
+
+
+.applications_zp
+
+
+	* = $ff
+
+.basic_reserved_zp
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE ONE  declarations  (processor STACK)
+;
+
+
+	* = $0100
+
+bad		*=*+16		;(this area used by BASIC, 16 bytes)
+
+
+	* = $0110
+
+;  System memory MAP configurations
+
+system_map	*=*+4		;Kernel/Editor, I/O, BASIC,   RAM-0
+monitor_map	*=*+4		;Kernel/Editor, I/O, Monitor, RAM-0
+dos_map		*=*+4		;Kernel/Editor, I/O, DOS,     RAM-1
+environment	*=*+4		;Current memory configuration
+
+
+;  System DMA lists		Kernel	(3 @ 12bytes each = 36 bytes)
+;				BASIC	(2 @ 12bytes each = 24 bytes)
+;  (keep lists contiguous to allow for up to 5 chained operations)
+
+dma_lda_list	*=*+12		;This list used by LDA_FAR routine
+dma_sta_list	*=*+12		;This list used by STA_FAR routine
+dma_list	*=*+12		;This list used by Editor & Monitor
+		*=*+24		;Two lists reserved for BASIC
+dma_byte	*=*+1		;Source/destination for LDA/STA far DMA routines
+
+
+;  System Stack
+
+stack_bottom	= *
+stack_top	= $01ff		;BASIC inits stack pointer to $1FB, Kernel to $1FF
+
+stack_space	= stack_top-stack_bottom
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE TWO  declarations  (input buffer & Kernel RAM code)
+;
+
+	* = $0200
+
+buf		*=*+161		;Line input buffer  (used by BASIC & Monitor)
+
+
+	* = $02b0
+
+keyd		*=*+10		;IRQ keyboard buffer		(moved from $3xx area)	[910710]
+
+
+	* = $02c0		;BASIC vars & pointers
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE THREE  declarations   (indirect vectors, Kernel tables, BASIC RAM code)
+
+	* = $02fa		;BASIC indirect vectors
+
+iautoscroll	*=*+2		;Autoscroll vector passed through by Editor
+
+	* = $0314		;Kernel indirect vectors:
+
+iirq		*=*+2		;IRQ
+ibrk		*=*+2		;BRK
+inmi		*=*+2		;NMI
+iopen		*=*+2
+iclose		*=*+2
+ichkin		*=*+2
+ickout		*=*+2
+iclrch		*=*+2
+ibasin		*=*+2
+ibsout		*=*+2
+istop		*=*+2
+igetin		*=*+2
+iclall		*=*+2
+exmon		*=*+2		;Monitor command indirect
+iload		*=*+2
+isave		*=*+2
+
+italk		*=*+2		;IEEE indirects for DOS		(moved from $3f0)	[910710]
+ilisten		*=*+2
+italksa		*=*+2
+isecond		*=*+2
+iacptr		*=*+2
+iciout		*=*+2
+iuntalk		*=*+2
+iunlisten	*=*+2
+
+; Editor indirect vectors to routines & tables:
+
+ctlvec		*=*+2		;'contrl' characters
+shfvec		*=*+2		;'shiftd' characters
+escvec		*=*+2		;'escape' characters
+keyvec		*=*+2		;post keyscan, pre-evaluation of keys
+keychk		*=*+2		;post-evaluation, pre-buffering of keys
+
+decode		*=*+12		;vectors to keyboard matrix decode tables
+
+	.page
+; Kernel I/O channel tables
+;
+
+lat		*=*+10		;logical file numbers
+fat		*=*+10		;primary device numbers
+sat		*=*+10		;secondary addresses
+
+
+; Kernel "common" RAM code area
+;
+
+	* = $0380		;Kernel RAM code
+
+ram_code			;Downloaded RestoreSystem, JMP/JSR_FAR routines
+
+	* = $03fc
+config				;Memory Configuration at BRK			[911112]
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  PAGE FOUR & HIGHER  declarations
+;
+
+		* = $0400		;BASIC run-time stack (512 bytes)
+bootsys_block				;BOOTSYS block loads here		[910110]
+
+
+;  MONITOR absolute declarations	(moved from $1100 area)			[910710]
+;
+
+monitor_abs
+xcnt		*=*+32			;compare buffer
+hulp		*=*+10
+mtemp		*=*+1
+format		*=*+1			;asm/dis
+length		*=*+1
+msal		*=*+3			;for assembler
+sxreg		*=*+1			;1 byte temp used all over
+syreg		*=*+1			;1 byte temp used all over
+wrap		*=*+1			;1 byte temp for assembler
+number		*=*+1			;parse number conversion
+shift		*=*+1			;parse number conversion
+numbers		*=*+1
+opcode		*=*+1
+hash_pointer	*=*+1
+operand_mask	*=*+1
+operand_size	*=*+1
+temps
+
+
+;  FUNCTION KEY ROM CARD tables
+;
+;		* = $xxxx		;???? not implemented in C65
+;
+; curbnk	*=*+1			;current function key ROM bank being polled
+; pat		*=*+4			;physical address table (ID's of logged-in cards)
+
+	.page
+; Display Areas:  40/80 column display screen and Sprite definitions
+;
+
+		* = $0600		;Sprite definition area
+sprite_data	* = *+512
+
+
+sprite_ptrs_80	  = $7f8		;Offsets from screen beginning to sprite pointers
+sprite_ptrs_40	  = $3f8
+
+
+		* = $0800		;Video matrix: VIC-III 80-column text screen
+screen		* = *+2000		;80 columns x 25 lines
+					;remaining bytes reserved for VIC sprite pointers)
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+		* = $1000		;programmable function key definitions
+
+pkynum		  = 16			;number of definable keys  (f1-f14, help, <shft>run)
+pkybuf		* = *+pkynum		;programmable function key lengths table
+pkydef		* = *+256-pkynum	;programmable function key strings
+
+
+;  ABSOLUTE  Kernel variables
+;
+		* = $1100
+
+system_vector	*=*+2		;vector to restart system (usually BASIC warm start)
+dejavu		*=*+1		;Kernel warm/cold initialization status byte
+palnts		*=*+1		;PAL/NTSC system flag
+init_status	*=*+1		;flags reset vs. NMI status for initialization routines
+save_status	*=*+1		;saves BASIC's init status during Monitor call
+default_drive	*=*+1		;default device number
+expansion	*=*+1		;flags presence (amount????) of expansion RAM		[910107]
+
+memstr		*=*+2		;pointer to bottom of available memory in system bank
+memsiz		*=*+2		;pointer to top of available memory in system bank
+
+timer		*=*+3		;decrementing binary frame counter      (unused????)	[910730]
+palcnt		*=*+1		;counter for PAL (jiffie adjustment)    (unused????)	[910730]
+
+speed		*=*+1		;save system speed during serial bus ops
+;		*=*+1		;???? spare (was sprite enables during serial bus ops)	[910429]
+vudeja		*=*+1		;flags disk_sei call
+
+rs232_params
+rs232_baud	*=*+1		;rs232 baud rate index	(0-15)
+rs232_word	*=*+1		;rs232 word length	(0-3: 8,7,6,5)
+rs232_parity	*=*+1		;rs232 parity mode	(b1:enable, b0:even/odd)
+rs232_stop	*=*+1		;rs232 stop bits	(unused for 6511 type UART) ????
+rs232_duplex	*=*+1		;rs232 duplex mode	(used for half duplex RTS/CTS)
+rs232_xline	*=*+1		;rs232 xline mode	(0=3-wire, 1=xline)
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+;  GLOBAL  ABSOLUTE  Editor Declarations
+
+xmax		*=*+1		;keyboard queue maximum size
+pause		*=*+1		;<ctrl>-S flag
+rptflg		*=*+1		;enable key repeats
+kount		*=*+1		;delay between key repeats
+delay		*=*+1		;delay before a key starts repeating
+lstshf		*=*+1		;delay between <C=><shft> toggles
+dead_keys	*=*+1		;national deadkey enable/pending key flag
+
+blnon		*=*+1		;VIC cursor mode (blinking, solid)
+blnsw		*=*+1		;VIC cursor disable
+blnct		*=*+1		;VIC cursor blink counter
+gdbln		*=*+1		;VIC cursor character before blink
+gdcol		*=*+1		;VIC cursor color before blink
+
+vm1		*=*+1		;VIC text screen/character base pointer
+ldtb1_sa	*=*+1		;high byte of sa of VIC screen (use with vm1 to move screen)
+
+mono		*=*+1		;monochrome flag ($80 = color disabled)
+
+ ;curmod	*=*+1		;cursor mode (when enabled)
+ ;sav80a	*=*+1		;temporary for 80-col routines
+ ;sav80b	*=*+1		;temporary for 80-col routines
+ ;curcol	*=*+1		;vdc cursor color before blink
+ ;split		*=*+1		;vic split screen raster value
+ ;hold_off	*=*+1		;flag set by user wanting full control of VIC reserved
+
+tabmap		*=*+10		;bitmap of TAB stops		(moved from $3xx area)	[910710]
+bitabl		*=*+4		;bitmap of line wraps
+
+mouse_enable	*=*+1		;mouse driver vars
+mouse_pointer	*=*+1		;sprite pointer used by mouse driver
+opotx		*=*+1
+opoty		*=*+1
+newvalue	*=*+1
+oldvalue	*=*+1
+mouse_top	*=*+1		;margins for mouse pointer, assuming hot spot at sprite 0,0
+mouse_bottom	*=*+1		;							[910307]
+mouse_left	*=*+1
+mouse_right	*=*+1
+
+xpos		= vic+0		;sprite pointer X position (lsb)
+ypos		= vic+1		;sprite pointer Y position
+xposmsb		= vic+16	;sprite pointer X position (msb)
+ ;active	= $117e		;basic7.0 active sprite flag (0=inactive)
+ ;vicdata	= $11d6		;basic7.0 copy of VIC register image
+
+autoscrollupchr	*=*+1		;normally crsrdn
+autoscrolldnchr	*=*+1		;normally crsrup
+
+save_cursor_column	*=*+1	;esc^ saves x-position here				[911003]
+save_cursor_line	*=*+1	;           y-position here
+save_input_column	*=*+1	;	    where input began here
+save_input_line		*=*+1
+
+		* = $1170
+
+; Area from $1170-$11FF used by BASIC
+
+	.page
+		* = $1200	;BASIC absolute variables
+		* = $1300	;BASIC DOS buffer
+
+		* = $1400	;RS-232 Input buffer
+rs232_input_buffer
+
+		* = $1500	;RS-232 Output buffer
+rs232_output_buffer
+
+
+
+		* = $2000	;Beginning of Bankable memory & ROM code overlays.
+user_memory			;BASIC text starts here (Kernel sets 'membot' here)
+
+	.page
+; DOS passes parameters between itself and the Kernel via unused VIC attribute
+; bytes, because they are accessible in any memory configuration in I/O space.
+;
+
+dos_safe_place	= $e000-14		;interface used in both C64 & c65 modes
+					;(image of RAM at $1FFFx, top of second RAM bank)
+
+.a1		= dos_safe_place+0	;save .a here
+.x1		= dos_safe_place+1	;save .x here
+.y1		= dos_safe_place+2	;save .y here
+.z1		= dos_safe_place+3	;save .z here
+.status		= dos_safe_place+4	;I/O status here, to be merged with ST
+.pcl		= dos_safe_place+5	;Get_DOS saves caller's PC here
+.pch		= dos_safe_place+6
+.pclss		= dos_safe_place+7	;Set_DOS_ST saves callers PC here
+.pchss		= dos_safe_place+8
+.sp		= dos_safe_place+9	;save system stack pointer here
+.config		= dos_safe_place+10	;save system configuration here (4 bytes)
+
+	.page
+;////////////////////   I  /  O    D E V I C E   M A P S   \\\\\\\\\\\\\\\\\\\
+
+
+vicchr		= $d000		;VIC character ROM (under I/O)
+
+vic		= $d000		;VIC registers
+
+dos_ctlr	= $d080		;FDC controller (F011C)
+ram_ctlr	= $d0a0		;RAM controller (external expansion RAM)
+
+palette_r	= $d100		;color palettes
+palette_g	= $d200
+palette_b	= $d300
+
+sid1		= $d400		;SID registers
+sid2		= $d420
+
+uart		= $d600		;6511 type UART
+e_keys		= $d607		;extended key lines, bits 0 & 1
+e_keys_ddr	= $d608		;data direction for extended key lines
+fsdir		= $d609		;fast serial (b7=mode, b6=direction)
+
+dma_ctlr	= $d700		;DMA controller
+
+viccol		= $d800		;VIC attributes (color, etc., 2K bytes)
+				;	(image of RAM at $1F800)
+
+cia1		= $dc00		;6526 #1
+
+cia2		= $dd00		;6526 #2
+
+io1		= $de00		;expansion I/O slot (reserved)
+
+io2		= $df00		;expansion I/O slot (reserved)
+	.page
+;	          C65  I/O  MAP
+;
+;	$DFFF _  _______________ -----------|
+;		|		|           |
+;	$DF00 -	|  EXT I/O - 2	|           |
+;	$DE00 -	|  EXT I/O - 1	|           |
+;		|_______________|           |
+;		|		|           |
+;	$DD00 -	|  CIA2 - 6526	|           |
+;	$DC00 -	|  CIA1 - 6526	|           |
+;		|_______________|           |
+;			    |	            |
+;			    |	ATTRIBUTE   |	<<<< mapped from RAM $1F800
+;			    |	 & COLOR    |
+;			    |	     RAM    |
+;			    |	            |
+;	$D800 _ ____________|___------------|
+;		|		|
+;		|     DMAgic	|
+;	$D700 _ |_______________|
+;		|		|
+;		|     UART	|
+;	$D600 _ |_______________|
+;		|		|
+;	$D440 -	| LFT SID  8580	|
+;	$D400 -	| RGT SID  8580	|
+;		|_______________|
+;	$D300 _	| BLU		|
+;	$D200 _	| GRN  PALETTE	|
+;	$D100 _ |_RED___________|
+;		|		|
+;	$D0A0 -	|     REC	|						[910129]
+;		|_______________|
+;		|		|
+;		|  DOS - 4191	|
+;	$D080 _ |_______________|
+;		|		|
+;		|  VIC - 4567	|
+;	$D000 _ |_______________|
+;
+;		 _______________
+;	$0001 -	|		|
+;		|  "4510" PORT	|
+;	$0000 _ |_______________|
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 6526 CIA  Complex Interface Adapter #1
+;   keyboard / joystick / paddles / lightpen / fast disk
+;pin(joystick)
+; 1 pra0 : keybd output c0 / joystick #1 up	/ mouse right button
+; 2 pra1 : keybd output c1 / joystick #1 down
+; 3 pra2 : keybd output c2 / joystick #1 left	/ paddle A fire button
+; 4 pra3 : keybd output c3 / joystick #1 right	/ paddle B fire button
+; 6 pra4 : keybd output c4 / joystick #1 fire	/ mouse left button
+;   pra5 : keybd output c5 /
+;   pra6 : keybd output c6 /			/ select port #1 paddle/mouse
+;   pra7 : keybd output c7 /			/ select port #2 paddle/mouse
+;
+; 1 prb0 : keybd input  r0 / joystick #2 up	/ mouse right button
+; 2 prb1 : keybd input  r1 / joystick #2 down
+; 3 prb2 : keybd input  r2 / joystick #2 left	/ paddle A fire button
+; 4 prb3 : keybd input  r3 / joystick #2 right	/ paddle B fire button
+; 6 prb4 : keybd input  r4 / joystick #2 fire	/ mouse left button
+;   prb5 : keybd input  r5 /
+;   prb6 : keybd input  r6 / timer b: toggle/pulse output
+;   prb7 : keybd input  r7 / timer a: toggle/pulse output
+;
+;   timer 1 & cra : fast disk
+;   timer 2 & crb : 
+;
+;   tod    :
+;   sdr    :
+;   icr    :
+
+	* = cia1	;device #1:  6526
+
+colm
+d1pra		*=*+1	;keyboard outputs / joystick / paddles / lightpen / mouse
+rows
+d1prb		*=*+1	;keyboard inputs  / joystick / paddles /          / mouse
+d1ddra		*=*+1
+d1ddrb		*=*+1
+d1t1l		*=*+1
+d1t1h		*=*+1
+d1t2l		*=*+1
+d1t2h		*=*+1
+d1tod1		*=*+1
+d1tods		*=*+1
+d1todm		*=*+1
+d1todh		*=*+1
+d1sdr		*=*+1
+d1icr		*=*+1
+d1cra		*=*+1
+d1crb		*=*+1
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 6526 CIA  Complex Interface Adapter #2
+;   user port / rs232 / serial bus / VIC memory / NMI
+;
+;   pra0 : va14
+;   pra1 : va15
+;   pra2 : rs232  transmitted data		 (user port   pin M )
+;   pra3 : serial ATN  output			 (serial port pin 3 )
+;   pra4 : serial CLK  output			 (serial port pin 4 )
+;   pra5 : serial DATA output			 (serial port pin 5 )
+;   pra6 : serial CLK  input			 (serial port pin 4 )
+;   pra7 : serial DATA input			 (serial port pin 5 )
+;
+;   prb0 : user port / rs232 received data	 (user port   pin C )
+;   prb1 : user port / rs232 request to send	 (user port   pin D )
+;   prb2 : user port / rs232 data terminal ready (user port   pin E )
+;   prb3 : user port / rs232 ring indicator	 (user port   pin F )
+;   prb4 : user port / rs232 carrier detect	 (user port   pin H )
+;   prb5 : user port				 (user port   pin J )
+;   prb6 : user port / rs232 clear to send	 (user port   pin K )
+;   prb7 : user port / rs232 data set ready	 (user port   pin L )
+;
+;   timer 1 & cra : 
+;   timer 2 & crb : 
+;
+;   tod    :
+;   sdr    :
+;   icr    : NMI (/IRQ)
+
+	* = cia2	;device #2: 6526
+
+d2pra		*=*+1	;serial bus / rs232 / va14,15
+d2prb		*=*+1	;user port  / rs232
+d2ddra		*=*+1
+d2ddrb		*=*+1
+d2t1l		*=*+1
+d2t1h		*=*+1
+d2t2l		*=*+1
+d2t2h		*=*+1
+d2tod1		*=*+1
+d2tods		*=*+1
+d2todm		*=*+1
+d2todh		*=*+1
+d2sdr		*=*+1
+d2icr		*=*+1	;NMI's
+d2cra		*=*+1
+d2crb		*=*+1
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 6511 UART		Universal Asynchronus Receiver Transmitter
+;
+; Reg Mode Name		D7	D6	D5	D4	D3	D2	D1	D0	
+;
+;  0  R/W   Data	(receive & transmit data)
+;  1  R     Status	Tdone	Empty	EndT	Idle	Frame	Parity	Overrun	Full
+;     W			--	EndT	Idle	--	--	--	--	--
+;  2  R/W   Control	XmitE	RcvrE	[Async/Sync]	[Word Length]	[Parity Mode]
+;  3  R/W   Baud Low	 7	 6	 5	 4	 3	 2	1	0
+;  4  R/W   Baud High	15	14	13	12	11	10	9	8
+;  5  R/W   INT Mask	XmitIRQ	RcvrIRQ	XmitNMI	RcvrNMI	--	--	--	--
+;  6  R     INT Flag	XmitIRQ	RcvrIRQ	XmitNMI	RcvrNMI	--	--	--	--
+
+
+	* = uart	;6511 type
+
+uart_data	*=*+1
+uart_status	*=*+1
+uart_control	*=*+1
+uart_baud	*=*+2
+uart_irq_mask	*=*+1
+uart_irq	*=*+1
+
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; 8520 SID		Sound Interface Device
+;
+; REG #	 _______________________________________________________
+;  0_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-1
+;  1_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+;  2_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+;  3_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+;  4_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+;  5_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+;  6_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+;  7_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-2
+;  8_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+;  9_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+; 10_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+; 11_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+; 12_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+; 13_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+; 14_	|  F7  |  F6  |  F5  |  F4  |  F3  |  F2  |  F1  |  F0  |______ Frequency lo    Voice-3
+; 15_	|  F15 |  F14 |  F13 |  F12 |  F11 |  F10 |  F9  |  F8  |______ Frequency hi
+; 16_	|  PW7 |  PW6 |  PW5 |  PW4 |  PW3 |  PW2 |  PW1 |  PW0 |______ Pulse Width lo
+; 17_	|  --  |  --  |  --  |  --  | PW11 | PW10 |  PW9 |  PW8 |______ Pulse Width hi
+; 18_	| NOISE| PULSE|  SAW |  TRI | TEST | RING | SYNC | GATE |______ Control Register
+; 19_	| ATK3 | ATK2 | ATK1 | ATK0 | DCY3 | DCY2 | DCY1 | DCY0 |______ Attack/Decay
+; 20_	| STN3 | STN2 | STN1 | STN0 | RLS3 | RLS2 | RLS1 | RLS0 |______ Sustain/Release
+;	|------|------|------|------|------|------|------|------|
+; 21_	|  --  |  --  |  --  |  --  |  --  |  FC2 |  FC1 |  FC0 |______ Frequency lo    Filter
+; 22_	| FC10 |  FC9 |  FC8 |  FC7 |  FC6 |  FC5 |  FC4 |  FC3 |______ Frequency hi
+; 23_	| RES3 | RES2 | RES1 | RES0 |FILTEX| FILT3| FILT2| FILT0|______ Resonance/Filter
+; 24_	| 3 OFF|  HP  |  BP  |  LP  | VOL3 | VOL2 | VOL1 | VOL0 |______ Mode/Volume
+;	|------|------|------|------|------|------|------|------|
+; 25_	|  PX7 |  PX6 |  PX5 |  PX4 |  PX3 |  PX2 |  PX1 |  PX0 |______ Pot X           Misc.
+; 26_	|  PY7 |  PY6 |  PY5 |  PY4 |  PY3 |  PY2 |  PY1 |  PY0 |______ Pot Y
+; 27_	|  O7  |  O6  |  O5  |  O4  |  O3  |  O2  |  O1  |  O0  |______ Oscillator 3
+; 28_	|  E7  |  E6  |  E5  |  E4  |  E3  |  E2  |  E1  |  E0  |______ Envelope 3
+;	|-------------------------------------------------------|
+
+; The SID chips are not accessable at 4 Mhz at all.  This is because the SIDs
+; do not have separate tone generator and phase-2 clock inputs.  Since this is
+; the case, they must always run at the 1 Mhz rate, so that the sounds they
+; produce will be at the correct frequency.  If the processor is running at 4
+; Mhz, the CPU cycle will not align with the SID cycle.
+
+
+potx		= sid1+25	;POTs connected to game ports 1&2 via 4066
+poty		= sid1+26	;CIA-1 PRA6 & PRA7 select port connected to SID1
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; MCS4171-F011B -- C65 Disk Controller Chip gate array version -- 8/28/89
+;
+;      The MCS4171-F011B is a short term, low cost MFM disk interface designed
+; for the C65 computer.  It requires the use of an external 512 byte RAM for a
+; data cache buffer.  This interface can perform reads from and writes to MFM
+; formatted diskettes, as well as free-format full track reads and writes. It
+; can also format diskettes.  An expansion drive interconnect is provided,
+; using a serial protocol for control and status signals.  It also incorporates
+; an index pulse simulator for drives that do not have an index sensor.
+;
+;				     C4171-F011B registers
+;
+;		    7	    6	    5	    4	    3	    2	    1	    0
+;		-----------------------------------------------------------------
+;  0   CONTROL	|  IRQ  |  LED  | MOTOR |       | SIDE  |  DS2  |  DS1  |  DS0  | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  1   COMMAND	| WRITE | READ  | FREE  | STEP  |  DIR  | PRECM |       | NOBUF | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  2   STAT A	| BUSY  |  DRQ  |  EQ   |  RNF  |  CRC  | LOST  | PROT  |  TK0  | R
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  3   STAT B	| RDREQ | WTREQ |  RUN  | WGATE | DSKIN | INDEX |  IRQ  | DSKCHG| R
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  4   TRACK	|  T7   |  T6   |  T5   |  T4   |  T3   |  T2   |  T1   |  T0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  5   SECTOR	|  S7   |  S6   |  S5   |  S4   |  S3   |  S2   |  S1   |  S0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  6   SIDE	|  S7   |  S6   |  S5   |  S4   |  S3   |  S2   |  S1   |  S0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  7   DATA	|  D7   |  D6   |  D5   |  D4   |  D3   |  D2   |  D1   |  D0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  8   CLOCK	|  C7   |  C6   |  C5   |  C4   |  C3   |  C2   |  C1   |  C0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  9   STEP	|  S7   |  S6   |  S5   |  S4   |  S3   |  S2   |  S1   |  S0   | RW
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  10  PROTECT	|  P7   |  P6   |  P5   |  P4   |  P3   |  P2   |  P1   |  P0   | R
+;		-----------------------------------------------------------------
+;
+;
+;dos_ctlr	= $d080		;F011A/B DOS chip
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; DMAgic  DMA  CONTROLLER  F018						01/15/91
+;
+;  The DMA controller has 4 registers:
+;
+;		0	DMA List address low,   Triggers DMA	(write only)
+;		1	DMA List address high			(write only)
+;		2	DMA List address bank			(write only)
+;		3	DMA Status (b7=busy, b0=chained)	(read only)
+;			    (a read will restart an INTerupted DMA operation)
+;
+;  The DMA RAM list has the following layout:
+;
+;		-----------------------------------------------------------------
+;		|       |   __  | __    | ____  |  ___  |       |               |
+;  COMMAND	| SADA  | SADA  | SADA  | SADA  |  INT  | CHAIN |   OPERATION   |
+;		|=======|=======|=======|=======|=======|=======|=======|=======|
+;  CNT LO (col)	|   C7  |  C6   |  C5   |  C4   |  C3   |  C2   |  C1   |  C0   |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  CNT HI (row)	|   C15 |  C14  |  C13  |  C12  |  C11  |  C10  |  C9   |  C8   |
+;		|=======|=======|=======|=======|=======|=======|=======|=======|
+;  SRC LO (fill)|  SA7  |  SA6  |  SA5  |  SA4  |  SA3  |  SA2  |  SA1  |  SA0  |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  SRC HI	|  SA15 | SA14  | SA13  | SA12  | SA11  | SA10  |  SA9  |  SA8  |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  SRC BANK	|  I/O  |  DIR  |  MOD  | HOLD  | SA19  | SA18  | SA17  | SA16  |
+;		|=======|=======|=======|=======|=======|=======|=======|=======|
+;  DEST LO	|  DA7  |  DA6  |  DA5  |  DA4  |  DA3  |  DA2  |  DA1  |  DA0  |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  DEST HI	|  DA15 | DA14  | DA13  | DA12  | DA11  | DA10  |  DA9  |  DA8  |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  DEST BANK	|  I/O  |  DIR  |  MOD  | HOLD  | DA19  | DA18  | DA17  | DA16  |
+;		|=======|=======|=======|=======|=======|=======|=======|=======|
+;  SUB COMMAND	|  --   |  --   |  --   |  --   |  --   |  --   |  --   |  --   |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  MOD LO	|  M7   |  M6   |  M5   |  M4   |  M3   |  M2   |  M1   |  M0   |
+;		|-------|-------|-------|-------|-------|-------|-------|-------|
+;  MOD HI	|  M15  |  M14  |  M13  |  M12  |  M11  |  M10  |  M9   |  M8   |
+;		-----------------------------------------------------------------
+;							  ___
+;  OPs:	 0 0   COPY				PARAMs:   INT    0  NO INTERUPTION
+;	 0 1   MIX   (MINTERMS ACTIVE)			         1  INTERUPT OK IRQ/NMI
+;	 1 0   SWAP					  CHAIN  0  LAST COMMAND
+;	 1 1   FILL  (SRC LO = FILL BYTE)		         1  CONTINUE NEXT
+;
+;  Note:  Minterns & SubCommand will not be implemented until F018A, at which
+;	  time the register map will be reorganized & support for the REC added.
+;
+;dma_ctlr	= $D700		;DMA Controller				[910102]
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+; REC  RAM Expansion Controller						01/15/91
+;
+; Optional device appearing only if the RAM expander is present.  This is an
+; early version, which will most definitely change.  Later versions will also
+; include a battery powered Real Time Clock, for which I still need a spec,
+; and an increased address range to 8 Megabytes (currently 1MB).
+;
+; The REC presumes the following system memory map:
+;	
+;	$00000-$1FFFF	128K on-board RAM
+;	$20000-$3FFFF	128K for System ROMs
+;	$40000-$7FFFF	256K reserved for cartridge expansion
+;	$80000-$FFFFF	512K reserved for RAM expansion
+;
+; The REC contains a four bit write-only register decoded at $D0A0:
+;
+;           ___ VIC access enable
+;          /___ VIC address range
+;         //___ bank select
+;        ///
+;	3210	VIC sees:
+;	----	----------------------------------------
+;	x0xx	Internal RAM, 	      $00000-$1FFFF
+;	x100	Expansion RAM bank 0, $C0000-$DFFFF
+;	x110	Expansion RAM bank 0, $E0000-$FFFFF
+;	x101	Expansion RAM bank 1, $C0000-$DFFFF
+;	x111	Expansion RAM bank 1, $E0000-$FFFFF
+;
+;		CPU sees:
+;	----	----------------------------------------
+;	0xxx	Expansion bank 0
+;	1xxx	Expansion bank 1
+;
+; The only problem I am having so far is that, because the register is write
+; only, I have to cache the VIC and CPU setups.  It would be preferable if
+; this was not the case, but what do I have to give up to get this?  Also,
+; I have not tried using VIC's DAT... I assume it would look like a CPU
+; access but without *expand Graphics using it are bound to internal RAM only!
+;
+; Note also that, because the uP must use A16 to select between the E and D
+; busses, some other address line must be used as high order dram address
+; during RAS time.  Due to this "unique" design, you can only map 50% of
+; expansion banks as VIC banks.
+;
+;ram_ctlr	= $D0A0		;REC Controller (requires F011C decode)		[910129]
+	.page \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+
+default_fa	= 8		;default drive #
+
+bakcol		= 6		;VIC background screen color (blue)
+forcol		= 1		;VIC foreground screen color (white)
+bodcol		= 6		;VIC screen border color     (blue)
+
+lf		= 10		;line feed		(control-J)
+cr		= 13		;carriage return	(control-M)
+xon		= 17		;XON character		(control-Q)
+xoff		= 19		;XOFF character		(control-S)
+esc		= 27		;escape			(control-[)
+space		= 32		;space
+quote		= 34		;double quote
+comma		= 44		;comma
+colon		= 58		;colon
+semi		= 59		;semicolon
+
+reverse		= 18		;reverse field on
+right		= 29		;cursor right
+up		= 145		;cursor up
+
+
+;.end
+	.page
+; BASIC 10.0 ROM  $2000-$7FFF
+
+		* = $2000
+
+basic		*=*+3			;cold start entry
+basic_warm	*=*+3			;warm start entry
+basic_irq	*=*+3			;IRQ entry
+basic_nmi	*=*+3			;NMI entry				[910515]
+
+
+
+	.page
+		* = $6000		;mapped to $6000 from ROM $30000
+monitor					;must end before $7FFF
+		.include monitor
+
+
+	.page
+; NewDOS ROM  $8000-$C7FF
+
+		* = $8000
+
+dos
+dos_cold	*=*+2			;cold start vector
+dos_warm	*=*+2			;warm start vector
+
+
+	.page
+		* = $c800
+kernel					;must end before $D000, contains an ORG $F000
+		.include kernel
+
+	.page
+		* = $e000
+editor					;must end before $F000
+		.include editor
+;		.include editorger
+
+	.page
+	.subttl C65 Cross Reference Listing
+	.end
