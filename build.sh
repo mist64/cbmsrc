@@ -57,6 +57,9 @@ test_tools
 rm -rf build
 mkdir build
 
+build2 LOADER_C128 loader
+exit
+
 build1 MONITOR_KIM kim.asm
 build1 MONITOR_AIM65 pa00-j001a
 build1 TIM tim.asm
@@ -187,3 +190,6 @@ build1 FIG FOR1-1
 #   build2 HCD65_65CE02_0.1 c65
 #   build2 HCD65_65CE02_0.2 c65
 #   build2 EDT_C128 edt
+#  ldz zp/abs
+#   build2 LOADER_C65 loader65
+#   build2 LOADER_C65_RS232 l232

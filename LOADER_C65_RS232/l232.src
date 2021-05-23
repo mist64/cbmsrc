@@ -1,0 +1,611 @@
+	.nam    C/65 HEX LOADER (03/20/90)
+	.forml 60
+
+; MOS Technology HEX loader for the C/65  by Fred Bowen
+;
+; April  2, 1986  original (beta) release
+; June  20, 1986  modification:  add 'program overwrite' error check	(FAB)
+; August 25, 1986 modification:  add bank check to overwrite check	(FAB)
+; March 20, 1990  conversion to C65 (ver 900214)			(FAB)
+;                                
+
+; system equates
+
+cursor		= $e030	;EDITOR: turn cursor on/off (.c)
+close_all	= $ff50	;KERNEL: close all open files
+stash		= $ff77	;KERNEL: banked indirect store routine
+primm		= $ff7d	;KERNEL: print immediate utility
+setbnk		= $ff6b	;KERNEL: set file name bank
+setlfs		= $ffba	;KERNEL: set la, fa, sa
+setnam		= $ffbd	;KERNEL: set file name
+open		= $ffc0	;KERNEL: open file
+close		= $ffc3	;KERNEL: close file
+chkin		= $ffc6	;KERNEL: open input channel
+clrchn		= $ffcc	;KERNEL: close channel
+basin		= $ffcf	;KERNEL: input character
+bsout		= $ffd2	;KERNEL: output character
+stop		= $ffe1	;KERNEL: test for stop key
+getin		= $ffe4	;KERNEL: input character (keyboard)
+clall		= $ffe7	;KERNEL: init file tables & restore default chnls
+
+;mmucr		= $ff00	;I/O:	 memory configuration register
+;config		= $00	;	 system ROMs, I/O, RAM-0
+
+; system variables
+
+status		= $90	;I/O status byte
+
+		*=$59	;use BASIC's domain
+
+load_address	*=*+2	;load address (2 bytes,  low/high)
+load_offset	*=*+2	;load offset  (3 bytes,  low/high/bank)
+bank		*=*+1	;bank destination for load (0-15)
+record_count	*=*+2	;input record count
+checksum	*=*+2	;record checksum
+next_address	*=*+2	;expected next address for contiguity
+first		*=*+1	;flags first record
+last_index	*=*+1	;last index from previous record
+count		*=*+1	;temporary (number of data bytes per record)
+index		*=*+1	;temporary (index from record sa to store byte)
+temp		*=*+1	;temporary
+disk		*=*+1	;la/fa/sa used for disk I/O
+stack_ptr	*=*+1	;save for good return to call
+
+		*=$200	;input buffer
+
+buffer		*=*+20	;filename buffer
+	.page
+; constants
+
+break_key	= $03	;stop key character
+bell		= $07	;bell character
+cr		= $0d	;carriage return
+return		= cr
+rvs		= $12	;reverse field character
+delete		= $14	;delete character
+esc		= $1b	;escape character
+space		= $20	;space character
+comma		= $2c	;comma character
+rvs_off		= $92	;reverse field off character
+bs		= $9d	;backspace character (cursor left)
+
+	.page
+	* = $c400		;loader origin
+
+start	jsr clall		;clear all channels
+;	sei
+;	ldx #load_address
+;	ldy #0
+;5$	lda $00,x		;save BASIC zero page
+;	sta end,y
+;	iny
+;	inx
+;	cpx #stack_ptr+1
+;	bcc 5$
+	tsx
+	stx stack_ptr		;save for clean return
+;	cli
+	jsr primm
+	.byte cr,'C/65 HEX LOADER V032090'
+	.byte cr,'(C)1990 BY COMMODORE BUSINESS MACHINES',cr,0
+
+;	jsr primm
+;	.byte cr,'OBJECT FILE  ([UNIT#,][DRIVE:]FILENAME) ? ',esc,'Q',0
+;	.page
+;	ldx #20			;16 char name + 4 char (8,0:) = 20 total
+;	stx count		;save maximum input character count
+;	ldx #0			;read characters from keyboard until <cr>
+;
+;10$	stx temp		;save buffer pointer
+;	jsr get_key		;get a character from keyboard
+;	ldx temp		;restore buffer pointer
+;	tay			;save character
+;	and #$7f		;mask to 7-bits
+;	cmp #return
+;	beq 40$			;...branch if <cr>
+;	cmp #delete
+;	bne 20$			;...branch if not <delete>
+;	cpx #0			;check buffer pointer
+;	beq 25$			;...branch if at start of line (ignore <delete>)
+;
+;	dex			;decrement buffer pointer
+;	bpl 30$			;...branch always (print <delete>)
+;
+;20$	cmp #space
+;	bcc 25$			;...branch if control code (ignore)
+;	tya			;restore character
+;	sta buffer,x		;put character into buffer
+;	inx			;increment buffer pointer
+;	cpx count		;check buffer pointer
+;	bcc 30$			;...branch if not a end of line
+;
+;	dex			;at end of line (ignore everything but <cr> and <delete>)
+;25$	lda #bell		;substitute <bell> to warn user
+;
+;30$	jsr bsout		;print the character
+;	bra 10$			;loop for next character
+;
+;40$	ldx temp		;character input count
+;	beq done		;...null input, exit to BASIC
+;
+;50$	stx count		;save filename length
+	jsr primm
+	.byte cr,'LOAD ADDRESS ([BANK][4 HEX DIGIT ADDR]) ? ',esc,'Q',0
+
+	ldx #0			;read characters from keyboard until <cr>
+	stx load_offset		;init offset value
+	stx load_offset+1
+	stx load_offset+2
+
+60$	stx temp		;save digit counter
+	jsr get_key		;get a character from keyboard
+	ldx temp
+	sta last_index		;save character (to print later)
+	and #$7f		;mask to 7-bits
+	cmp #return
+	beq 90$			;...branch if <cr>
+	cmp #delete
+	bne 70$			;...branch if not <delete>
+	cpx #0			;check digit counter
+	beq 76$			;...branch if at start of line (ignore <delete>)
+
+	dex			;decrement digit counter
+	ldy #4
+65$	lsr load_offset+2	;shift entire value right one nibble
+	ror load_offset+1
+	ror load_offset
+	dey
+	bne 65$
+	beq 80$			;...branch always (print <delete>)
+
+70$	cpx #5
+	bcs 76$			;...branch if 5 digits already input (ignore)
+	cmp #'0'
+	bcc 76$			;...branch if control code (ignore)
+	cmp #':'
+	bcc 71$			;...branch if in range (0-9)
+	cmp #'A'
+	bcc 76$			;...branch if >9 and <A  (ignore)
+	cmp #'F'+1
+	bcs 76$			;...branch if >F  (ignore)
+
+	sbc #7			;adjust if in range (A-F)
+71$	sbc #47			;adjust to (0-15)
+	asl a			;shift low nibble to high
+	asl a
+	asl a
+	asl a
+	ldy #4			;multiply previous value by 16, then add new digit
+75$	asl a
+	rol load_offset		;low
+	rol load_offset+1	;high
+	rol load_offset+2	;bank
+	dey
+	bne 75$
+	inx			;increment digit counter
+	lda last_index		;recall digit and print it
+	.byte $2c		;skip next instruction
+
+76$	lda #bell		;substitute <bell> to warn user
+
+80$	jsr bsout		;print the character
+	bra 60$			;loop for next character
+
+90$	ldx temp
+	stx first		;flags null input vs. $0000 for offset calculations
+	jsr bsout		;print <cr>
+
+	.page
+; open object file
+
+open_file
+;	ldx #8
+;	stx disk		;default disk unit
+;
+;	ldx #0			;parse filename (look for [unit,])
+;	stx temp		;init
+;1$	lda buffer,x
+;	cmp #'9'+1		;numeric?
+;	bcs 5$			;...no
+;	cmp #'0'
+;	bcc 5$			;...no
+;	sbc #'0'		;convert ascii to binary
+;	sta index		;save digit
+;	lda temp		;convert binary to decimal
+;	asl a
+;	bcs 9$
+;	ldy #3
+;2$	asl temp		;3 shifts (8) + 1 shift (2) -> x10
+;	bcs 9$
+;	dey
+;	bne 2$
+;	adc temp
+;	bcs 9$
+;	adc index		;add current digit
+;	sta temp
+;	bcs 9$
+;	inx
+;	cpx count
+;	bne 1$			;...loop until done or EOL
+;	beq 9$
+;
+;5$	cmp #','		;found non-numeric
+;	bne 9$			;...not <comma>, must not be a unit #
+;	lda temp		;...got <comma>, use as unit #
+;	sta disk
+;	inx
+;	ldy #0			;squish unit# from buffer
+;6$	cpx count
+;	beq 7$
+;	lda buffer,x
+;	sta buffer,y
+;	iny
+;	inx
+;	bne 6$
+;7$	sty count
+;
+;9$	ldx count
+;	lda #','		;append ',S' to filename
+;	sta buffer,x
+;	inx
+;	lda #'S'
+;	sta buffer,x
+;	inx
+;	stx count
+;
+;	lda disk		;la
+;	cmp #31
+;	bcs error5		;bad unit #
+;	cmp #8
+;	bcc error5		;bad unit #
+	lda #2			;************************************ [910528]
+	sta disk
+	tay			;sa
+	tax			;fa
+	jsr setlfs
+;	lda count		;fnlen
+	lda #14			;9600 baud
+	sta buffer
+	lda #1
+	ldx #<buffer		;fnadr
+	ldy #>buffer
+	jsr setnam
+	ldx #0
+	jsr setbnk		;fnbank (RAM-0)
+	jsr open		;open object file
+	bcs error0		;...report disk error
+
+	jsr primm
+	.byte cr,'START DOWNLOAD NOW...',cr,0
+
+	.page
+; begin actual load
+
+20$	lda #0
+	sta last_index		;init previous record index
+	sta next_address+1	;init for contiguity check
+	sta record_count	;init record count
+	sta record_count+1
+
+	ldx disk		;set channel
+	jsr chkin
+	bcs error0		;...branch on disk error
+
+next_record
+	jsr stop
+	beq error3		;...branch if STOP key- BREAK
+
+10$	jsr get_character
+	cmp #';'		;record initiator?
+	bne next_record		;no...keep looking
+
+	lda #0
+	sta checksum		;reset record checksum
+	sta checksum+1
+	sta index		;reset memory index pointer
+
+	jsr get_byte		;read record's byte count
+	bne 30$			;...branch if not last record (not null)
+
+	jsr get_byte		;check record count
+	cmp record_count+1
+	bne error4		;...branch if sums do not match- error
+	jsr get_byte
+	cmp record_count
+	bne error4		;...branch if mismatch (missing record)
+	bra done		;exit to BASIC, all done correctly
+
+
+30$	sta count		;save record's byte count
+	jsr add_checksum	;add byte count to checksum
+	inw record_count	;increment record count
+
+40$	lda first
+	beq 44$			;...branch if not first record (or null sa given)
+	jsr offset_calc		;else read first address & calculate offset
+	bra 50$
+
+44$	jsr get_byte		;get record's starting address (high)
+	pha
+	jsr add_checksum	;add to checksum
+	pla
+	clc
+	adc load_offset+1	;add user offset (high) to starting address
+	sta load_address+1
+	jsr get_byte		;get low address
+	pha
+	jsr add_checksum	;add to checksum
+	pla
+	clc
+	adc load_offset		;add user offset (low) to starting address
+	sta load_address
+	bcc 50$
+	inc load_address+1	;add any carry to high byte
+
+50$
+;	jsr check_address	;check for program overwrite
+	lda load_address	;check contiguity
+	cmp next_address
+	bne 55$			;...branch if beginning new block
+	lda load_address+1
+	cmp next_address+1
+	beq 60$
+
+55$	lda #cr			;display starting address of new block
+	jsr bsout
+	jsr display_address	;write load address
+	jsr primm
+	.byte ' -> ',0		;position cursor for ending address
+
+60$	jsr get_byte		;get data byte
+	ldy index		;get current memory index
+	sty last_index		;save it for last address check
+	inc index		;increment it for next memory index
+
+	ldz bank		;get bank for memory store
+	ldx #load_address
+	jsr stash		;store data byte-->  sta (load_address),y
+	jsr add_checksum	;add byte to checksum
+	dec count		;decrement record byte count
+	bne 60$			;...loop until done all bytes for this record
+
+	jsr get_byte		;get record checksum (high)
+	cmp checksum+1		;compare with calculated checksum
+	bne 65$			;...branch if checksum error
+	jsr get_byte		;get record checksum (low)
+	cmp checksum		;compare with calculated checksum
+65$	php			;save result- checksum error is non-fatal
+
+	clc
+	lda last_index		;add last index to last record index for last address
+	adc load_address
+	tay
+	lda load_address+1
+	adc #0
+	tax
+	jsr display_byte	;print the record ending address
+	tya
+	jsr display_byte
+	iny
+	sty next_address	;save for determining contiguity
+	bne 70$
+	inx
+70$	stx next_address+1
+	plp			;check for non-fatal errors
+	bne error2
+
+	jsr primm
+	.byte bs,bs,bs,bs,0	;format next for overwrite
+	bra next_record		;continue with next record
+
+	.page
+error0	jsr primm
+	.byte bell,cr,rvs,'DISK ERROR',rvs_off,'  ',0
+	jsr clrchn
+;	lda #0
+;	jsr setnam
+;	ldx disk
+;	ldy #15			;prepare to read disk command channel
+;	jsr setlfs
+;	jsr open
+;	bcs error1		;??? must be device not present
+;	ldx #0
+;	jsr chkin
+;	bcs 20$
+;10$	jsr basin		;input error message from disk
+;	jsr bsout		;print it
+;	cmp #cr
+;	beq 20$
+;	lda status
+;	and #$bf
+;	beq 10$			;loop until EOL or error
+;20$	bra done
+
+error1	jsr primm
+	.byte bell,cr,rvs,'DEVICE NOT PRESENT',cr,0
+	bra done
+
+error2	jsr primm
+	.byte bell,'   ',rvs,'CHECKSUM ERROR',0
+	dec next_address
+	bra next_record		;fake non-contiguous block by trashing next_address
+
+error3	jsr primm
+	.byte bell,cr,rvs,'BREAK',cr,0
+	bra done
+
+error4	jsr primm
+	.byte bell,cr,rvs,'RECORD COUNT BAD',cr,0
+	bra done
+
+error5	jsr primm
+	.byte bell,cr,rvs,'INVALID DEVICE SPECIFIED',cr,0
+	bra done
+
+error6	jsr primm
+	.byte bell,cr,rvs,'PROGRAM OVERWRITE',cr,0
+;	jmp done
+
+
+
+done	jsr clrchn		;finished with load
+	lda disk
+	jsr close_all		;close disk channel
+;	sei
+	ldx stack_ptr
+	txs
+;	ldx #load_address	;restore zero page
+;	ldy #0
+;10$	lda end,y
+;	sta $00,x
+;	iny
+;	inx
+;	cpx #stack_ptr
+;	bcc 10$
+;	cli
+	rts			;return to caller
+
+	.page
+get_key
+	clc
+	jsr cursor		;turn on cursor
+10$	jsr getin		;loop until keypress
+	beq 10$
+	pha
+	sec
+	jsr cursor		;turn off cursor
+	pla
+	cmp #break_key
+	beq error3		;exit if STOP key
+	rts
+
+
+
+get_character
+	lda #0
+	sta status		;clean slate
+	jsr basin		;get next character from channel
+	bcs error0			;...branch if I/O error
+	pha
+	lda status
+	and #%10111111		;mask EOI bit
+	bne error0			;...branch if I/O error
+	pla
+	rts
+
+
+
+add_checksum
+	clc			;add current byte to record checksum
+	adc checksum
+	sta checksum
+	bcc 10$
+	inc checksum+1
+10$	rts
+
+
+
+offset_calc
+	jsr get_byte		;get first record's starting address (high)
+	sta load_address+1
+	jsr add_checksum	;add to checksum
+	jsr get_byte		;get low address
+	sta load_address
+	jsr add_checksum	;add to checksum
+
+	sec
+	lda load_offset		;calculate offset= alt_adr - rec_adr
+	pha			;save sa
+	sbc load_address
+	sta load_offset
+	lda load_offset+1
+	pha			;save sa
+	sbc load_address+1
+	sta load_offset+1
+
+	pla			;pop first load address (original load_offset)
+	sta load_address+1
+	pla
+	sta load_address
+	lda #0
+	sta first		;squash first record flag
+	rts
+
+
+;check_address
+;	ldx bank		;check for record overwrite of program
+;	bne 20$			;it's okay: bank is not same
+;
+;	lda load_address+1
+;	jsr 10$			;check record starting address
+;	ldy count
+;	dey
+;	tya
+;	clc			;calculate address of last byte of record
+;	adc load_address
+;	lda load_address+1	;(only concerned with high bytes...)
+;	adc #0			;(fall into subroutine)
+;
+;10$	cmp #>start		;beginning of this program
+;	bcc 20$			;...branch if below program- ok
+;	cmp #>end+1		;end of this program
+;	bcc error6		;...error- loading this record would overwrite!
+;
+;20$	rts
+
+	.page
+; read ASCII hex byte and return binary in .a
+
+get_byte
+	lda #0			;space
+	sta temp
+	jsr get_character	;get most significant digit
+	jsr get_binary		;convert to binary
+	asl a			;shift to most significant nibble
+	asl a
+	asl a
+	asl a
+	sta temp		;save it
+	jsr get_character	;get least significant digit
+	jsr get_binary		;convert to binary
+	ora temp		;merge nibbles
+	rts
+
+
+get_binary
+	cmp #':'		;convert ascii hex digit to binary
+	php
+	and #$0f		;mask it
+	plp
+	bcc 10$			;...branch if it was numeric (0-9)
+	adc #8			;else in range (A-F), add 9 (assumes .c=1)
+10$	rts
+
+
+; write address
+
+display_address
+	lda load_address+1	;print current address, high/low
+	jsr display_byte	;print high byte
+	lda load_address	;print low  byte (fall into display_byte)
+
+display_byte
+	pha			;save byte to unpack
+	lsr a			;most significant nibble
+	lsr a
+	lsr a
+	lsr a
+	jsr display_digit	;convert binary to ascii & print it
+	pla
+	and #$0f		;least significant nibble (fall into display_digit)
+
+display_digit
+	clc			;convert binary nibble to ascii
+	adc #$f6
+	bcc 10$
+	adc #$06
+10$	adc #$3a
+	jmp bsout		;print it and RTS
+
+end
+	.end

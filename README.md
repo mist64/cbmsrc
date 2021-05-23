@@ -157,6 +157,9 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [EDT_C128](EDT_C128)                                         | 1986 | |
 | [LOADER_PET](LOADER_PET)                                     | 1979 | OBJ Loader |
 | [LOADER_C64](LOADER_C64)                                     | 1986 | OBJ Loader |
+| [LOADER_C128](LOADER_C128)                                   | 1986 | rewrite |
+| [LOADER_C65](LOADER_C65)                                     | 1990 | |
+| [LOADER_C65_RS232](LOADER_C65_RS232)                         | 1990 | RS-232 |
 
 ## Software: Games
 
@@ -492,6 +495,10 @@ The PET OBJ Loader, version V121379. Extracted from [ted_kernal_basic_src.tar.gz
 ### LOADER_C64
 
 The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz) and converted to uppercase and LST-style indenting.
+
+### LOADER_C128, LOADER_C65, LOADER_C65_RS232
+
+The OBJ Loader of the HCD65 assembler. Versions for C128 and C65 (disk and RS-232). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
 ### EDT_C128
 
