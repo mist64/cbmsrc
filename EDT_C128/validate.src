@@ -1,0 +1,97 @@
+	.subttl validate routine
+;
+;
+;	validate:
+;		the purpose of this routines is too attempt to keep the
+;		cursor within the middle lines of the screen.
+;		I.E. moveing up and down operations result in the
+;		cursor being placed on the top or bottom lines of the screen.
+;		this function detects when the cursor is near the edge of
+;		a window, and examines the text buffer to see if a more
+;		optimal location can be selected.
+;
+;
+;	validate works a follows:
+;		copy cursor line to temp location.
+;		modify temp location based on various rules for cursor placement
+;		compare temp tto cursor line
+;		if	different
+;			cursor lione <= temp
+;			force new_screen
+;
+	ram val_temp,1
+;		
+validate
+	lda cur_line	a <= cur_line
+	bpl 10$		if	.a < 0
+	lda #0			.a <= 0
+;
+10$	sta val_temp	val_temp <= .a
+;
+	sec		.a <= max desired line
+	lda nlines
+	sbc hyster_lines
+;
+	cmp val_temp	if 	.a < val_temp
+	bcs 20$
+;
+	ldax cr_count_post	.a <= mim(hyster_lines,cr_count_post)
+	jsr 100$
+;
+	eor #$ff		.a <= nlines - .a
+	sec
+	adc nlines
+;
+	cmp val_temp		if	.a < val_temp
+	bcs 20$
+	sta val_temp			val_temp <= .a
+;
+20$	lda val_temp	if	val_temp < hyster_lines
+	cmp hyster_lines
+	bcs 50$
+	ldax cr_count_pre		.a <= min(hyster_lines,cr_count_pre)
+	jsr 100$
+	cmp val_temp			if	.a > val_temp
+	bcc 50$
+	beq 50$
+;
+	sta val_temp				val_temp <= .a
+;
+50$	lda cr_count_post+1
+;			if	< 255 lines after cursor
+	bne 70$
+	sec
+	lda nlines		a <= nlines - number of crs behind us
+	sbc cr_count_post
+	bcc 70$			if	.a > 0
+;
+	cmp val_temp			if	.a > val_temp
+	bcc 70$
+	beq 70$
+	sta val_temp				select a new cursor line
+;
+;			if 	cr_count_pre < val_temp
+70$	ldx cr_count_pre+1
+	bne 80$
+	lda cr_count_pre
+	cmp val_temp
+	bcs 80$
+	sta val_temp		val_temp <= cr_count_pre
+;
+80$	lda val_temp	if	val_temp <> cur_line
+	cmp cur_line
+	beq 88$
+	sta cur_line		cur_line <= val_temp
+	inc new_screen		force a new_screen
+88$	clc		return happy
+	rts
+;
+;
+100$	cpx #0			.a <= min( hyster_lines, (x,a) )
+	bne 110$
+	cmp hyster_lines
+	bcc 120$
+110$	lda hyster_lines
+120$	rts
+;
+

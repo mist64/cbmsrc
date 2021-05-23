@@ -1,0 +1,627 @@
+	.subttl	kernal declarations and utilities
+;
+file		= $08		always use 8s ( fa,sa,la )
+;
+status		= $90		kernal status word
+dfltn		= $99		default input device
+dflto		= $9a
+msgflg		= $9d		kernal i/o error message print enable
+ndx		= $d0		kernals idea of number of keys in queue
+rvs		= $f3		kernal rvs mode switch
+qtsw 		= $f4		quote mode switch
+scnrts		= $c6c4		kernal scnrts routine
+inmi		= $0318
+keychk		= $033c
+;
+fetch_pointer	= $02aa		; bank 1 indirection vectors.
+stash_pointer	= $02b9
+;
+decode		= $033E		keyboard indirection vectors
+;
+system_vector	= $0a00		vector for monitor exit
+;
+init_status	= $0a04		system init status
+;
+k_print		= $C00C		editor entry point for print a char routine
+init80		= $C027		init 80 col to petscii chars
+cursor_on	= $CD6F		enable cursor last cursor position
+cursor_off	= $CD9F		shut of das blinken lights
+vdcput		= $CDCA		write .a to 8563, data register (.y preserved)
+vdcout		= $CDCC		write .a to 8563, register .x	(.y preserved)
+k_prend		= $FF33		kernal irq & nmi return
+;
+;
+kernal_keycode_tables	= $fa80
+;				
+close_all	= $FF4A		close all.....
+setbnk		= $FF68		set banks ( .a = load save bank )
+;					  ( .x = file name back )
+primm		= $FF7D		print immediate routine
+setlfs		= $FFBA		set file structure
+setnam		= $FFBD		set file name
+open		= $FFC0
+close		= $FFC3
+chkin		= $FFC6
+ckout		= $FFC9
+clrchn		= $FFCC
+basin		= $FFCF
+bsout		= $FFD2
+stop		= $FFE1
+getin		= $FFE4		read a single char from input
+scrorg		= $FFED		return number of screen rows in .y
+;				max coloumns in .x 
+plot		= $FFF0		positon cursor ( row y, coloumn x )
+;				c=0 means write, c=1 means read
+;
+	ram keychk_save,2
+;
+k_monitor
+	jsr clrchn	; clear em to assure good kybd reads
+	php
+	sei
+	ldax keychk_save ; this is set up via first call to init_keyboard
+	stax keychk
+	plp
+	ldai 10$	; set up return
+	stax system_vector
+	jmp $b000	; enter monitor
+;
+;			; restore keyboard
+10$	jsr init_keyboard
+	lda #0		kill messages
+	sta msgflg
+	rts
+;
+;
+;
+;
+	ram save_page,256
+	pntr	= $fe
+;
+save_system
+	php
+	sei
+	sec
+	jsr save_zero_page_op
+	jsr save_vector_op
+	plp
+	rts
+;
+restore_system
+	php
+	sei
+	clc
+	jsr save_vector_op
+	jsr save_zero_page_op
+	plp
+	jmp set_8563_to_petscii
+;
+save_zero_page_op
+;
+	lda #$00		get io in map
+	sta $ff00
+;
+	ldx #$10		x <= $10
+10$	lda $0,x		do	.a <= $0,x
+	bcs 20$				if	c=0
+	lda save_page,x				.a <= save_page,x
+20$	sta $0,x			$0,x , save_page <= .a
+	sta save_page,x		
+	inx				x++
+	bne 10$			until	x==0
+;
+	rts			return
+;
+save_vector_op
+;				x <= index into table
+	ldx #110$-100$-2
+40$	lda 100$,x		do	pntr <= $100,x
+	sta pntr
+	lda 100$+1,x
+	sta pntr+1
+	ldy #1				y <= 1
+50$	lda (pntr),y			do	.a <= (pntr),y
+	bcs 60$					if	c=0
+	lda save_page,x					.a <= save_page,y
+60$	sta (pntr),y				(pntr),y <= .a
+	sta save_page,x				save_page,x <= .a
+	dex					x--
+	dey					y--
+	bpl 50$				while	y > 0
+	txa			while	x > 0
+	bpl 40$
+;
+	rts
+;
+100$	.word $d501
+	.word $d503
+	.word $d505
+	.word system_vector
+	.word inmi
+	.word init_status
+110$
+;
+kill_nmis
+	ldai k_prend	; kill nmis by pointing nmi to kernal rti.
+	stax inmi
+	rts
+;
+kill_basic
+	lda init_status
+	and #%11111110
+	sta init_status
+	rts
+;
+;
+cursor_wait_for_text
+	sec			y <= coloumn for cursor - screen offset
+	lda cur_col
+	sbc col_offset
+	tay
+	ldx cur_line		x <= cursor line
+	clc			position cursor @ y,x
+	jsr plot
+cursor_wait_for_key
+	jsr cursor_on		;cursor on
+10$	jsr get_key		;wait for a key
+	bcs 10$
+	pha			;save key
+	jsr cursor_off		;kill cursor
+	pla			;recall key
+	rts			; return
+;
+;
+press_any_key_to_continue
+	jsr 10$
+	jsr primm
+	.byte rvs_on,"PRESS ANY KEY TO CONTINUE...",rvs_off,0
+	jsr cursor_wait_for_key
+;
+10$	lda error_line
+clear_line		;	position the cursor
+	jsr set_line
+clear_to_eol
+	lda #'Q
+print_escape_a
+	pha
+	lda #$1b
+	jsr print
+	pla
+;
+print	pha	
+	lda #0		kill quote mode stuff in editor
+	sta qtsw
+	pla
+	jmp k_print	print the damn char
+;
+set_line	; position cursor in coloumn 0 on row .a
+	ldy #0	; position the cursor
+	tax
+	clc
+	jsr plot
+	lda #rvs_off	kill reverses
+	.byte $2c	skipparoo
+beep	lda #$07
+	jmp print	
+;
+;	print_null_terminated_string
+;		prints the ttext string pointed to by x,a
+;
+print_null_terminated_string
+	stax errpnt	; set up pointer
+;
+10$	ldy #0		; do 	a <= char at pointer
+	lda (errpnt),y
+	bne 20$		;	if	null
+	rts		;		return
+20$	jsr print	;	print the char
+	incd errpnt
+	jmp 10$		;loop
+;
+;
+;******************************************************************************
+;			print decimal routime
+;******************************************************************************
+;print_decimal
+;		prints a decimal number given a 16 bit hex value
+;	entry:
+;			x,a = 16 bit hex value
+;
+	zpage print_decimal_temp,2
+	zpage print_decimal_flag
+;
+print_decimal		;temp <= x,a
+	stax print_decimal_temp	
+	lda #0		flag <= 0
+	sta print_decimal_flag
+	ldx #8		x <= 5*2-2
+10$	ldy #0		do	y <= 0
+20$	lda print_decimal_temp+1 while	temp > 100$,x (double)
+	cmp 100$+1,x
+	bcc 40$
+	bne 30$
+	lda print_decimal_temp
+	cmp 100$,x
+	bcc 40$
+30$	sec			do	temp <= temp - 100$,x (double)
+	lda print_decimal_temp
+	sbc 100$,x
+	sta print_decimal_temp
+	lda print_decimal_temp+1
+	sbc 100$+1,x
+	sta print_decimal_temp+1
+	iny				y++
+	jmp 20$
+;
+40$	cpy #0			if	y <> 0 or x == 0 or flag <> 0
+	bne 50$
+	cpx #0
+	beq 50$
+	lda print_decimal_flag
+	beq 60$
+;
+50$	stx print_decimal_flag		save x
+	tya				print char for y
+	ora #$30
+	jsr print
+	ldx print_decimal_flag		recall x
+;
+60$	dex			x--
+	dex			x--
+	bpl 10$		while	x > 0
+;
+	clc		return happy
+	rts
+;
+100$	.word 1,10,100,1000,10000
+;
+;
+
+;
+;
+;	get_key and key scanner routines
+;
+kybd_buf_len = 10
+	ram kybd_buf,kybd_buf_len	keyboard buffer
+	zpage kybd_pin		input and output pointers
+	zpage kybd_pout
+;
+get_key	ldx kybd_pout	if	pout = pin
+	cpx kybd_pin
+	bne 10$
+	lda #0			return .a = 0 , c=1
+	sec
+	rts
+;
+10$	lda kybd_buf,x	a <= buf,pout
+	jsr kybd_advx	inc pout
+	stx kybd_pout
+	bit kybd_mode
+	bpl 80$		if	ascii mode keyboard
+;
+	bpl 80$			if	any controls
+	cmp #$20
+	bcc 80$				pass normally
+	cmp #$80
+	bcc 20$
+	cmp #$a0
+	beq 88$			( trap shifted space )
+	bcc 80$
+	cmp #$e0
+	bcs 80$
+;
+20$	cmp #$C0		if	repeat of upper case
+	bcc 70$
+;					remap to normal upper case
+	eor #%10100000			( %110xxxxx -> %011xxxxx )
+;
+70$	jsr 			change_case_of_char
+;
+80$	cmp #$03	eat stop keys ( this is a kludge )
+	beq get_key
+	.byte $2c
+88$	lda #space
+	clc		return .c = 0
+	rts
+;
+;
+;
+kybd_in ldx kybd_pin	buf,pin <= .a
+	jsr kybd_advx	if	(pin+1) <> pout
+	cpx kybd_pout
+	beq 10$
+	ldx kybd_pin		pout <= pin++
+	sta kybd_buf,x
+	jsr kybd_advx
+	stx kybd_pin
+10$	jmp scnrts	continue w/ keybd irq
+;
+kybd_advx
+	dex
+	bpl 10$
+	ldx #kybd_buf_len-1
+10$	rts
+;
+pntr1	= cut_start_pos
+pntr2	= cut_end_pos
+;
+;
+	ram remapped_keycodes,$59+$59+$59+$59+$59 ; ram for new keycodes
+stop_keycode = remapped_keycodes+$3f
+cntrl_keycode = remapped_keycodes+$3a
+;
+init_keyboard
+;
+	php		kill irqs
+	sei
+;
+	lda #0		pin <= pout <= 0
+	sta kybd_pin
+	sta kybd_pout
+	sta ndx
+;
+	ldax keychk
+	stax keychk_save
+;
+	ldai kybd_in	keychk vector points to kybd_in
+	stax keychk
+;
+	ldai kernal_keycode_tables
+	stax pntr1
+;
+	ldai remapped_keycodes
+	stax pntr2
+;
+	ldx #0			; move 59 bytes
+10$	ldy #$59
+20$	lda (pntr1),y
+	sta (pntr2),y
+	dey
+	bpl 20$
+;
+;				set keys for codes $E0-$ED
+;
+	ldy #$E0+110$-100$-1	; y <= $Ed
+40$	tya			;do	save y
+	pha
+	lda 100$-$E0,y		;	y <= offset for key to be defined as y
+	tay			;
+	pla			;	.a <= what was that coed again
+	pha
+	sta (pntr2),y		;	redefine key
+	pla			;	restore y
+	tay
+	dey			;	dey
+	cpy #$E0-1		;until y = 5
+	bne 40$
+;
+	txa			; y <= 2*x
+	asl a
+	tay
+	lda pntr2		; set up decode indirection vector.
+	sta decode,y
+	lda pntr2+1
+	sta decode+1,y
+;
+	ldy #pntr1		; point to next bank of keys
+	jsr 120$
+	ldy #pntr2
+	jsr 120$
+	inx
+	cpx #$05		; if more to do
+	bne 10$			; 	go do 'em
+;				; get the control left and right keys
+	lda #$ee
+	sta remapped_keycodes+$59+$59+$59+$55
+	lda #$ef
+	sta remapped_keycodes+$59+$59+$59+$56
+;
+	plp		reenable irqs
+	rts
+;
+120$	clc
+	lda $00,y
+	adc #$59
+	sta $00,y
+	lda $01,y
+	adc #0
+	sta $01,y
+	rts
+;
+;             $E0 $E1 $E2 $E3 $E4 $E5 $E6 $E7 $E8 $E9 $Ea $Eb $Ec $Ed
+;	       0   1   2   3   4   5   6   7   8   9   .   E   -   +
+100$	.byte $51,$47,$44,$4f,$45,$42,$4d,$46,$41,$4e,$52,$4c,$4a,$49
+110$	
+;		$Ee = control left
+;		$Ef = control right
+;
+;
+;	errors and error routine
+;
+;
+;
+error_table
+	.byte 0		; error zero is not an error !!, no text...
+error_eob = 1
+error_advance_past_bottom_of_buffer = 1
+	.byte "ADVANCE PAST BOTTOM OF BUFFER",0
+error_sob = 2
+	.byte "BACKUP PAST TOP OF BUFFER",0
+error_noimp = 3
+	.byte "FUNCTION NOT IMPLEMENTED",0
+error_string_was_not_found = 4
+	.byte "STRING WAS NOT FOUND",0
+error_no_select_range_active = 5
+	.byte "NO SELECT RANGE ACTIVE",0
+error_select_range_is_already_active = 6
+	.byte "SELECT RANGE IS ALREADY ACTIVE",0
+error_insufficient_memory = 7
+	.byte "INSUFFICIENT MEMORY",0
+error_numeric_value_illegal = 8
+	.byte "NUMERIC VALUE ILLEGAL",0
+error_syntax_error = 9
+	.byte "COMMAND SYNTAX ERROR",0
+error_device_not_present = 10
+	.byte "DEVICE NOT PRESENT",0
+error_stopped = 11
+	.byte "STOPPED",0
+error_unknown = 12
+	.byte "MR. ERROR IS CONFUSED !!!",0
+	.byte 0
+	
+;
+;
+error_display
+	lda error_line	; position cursor
+	jsr set_line
+	lda #rvs_on	; print error message inverted
+	jsr print
+;
+	lda #>error_table	; point to base of error table
+	sta errpnt+1
+	lda #<error_table
+	sta errpnt
+;
+	ldx error_flag		; x <= error_flag + 1
+	inx
+;
+	jmp 50$		; goto middle of error scan loop.
+;
+30$	ldy #$00	;do	while (errpnt) <> null
+	lda (errpnt),y
+	beq 40$
+	incd errpnt		do	inc errpnt
+	jmp 30$
+;
+40$	incd errpnt		inc errpnt ( point past the null )
+	lda (errpnt),y		if	at another null
+	bne 50$	
+	lda #error_unknown	;	at end of the string, go puke
+	sta error_flag
+	jmp error_display
+50$	dex			x <= x - 1
+	bne 30$		;while x > 0
+;
+	ldax errpnt	; print error message
+;
+	jsr print_null_terminated_string 
+	jmp clear_to_eol
+;
+;
+;
+;*******************************************************************************
+;			ascii charecter definitions
+;*******************************************************************************
+;
+	ram store_base
+	ram char_invert
+;
+;
+set_8563_to_petscii
+	jmp init80
+;
+;
+set_8563_to_ascii
+	lda #0		; spit normal chars.
+	sta char_invert
+	lda #$20	; do eight chars in lower case set
+	jsr 10$
+	lda #$30	; do eight chars in upper case set
+	jsr 10$
+	dec char_invert	; time to invert chars
+	lda #$28	; do eight chars in lower case set
+	jsr 10$
+	lda #$38	; do eight chars in upper case set
+;
+10$	sta store_base	; save base address to modify
+	
+	
+	ldx #7		; x <= 7
+20$	txa		; do	stack .x
+	pha
+	jsr 30$		;	spit out the xth char
+	pla		;	recall x
+	tax
+	dex		;	dex
+	bpl 20$		; while x > 0
+	rts		;return
+;
+;	.a = index of char to send
+;
+30$	asl a		; y <= offset for char address
+	tay
+	lda store_base	; set address or with the base address
+	ora char_offset+1,y
+	ldx #18		; tell 8563 where to put this char
+	jsr vdcout
+	inx
+	lda char_offset,y
+	jsr vdcout
+;
+	tya		; y <= offset into char definition
+	asl a
+	asl a
+	tay
+;
+40$	lda ascii_chars,y
+	eor char_invert
+	jsr vdcput
+	iny
+	tya
+	and #$07
+	bne 40$
+	rts
+;
+;
+char_offset
+	.word $01c0,$01e0,$01f0,$0400,$05b0,$05c0,$05d0,$05e0
+;
+;char_rom_locations
+;	.byte 28,30,31,64,91,92,93,94
+;
+ascii_chars
+	.byte $00,$60,$30,$18,$0c,$06,$03,$00	; backslash ( pound )
+	.byte $00,$18,$3c,$66,$00,$00,$00,$00	; up arrow  ( up arrow )
+	.byte $00,$00,$00,$00,$00,$00,$7f,$00	; underscore ( back arrow ) 
+	.byte $00,$18,$0c,$06,$00,$00,$00,$00	; grave accent ( horiz bar )
+	.byte $0e,$18,$18,$70,$18,$18,$0e,$00	; open curly bracket ( cross )
+	.byte $18,$18,$18,$00,$18,$18,$18,$00	; vertical bar	( half hash )
+	.byte $70,$18,$18,$0e,$18,$18,$70,$00	; close curly bracket (vert bar)
+	.byte $00,$00,$06,$3c,$60,$00,$00,$00	; tilde ( pi )
+;
+;char_rom_locations
+;	.byte 28,30,31,64,91,92,93,94
+;
+
+;
+;	change case of char:
+;		examines the charecter in .a and changes its case
+;		if appropriate. x,y are preserved.
+;		
+change_case_of_char
+	bit plot_mode	if	ascii mode
+	bpl 100$
+	cmp #'A			if	'A'-'Z' or 'a'-'z'
+	bcc 70$
+	cmp #'Z'+1
+	bcc 65$
+	cmp #'a'
+	bcc 70$
+	cmp #'z'+1
+	bcs 70$
+;
+65$	eor #'a'-'A'			toggle case
+70$	rts			return
+;			
+100$	cmp #65		if 	petscii letter
+	bcc 170$
+	cmp #91
+	bcc 160$
+	cmp #193
+	bcc 170$
+	cmp #219
+	bcs 170$
+160$	eor #%10000000		toggle case of it
+170$	rts		return
+;
+;

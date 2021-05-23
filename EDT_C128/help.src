@@ -1,0 +1,138 @@
+	.subttl	HELP routines
+;****************************************************************************
+;			HELP STUFF
+;****************************************************************************
+;
+f = rvs_off	; small version of rvs_off
+b = rvs_on	; small version of rvs_on
+;
+grid_ul	= $b0	; upoper left corner
+grid_ur = $ae	; upper right corner
+grid_lr = $bd	; lower righht corner
+grid_ll = $ad	; lower left corner
+grid_vb = $dd	; vertical bar
+grid_hb = $c0	; horizontal bar
+grid_cr = $db	; cross
+grid_tc = $b2	; top center bit ( connects left, right and below )
+grid_rc = $b3	; right center
+grid_bc = $b1	; bottom center
+grid_lc = $ab	; left center
+;
+help	jsr clear_repeat	execute help once per keypress
+	lda plot_mode		save plot mode 
+	pha
+	bpl 10$			if	ascii
+	jsr petscii			select petscii mode
+10$	jsr help_screen		show first page
+	jsr press_any_key_to_continue
+	jsr help_screen_2	show second page
+	jsr press_any_key_to_continue
+	inc new_screen		force screen replot
+	pla			recall plot_mode
+	bpl 20$			if	was ascii
+	jsr ascii			select ascii mode
+20$	clc			return happy
+	rts
+;
+;
+help_screen		; NOTE :  '}' is a petscii vertical bar
+	jsr primm	
+	.byte  rvs_off	; kill any left over reverse
+	.byte  147	; clear the screen
+	.byte "KEYPAD LAYOUT",cr 
+	.byte grid_ul
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_ur,cr
+;
+	.byte  "} GOLD  } HELP  }FNDNXT }DELLIN }",cr
+	.byte  "} ",b,"GOLD",f,"  } ",b,"HELP",f,"  } ",b,"FIND",f,"  }",b,"UDELLIN",f,"}",cr
+;
+	.byte grid_ll
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_lr,cr
+;
+	.byte grid_ul
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_tc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_ur,cr
+;
+	.byte  "} PAGE  } SECT  }APPEND }DELWRD }",cr
+	.byte  "}",b,"COMMAND",f,"} ",b,"FILL",f,"  }",b,"REPLACE",f,"}",b,"UDELWRD",f,"}",cr 
+;
+	.byte grid_lc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_rc,cr
+;
+	.byte  "}FORWARD}BACKWRD}  CUT  }DELCHR }",cr
+	.byte  "}",b,"BOTTOM",f," }  ",b,"TOP",f,"  } ",b,"PASTE",f," }",b,"UDELCHR",f,"}",cr
+;
+	.byte grid_lc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_rc,cr
+;
+	.byte  "} WORD  }  EOL  } CHAR  } ENTER }",cr
+	.byte  "} ",b,"CASE",f,"  }",b,"DEL EOL",f,"}",b,"SPCINS",f," }       }",cr
+;
+	.byte grid_lc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_cr
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_rc
+	.byte "       ",grid_vb,cr
+;
+	.byte  "}      BOL      } MARK  }       }",cr
+	.byte  "}   ",b,"OPEN LINE",f,"   }",b,"UNMARK",f," } ",b,"SUBS",f,"  }",cr
+;
+	.byte grid_ll
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_bc
+	.byte grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_hb,grid_lr,cr
+;
+	.byte cr
+	.byte "USE CURSOR KEYS TO MOVE ABOUT ",cr
+	.byte 0
+	rts
+;
+;
+;
+help_screen_2
+	jsr primm
+	.byte  147	; clear the screen
+	.byte rvs_off
+	.byte "COMMANDS INCLUDE:",cr
+;              01234567890123456789012345678901234567890
+	.byte " LOAD           L( UNIT)( FILENAME)",cr
+	.byte " INCLUDE        I( UNIT)( FILENAME)",cr
+	.byte " SAVE           S( UNIT)( (@)(FILENAME))",cr
+	.byte " SAVE & EXIT    E( UNIT)( (@)(FILENAME))",cr
+	.byte " TYPE (PRINT)   T UNIT( SA)",cr
+	.byte " QUIT           QUIT",cr
+	.byte " DISK STATUS    @( UNIT)",cr
+	.byte " DISK COMMAND   @( UNIT) DISK COMMAND",cr
+	.byte " DISK DIRECTORY $( UNIT)( FILENAME)",cr
+	.byte " GOTO LINE      (NUMBER)",cr
+	.byte " INVOKE MONITOR MONITOR",cr
+	.byte " STATUS LINE    O(N)(FF)",cr
+	.byte " DISPLAY MODE   A(SCII) OR P(ETSCII)",cr
+	.byte " FILTER TEXT    FA(TOP) OR FP(TOA)",cr
+	.byte " UNINVERT CHARS FM(ASK)",cr
+	.byte " MOVE TAB,CTRL  K(EYMAP)",cr
+	.byte cr
+;              01234567890123456789012345678901234567890
+	.byte "WHERE ITEMS IN PARENS ARE OPTIONAL.",cr
+	.byte "DEFAULT FILE IS DEVICE 8, NONAME.TXT.",cr
+	.byte "LOADS MODIFY THE CURRENT DEFAULTS.",cr
+	.byte cr
+	.byte "SOFTWARE BY HEDLEY DAVIS FOR COMMODORE.",cr
+	.byte 0
+	rts
+;

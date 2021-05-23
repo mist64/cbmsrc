@@ -1,0 +1,29 @@
+version	.macro 
+	.byte "2.0"
+	.endm
+
+	.blist
+	.include macro		; decalre macros
+	.include declare	; declare variables and memory map
+	*=code_start		; init pc
+	jmp init		; code
+;
+	jsr $ff7d		; primm....
+	.byte "(C)1986 COMMODORE ELECTRONICS, LTD.",$0d
+	.byte "ALL RIGHTS RESERVED",cr,00
+	rts
+;	
+	.include kernal
+	.include buf
+	.include main
+	.include keyproc
+	.include keyops
+	.include plot
+	.include bufop
+	.include command
+	.include dos
+	.include help
+	.ifgt *-text_start
+	*** error *** code overflow
+	.endif
+	.end

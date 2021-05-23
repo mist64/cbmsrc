@@ -1,0 +1,54 @@
+;
+print	jsr clrchn
+	jsr parse	; parse the filename ( we'll ignore the name )
+	bcs 90$
+
+	lda #0		; set up kernal for no name
+	jsr setnam
+	lda #printer_lfn set up lfs etc. using users device
+	ldy #0
+	ldx list_device	; ( puke if device is not 4 or 5 )
+	cpx #4
+	beq 10$
+	cpx #5
+	beq 10$
+	lda #error_numeric_value_illegal
+	sec
+	rts
+;
+10$	jsr setlfs
+;
+	jsr open	; attempt the open
+	bcc 90$		; puke if error
+;
+	ldx #print_lfn	; attach the printer..
+	jsr ckout
+	bcc 90$
+;
+			; save current buffer position
+;			; point to start of buffer
+	jsr start of file
+	
+;
+20$	jsr forward	while	can get a byte 
+	bcs 80$
+	jsr bsout	do	print the byte
+	jsr stop		if	 stop key
+	bne 20$
+	jsr 80$				close the file
+	lda #error_stop			return stop key error
+	sec
+	rts
+;
+80$	jsr clrchn
+	ldx #print_lfn	; close the file
+	jsr close
+	jsr clrchn
+	clc		; return happy
+	rts
+;
+90$	jsr 80$		; close the file
+	lda #error_device_not_present
+	sec		; return error
+	rts
+;

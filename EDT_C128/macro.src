@@ -1,0 +1,128 @@
+	.subttl	16 bit macro definitions
+;
+ram	.macro %a,%b
+%a	= curram
+	.ifb <%b>
+curram = curram+1
+	.else
+curram = curram+%b
+	.endif
+	.endm
+
+zpage	.macro %a,%b
+%a	= curzpage
+	.ifb <%b>
+curzpage = curzpage+1
+	.else
+curzpage = curzpage+%b
+	.endif
+	.ifgt curzpage-$0090
+	ERROR- too many zero page variables.....
+	.endif
+	.endm
+;
+;
+;	double precision macros
+;
+;
+ldax	.macro	%a
+	lda %a		; x,a <= %a
+	ldx %a+1
+	.endm
+;
+stax	.macro %a
+	sta %a		; %a <= x,a
+	stx %a+1
+	.endm
+;
+cmpx	.macro %a
+	cpx %a+1	; compare x,a with %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	cmp %a
+	.endm
+;
+;
+cmpi	.macro %a
+	cpx #>%a	; compare x,a with #%a
+	bne *+4
+	cmp #<%a
+	.endm
+;
+ldai	.macro %a
+	lda #<%a	; x,a <= #%a
+	ldx #>%a
+	.endm
+;
+;
+incd	.macro %a
+	inc %a		; inc double precision %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	inc %a+1
+	.endm
+;
+decd	.macro %a
+	pha		; dec double precision %a
+	lda %a
+	.ifn >%a
+	bne *+5
+	.else
+	bne *+4
+	.endif
+	dec %a+1
+	dec %a
+	pla
+	.endm
+;
+adcx	.macro %a
+	cld		; add %a to x,a
+	clc		; ( carry is only good condition code )
+	adc %a
+	pha
+	txa
+	adc %a+1
+	tax
+	pla	
+	.endm
+;
+sbcx	.macro %a
+	cld		; sub %a from x,a
+	sec		; ( carry is only good condition code )
+	sbc %a
+	pha
+	txa
+	sbc %a+1
+	tax
+	pla
+	.endm
+;
+cmpdr	.macro %a,%b,%r	; double compare %a to %b using .%r
+	ld%r %a+1
+	cp%r %b+1
+	.ifn >%a
+	.ifn >%b
+	bne *+2+3+3
+	.else
+	bne *+2+3+2
+	.endif
+	.else
+	.ifn >%b
+	bne *+2+2+3
+	.else
+	bne *+2+2+2
+	.endif
+	.endif
+	ld%r %a
+	cp%r %b
+	.endm
+;
+cpa 	.macro %a
+	cmp %a
+	.endm

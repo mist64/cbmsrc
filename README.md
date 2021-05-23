@@ -154,6 +154,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [HCD65_3.5](HCD65_3.5)                                       | 1986 | BSO-compatible rewrite |
 | [HCD65_65CE02_0.1](HCD65_65CE02_0.1)                         | 1988 | 65CE02/4510 opcode support |
 | [HCD65_65CE02_0.2](HCD65_65CE02_0.2)                         | 1990 | update |
+| [EDT_C128](EDT_C128)                                         | 1986 | |
 | [LOADER_PET](LOADER_PET)                                     | 1979 | OBJ Loader |
 | [LOADER_C64](LOADER_C64)                                     | 1986 | OBJ Loader |
 
@@ -491,6 +492,10 @@ The PET OBJ Loader, version V121379. Extracted from [ted_kernal_basic_src.tar.gz
 ### LOADER_C64
 
 The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_kernal_bas_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz) and converted to uppercase and LST-style indenting.
+
+### EDT_C128
+
+The editor for the HCD65 assembler for the C128 (1986). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
 ### MONITOR_KIM
 

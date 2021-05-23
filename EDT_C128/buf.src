@@ -1,0 +1,533 @@
+	.subttl	EDT text buffer primatives.
+;
+;
+;
+;buffer primatives:
+;
+;
+; 	the file is stored in two stacks. all chars before the current char 
+;	are in the first stack. all chars after the current char are in 
+;	the second stack. This is done to permit extremely rapid insertion of
+;	chars.
+;
+;	the text within the two stacks is a seris of <cr> separated lines.
+;	
+;	several paramaeters use the concept of charecter number. this is 
+;	in concept the offset of the char from the start of the text. This 
+;	if done so as to permit rapid movement to certain locations within 
+;	the file. ( such as the paste marker , etc. ).
+;
+;	CHAR NUMBERS ARE STORED AS A POINTER WHERE THE CHAR WOULD BE
+;	IF THE CHARECTER WAS ON THE PRE-STACK !!!. Therefore if the buffer
+;	is aligned such that the char is the current char in the buffer,
+;	then PREP would yeild the char number.
+;
+;	startp:	points to first legal char position in buffer
+;	prep:	has index or char position of "current char"
+;		points one past precious char.
+;	postp:	points directly to the current charecter unless
+;		at eof in which case points to undefined.
+;	endp:	points directly to past last legal position in buffer.
+;
+;
+;
+;
+;	zpage startp,2	; start of test pointer
+;	zpage prep,2	; pre stack pointer
+;buf_pos = prep		; yet another name for that guy
+;	zpage postp,2	; post stack pointer
+;	zpage stopp,2	; end of text pointer
+;
+	zpage buf_cr_flag 	; flag set iff buffer routines add/sub a <cr>
+;				( buf_insert, buf_remove only )
+	zpage buf_change_flag	; flag set if buffer contents change.
+;
+buf_init
+	ldai text_start	startp, prep <=  start of text
+	stax startp
+	stax prep
+	stax cur_pos	cur_pos <= $3000
+;
+	ldai text_end	postp<= endp <= end of text
+	stax endp
+	stax postp
+;
+	ldai 0
+	stax cr_count_pre	cr_count(s) <= 0000
+	stax cr_count_post
+;
+	clc		return
+	rts
+;
+
+;	four basic primitaves are defined for transfering
+;	chars from one list to another. These are for use only
+;	by other buffer routines ( do not call from key operations,
+;	because these do not affect the higher function flags like
+;	buf_cr_flag, and buf_changed flag ).
+;
+;	push_post	pushes a char after the current loc
+;	pull_post	pulls a char from behind current loc.
+;	pre_push	push a char infront of the current loc.
+;	pre_pull	pull a char from infront of current loc.
+;
+;
+buf_back_fast
+	jsr pre_pull
+	bcc push_post
+	rts
+;
+push_post	; if	full
+	cmpdr postp,prep,x
+	bne 10$
+	sec		;	puke
+	lda #error_insufficient_memory
+	rts
+;
+10$	decd postp		;dec post counter
+;
+	ldy #0		;store char
+	sta mmu_bank0
+	sta (postp),y
+	sta mmu_normal
+	cmp #cr		;if	cr
+	bne 20$
+	incd cr_count_post	incremennt cr counter
+20$	clc		; return happy
+	rts
+;
+;
+pull_post		; if empty stack
+	cmpdr postp,endp,x
+	bne 10$
+	lda #error_eob	;	return error, and a null 
+	rts
+10$	ldy #0		; load char at stack pointer
+	sta mmu_bank0
+	lda (postp),y
+	sta mmu_normal
+	incd postp	; increment stack pointer
+	cmp #cr		; if	cr
+	bne 20$
+	decd cr_count_post	decrement the cr_counter
+20$	clc		; return happy
+	rts
+;
+;
+;
+pre_pull
+	cmpdr prep,startp,x	; if empty
+	bne 10$
+ 	lda #error_sob	;	return error
+	sec	
+	rts
+;
+10$	decd prep	; dec the pre pointer
+	ldy #0		; a <= char @ prep
+	sta mmu_bank0
+	lda (prep),y
+	sta mmu_normal
+	cmp #cr
+	bne 20$
+	decd cr_count_pre
+20$	clc
+	rts		; return happy
+;
+;
+buf_advance_fast
+	jsr pull_post
+	bcc pre_push
+	rts
+;
+pre_push
+	cmpdr prep,postp,x	; if prep = postp
+	bne 10$
+	lda #error_insufficient_memory
+	sec
+	rts		;	return unhappy
+;
+10$	ldy #0
+	sta mmu_bank0
+	sta (prep),y	;stash char
+	sta mmu_normal
+	incd prep	; point to next
+	cmp #cr
+	bne 20$
+	incd cr_count_pre
+20$	clc		; return happy
+	rts
+;
+;
+;
+;
+;
+;buffer operations
+;	( above primatives )
+;
+;	these primatives simply move the buffer around
+;
+;		buf_char
+;			returns current buffer char in .a
+;		buf_to_cursor
+;			moves buffer to last known cursor position
+;		buf_position
+;			adjusts buffer to char position in x,a
+;		buf_top
+;			positions buffer at top of file
+;		buf_bot
+;			positions buffer at eof
+;		buf_sol
+;			moves buffer to start of current line
+;		buf_eol
+;			moves buffer to end of current line
+;
+;		buf_to_col
+;			moves buffer to the closest column available
+;			for the variable .a
+;		buf_col_return
+;			returns .a = the column for the current buffer position.
+;		buf_word_check
+;			returns c=1 iff at beginning of word
+;		buf_return_free
+;			returns x,a = number of free bytes in buffer
+;
+;	the following operations modify the buffer and the number
+;	of charecters in the buffer.
+;
+;		buf_insert
+;			inserts char into buffer
+;			( also updates dot_pos if necessary )
+;		buf_remove
+;			deletes char from buffer
+;			( also updates dot pos if neccesary )
+;			returns char in .a
+;
+;	NOTE:	buf_insert and buf_remove are NOT complementary.
+;		buf_insert advances the cursor position in the buffer,
+;		while buf_delete removes the current charecter, instead of
+;		the last inserted char.
+;
+;	The following buffer operations modify the line_count variable.
+;	this variable is 8 bit twos complement. This is used to keep 
+;	track of how many <crs> have been transversed to get to a certain 
+;	cursor position.
+;	Note that the variable buf_cr_flag is set if any <crs> are encountered.
+;
+;		buf_advance
+;			moves a char forward if possible
+;		buf_back
+;			moves a char back if possible
+;
+;		buf_search_check
+;			checks to see if buffer is positioned at
+;			a copy of the search string
+;
+;
+;	simple posisitioning primatives
+;
+buf_char
+	cmpdr postp,endp,a	; if	@ [eob]
+	bne 20$
+	lda #0		;	return null and error
+	sec
+	rts
+;
+20$	ldy #0		; return char 
+	sta mmu_bank0
+	lda (postp),y
+	sta mmu_normal
+	clc
+	rts
+;
+;
+;
+;
+;	buf_position
+;		sets buffers to specified position
+;		( well not too quickly right now ).
+;
+	zpage set_pos_temp,2
+;
+buf_to_cursor
+	ldax cur_pos
+;
+buf_position
+	stax set_pos_temp
+;
+10$	cmpdr prep,set_pos_temp,a
+	bne 20$
+	clc
+	rts
+;
+20$	bcc 40$
+	jsr buf_back_fast
+	bcc 10$
+	rts
+;
+40$	jsr buf_advance_fast
+	bcc 10$
+	rts
+;
+;
+buf_top
+	lda #0
+	.byte $2c
+buf_bot
+	lda #$ff
+	tax
+	jsr buf_position
+	clc
+	rts
+;
+;
+;	buf_sol
+;	set buffer so that it as at the start of the current line.
+;	( if it is not already there )...
+;
+buf_sol	
+	jsr buf_back_fast
+	bcs 90$
+	cmp #cr
+	bne buf_sol
+	jmp buf_advance_fast
+90$	rts
+;
+buf_eol_entry
+	jsr pre_push
+buf_eol
+	jsr pull_post
+	bcs 90$
+	cmp #cr
+	bne buf_eol_entry
+	jsr push_post
+90$	clc
+	rts
+;
+;
+;
+;	column primiatives for buffer.
+;
+	zpage buf_col_temp,2	two bytes for buffer coloumn
+	zpage buf_col_count
+;
+buf_col_return
+	ldax buf_pos		temp <= buffere psoition
+	stax buf_col_temp
+	lda #0			cout <= 0
+	sta buf_col_count
+	jsr buf_sol		buf <= start of line
+;
+10$	cmpdr buf_pos,buf_col_temp,a	while	buf_pos < temp
+	bcs 80$
+	jsr buf_internal_advance	do	advance
+	bcc 10$					break if error
+;
+80$	lda buf_col_count	a <= coloumn
+	clc			return happy
+	rts
+;
+;
+buf_to_col
+	sta buf_col_temp	temp <= .a
+	lda #0			count <= 0
+	sta buf_col_count
+	jsr buf_sol		buf <= start of line.
+	jmp 50$			go enter middle of loop
+;
+;
+10$	jsr buf_internal_advance
+	bcs 80$			
+;
+50$	jsr buf_char
+	bcs 80$
+	cmp #cr
+	beq 80$
+	lda buf_col_count
+	cmp buf_col_temp
+	bcc 10$
+	beq 80$
+	jsr buf_back		opps, went too far, so back up a char
+	jmp buf_col_return	and return 
+	
+80$	lda buf_col_count
+	clc
+	rts
+;
+;
+;buf_internal_advance
+;	advances buffer one byte.
+;	updates buffer coloumn count.
+;	returns next char after buffer in .a
+;	returns c=1 iff at end of buffer
+;
+;
+buf_internal_advance
+	jsr buf_advance_fast	advance a char
+	bcs 90$			if	no error
+	cmp #tab			if	was tab
+	bne 20$
+	lda buf_col_count			set to one before nextr tab stop
+	ora #$07
+	sta buf_col_count
+	jmp 80$				elseif	was control
+;
+20$	and #%01111111				
+	cmp #%00100000
+	bcs 80$
+	jsr 80$
+	jsr 80$
+	jsr 80$
+80$	inc buf_col_count		inc buf_col_count
+	bne 88$				if	over_flow
+	dec buf_col_count			dec buf_col_count
+	sec					return w/ carry set...
+	rts
+88$	clc				return happy
+90$	rts			return
+;
+;		return error if current char is not begining of a word.
+;			i.e. current = tab or <cr>
+;				or current not tab,<cr>, or space
+;				and previous is tab,<cr>, or space
+;
+buf_word_check
+	jsr buf_char		if	cannot read current char
+	bcs 80$				return happy( must be EOB )
+	cmp #tab		if	tab
+	beq 80$				return happy
+	cmp #cr			if	cr
+	beq 80$				return happy
+	cmp #space		if	space
+	beq 90$				return unhappy
+;
+;
+	jsr buf_back_fast	back up a char
+	bcs 80$			if 	error, return happy ( mst be TOF )
+	jsr buf_char		read char
+	pha			save char, advance, recall char
+	jsr buf_advance_fast
+	pla
+	cmp #tab		if	tab
+	beq 80$				return happy
+	cmp #space		if	space
+	beq 80$				return happy
+	cmp #cr			if	cr
+	bne 90$
+80$	clc			return happy
+	rts
+90$	sec			return unhappy
+	rts
+;
+;	buf_return_free
+;		sets x,a to number of free bytes in buffer
+;
+buf_return_free
+	ldax postp	x,a <= postp - prep
+	sbcx prep
+	rts
+;
+;
+;
+;
+;buf_insert
+;
+buf_insert
+	jsr pre_push		push the byte onto the stack
+	bcs 90$			if	ok
+	jsr buf_cr_check		check for cr and set flags
+	ldx dot_flag		if	dots enabled
+	beq 80$
+	cmpdr buf_pos,dot_pos,a			if	buf_pos < dot_pos
+	bcs 80$
+	incd dot_pos				inc dot_pos
+80$	clc			return happy
+90$	rts
+;
+;
+buf_remove
+	jsr pull_post	pull "current char"
+	bcs 90$		if	ok
+	pha			save char
+	jsr buf_cr_check	flag iff <Cr>
+	ldx dot_flag		if	dot dropped
+	beq 80$
+	cmpdr buf_pos,dot_pos,a		if	> buf_position
+	bcs 80$
+	decd dot_pos				dec dot_pointer
+80$	pla			recall char
+	clc			return happy
+90$	rts		return
+;
+;
+;
+;		buf_advance
+;			moves a char forward if possible
+;		buf_back
+;			moves a char back if possible
+;		buf_search_forward
+;			searchs buffer for position of text forwards
+;		buf_search_backward
+;			searchs buffer for position of text backwards
+;
+;
+buf_cr_check
+	cmp #cr		if 	.a = <cr>
+	bne 80$
+	sta buf_cr_flag		flag that pig
+80$	ldx #$80	mark buffer as changed
+	stx buf_change_flag	
+	clc		return happy w/ z=1 iff .a == <cr>
+	rts
+;
+;	buf_advance
+;		advances one char in text list
+;		returns the char char just pushed in front of here.
+;		( ie used to be the current char ).
+;
+buf_advance = buf_advance_fast
+;
+;	back_char
+;		backs up one in the list.
+;		returns the new current char.
+;
+buf_back = buf_back_fast
+;
+
+;
+;
+;	compares search string to current buffer positon
+;
+;
+buf_search_check
+	sta mmu_bank0
+	jsr 1$
+	sta mmu_normal
+	rts
+
+;			if not enough chars in main buffer to match string
+1$	lda search_len
+	ldx #0
+	adcx postp
+	cmpx endp
+	beq 8$
+	bcs 90$		go complain 
+8$	ldy #0		y <= 0
+;			while	more chars in search string
+10$	cpy search_len
+	beq 80$		do
+	lda (postp),y		.a <= char from buffer
+	cmp search_buffer,y	if	doesn't match char in search buffer
+	beq 20$
+	jsr change_case_of_char		change case of char
+	cmp search_buffer,y		if	doesn't match search buffer
+	bne 90$					exit unhappy
+20$	iny			iny
+	jmp 10$		enddo
+;
+80$	clc			return happy
+	rts
+;
+90$	lda #error_no_select_range_active
+	sec			return failure
+	rts
+;

@@ -1,0 +1,105 @@
+	.subttl	CUT and PASTE types of operations
+;
+;
+;
+;BUFLOAD:
+;	entry:	buf_pos		text buffer pointer to destination.
+;		abuf_start	pointer to source in bank one.
+;		x,a =		number of bytes to load from one.
+;
+;	exit:	error if insufficient room.
+;		information transfered from abuffer area into the
+;		text buffer. text buffer is left at the end of the inserted 
+;		information.
+;
+; BUFSAVE: ( effect a cut type of operation ).
+;	entry:	cut_start_pos	text buffer pointer of start of text to "cut"
+;		cut_end_pos	text buffer pointer to end of text to cut.
+;
+;		abuf_start	destination start address.
+;				( may be "played with" for appends.. )
+;		abuf_end	max legal position to moditfy.
+;
+;	exit:	error returned in insufficient room for operation.
+;		information transferd from the text buffer in bank 0
+;			to the buffer in bank one.
+;		x,a	= number of bytes saved
+;
+buf_save
+	ldax cut_end_pos	len <- number of bytes to cut
+	sbcx cut_start_pos
+	stax abuf_len
+;
+	adcx abuf_start		x,a <= calced end address
+	bcs 90$
+	cmpx abuf_end		if	 > end address
+	bcc 10$
+90$	lda #error_insufficient_memory
+	sec				return unhappy
+	rts
+	
+10$	stax abuf_end
+	ldax cut_start_pos	move buffer to start of ara to "cut"
+	jsr buf_position
+;
+20$	ldax abuf_start		while	start <> end
+	cmpx abuf_end
+	beq 30$			do
+;
+	jsr buf_remove			remove byte from text buffer
+	ldy #0				stash it out
+	sta mmu_bank1
+	sta (abuf_start),y
+	sta mmu_normal
+	incd abuf_start			inc start address
+	jmp 20$
+;
+30$	ldax abuf_len		x,a <= number of bytes moved
+	clc			return happy
+	rts
+;
+;BUFLOAD:
+;	entry:	buf_pos		text buffer pointer to destination.
+;		abuf_start	pointer to source in bank one.
+;		x,a =		number of bytes to load from one.
+;
+;	exit:	error if insufficient room.
+;		information transfered from abuffer area into the
+;		text buffer. text buffer is left at the end of the inserted 
+;		information.
+;
+;
+buf_load
+	stax abuf_len		len <= number of bytes to load
+	adcx abuf_start		end <= ending pointer
+	stax abuf_end
+;
+	jsr buf_return_free	x,a <= space to fit
+	cmpx abuf_len		if	x,a < lengtth of buffer
+	bcs 20$
+	lda #error_insufficient_memory
+	sec				return error
+	rts
+;
+20$	ldax abuf_start		while	start <> end
+	cmpx abuf_end
+	beq 30$
+;
+	ldy #0			do	a <= char from bank one
+	sta mmu_bank1
+	lda (abuf_start),y
+	sta mmu_normal
+	jsr buf_insert			insert the char
+	bcs 90$
+	incd abuf_start			start <= start + 1
+	jmp 20$
+;
+;
+30$	clc			;return happy
+	rts
+;
+90$	lda #99			return the unknown error
+	sec
+	rts
+;
+;

@@ -1,0 +1,742 @@
+	.subttl	control key function 
+;******************************************************************************
+;		functions asscociated with keys
+;******************************************************************************
+;
+; 	cusor_up,cursor_down,cursor_left,cursor_right
+;
+;	delete		deletes char before cursor
+;	line_feed	delete char to beginning of word
+;	back_space	delete char to beginning of line
+;
+;	insert	.a	inserts a char of text
+;
+;	keypad layout
+;
+;	-----------------------------------------------------------------
+;	|    gold:	|	help:	|    find_nxt	|  del_line	|
+;	|    gold:	|	help:	|     find	|  un_del_line  |
+;	+---------------+---------------+---------------+---------------+
+;
+;	+---------------+---------------+---------------+---------------+
+;	|    page	|	sect	|    append	|   del_word    |
+;	|  command	|	fill	|   replace	|  un_del_word	|
+;	+---------------+---------------+---------------+---------------+
+;	|   advance	| 	backup	|	cut	|    del_char	|
+;	|    bottom	|	top	|	paste	|  un_del_char	|
+;	+---------------+---------------+---------------+---------------+
+;	|	word	|	eol	|	char	|		|
+;	|   change_case	|     del_eol	|     specins	|	subs	|
+;	+---------------+---------------+---------------+		|
+;	|	line			|    select	|      enter	|
+;	|	open_line		|    reset	|		|
+;	+---------------+---------------+---------------+---------------+
+;
+;
+
+;****************************************************************************
+;				key operations:
+;****************************************************************************
+;
+;	this section of contains the functions implemented by
+;	control charecters, keypad keys, and the arrow keys.
+;
+;	keys in this section are listed in the following order:
+;
+;		arrow ( cursor ) keys
+;		misc control keys
+;		pf1-pf4
+;		keypad numbers in ascending order
+;		non_numeric_keypad_keys
+;
+;	all of these control functions exeoect a call to control_preprocess
+;	immediately before control is passed to them. This call sets up
+;	flags in the processor condition codes regarding the state
+;	of the gold function ( this a gold key ? ) and the state of 
+;	the direction byte ( are we forwards or reverse ) ?.
+;
+;	as you see, a signicant amouint of dispatching still must take place
+;	at this level of operation, as DISPATCH only breaks control down
+;	to the key level, NOT the intended function level.
+;
+;
+;
+;
+;*****************************************************************************
+;				arrow keys 
+;*****************************************************************************
+;	
+;
+;	cursor_up		move cursor up
+;	cursor_down		move cursor down
+;	cursor_left		move cursor left
+;	cursor_right		move cursor right
+;
+;
+cursor_right
+	jmp buf_advance
+cursor_left 
+	jmp buf_back
+;
+;
+cursor_up
+	inc dcol_flag	; mark this operation as set coloumn by dcol
+	jsr buf_sol	; move to start of a line
+	jmp buf_back	; back up a char and return
+;
+;	move cursor down a line
+;		( forces new screen )
+;
+cursor_down
+	inc dcol_flag	; mark this as a special dcoloumn operation
+	jsr buf_eol	; advance the cursor to end of this line
+	jmp buf_advance	; go one more char and return
+;
+;	shift screen to left if seems reasonable
+;
+ctl_left
+	clc
+	lda col_offset
+	adc #$08
+	bcs 10$
+	sta col_offset
+	inc new_screen		force replot
+10$	clc
+	rts
+;
+;	shift screen to right if seems reasonable
+;
+ctl_right
+	sec
+	lda col_offset
+	beq 10$
+	sbc #$08
+	inc new_screen		force replot
+10$	sta col_offset
+	clc	
+	rts
+;
+;
+;*****************************************************************************
+;			mics control keys 
+;*****************************************************************************
+;
+key_delete
+	jsr buf_back	; back up so char to remove is current char
+	bcs 90$
+	jsr buf_remove	; remove char
+	sta deleted_char_buffer ; save in buffer
+	lda #0		; mark type of deleted char ( edt subtilty)
+	sta deleted_char_type
+	clc		; return happy
+90$	rts
+;
+key_clear
+key_ctl_r
+	inc new_screen	; force a new screen
+	clc
+	rts
+;
+;key_insert
+;	lda deleted_char_buffer
+;	jsr buf_insert
+;	rts	
+;
+;
+;*****************************************************************************
+;			PF keys 
+;*****************************************************************************
+;
+key_pf1	rts		; trapped else where
+;
+key_pf2 jmp help
+;
+key_pf3_50
+;
+;		implement the find function
+;
+;	KLUDGE:	this routine assumes forwards key is $E4 and backwards key
+;		is $e5
+;
+;
+	lda direction		; stack the current direction
+	pha
+	ldai search_message	; get text from user
+	jsr get_command		; ( termination key in .a )
+;
+	lsr a			; set direction if user hit adv or back
+	eor #$72
+	bne 5$
+	rol a
+	sta direction
+;
+5$	ldx command_len		; copy text & length to buffer
+	stx search_len
+	dex
+10$	lda command,x
+	sta search_buffer,x
+	dex
+	bpl 10$
+	lda #0
+	sta gold_flag		; clear the gold flag to fix repeat problem
+;
+	jsr search		; go search for requestted text (BUF call )
+;
+	tay			; y <= possible error
+	pla			; a <= old direction
+	bcc 7$			; if	error occured
+	sta direction		;	restore old direction
+7$	tya			; .a <= possible error
+	rts			; return
+;
+search_message
+	.byte "SEARCH FOR: ",0
+;
+;		implemenent the find next function
+;
+key_pf3	bne key_pf3_50
+search	jsr char_function	do	move a char
+	bcs 90$			until 	error or at search string
+	jsr buf_search_check
+	bcs search
+	rts			return happy
+;
+90$	jsr buf_to_cursor	restore buffer position
+	lda #error_string_was_not_found
+	sec			return unhappy
+	rts
+;
+key_pf4	bne key_pf4_50
+;
+;	implement the delete line function
+;
+	ldax buf_pos		cut_start_pos <= cursor postition
+	stax cut_start_pos
+	jsr buf_eol		move to end of this line
+	jsr buf_advance		advance another byte ( cr )
+delete_eol_entry
+	ldax buf_pos		cur_end_pos <= buffer positon
+	stax cut_end_pos
+	cmpx cut_start_pos	if	same as start
+	bne 10$
+	lda #error_advance_past_bottom_of_buffer
+	sec					puke
+	rts
+;
+10$	ldax dline_base		abuf_start <= base of dline_buffer
+	stax abuf_start
+;
+	ldai dline_space	abuf_end <= end of dline buffer
+	adcx dline_base
+	stax abuf_end
+;
+	jsr buf_save		perform the "cut"
+	bcs 90$			if	no error
+	stax dline_len			dline_len <= x,a
+90$	rts			return
+;
+;	implement the undelete line function
+;
+key_pf4_50
+	ldax dline_base		abuf_start <= base of dline slicer
+	stax abuf_start
+	ldax dline_len		x,a <= dline_len
+	jsr buf_load		preform the "paste" and return
+	bcs 90$
+	jsr buf_to_cursor	restore previous buffer position
+90$	rts
+;
+;	
+;*****************************************************************************
+;			Keypad keys ( numeric )
+;*****************************************************************************
+;
+key_0	bne key_0_50
+;
+;		implements the beginning of a line operation
+;
+key_bol
+	lda direction
+	bne 10$		;if	forwards
+;
+	jsr buf_eol	;	goto end of current line
+	jmp buf_advance	;	advance one char & return
+;			else
+10$	jsr buf_back	;	go back one char
+	bcs 90$
+	jmp buf_sol	;	set to start of whichever line we're on & return
+90$	rts
+;
+;	implement the open line function
+;
+key_0_50
+	jsr clear_repeat ; do this only once
+	lda #cr		; pretend he typed a cr and a back arrow.
+	jsr buf_insert
+	bcs 90$
+	jmp buf_back
+90$	rts
+;
+;
+key_1	bne 50$
+;
+;		implement the word function
+;
+10$	jsr char_function	do 	move a char
+	bcs 49$
+	jsr buf_word_check	until	at start of word
+	bcs 10$
+49$	rts
+;
+;		implement the change case function
+;
+50$	lda #'F			; pretend user entered undocumented FC command
+	sta command
+	lda #'C
+	sta command+1
+	lda #2
+	sta command_len
+	jmp filter_command	; let filter_command handle the problem
+;
+;
+key_2	bne 50$
+;
+;	implement the end of line function
+;
+10$	jsr char_function	do	move a char
+	bcs 90$
+	jsr buf_char		until	at eof or a cr
+	bcs 90$
+	cmp #cr
+	bne 10$
+	clc
+90$	rts
+;
+;	implement the delete to end of line function
+;
+50$	ldax buf_pos		cut_start_pos <= cursor postition
+	stax cut_start_pos
+	jsr buf_eol		move to end of this line
+	jmp delete_eol_entry	let delete_line finish the job
+;
+key_3	bne specins
+;
+;
+;	implement the char function
+;
+char_function
+	lda direction
+	bne 10$
+	jmp buf_advance
+10$	jmp buf_back
+;
+specins	ldx repeat_count+1	if	repeat count < 256
+	bne 90$
+	lda repeat_count		repeat_count <- 0
+	stx repeat_count
+	jmp buf_insert			insert and return
+;
+90$	lda #error_numeric_value_illegal
+	sec
+	rts
+;
+key_4	bne 50$
+;
+;	implement the advance function
+;
+	lda #0
+	sta direction
+	clc
+	rts
+;
+;	implement the bottom function
+;
+50$	jsr buf_bot	go to bottom of file ( lowlevel routine )
+	lda nlines	put cursor on the floor
+	sta cur_line	
+	inc new_screen	set lotsa nasty flags 
+	inc buf_cr_flag
+	clc	
+	rts		return
+;
+;
+key_5	bne 50$
+;
+;	implement the backwards function
+;
+	lda #1
+	sta direction
+	clc
+	rts
+;
+;	implement the top function
+;
+50$	nop
+key_home
+	jsr buf_top	go to top of file ( lowlevel routine )
+	lda nlines	put cursor on the floor
+	sta cur_line	
+	inc new_screen	set lotsa nasty flags 
+	inc buf_cr_flag
+	clc	
+	rts		return
+;
+;
+;
+key_6	bne 50$
+;
+;	implement the cut function
+;
+	jsr select_something	if	nothing to cut
+	bcs 90$				puke
+;
+;				set up buf_save routine
+	ldax cut_base		;abuf_start <= cut_base
+	stax abuf_start
+;				;abuf_end <= max addr legal for cut
+	ldai cut_space
+	adcx cut_base
+	stax abuf_end
+;
+	jsr buf_save		perform the cut
+	bcs 90$			if	no error
+	stax cut_len			cut_len <= number of chars
+	jsr clear_dot			clear dot flag
+90$	rts			return
+;
+;
+;	implement the paste function
+;
+50$
+subs_entry
+	ldax cut_base		abuf_start <= pointer to base of cut area
+	stax abuf_start
+	ldax cut_len		x,a <= length of cut
+	jmp buf_load		perform paste and return
+;
+;
+;
+key_7	bne key_7_50
+;
+;	implement the page function
+;
+10$	jsr char_function	do	move a char based on direction
+	bcs 90$				puke if error
+	jsr buf_char		until	at a line feed
+	bcs 90$				
+	cmp #$0c
+	bne 10$			return happy
+	clc
+90$	rts
+;
+;	implement the command function
+;
+key_7_50
+key_ctl_z
+	jsr clear_repeat	kill repeats
+	jmp do_command		do a command ( once )
+;
+;
+key_8	bne 50$
+;
+;	implement the section function
+;
+	jsr buf_sol	move cursor to start of current line
+;
+	ldx #16		x <= 16
+10$	txa		do	save .x on stack
+	pha
+	jsr key_bol		perform the beginning of line function
+	tay			recall x from stack preserving .a
+	pla
+	tax
+	tya
+	bcs 90$			puke if error
+	dex			x <= x - 1
+	bne 10$		while	x <> 0
+90$	rts		return
+;
+;	implement the fill function
+;
+50$	jmp noimp
+;
+;
+;
+key_9	bne 50$
+;
+;
+;	implement the append_function
+;
+	jsr select_something_no_move
+	bcs 90$
+;
+	ldax cut_base		;abuf_start <= cut_base+len
+	adcx cut_len
+	stax abuf_start
+;				;abuf_end <= max addr legal for cut
+	ldai cut_space
+	adcx cut_base
+	stax abuf_end
+;
+	jsr buf_save		perform the cut
+	bcs 90$			if	no error
+	adcx cut_len			cut_len += number of chars
+	stax cut_len
+	jsr clear_dot
+	rts			return
+;
+90$	rts
+;
+;	implement the replace function
+;
+50$	jsr select_something_no_move
+	bcs 90$
+	jsr buf_return_free	; determine if it'll fit
+	adcx cut_end_pos	; x,a <= free + cut_end-cut_start
+	sbcx cut_start_pos	; ( this is free after removal )
+	cmpx cut_len		; if x,a < cut_len
+	bcs 60$
+	lda #error_insufficient_memory
+	sec			;	return error
+	rts
+;
+60$	ldax cut_end_pos	; buffer <= end of text to remove
+	jsr buf_position
+70$	ldax buf_pos		; while buffer not at start cut removal area
+	cmpx cut_start_pos
+	beq 80$			; do
+	jsr buf_remove		;	remove a char
+	jsr buf_back		;	back up a char
+	jmp 70$
+;
+80$	jsr clear_dot
+	ldax cut_base		; abuf_start <= base of cut buffer
+	stax abuf_start
+	ldax cut_len		; x,a <= cut_length
+	jmp buf_load		; read data in....
+;
+;
+;
+;
+;
+;*****************************************************************************
+;			Keypad Keys ( non-numeric )
+;*****************************************************************************
+;
+;
+key_comma bne 50$
+;
+;	implement the delete char function
+;
+	jsr buf_remove
+	bcs 90$
+	sta deleted_char_buffer
+	lda #1
+	sta deleted_char_type
+90$	rts
+;
+;
+;	implement the undelete char function
+;
+50$	lda deleted_char_buffer
+	jsr buf_insert
+	bcs 90$
+	lda deleted_char_type
+	beq 90$
+	jmp buf_back
+;
+;
+key_enter bne 50$
+;	implement the enter function
+;
+	clc	; enter does absolutely nothing in this context.....
+	rts
+;
+;	implement the substitute function
+;
+50$	jsr buf_search_check	if at an instance of the search string
+	bcs 90$
+	ldx search_len			if len <> 0
+	beq 70$
+;
+60$	txa					do
+	pha						save num chars on stack
+	jsr buf_remove					remove a char
+	pla						recall number of chars
+	tax
+	dex						dec number of chars
+	bne 60$ 				while <> 0
+;
+70$	jsr subs_entry			pasto
+	bcs 99$
+	jsr search			find the next one...
+	bcs 99$				if	on a different line
+	cmpdr cr_count_pre,old_cr_count_pre,a
+	beq 80$
+	lda #55					force screen replot
+;				( load and store because increment could wrap )
+	sta new_screen	
+80$	clc				return happy
+	rts
+;
+90$	lda #error_no_select_range_active
+	sec
+99$	rts
+;
+key_dot	bne 50$
+;
+;	implement the dot function
+;
+	lda dot_flag	; if	dot flag is set
+	beq 10$
+	lda #error_select_range_is_already_active
+	sec		;	puke
+	rts
+;
+10$	inc dot_flag	; set dot_flag
+	ldax buf_pos	; save buffer postion as dot position
+	stax dot_pos
+	jsr clear_repeat
+	clc		; return happy
+	rts
+;
+;	implement the cancel dot function
+;
+50$	lda dot_flag	; if	dot flag is set
+	beq 60$
+	inc new_screen	;	force a new screen
+60$	jsr clear_dot	; clear the dot flag
+	clc		; return happy
+	rts
+;
+clear_dot		; clear dot preserving registers and carry 
+	pha
+	lda #0
+	sta dot_flag
+	pla
+	rts
+;
+;
+key_dash bne 50$
+;
+;	implement the delete word function
+;
+;
+	ldax buf_pos		cut_start_pos <= buf_pos
+	stax cut_start_pos
+20$	jsr buf_advance		advance to start of next word
+	bcs 30$
+	jsr buf_word_check
+	bcs 20$
+30$	ldax buf_pos		cut_end_pos <= buf_pos
+	stax cut_end_pos
+;
+	ldax cut_start_pos	reposition buffer at start of "word"
+	jsr buf_position
+;
+	ldax dword_base		abuf_start <= start of dword buffer
+	stax abuf_start
+;
+	ldai dword_space	abuf_end <= max position in word_buffer
+	adcx abuf_start
+	stax abuf_end
+;
+	jsr buf_save		attempt the "cut"
+	bcs 40$			if	no error
+	stax dword_len			dword_len <= x,a
+;
+40$	rts			return
+;
+;
+;	implement the undelete word function
+;
+50$	ldax dword_base
+	stax abuf_start
+	ldax dword_len
+	jsr buf_load		preform the "paste" and return
+	bcs 90$
+	jsr buf_to_cursor	restore previous buffer position
+90$	rts
+;
+;
+;
+
+;**************************************************************************
+;		SELECT_SOMETHING
+;**************************************************************************
+;
+;
+;	select_something
+;		attempts to select an area of text and positions
+;		buffer at start of that area
+;
+select_something
+	jsr select_something_no_move
+	bcc 10$
+	rts
+;
+10$	ldax cut_start_pos	position buffer at start of area
+	jmp buf_position
+;
+;
+;	select_something_no_move
+;		sets up selection pointers to marked area or searched string
+;		or returns an error.
+;
+;		if	nothing is marked and not at start of search string
+;			return error selectr range not active
+;		if	something is marked
+;			cut_start_pos,end_pos <= start and end of marked area
+;		else	( at start of search string )
+;			cut_start_pos,end_pos <= start and end of search string
+;			in text buffer
+;		return c=0
+;
+select_something_no_move
+	jsr set_cut_start_stop	set up pointers around marked area
+	lda dot_flag	if	no dot dropped
+	bne 80$
+;				if	search string is null
+	lda search_len			
+	beq 90$				go puke
+	jsr buf_search_check	if	not at start of search instance
+	bcs 90$				go puke
+;
+	ldax buf_pos		cut_start_pos <= buffer_position
+	stax cut_start_pos
+	clc			cut_end_pos <= same + length of search string
+	adc search_len
+	bcc 40$
+	inx
+40$	stax cut_end_pos
+;
+80$	clc			return happy
+	rts
+	
+;
+90$	lda #error_no_select_range_active
+	sec
+	rts
+;
+
+;
+;set_cut_start_stop
+;	sets cut_start and cut_end pointers based on
+;	cursor postions and the dot position
+;
+set_cut_start_stop
+;
+	ldax cur_pos	; start & stop  <= cursor position
+	stax cut_start_pos	
+	stax cut_end_pos
+;
+	ldax dot_pos	; if dot_pos < cursor_pos
+	cmpx cur_pos
+	bcs 10$
+;
+	stax cut_start_pos	start <= dot_pos
+	rts
+;			else
+10$	stax cut_end_pos	end <= dot_pos
+	rts		return
+;

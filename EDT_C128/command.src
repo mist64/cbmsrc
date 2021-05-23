@@ -1,0 +1,638 @@
+	.subttl "COMMAND LINE EDITOR AND COMMANDS"
+;
+;*****************************************************************************
+;				commands:
+;*****************************************************************************
+;
+;	save file	s(ave)(4|5|6|7|8|9|10|11) (@)file(,s,p)(=( )[main|paste])
+;			w(rite)(4|5|6|7|8|9|10|11) (@)files(,s,p)(=( )[main|paste])
+;	load file	l(oad)(8|9|10|11) file(,s)
+;	include file	i(nclude)(8|9|10|11) file(,s)
+;	exit & save	e(xit)(8|9|10|11) (file(,s))
+;	exit no save	q(uit)
+;	goto line 	[0-9](0-9(0-9(0-9(0-9(0-9(0-9)))))
+;	never mind	(cr)
+;	disk status	@ (8|9|10|11)
+;	disk command	@ (8|9|10|11) (text sent to command channel )
+;	directory  	$ (8|9|10|11) ( example filename for drive to use )
+;	monitor		monitor
+;
+name_max = 40		; max disk size command string
+	ram load_name,name_max+2 file name of last loaded file
+	ram load_name_len		length
+	ram load_disk		source of file
+	ram temp_name,name_max+2	temp filename
+	ram temp_name_len	temp filename length
+	ram temp_disk		temporary disk drive number
+	ram replace_flag	flag for '@'
+	ram charno		index into command string
+	ram prompt_addr,2
+
+;
+;
+;******************************************************************************
+;			COMMAND LINE EDITOR
+;******************************************************************************
+;
+;
+;
+; get_command
+;	gerates a commaand prompt and allows single line editing 
+;	for the user to enter a command.
+;	
+;	exit:	command		: contains the users text for the command
+;		command_len	: number of chars in users command
+;
+;
+get_command
+	stax prompt_addr	save the prompt address
+	jsr command_clear	clear the command line
+;
+10$	ldax prompt_addr	do
+	jsr command_refresh 		refresh the command line
+;
+	jsr cursor_wait_for_key		key key from user ( use cursor )
+;
+	cmp #$e0			if	any keypad key
+	bcs 80$		
+;
+	cmp #142				or shift return or function key
+	bcs 20$
+	cmp #133
+	bcc 20$
+80$	clc					return happy w/ key in .a
+	rts
+;
+20$	jsr 				command_insert_delete
+	jmp 10$			forever
+;
+;
+;command_refresh
+;	entry: x,a	= pointer to text for prompt on command line
+;	exit:	command line refreshed ( prompt and user text ).
+;
+;
+command_refresh
+	tay		x,y <= x,a 
+;
+	lda col_offset	kill shifting for the char plotter
+	pha
+	lda #0
+	sta col_offset
+;
+	tya		save prompt addr on stack
+	pha	
+	txa
+	pha
+;
+	lda status_line	point to the command line
+	jsr set_line
+	lda #12
+	sta col_count
+	pla		recall address of the prompt
+	tax
+	pla
+	jsr 		print_null_terminated_string
+;
+	ldx #0		x <= 0
+20$	cpx command_len	while x < command_len
+	bcs 30$		do
+	txa			save x
+	pha
+	lda command,x		print the char
+	jsr plot_char
+	pla			restore x
+	tax
+	inx			inc x
+	jmp 20$
+;			blank rest of command line
+30$	jsr clear_to_eol
+	pla		restore the coloumn offset
+	sta col_offset
+	rts		return
+;
+;	command_clear
+;		zeros out users command line.
+;
+command_clear
+	lda #0
+	sta command_len
+	rts
+;
+;	command_insert_delete
+;		if	.a = delete
+;			if	command_len <> 0
+;				removes a char from command.
+;			else
+;				beep
+;		else	if	room to add chars
+;				add .a to command
+;			else
+;				beep
+;		
+;		entry:	.a = single petscii char
+;		exit:	command,command_len altered
+;
+command_insert_delete
+	cmp #delete	if	delete
+	bne 50$
+	dec command_len		dec command length
+	bpl 80$			if	< 0
+	inc command_len			inc command_length
+9$	jmp beep			beep & return
+;
+50$	ldx command_len 
+	sta command,x	save this char as part of the command
+	beq 70$
+	ldx col_count	if	col_count >= command_len_max
+	cpx command_len_max
+	bcs 9$			go beep and return
+70$	inc command_len	increment the command length
+80$	rts		return
+;
+
+;***************************************************************************
+;			COMMAND DISPATCH
+;***************************************************************************
+;
+;	do_command
+;		prompts user for a command
+;		reads command.
+;		executes command.
+;	exit:	c=0	ok
+;		c=1	error code in .a
+;
+command_message
+	.byte "COMMAND: ",0
+;
+do_command
+	lda plot_mode		if	in ascii mode
+	bpl 5$
+	jsr petscii			goto petscii mode
+	ldai command_message		get the command from the user
+	jsr get_command
+	jsr ascii			goto ascii mode
+	jmp 10$			else
+;
+5$	ldai command_message		get the command from the user
+	jsr get_command
+;
+10$	lda command_len		if	len is null
+	bne 20$
+	clc				return 
+	rts
+;
+20$	lda command		if	first char is digit
+	jsr isdigit
+	bcs 50$
+	jmp goto_line			execute goto line command
+;
+50$	ldx #110$-100$-1	search list of letters for command
+	lda command
+60$	cmp 100$,x
+	beq 80$
+	dex			if	not found
+	bpl 60$
+	jmp syntax			puke
+80$	inc new_screen		force a new screen after the command
+	txa			jmp to command using list of addresses
+	asl a
+	tax
+	lda 110$+1,x
+	pha
+	lda 110$,x
+	pha
+	rts
+;
+90$	sec
+	rts
+;
+100$	.byte "ELIQSW@M$OAPFKT"
+110$	.word exit-1,load-1,include-1,quit-1,save-1,save-1,disk-1
+	.word monitor-1,directory-1,status_enable_command-1
+	.word ascii_command-1,petscii_command-1,filter_command-1
+	.word key_command-1,type-1
+;
+;
+;****************************************************************************
+;			bcd to hex utils
+;			hex mul utils
+;			numeric parser
+;			isdigit routine
+;****************************************************************************
+;
+;	isdigit:	tests to see if char is 0-9
+;		entry:	.a = char under test
+;			
+;		exit:	if	true
+;				clc
+;				return hax value for char
+;			else
+;				return syntax error
+;
+;
+isdigit	cmp #'0		if	cahr >= 0 and <= 9
+	bcc 90$
+	cmp #'9'+1
+	bcs 90$
+	and #$0f		convert to binary
+	rts			return w/ carry clear
+90$	lda #error_syntax_error
+	sec		return unhappy
+	rts
+;
+;
+;
+;	char_mul_10
+
+;	entry:
+;		.a = petscii char
+;
+;	exit:	c=0	ok...
+;		c=1	overflow
+;			.a = error_illegal_numeric_value
+;		c=1	not a digit
+;			.a = error_syntax_error
+;
+char_mul_10
+	jsr isdigit	if	not a digit
+	bcs 99$			puke
+;
+	ldy #4		asl number 4 times
+10$	asl number
+	rol number+1
+	bcs 90$		puke if over flow
+	dey
+	bne 10$		or in this digit
+	ora number
+	sta number
+	clc		return happy
+	rts
+;
+90$	lda #error_numeric_value_illegal
+	sec
+99$	rts
+;
+;
+;	parse_command_to_number
+;		examines command line
+;		if	0-n decimal digits ( <9999 )
+;			returns:clc
+;				value in x,a 
+;		else
+;			returns illegal quantity error
+;
+parse_command_to_number
+	lda #0		clear "number"
+	sta number
+	sta number+1
+	sta charno	reset parser
+;
+10$	jsr gnc		while 	chars can be got
+	bcs 20$
+	jsr char_mul_10	do	attempt to process as a digit
+	bcc 10$			puke if errror
+	rts		
+;
+20$	ldax number	x,a <= bcd version
+	jsr bcd_to_hex	convert to hex
+	clc		return happy
+	rts
+;
+;
+	zpage bcd_to_hex_temp,2
+;
+;	bcd_to_hex
+;		entry:	x,a = 4 packed bcd digits ( garbage in, garbage out ).
+;		exit:	x,a = binary equivelent.
+;
+bcd_to_hex		;	convert x,a from bcd to hex
+	ldy #0		; temp <= 0
+	sty bcd_to_hex_temp
+	sty bcd_to_hex_temp+1
+;
+	pha		; save low order byte
+	txa	
+	jsr 50$		; do high order byte
+	pla		; recall low order byte
+	jsr 50$		; do low order byte
+	ldax bcd_to_hex_temp
+	rts		; return w/ result
+;
+50$	pha		save byte
+	lsr a		do up a low order nybble
+	lsr a
+	lsr a
+	lsr a
+	jsr 100$
+	pla		recall byte
+100$	and #$0f	mask
+	pha		save nybble
+;
+	jsr 150$	temp <= 10 * temp
+	lda bcd_to_hex_temp+1
+	pha
+	lda bcd_to_hex_temp
+	jsr 150$
+	jsr 150$
+	adc bcd_to_hex_temp
+	sta bcd_to_hex_temp
+	pla
+	adc bcd_to_hex_temp+1
+	sta bcd_to_hex_temp+1
+;
+	pla		temp += saved value of nybble
+	clc
+	adc bcd_to_hex_temp
+	sta bcd_to_hex_temp
+	bcc 118$
+	inc bcd_to_hex_temp+1
+118$	rts
+;	
+150$	asl bcd_to_hex_temp
+	rol bcd_to_hex_temp+1
+	rts
+;
+ungnc	dec charno		decrement the  char pointer
+	bpl 10$			if	underflow
+	lda #0				char pointer <= 0 
+	sta charno
+10$	rts			return
+	
+;
+gnc	ldx charno		if	no more chars
+	cpx command_len
+	bcc 10$
+	rts				return w/ carry set
+;
+10$	lda command,x		a <= next char
+	inc charno		point to next char
+	cmp #space		set .z if space char
+	clc			return w/ c=0.
+	rts
+;
+;**************************************************************************
+;		goto line ( just a numeric command )
+;**************************************************************************
+;
+goto_line
+	jsr 			parse_command_to_number	
+	bcs 90$			puke if error
+	stax number		leave command in number
+;
+;				while	number <> number of previous crs.
+10$	cmpdr number,cr_count_pre,a
+	beq 80$
+	bcs 30$			do	if	mumber < previous
+	jsr buf_back				back up a char
+	jmp 40$				else
+30$	jsr buf_advance				advance char
+40$	bcc 10$				puke if error
+	rts
+;
+80$	jsr buf_sol		move to start of line
+	clc			return happy
+90$	rts
+;
+;
+;**************************************************************************
+;			quit 
+;**************************************************************************
+;
+quit_text
+	.byte 'QUIT'
+;
+quit	ldy command_len
+	cpy #4
+	bne 90$
+	dey
+10$	lda command,y
+	cmp quit_text,y
+	bne 90$
+	dey
+	bpl 10$
+	inc quit_flag	signal main loop to quit
+	clc		return happy
+	rts
+90$	jmp syntax
+;
+;
+;******************************************************************************
+;			MONITOR
+;******************************************************************************
+;
+monitor
+	ldx #110$-100$		if command is "MONITOR"
+	cpx command_len
+	bne 90$
+10$	dex
+	bpl 5$
+	jsr k_monitor			call kernal's monitor
+	jsr primm
+	.byte 147			clear screen
+	.byte "PLEASE WAIT...",0	tell user
+	jmp recover			go set up cr_counts,& return
+;
+5$	lda 100$,x
+	cmp command,x
+	beq 10$
+;
+90$	lda #error_syntax_error	puke
+	sec
+	rts
+;
+;	
+100$	.byte "MONITOR"
+110$
+;
+
+;****************************************************************************
+;		PETSCII & ASCII MODE COMMANDS
+;****************************************************************************
+;
+;
+;restore_ascii_mode
+;	lda ascii_mode_flag
+;	beq petscii
+;	bne ascii
+;
+;
+ascii_command
+	lda #$ff
+	sta ascii_mode_flag
+;
+ascii	jsr set_8563_to_ascii
+	jsr primm	; select lower case, kill shift chicken
+	.byte 11,14,0
+	lda #$80
+	bmi ascii_entry
+;
+petscii_command	
+	lda #0
+	sta ascii_mode_flag
+;
+petscii
+	jsr set_8563_to_petscii
+	jsr primm	; enable shift chicken
+	.byte 12,0
+	lda #$00
+ascii_entry
+	sta plot_mode
+	sta kybd_mode
+	clc
+	rts
+;
+;****************************************************************************
+;		STATUS LINE COMMANDS  ( on & off )
+;****************************************************************************
+;
+status_enable_command	;
+	lda command_len	if	command is 1 char
+	cmp #1
+	beq 10$			go toggle status enable
+;
+	lda command+1	if	command is 'OF..'
+	cmp #'F
+	beq 20$			go zero status enable
+	cmp #'N		if	command is 'ON'
+	bne 30$			go set status enable
+;			if	status is enabled
+10$	lda status_enable
+	beq 30$
+20$	lda #0			disable status
+	.byte $2c	skip
+30$	lda #1			enable status
+	sta status_enable
+	clc		return happy
+	rts
+;	
+;
+;****************************************************************************
+;		FILTER COMMANDS
+;****************************************************************************
+;
+;
+	ram filter_core_routine,2	; address of cchar filter
+;
+;
+filter_command
+	lda #1			if 	command < 2 chars long
+	cmp command_len
+	bcs 99$				syntax error
+;
+10$	lda command+1		find second command char in list
+	ldx #110$-100$-1
+20$	cmp 100$,x
+	beq 30$
+	dex
+	bpl 20$			if	not present
+99$	lda #error_syntax_error		syntax_error
+90$	sec				return pissed
+	rts
+;
+30$	lda 110$,x		filter_core_routine <= addr of code for char filter
+	sta filter_core_routine
+	lda 120$,x
+	sta filter_core_routine+1
+;
+	jsr select_something	attempt to select something
+	bcc 40$			if	failure
+	jmp 200$			filter one char and return
+;
+40$	jsr clear_dot		clear any dot user left around
+;
+;				while 	not at end of area to filter
+50$	cmpdr cut_end_pos,buf_pos,a
+	beq 80$			do	filter a char
+	jsr 200$
+	bcc 50$				puke if error
+	rts
+80$	clc
+	rts
+;
+100$	.byte 'MAPC'			; filter command letters
+110$	.byte <mask_char		; filter core addresses
+	.byte <convert_char_to_petscii
+	.byte <convert_char_to_ascii
+	.byte <change_case_of_char
+120$	.byte >mask_char
+	.byte >convert_char_to_petscii
+	.byte >convert_char_to_ascii
+	.byte >change_case_of_char
+;
+;	filter one char please
+;
+;
+200$	jsr buf_remove		remove the char from the buffer
+	bcs 90$			( puke if error )
+	jsr 210$		jsr indirect to filter core routine
+	jmp buf_insert		insert the char into the buffer & return
+;
+210$	jmp (filter_core_routine)
+;
+;	character filters
+;
+convert_char_to_ascii		; assuming in petscii mode
+	jsr change_case_of_char	swap them uppers and lowers
+	cmp #$c0		if	$c0-$df
+	bcc 30$
+	cmp #$e0
+	bcs 30$
+	eor #%10100000			%110xxxxx -> %011xxxxx
+30$	clc
+	rts
+;
+;
+convert_char_to_petscii		; assuming in ascii mode
+	jsr change_case_of_char		toggle case
+	cmp #$80			if	$60-$7f
+	bcs 30$
+	cmp #$60
+	bcc 30$
+	eor #%10100000				%011xxxxx -> %110xxxxx 
+30$	clc
+	rts
+;
+mask_char			; uninvert any inverted chars 
+	ldx ascii_mode_flag	if	ascii mode
+	beq 10$
+	and #%01111111			mask high order bit
+	clc				return happy
+	rts
+;
+10$	cmp #$60		if	< $60
+	bcc 80$				go pass char
+	cmp #$7f		if	< $80
+	bcs 20$
+	eor #%10100000			move to $c0-df
+20$	cmp #$E0		if	>= $e0
+	bcc 80$				
+	eor #%01000000			move to $a0-$bf
+80$	clc			return happy
+	rts
+;
+;
+;
+;key_command
+;
+;	toggles mode where the the key labeled cntrl becomes
+;	a tab key, and the key labeled stop becomes the
+;	control key.
+;
+;
+key_command
+	lda #$04		a <= keycode for cntrl key
+	cmp cntrl_keycode	if	cntrl_keycode <> a
+	bne 50$
+	tax				x <= code for cntrl key
+	lda #$09			a <= code for tab key
+;
+	.byte $2c		else
+50$	ldx #$03			x <= code for stop key
+;
+	stx stop_keycode	stop_keycode <= .x
+	sta cntrl_keycode	cntrl_keycode <= .a
+	clc			return happy
+	rts
+;
+;

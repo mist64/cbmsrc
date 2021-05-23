@@ -1,0 +1,63 @@
+;
+;
+;num lines
+;
+;
+scroll_up_a
+	pha			save number of lines to scroll
+	sta scroll_temp		scroll_temp <= number of lines past
+	lda nlines			cursor where the first unshown line is.
+	sec
+	sbc scroll_temp
+	sbc cur_line
+	sta scroll_temp
+	jsr buf_to_cursor	position buffer at cursor
+10$	jsr buf_eol		do	move to stat of next line
+	jsr buf_advance
+	dec scroll_temp			dec temp
+	bne 10$			while temp <> 0
+;
+	pla			recall number of lines to scroll
+	sta scroll_temp
+20$	jsr scroll_up		do	move the display down a line
+	lda nlines			plot a line
+	jsr plot_line
+	jsr buf_advance			move to start of next line
+	dec scroll_temp			dec temp
+	bne 20$			until temp = 0
+;
+	rts			return
+;
+;
+;
+;
+;
+scroll_down_a
+	pha			save number of lines to scroll
+	sta scroll_temp		scroll_temp <= number of lines before cursor
+	lda cur_line			to first not yet shown line.
+	sec
+	sbc scroll_temp
+	sta scroll_temp
+;
+	jsr buf_to_cursor	position buffer at cursor
+10$	jsr buf_sol		do	move to next line
+	jsr buf_back
+	dec scroll_temp			dec temp
+	bne 10$			while temp <> 0
+;
+	pla			recall number of lines to scroll
+	sta scroll_temp
+20$	jsr scroll_down		do	scroll the display one line
+	jsr buf_sol			move to start of this line
+	lda #0				plot a line
+	jsr plot_line
+	jsr buf_sol			move to previous line
+	jsr buf_back
+	dec scroll_temp			dec temp
+	bne 20$			until temp = 0
+;
+	rts			return
+;
+;
+;

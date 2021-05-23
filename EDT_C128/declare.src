@@ -1,0 +1,210 @@
+
+	.subttl  EDT global memory declarations
+;
+;	MEMORY MAP DECLARATIONS:
+;
+;
+code_start	= $2000		location of editor code	bank 0
+text_start 	= $4000		location of text buffer	bank 0
+text_end	= $FEFF		end of text buffer in bank 0
+;
+cut_start 	= $4000		cut / paste buffer	bank 1
+cut_end		= $FEFF
+cut_space	= $BF00
+;
+dword_start 	= $1600		deleted word buffer	bank 1
+dword_space	= $00FF
+dword_end	= dword_start+dword_space
+;
+dline_start 	= $1700		deleted line buffer	bank 1
+dline_space	= $00FF
+dline_end	= dline_start+dline_space
+;
+curzpage 	= $0010		start of genral purpose zero page variables
+curram 		= $1800		start of genral purpose ram variables
+;
+mmu_normal	= $FF01
+mmu_normal_cfg	= $D501
+mmu_normal_val	= $00		; normal means roms and i/o
+;
+mmu_bank0	= $FF02
+mmu_bank0_cfg	= $D502
+mmu_bank0_val	= $3F		; bank0 means all ram bank 0
+;
+mmu_bank1	= $FF03
+mmu_bank1_cfg	= $D503
+mmu_bank1_val	= $7F		; bank1 means all ram bank 1
+;
+init_mmu	.macro		; macro for init mmu code
+	lda #0			; hard coded enable i/o
+	sta $ff00
+	lda #%00000111		; set shared ram from $0000 to $3FFF
+	sta $d506
+	lda #mmu_normal_val
+	sta mmu_normal_cfg
+	lda #mmu_bank0_val
+	sta mmu_bank0_cfg
+	lda #mmu_bank1_val
+	sta mmu_bank1_cfg
+	sta mmu_normal		; select normal mmu operation
+	.endm
+;
+;
+;***************************************************************************
+;		EXCEPTION HANDLEING
+;***************************************************************************
+;
+;	through out this code, the carry is used to return the
+;	relative success or failure of an operation. Note most errors
+;	ripple up from the bottom level routines for dealing with the
+;	text buffer.
+;
+;		c=0	ok
+;		c=1	operation failed.
+;			.a = error code for error routine
+;
+;***************************************************************************'
+;		TEXT BUFFER OPERAIONS
+;***************************************************************************'
+;
+;
+; 	the text buffer is divided into two stacks. all chars before the 
+;	current char are in the first stack. all chars after the current char 
+;	are in the second stack. This is done to permit extremely rapid 
+;	insertion of chars and at the expanse of slower file positioning.
+;
+;	the text within the two stacks is a seris or <cr> separated lines.
+;	nulls are disallowed. tab chars (09) are supported. Only printable
+;	chars and <cr>s are permitted.
+;
+;	several paramaeters use the concept of charecter number. this is 
+;	in concept the offset of the char from the start of the text. This 
+;	if done so as to permit rapid movement to certain locations within 
+;	the file. ( such as the paste marker , etc. ).
+;
+;	CHAR NUMBERS ARE STORED AS A POINTER WHERE THE CHAR WOULD BE
+;	IF THE CHARECTER WAS ON THE PRE-STACK !!!. Therefore if the buffer
+;	is aligned such that the char is the current char in the buffer,
+;	then PREP would yeild the char number.
+;
+;	thus two methods are used to refer to locations in the text:
+;		pointers:
+;		char numbers:
+;
+;
+;***************************************************************************
+;			RAM DECLARATIONS 
+;***************************************************************************
+;
+;	text buffer pointers
+;
+	zpage startp,2	; start of test pointer
+	zpage prep,2	; pre stack pointer
+buf_pos = prep
+	zpage postp,2	; post stack pointer
+	zpage endp,2	; end of text pointer
+;
+;	display formatting information
+;
+	zpage nlines,1		; max line number for text
+	ram error_line		; line number for error text
+	ram status_line		; line number for status
+	zpage max_col		; max number of coloumns for displayed text
+	ram status_enable	; enable for status line
+	zpage plot_mode		; b7=1 means display as ascii, else petscii
+	zpage kybd_mode 		; b7=1 means ascii keybd in ascii, else petscii.
+	zpage ascii_mode_flag	; b7=1 means user in ascii mode, else petscii.
+;
+	zpage hyster_lines	; hysteresis value for keeping cursor from
+;					top and bottom of screen
+	zpage hyster_col		; hystersis value for keeping cursor
+;					from left and right sides of screen
+;
+	zpage cr_count_pre,2	; number of crs in front of cursor
+	zpage cr_count_post,2	; number of crs after cursor
+;
+	zpage old_cr_count_pre,2	; same as cr_count_pre, before last operation..
+	zpage col_offset	; number of chars to offset the text to the left
+	zpage col_count	; temp counter for shifting display
+;
+	zpage dcol	; desired coloumn
+	zpage dcol_flag	; temp for detemining how to set cursor position
+	zpage cur_col	; cursor coloumn
+	zpage cur_row	; cursor row
+cur_line = cur_row	; alternate definition
+;
+;	error code ram
+;
+	ram error_flag		; flag for errors
+	zpage errpnt,2		; pointer into error text
+;
+;	text buffer positioning
+;
+	zpage cur_pos,2	; cursor location in buffer
+	zpage dot_pos,2	; char number of where the cut paste dot is
+	zpage dot_flag	; if non zero then cut paste dot dropped
+	ram number_flag	; if non zero, then repeat count being built
+	zpage repeat_count,2	; repeat count value
+;
+;
+;	ram for cut and paste types of operations 
+;
+	ram dword_base,2	base and number of chars in deleted word buffer
+	ram dword_len,2
+;
+	ram dline_base,2	base and number of chars in deleted line buffer
+	ram dline_len,2
+;
+	ram cut_base,2		
+	zpage cut_len,2
+;
+	zpage abuf_len,2	internal to buf_save, buf_load
+	zpage abuf_temp,2	temp thingy
+;
+	zpage abuf_start,2	start of area to cut/paste in alt buffer
+	zpage abuf_end,2	end of area to cut/paste
+;	
+	zpage cut_start_pos,2	; text buffer pointers for cut and pste
+	zpage cut_end_pos,2	; ( also used for plotting  )
+;
+	zpage number,2		;good place for building numbers
+;
+	ram new_screen	; flag to mark need to replot the entire screen
+	ram direction	; flag for advance / retreat
+	ram gold_flag	; self explanitory ( well read the damn code then !)
+	ram ds_flag	; link between reading ds$ and main loop.
+;			  if <> 0 then ds was read, therefore leave on display
+;
+	ram deleted_char_buffer	; this is self expanitory
+	ram deleted_char_type	; if 0 , char deleted via delete key
+;				 else char deleted via keypad comma key
+;
+	zpage command_len
+	ram command_len_max
+	ram command,80
+	ram search_buffer,80	; search buffer is in bank 0...
+	ram search_len		; bytes in the search string...
+	ram quit_flag		; if set then editor is to return to basic
+;
+
+;
+;	define special chars
+;
+tab	= $09
+cr	= $0d
+escape	= 27
+rvs_on	= 18
+rvs_off	= 18+128
+home 	= 19
+up	= 17+128
+down	= 17
+left	= 29+128
+right	= 29
+space	= $20
+insert	= 20+128
+delete	= 20
+gold_key = 133
+gold_key_2 = 137
+;
+;
+;

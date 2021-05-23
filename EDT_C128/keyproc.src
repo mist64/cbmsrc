@@ -1,0 +1,238 @@
+
+	.subttl	PROCESS A KEY
+;******************************************************************************
+;			PROCESS KEY
+;******************************************************************************
+;
+process_key
+	sta rxed_char	save key
+	cmp #gold_key	if	either gold_key
+	beq 1$
+	cmp #gold_key_2
+	bne 5$
+1$	sta gold_flag		set gold_flag
+	clc			return happy
+	rts
+;
+5$	cmp #delete	if	delete or a digit
+	beq 10$
+	cmp #'0
+	bcc 20$
+	cmp #'9'+1
+	bcs 20$
+;
+10$	lda command_len		if	gold or command len <> 0
+	ora gold_flag
+	beq 20$
+;
+	lda #0				clear gold_flag
+	sta gold_flag
+;	
+	lda rxed_char			add char to command line
+	jsr command_insert_delete
+	clc				return happy
+	rts
+;
+20$	ldai 0			x,a <= 0
+	cmp command_len		if	something in command buffer
+	beq 30$
+	jsr 				parse_command_to_number ( x,a )
+	bcs 90$				if	error
+;						go clear gold,repeat,and command
+;
+30$	stax repeat_count		repeat_count <= value of number
+;
+50$	jsr execute_key		do	execute the key
+	bcs 90$				if	error
+;						go clear gold,repeat,and command
+	lda repeat_count		if	repeat_count == 0
+	ora repeat_count+1
+	beq 80$					break
+	jsr stop			if	stop key pressed
+	bne 60$
+;
+	lda #error_stopped			stop error
+	bne 90$
+;
+60$	decd repeat_count		decrement the repeat count
+	lda status_line			position cursor
+	jsr set_line
+	ldax repeat_count
+	jsr print_decimal		print number for user
+	jsr clear_to_eol		clear to end of the line for the user..
+	lda repeat_count	until	repeat count == 0
+	ora repeat_count+1
+	bne 50$
+;
+80$	clc			return happy	w/ all kinds of stuff cleared
+	bcc 100$
+;
+90$	sta error_flag
+	sec
+;
+100$	ldy #0			clear the gold_flag
+	sty gold_flag
+	sty command_len		clear command
+;
+clear_repeat
+	ldy #0			clear repeat count
+	sty repeat_count
+	sty repeat_count+1
+	rts
+;
+;******************************************************************************
+;			EXECUTE KEY 
+;******************************************************************************
+;	execute the key
+;		adjust the cursor column as is appropriatte.
+;		( kludge to assist in up, and down and section operations ).
+;
+;
+execute_key
+	ldx #0			desired column flag <= 0
+	stx dcol_flag
+	jsr dispatch_key	dispatch the key to processing
+	bcs 5$			if	no error
+	lda #0				a <= 0 ( no error )
+5$	pha			save any possible error condition
+	lda dcol_flag		if	dcol_flag <> 0
+	beq 10$
+;
+	lda dcol			.a <= buf_col <= cursor_col ( best fit )
+	jsr buf_to_col
+	sta cur_col
+	ldax buf_pos			mark this position as cursor position
+	stax cur_pos
+	jmp 20$			else
+;
+10$	ldax buf_pos			mark this position as curosr position
+	stax cur_pos
+	jsr buf_col_return		cur_col <= dcol <= .a <= buffer's coloumn
+	sta dcol
+	sta cur_col
+;
+;
+20$	pla			recall error status
+	cmp #1			sec if <> 0
+	rts			return
+;
+;
+;*******************************************************************
+;			DISPATCH KEY
+;*******************************************************************
+;
+;	determine if key is control
+;	if	not,
+;		insert key into buffer as normal
+;	otherwise
+;		call appropriate control key routine.
+;
+;	remap control keys as follows:	B7-B5	B7-B5
+;					000	000
+;					100	001
+;					111	010
+;	
+	ram rxed_char
+;
+dispatch_key	lda rxed_char		a <= key
+		bmi 10$			if	< 128
+		cmp #$20			if	< $20
+		bcc control_key_0			control key
+		bcs normal_key			normal ( text ) key
+10$		cmp #$a0		if	< $a0
+		bcc control_key_1		control_key
+		cmp #$e0		if	>= $e0
+		bcs control_key_2		control_key
+;					fall through to normal key
+;
+normal_key	; normal key operation
+ctlins		; control key insert operation
+	jmp buf_insert
+;
+control_key_2	
+control_key_1	
+	eor #%10100000
+control_key_0
+	asl a		; stack address for the keys operation
+	tax
+	lda control_dispatch+1,x
+	pha
+	lda control_dispatch,x
+	pha
+	lda direction	;	set carry if direction is reversed
+	cmp #1
+	lda gold_flag	;	set z flag if not a gold function
+	php		;	save this status
+	lda rxed_char	;		recall .a
+	plp		;	restore status
+	rts		;	rts to control routine
+;
+;
+;
+;*************************************************************************
+;		control key dispatch tables
+;*************************************************************************
+;
+;	first 32 entries	low order control codes (0-31)
+;	second 32 entries	high order control codes ( 128-159 )
+;	third 32 entries	keypad keycodes
+;
+;
+control_dispatch	;
+;
+;		low order key codes
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 0-3
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 4-7
+	.word ctlins-1,normal_key-1,ctlins-1,ctlins-1		; 8-11
+	.word ctlins-1,normal_key-1,ctlins-1,ctlins-1		; 12-15
+	.word ctlins-1,cursor_down-1,key_ctl_r-1,key_home-1	; 16-19
+	.word key_delete-1,ctlins-1,ctlins-1,recover-1		; 20-23
+	.word ctlins-1,ctlins-1,key_ctl_z-1,ctlins-1		; 24-27
+	.word ctlins-1,cursor_right-1,ctlins-1,ctlins-1		; 28-31
+;
+;		high order key codes
+;
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 128-131
+	.word help-1,key_pf1-1,key_pf2-1,key_pf3-1		; 132-135
+	.word key_pf4-1,key_pf1-1,key_pf2-1,key_pf3-1		; 136-139
+	.word key_pf4-1,ctlins-1,ctlins-1,ctlins-1		; 140-143
+	.word ctlins-1,cursor_up-1,ctlins-1,key_clear-1		; 144-147
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 148-151
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 152-155
+	.word ctlins-1,cursor_left-1,ctlins-1,ctlins-1		; 156-159
+;
+;		key pad key codes
+;
+	.word key_0-1,key_1-1,key_2-1,key_3-1			; 0-3
+	.word key_4-1,key_5-1,key_6-1,key_7-1			; 4-7
+	.word key_8-1,key_9-1,key_dot-1,key_enter-1 		; 8-11
+	.word key_comma-1,key_dash-1,ctl_left-1,ctl_right-1	; 12-15
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 16-19
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 20-23
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 24-27
+	.word ctlins-1,ctlins-1,ctlins-1,ctlins-1		; 28-31
+;
+;
+noimp	lda #error_noimp
+	sec
+	rts
+;
+;
+recover
+	jsr buf_top		goto top of file
+	ldai 0			clear <cr> count
+	stax cr_count_pre
+	jsr buf_bot		goto bottom of file
+	ldai 0			clear <cr> count
+	stax cr_count_post
+	ldax cur_pos		goto cursor position if possible
+	jsr buf_position
+	ldax buf_position	set cursor to match buffer position
+	stax cur_pos
+	inc new_screen		force a replot
+	clc			return
+	rts
+;
+;
+;
+

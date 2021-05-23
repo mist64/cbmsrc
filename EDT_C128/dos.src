@@ -1,0 +1,652 @@
+	.subttl  disk commands
+;
+;********************************************
+;
+;	Disk Command/Status Operations
+;
+;	@[device-number][,command-string]
+;
+;********************************************
+;
+disk	jsr load_to_temp	assume default disk device
+	lda #0			clear name len
+	sta temp_name_len
+	jsr parse_no_default	parse the string
+	bcs 90$
+	jsr puke_if_printer	cannot use printers
+	bcs 90$
+;
+	lda temp_name_len	ignore the '0:' inserted by parse
+	cmp #3
+	bcs 10$
+;
+	jmp dscheck		no command is just dscheck
+;
+10$	ldx temp_name_len	set up the file name
+	dex 
+	dex
+	txa
+	ldx #<temp_name+2
+	ldy #>temp_name
+	jsr setnam
+;				open the disk channel,and read errst
+	jsr dscheck_no_setnam
+90$	rts
+;
+;
+
+;**************************************************************************
+;		disk status
+;**************************************************************************
+;dscheck	read disk status
+;		plots status on status line
+;		returns c=0 if ok
+;		else	returns c=1
+;			.a = 0
+ds_lfn	= 0	logical file number for ds check
+;
+	ram ds_temp,2
+;
+dscheck	lda #0		set up for error channel read
+	jsr setnam
+dscheck_no_setnam	; entry point for submit command
+	ldx number
+	lda #ds_lfn
+	ldy #$6f
+	sty ds_flag	; force main routine to not update command line...
+	jsr setlfs
+	jsr open
+	bcs 90$
+	lda status
+	bmi 90$
+	ldx #ds_lfn
+	jsr chkin
+	bcs 90$
+	lda status
+	bpl 10$
+90$	jsr 80$		close the command channel
+	lda #error_device_not_present
+	sec
+	rts
+;
+;				set up for status line print
+;
+10$	lda status_line
+	jsr set_line
+	ldx #3			make sure can print
+	stx dflto
+;
+	lda #0
+	sta ds_temp
+	sta ds_temp+1
+;
+20$	jsr basin		do	read a char
+	cmp #cr				if	cr
+	beq 80$					quit
+	cmp #'0'			if	not '0'
+	beq 30$
+	ldx ds_temp				if	ds_temp < 2
+	cpx #2
+	bcs 30$
+	inc ds_temp+1					inc ds_temp+1
+30$	inc ds_temp			inc ds_temp
+	jsr print			print the char ( on command line )
+	jmp 20$			enddo
+;
+80$	lda #ds_lfn
+	jsr close
+	jsr clear_to_eol	blank rest of line
+	jsr clrchn		clear channels
+	lda ds_temp+1		return  c=0 if ds_temp == 0
+	cmp #1
+	lda #0				.A = 0 ( null error ).
+	rts
+;
+;
+
+
+;******************************************************************************
+;  		read & display the disk directory
+;******************************************************************************
+	ram t1
+	ram t0,2
+	ram dir_flag
+;
+directory
+	jsr load_to_temp	assume default disk device
+	lda #0			clear name len
+	sta dir_flag		dir_flag <= 0
+	sta temp_name_len
+	jsr parse_no_default	parse the string
+	bcs 99$
+	jsr puke_if_printer	can't dir printers
+	bcs 99$
+;
+	lda #'$			convert 0: to $:
+	sta temp_name
+;
+	lda #2			if	name is 2 char long
+	cmp temp_name_len
+	bne 5$
+	dec temp_name_len		name <= 1 char long ( "$" only )
+;
+5$	lda replace_flag	puke iff replace flag set.....
+	beq 10$
+	lda #error_syntax_error
+	sec
+99$	rts
+;
+10$	lda temp_name_len	setnam
+	ldx #<temp_name	;fnadr low
+	ldy #>temp_name	;fnadr high
+	jsr setnam
+	lda #ds_lfn	;la
+	ldx number	;fa
+	ldy #$60	;sa
+	jsr setlfs
+	jsr open	;open directory channel
+	bcs 90$		;...branch on error
+	lda status
+	bmi 90$
+	ldx #ds_lfn
+	jsr chkin	;make it an input channel
+	bcs 90$		;...branch on error
+	lda status
+	bmi 90$
+;
+	lda #147
+	jsr print	; clear screen
+	inc dir_flag	; mark that we are reading directory
+;
+	ldy #3		;first pass only- trash first two bytes read
+;
+20$	sty t1		;loop counter
+25$	jsr basin
+	sta t0		;get # blocks low
+	lda status
+	bne 90$		;...branch if error
+	jsr basin
+	sta t0+1	;get # blocks high
+	lda status
+	bne 90$		;...branch if error
+	dec t1
+	bne 25$		;...loop until done
+;
+	ldax t0		print number
+	jsr print_decimal
+;
+	lda #' '
+	jsr print	print a space
+;
+30$	jsr basin	;read & print filename & filetype
+	beq 40$		;...branch if eol
+	ldx status
+	bne 90$		;...branch if error
+	jsr print
+	bcc 30$		;...loop always
+;
+40$	lda #cr
+	jsr print	;start a new line
+	ldy #2
+	bne 20$		;...loop always
+;
+90$	jsr clrchn	; clear channels
+	lda #ds_lfn	; close dir channel
+	sec
+	jsr close	
+	lda dir_flag	; if	we were really reading that crap
+	beq 95$
+	jsr primm		scroll dir up above error and stat lines
+	.byte cr,cr,0
+	jsr 			press_any_key_to_continue
+95$	jmp dscheck	show user the problem
+
+
+;******************************************************************************
+;		disk parser which has no right to exist
+;******************************************************************************
+;
+;	parse:
+;		parses users command for unit number, replace symbol,
+;			and file name.
+;		entry:
+;			users command in commanad,command_len.
+;		exit:
+;			c=1	.a=error code for why command is questionable.
+;			c=0	number,number = legal specified or 
+;					default unit number.
+;				replace flag == 0 iff no '@'
+;				temp_name,temp_name_len <= default or
+;					specified filename with '0:'.
+;					
+;
+parse
+	jsr load_to_temp	assume load file name ( save op ? )
+parse_no_default
+	lda  #0
+	sta charno		char number is 0
+	sta replace_flag	clear replace flag
+;
+10$	jsr gnc		do	read chars until at space
+	bcs parse_end		quit if no more
+	bne 10$
+;
+15$	jsr gnc		read first nonn white char after command
+	bcs parse_end		quit if no more
+	beq 15$
+	jsr ungnc	forget that we read it
+	jsr isdigit	if	was a digit
+	bcs 50$
+	lda #0			number <= 0
+	sta number
+	sta number+1
+20$	jsr gnc			do	read char
+	bcs 30$				if	no more or char is white
+	beq 30$					break
+	jsr char_mul_10			build up value
+	bcc 20$				if	error
+	rts					return
+;				enddo
+;
+30$	ldax number		convert disk number to binary
+	jsr bcd_to_hex
+	stax number
+;
+40$	jsr gnc			skip_white
+	bcs parse_end		quit if done
+	beq 40$
+	jsr ungnc		unread first non white char
+;
+50$	jsr gnc		read next char
+	bcs parse_end	quit if done
+	cmp #'@		if	'@'
+	bne 60$
+	sta replace_flag	set replace_flag
+	jsr gnc			read next char
+	bcs parse_end		end if done
+;
+60$	jsr ungnc	unget current char ( must be file name time... )
+	lda #0		temp_name_len <= 0
+	sta temp_name_len
+;
+70$	jsr gnc		do	copy name from comand to temp_name
+	bcs parse_end		quit if eof
+	ldx temp_name_len		puke if too many chars
+	cpx #name_max-2-4		( max string - space for "0:,s,r" )
+	bcs syntax
+	sta temp_name,x
+	inc temp_name_len
+	jmp 70$
+;
+syntax	lda #error_syntax_error
+	sec
+	rts
+;
+parse_end		;if	first char(s) are not "0:"
+	lda temp_name_len
+	cmp #2
+	bcc 10$
+	lda temp_name
+	cmp #'0
+	bne 10$
+	lda #':
+	cmp temp_name+1
+	beq 20$
+10$	jsr			insert_zero_colon
+;
+20$	lda number+1	if	number < 4 or > 11
+	bne 90$
+	lda number
+	cmp #4
+	bcc 90$
+	cmp #12
+	bcc 100$
+90$	sec			puke
+	lda #error_numeric_value_illegal
+100$	rts		return
+;
+;
+;
+;**********************************************************************
+;		parser utils
+;**********************************************************************
+;
+;
+load_to_temp		; copy load file params to temp params
+	lda #0
+	sta number+1	number <= $00,load_disk
+	lda load_disk	assume the default disk
+	sta number
+;
+	ldy load_name_len	copy load_name to temp_name
+	sty temp_name_len
+10$	lda load_name,y
+	sta temp_name,y
+	dey
+	bpl 10$
+	rts
+;
+temp_to_load		; copy temp params to file params
+	lda number
+	sta load_disk
+	ldx temp_name_len
+	stx load_name_len
+10$	lda temp_name,x
+	sta load_name,x
+	dex
+	bpl 10$
+	rts
+;
+insert_zero_colon
+	lda #':'
+	jsr insert_char_into_temp
+	lda #'0'
+insert_char_into_temp
+	pha	save char
+	lda temp_name_len
+	cmp #name_max
+	bcc 5$
+	lda #error_syntax_error
+	rts
+5$	inc temp_name_len
+	ldx temp_name_len
+10$	lda temp_name-1,x
+	sta temp_name,x
+	dex
+	bne 10$
+	pla
+	sta temp_name
+	rts
+;
+puke_if_printer
+	lda #error_numeric_value_illegal	.a <= error code
+	ldx #7				return c=1 iff unit < 8
+	cpx number
+	rts
+;
+;
+;**************************************************************************
+;		exit and save 
+;**************************************************************************
+;
+exit	jsr parse	parse the filename and unit number
+	bcs 90$
+;
+	jsr puke_if_printer
+	bcs 90$			error, cannot exit to printer....
+;
+	lda #'@		exit always replaces
+	sta replace_flag
+	jsr insert_char_into_temp
+	bcs 90$
+	jsr exit_entry	try to save
+	bcs 90$
+	jsr dscheck	check the save status
+	bcc 10$		if	error
+90$	rts			return
+;
+10$	inc quit_flag	signal main loop to quit
+	rts		return happy
+;
+;
+;
+;
+save	jsr parse	parse the filename and unit number
+	bcc 10$
+	rts
+10$	jsr puke_if_printer	if	not a printer
+	bcs 90$
+	jsr exit_entry
+	bcs 90$
+	jmp dscheck
+90$	rts
+;
+;
+	ram last_byte
+;
+type	jsr clrchn		clear channels
+	lda #0
+	sta temp_name_len
+	lda #1			number <= > 256
+	sta number+1
+;				parse the users crap
+	jsr parse_no_default
+	bcs 90$
+	jsr puke_if_printer	if	not printer
+	bcc 91$				puke
+	lda number		save unit number on stack
+	pha
+;
+	ldx temp_name_len	if	name = 0:"" ( inserted by parse )
+	dex
+	dex
+	bne 10$
+	lda #$FF			x,a <= $00FF
+	jmp 50$			else
+;
+10$	stx command_len			mark command len
+20$	lda temp_name+2,x		copy name to command
+	sta command,x
+	dex
+	bpl 20$
+	jsr parse_command_to_number	convert to a number
+	bcc 50$				if	error
+	tay					save .a
+	pla					restore stack
+	tya					restore .a
+	bcs 90$					go complain
+93$	lda #error_device_not_present
+	.byte $2c
+92$	lda #error_syntax_error
+	.byte $2c
+91$	lda #error_numeric_value_illegal
+90$	pha	
+	lda #2
+	jsr close
+	pla
+	sec
+	rts
+;
+50$	tay			y <= low order bit of sa
+	pla			.a <= unit number
+	cpx #0			if	x <> 0
+	bne 91$				illegal quatity
+	tax			.x <= unit
+	lda #2			la <= 2
+	jsr setlfs
+	lda #0			no name
+	jsr setnam
+	jsr open		open
+	bcs 93$			device not present error
+	ldx #2			ckout 
+	jsr ckout
+	bcs 93$			device_not_present_error
+;
+	jsr buf_top	move buffer to start of file
+;
+60$	jsr buf_advance	while	can read from buffer
+	bcs 70$
+	sta last_byte
+	jsr bsout	do	write to disk
+	bit status		if	nothing there
+	bpl 65$
+	jsr 80$				do up the close
+	lda #error_device_not_present	return pissed
+	sec
+	rts
+65$	jsr stop		if	stop pressed
+	bne 60$
+	jsr 70$
+	lda #error_stopped
+	sec
+	rts
+;
+70$	lda #cr		if	last byte was not cr
+	cmp last_byte
+	beq 80$
+	jsr bsout			send one for the dummy (printer)
+;
+80$	jsr clrchn		clear channels
+	lda #2			close the file
+	jsr close	
+	jsr buf_to_cursor	restore the file position
+	jsr clrchn		clear channels
+	clc 
+	rts
+;
+;
+exit_entry
+	lda replace_flag 
+	beq 10$
+	lda #'@
+	jsr insert_char_into_temp
+	bcc 10$
+	rts
+10$	ldx temp_name_len
+	lda #',
+	sta temp_name,x
+	inx
+	lda #'W
+	sta temp_name,x
+	inx
+	stx temp_name_len
+;
+	jsr dopen	open the file
+	bcs 90$		puke if error
+	jsr clrchn
+	ldx #2		set up to write to file
+	jsr ckout
+	jsr print_entry	send the data and close the file
+90$	php		save stat and errorno
+	pha
+	jsr buf_to_cursor goto cursor position
+	pla		restore stat and errorno
+	plp
+	rts		return
+;
+	ram last_byte
+;
+print_entry
+	jsr buf_top	move buffer to start of file
+;
+20$	jsr buf_advance	while	can read from buffer
+	bcs 70$
+	sta last_byte
+	jsr bsout	do	write to disk
+	bit status		if	nothing there
+	bpl 20$
+	jsr 80$				do up the close
+	lda #error_device_not_present	return pissed
+	sec
+	rts
+;
+70$	lda #cr		if	last byte was not cr
+	cmp last_byte
+	beq 80$
+	jsr bsout			send one for the dummy (printer)
+80$	jsr clrchn		clear channels
+	lda #2			close the file
+	jsr close	
+	jsr buf_to_cursor	restore the file position
+	jsr clrchn		clear channels
+	clc 
+	rts
+;
+;
+;*************************************************************************
+;			load and include
+;*************************************************************************
+;
+;
+include	jsr load_1	parse,open,chkin,etc
+	bcc go_load	if	ok, go load
+	rts		return unhappy
+;
+load	jsr load_1	set up for the load
+	bcc 10$		return if error
+	rts
+;
+10$	jsr buf_init		init the buffer
+	jsr temp_to_load	make note of this file
+	lda #0
+	sta status
+;
+go_load
+10$	jsr basin	do	read a char
+	jsr buf_insert		insert the char
+	bcs 90$			puke if buffer full.....
+	lda status	until	status <> 0
+	beq 10$
+	jsr dscheck	show disk status to the user
+	php		save error status
+	pha		save error number
+	jsr 90$		close file
+	pla		recall error number and status
+	plp
+	rts		return to the monkey
+;
+90$	lda #2		; close the file
+	jsr close
+	lda #error_insufficient_memory
+	sec
+	rts
+;
+;	load_1
+;		parse for load unit, and filename
+;		perform the open
+;		perform the chkin
+;		return c=0 if looks ok to load
+;				x,a = first two bytes in file
+;		return c=1 if some sort of error
+;
+;
+;
+load_1	jsr parse	parse the filename and unit number
+	bcs 90$
+	jsr puke_if_printer
+	bcs 90$
+;
+	lda replace_flag puke if replace flag
+	beq 10$
+	jmp syntax
+10$	jsr dopen	open the file
+	bcs 90$		puke if error
+	jsr clrchn	clear channels
+	ldx #2		set up to read from it...
+	jsr chkin
+90$	rts		return
+;
+;
+;**************************************************************************
+;		 disk open
+;**************************************************************************
+;
+dopen	lda #2		; setlfs for suggested unit
+	ldx number
+	tay	
+	jsr setlfs
+	lda temp_name_len
+	ldx #<temp_name	; setname for "temp_name"
+	ldy #>temp_name
+	jsr setnam
+	lda #$0E	; set the bank
+	ldx #$0E
+	jsr setbnk
+	jsr open	; attempt to open the file
+	bcs 91$
+	jsr dscheck
+	bcs 90$
+	rts		; return happy
+;
+91$	lda #error_device_not_present
+	sec
+;
+90$	php
+	pha
+	lda #2		; close the file
+	jsr close
+	pla
+	plp
+	rts
+;
+;

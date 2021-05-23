@@ -1,0 +1,447 @@
+	.subttl	THE CORE OF EDT
+;**************************************************************************
+;			initialization
+;**************************************************************************
+;
+init	jsr save_system		save stuff necesary to return to basic
+	jsr init_editor		init the editor
+10$	jsr main_loop		do	main loop
+	lda quit_flag		while	quit_flag = 0
+	beq 10$
+	jsr restore_system	restore system
+	jmp $4000		hard reset basic ( almost full init... )
+;
+init_editor
+	init_mmu		; init the mmu preconfig registers
+	jsr kill_basic		; no basic irqs ( frees zero page )
+	jsr kill_nmis		; don't like them nmis either
+	jsr init_keyboard	; modified keyboard driver
+	jsr scrorg		
+	sty status_line		; bottom line is status
+	dey
+	sty error_line		; next to last is error line
+	dey
+	sty nlines		; next to next to last is last line in window
+	dex			; need to never place cursor past right of window
+	stx max_col
+	stx command_len_max
+;
+	jsr buf_init
+;
+	lda #0		a <= 0
+	sta plot_mode	select petscii mode of display
+	sta kybd_mode	select petscii keyboard mode
+	sta msgflg	kill kernal messages
+	sta cur_line	cur_line <= 0
+	sta cur_col	cur_col <= 0
+	sta col_offset	col_offset <= 0
+	sta dcol	dcol <= 0
+	sta error_flag	error_flag <= 0
+	sta dot_flag	dot_flag <= 0
+	sta number_flag	number_flag <= 0
+	sta direction	direction <= 0
+	sta search_len	search string <= ""
+	sta quit_flag	quit_flag <= 0
+;
+;
+	lda #4
+	sta hyster_lines	screen vertical hysterisis <= 5 lines
+	lda #1			screen horizontal hystersis <= 1 char
+	sta hyster_col
+	sta new_screen	new_screen <= non_zero
+	sta status_enable	enable status line display
+;
+	ldai 0		;x,a <= 0
+	stax dword_len		bytes in word buffer <= 0
+	stax dline_len		bytes in line buffer <= 0
+	stax cut_len		bytes in cut buffer <= 0
+	stax repeat_count	repeat_count <= 0
+;
+	ldai cut_start	; init base pointers for various buffers
+	stax cut_base
+	ldai dline_start
+	stax dline_base
+	ldai dword_start
+	stax dword_base
+;
+	lda #8		; set up default disk
+	sta load_disk
+;			; set up default filename
+	ldx #init_filename_end-init_filename
+	stx load_name_len
+	dex
+1$	lda init_filename,x
+	sta load_name,x
+	dex
+	bpl 1$
+;
+	lda #0		clear pending command
+	sta command_len
+;
+	ldai init_message	tell 'em who we are
+	jsr command_refresh
+	lda #1		prevent main from updateing command line
+	sta ds_flag	have not recently read disk status
+	jmp refresh_display	display the empty buffer & return
+;
+init_message
+	.byte 14 	; select lower case as default
+;	0123456789012345678901234567890123456789   40 col max....
+	.byte "-- C128 TEXT FILE EDITOR V"
+	version
+	.byte " --"
+	.byte 0
+;
+init_filename
+	.byte "0:NONAME.TXT"
+init_filename_end
+;
+
+;
+;**********************************************************************
+;		main routine 
+;**********************************************************************
+;
+;
+null_message
+	.byte " ",0
+;
+main_loop
+	lda error_flag		if	error flag <> 0
+	beq 20$
+	jsr beep			beep
+	jsr error_display		display error condition
+	jmp 30$			else
+;
+20$	lda error_line			postition cursor
+	jsr set_line
+;
+	lda status_enable		if 	status enable <> 0
+	beq 25$
+	jsr					print_status_info
+;
+25$	jsr clear_to_eol		blank to eol
+;
+30$	lda status_line
+	jsr set_line
+	lda ds_flag		if	disk status not read
+	bne 40$
+	lda command_len			if	command len = 0
+	bne 35$
+	lda status_enable		andif	status line enabled
+	beq 35$
+	jsr print_status_info_2				print second line
+	jmp 40$				else
+;
+35$	ldai null_message			update command line 
+	jsr command_refresh			  ( has repeat count or null )
+;
+40$	jsr 			cursor_wait_for_text
+	pha			save key
+;
+	ldax cr_count_pre
+	stax old_cr_count_pre
+	ldx #0
+	stx buf_change_flag	buf_line_offset <= 0
+	stx buf_cr_flag		buf_cr_flag <= 0
+	stx error_flag		error_flag <= 0
+	stx ds_flag		ds_flag <= 0
+;
+	pla			recall key
+50$	jsr process_key		do	process_key 
+	bcs 60$				break if error
+	jsr get_key		until	no more keys to implement
+	bcc 50$
+;
+60$	jsr check_cur_col	validate horizontal postiition of cursor
+	jsr pick_cur_line	position the cursor vertically
+	jsr update_display	fix the display to match
+	jmp buf_to_cursor	position buffer and return
+;
+;
+print_status_info
+;
+	ldx #2			; skip 0: in filename
+10$	cpx load_name_len
+	txa
+	pha
+	lda #space
+	bcs 20$
+	lda load_name,x
+20$	jsr print
+	pla
+	tax
+	inx
+	cpx #19
+	bne 10$
+;
+	jsr primm
+	.byte "LINE = ",0	print line number
+	ldax cr_count_pre
+	jsr print_decimal
+	jsr primm		print coloumn number
+	.byte " COL = ",0
+	ldx #0
+	lda cur_col
+	jsr print_decimal
+	jsr clear_to_eol	clear to eol
+	rts
+;;
+print_status_info_2
+	bit plot_mode	
+	bpl 20$	
+	jsr primm
+	.byte "ASCII  ",0
+	jmp 40$
+20$	jsr primm
+	.byte "PETSCII",0
+40$	jsr primm
+	.byte "           FREE SPACE = ",0
+	jsr buf_return_free
+	jsr print_decimal
+	jmp clear_to_eol
+;
+;
+;
+;
+;check_cur_col
+;	this routine is respncible for shifting the display
+;	left and right based on the number of columns, the
+;	current cursor coloumn, and the current display shift.
+;
+;	if shifting is required, then the new_screen flag is set,
+;	and col_offset is adjusted to the new shift value.
+;
+;
+check_cur_col
+	lda cur_col		x <= calc minumum screen offset
+	clc			( cursor_col + hyster_col - screen width )
+	adc hyster_col		( rounded up to next tab stop )
+	bcc 10$
+	lda #255
+10$	sec
+	sbc max_col
+	bcs 20$
+	lda #255
+20$	ora #%00000111	
+	tax
+	inx
+;
+;
+	lda cur_col		y <= max screen offset
+	sec			( rounded down to tab stop )
+	sbc hyster_col
+	bcs 30$
+	lda #0
+30$	and #%11111000
+	tay
+;
+	cpx col_offset		if	x > current screen offset
+	bcc 40$
+	beq 40$
+	stx col_offset			col_offset <= .x
+	inc new_screen			force a screen
+40$	cpy col_offset		if	y < current screen offset
+	bcs 50$
+	sty col_offset			col_offset <= .y
+	inc new_screen			force a screen
+;
+50$	clc
+	rts
+;
+;
+;	pick_cur_line
+;		looks at the number of crs in front of the cursor
+;		and the number that used to be there in order to determine
+;		how the cursor should move vertically. new cursor line is
+;		calculated base upon this delta and the line the cusor
+;		used to be on.
+;		
+;		sets old_cur_line to value of cur_line before entry, and
+;		then modifies cur_line to freshly calculated value.
+;
+;		calls check_cur_line to assure that the new cursor position 
+;		meets the rules for positiioning based upon the vertical
+;		hysteresis values.
+;
+	ram old_cur_line	temp var
+;
+pick_cur_line
+	lda cur_line
+	sta old_cur_line
+	cld			x,a <= new cursor line
+	sec				( new text line-old text line+cur_line )
+	ldax cr_count_pre	
+	sbcx old_cr_count_pre	
+	clc
+	adc cur_line
+	bcc 10$
+	inx
+10$	cpx #0			if < 0
+	bmi 30$				go set to line zero
+	bne 20$			if < nlines
+	cmp nlines		
+	bcc 40$				go curline <= .a
+20$	lda nlines		curline <= nlines
+	.byte $2c
+30$	lda #0
+40$	sta cur_line
+;
+;	jmp check_cur_line
+;	
+;	check_cur_line
+;		the purpose of this routines is too attempt to keep the
+;		cursor within the middle lines of the screen.
+;		I.E. moveing up and down operations result in the
+;		cursor being placed on the top or bottom lines of the screen.
+;		this function detects when the cursor is near the edge of
+;		a window, and examines the text buffer to see if a more
+;		optimal location can be selected.
+;
+;		copy cursor line to temp location.
+;		modify temp location based on various rules for cursor placement
+;		compare temp tto cursor line
+;		if	different
+;			cursor lione <= temp
+;			force new_screen
+;
+	zpage val_temp,1
+;		
+check_cur_line
+	lda cur_line		a <= cur_line
+	bpl 10$			if	.a < 0
+	lda #0				.a <= 0
+;
+10$	sta val_temp		val_temp <= .a
+;
+	sec			.a <= max desired line
+	lda nlines
+	sbc hyster_lines
+;
+	cmp val_temp		if 	.a < val_temp
+	bcs 20$
+;
+	ldax cr_count_post		.a <= mim(hyster_lines,cr_count_post)
+	jsr 100$
+;
+	eor #$ff			.a <= nlines - .a
+	sec
+	adc nlines
+;
+	cmp val_temp			if	.a < val_temp
+	bcs 20$
+	sta val_temp			val_temp <= .a
+;
+20$	lda val_temp	if	val_temp < hyster_lines
+	cmp hyster_lines
+	bcs 50$
+	ldax cr_count_pre		.a <= min(hyster_lines,cr_count_pre)
+	jsr 100$
+	cmp val_temp			if	.a > val_temp
+	bcc 50$
+	beq 50$
+;
+	sta val_temp				val_temp <= .a
+;
+50$	lda cr_count_post+1
+;			if	< 255 lines after cursor
+	bne 70$
+	sec
+	lda nlines		a <= nlines - number of crs behind us
+	sbc cr_count_post
+	bcc 70$			if	.a > 0
+;
+	cmp val_temp			if	.a > val_temp
+	bcc 70$
+	beq 70$
+	sta val_temp				select a new cursor line
+;
+;			if 	cr_count_pre < val_temp
+70$	ldx cr_count_pre+1
+	bne 80$
+	lda cr_count_pre
+	cmp val_temp
+	bcs 80$
+	sta val_temp		val_temp <= cr_count_pre
+;
+80$	lda val_temp	if	val_temp <> cur_line
+	cmp cur_line
+	beq 88$
+	sta cur_line		cur_line <= val_temp
+88$	clc		return happy
+	rts
+;
+;
+100$	cpx #0			.a <= min( hyster_lines, (x,a) )
+	bne 110$
+	cmp hyster_lines
+	bcc 120$
+110$	lda hyster_lines
+120$	rts
+;
+;
+;
+;
+;	cr_count_pre(2)		buffer line number after operation
+;	old_cr_count_pre(2)	buffer line number before operation
+;	old_cur_line		display line number before operation
+;	cur_line		display line number
+;
+;	buf_changed_flag	set if operation changed buffer
+;	buf_cr_flag		set if operation added or deled a CR from buf
+;	new_screen		set if operation requires full refresh
+;				( command, etc )
+;	dot_flag		set if mark area enabled.
+;
+update_display
+	lda buf_cr_flag		if	buf_cr_flag <> 0
+	bne 99$				go force complete refresh
+	lda new_screen		if	new_screen <> 0
+	bne 99$				fo force complete refresh
+	ldax cr_count_pre	x,a <= number of lines to scroll display
+	sbcx old_cr_count_pre
+	sec
+	sbc cur_line
+	bcs 10$
+	dex
+10$	clc
+	adc old_cur_line
+	bcc 20$
+	inx
+;
+20$	cpx #0			if	x,a > 0
+	bmi 30$
+;					if 	x,a > 16
+	bne 99$	
+	cmp #16+1
+	bcs 99$					go force complete refresh
+	bcc 40$			else
+;
+30$	inx				if 	x,a < -10
+	bne 99$	
+	cmp #$FF-16
+	bcc 99$					go force complete refresh
+;
+40$	cmp #0			if	scroll_num  (.a ) <> 0
+	beq 50$
+	ldx buf_change_flag		if 	buf_changed
+	bne 99$					go force complete refresh
+	ldx dot_flag			if	dot is dropped
+	bne 99$					go force complete refresh
+;
+	jmp scroll_and_refresh		go scroll and refresh
+;
+50$	ldx dot_flag		if	dot dropped
+	beq 60$
+	ldax cr_count_pre		if moved past a line
+	cmpx old_cr_count_pre
+	bne 99$					go refresh entire display
+	jmp refresh_cursor_line		go refresh cursor line
+60$	lda buf_change_flag	if	buffer changed
+	beq 70$
+	jmp refresh_cursor_line		refresh_cursor_line
+70$	rts			return
+;
+99$	lda #0			clear new_screen
+	sta new_screen
+	jmp refresh_display	refresh_entire_display

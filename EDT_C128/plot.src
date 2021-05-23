@@ -1,0 +1,386 @@
+	.SUBTTL DISPLAY REFRESH ROUTINES
+
+;
+;
+	zpage scroll_temp
+;
+
+scroll_and_refresh
+	sta scroll_temp	
+	and #$ff
+	bpl scroll_up_a
+	eor #$ff	correct sign of calcuation
+	clc
+	adc #1
+;
+scroll_down_a
+	pha			save number of lines to scroll
+	clc
+	sbc cur_line
+	jsr scroll_buf_pos
+;
+	pla			recall number of lines to scroll
+	sta scroll_temp
+20$	jsr scroll_down		do	scroll the display one line
+	jsr buf_sol			move to start of this line
+	lda #0				plot a line
+	jsr plot_line
+	jsr buf_sol			move to previous line
+	jsr buf_back
+	dec scroll_temp			dec temp
+	bne 20$			until temp < 0
+;
+	rts			return
+;
+;
+scroll_up_a
+	pha			save number of lines to scroll
+	sta scroll_temp		scroll_temp <= number of lines past
+	lda nlines			cursor where the first unshown line is.
+	sec
+	sbc cur_line
+	sbc scroll_temp
+	clc
+	adc #$01
+	jsr scroll_buf_pos
+;
+	pla			recall number of lines to scroll
+	sta scroll_temp
+20$	jsr scroll_up		do	move the display down a line
+	lda nlines			plot a line
+	jsr plot_line
+	jsr buf_advance			move to start of next line
+	dec scroll_temp			dec temp
+	bne 20$			until temp = 0
+;
+	rts			return
+;
+scroll_buf_pos
+	sta scroll_temp		save number of lines  to move buffer
+	jsr buf_to_cursor	position buffer at cursor
+	lda scroll_temp		a <= number of lines to move buffer
+	beq 80$			if	non zero
+	bmi 20$				if	> 0
+10$	jsr buf_eol				do	move to end of line
+	jsr buf_advance					move to start of next 
+	dec scroll_temp					temp--
+	bne 10$					until	temp == 0
+	rts					return
+;
+20$ 	jsr buf_sol			do	move to start of line
+	jsr buf_back				back up to end of previous line
+	inc scroll_temp				temp ++
+	bne 20$				until	temp == 0
+80$	jmp buf_sol		move to start of line & return
+;
+;
+scroll_up
+	ldx nlines
+	ldy max_col
+	clc
+	jsr plot
+	jsr primm
+	.byte escape,"B",escape,"V",home,home,0
+	rts
+;
+scroll_down
+	ldx nlines
+	ldy max_col
+	clc
+	jsr plot
+	jsr primm
+	.byte escape,"B",escape,"W",home,home,0
+	rts
+;
+;
+;
+;	refresh_line_group
+;	
+;	refreshes lines .a through .x where  0 <= x,a <= nlines
+;
+	zpage refresh_min_line	min line number to refresh
+	zpage refresh_max_line	max line to refresh
+	zpage refresh_cur_line	current line being refreshed
+;
+;
+refresh_display
+	lda #0
+	ldx nlines
+	jmp refresh_line_group
+;
+;
+refresh_cursor_line
+	lda cur_line
+	ldx #0
+;
+refresh_line_group
+	sta refresh_min_line	save lines to refresh
+	stx refresh_max_line
+	jsr buf_to_cursor	position buffer on cursor line
+	lda cur_line
+	sta refresh_cur_line
+;
+10$	lda refresh_cur_line	while	cur_line <> min_line
+	cmp refresh_min_line
+	beq 30$
+	bcc 20$				if	cur_line > min_line
+;
+	dec refresh_cur_line			dec cur_line
+	jsr buf_sol				back up buffer to match
+	jsr buf_back
+	jmp 10$				else
+;
+20$	inc refresh_cur_line			inc cur_line
+	jsr buf_eol				advance buffer to match
+	jsr buf_advance
+	jmp 10$	
+;
+30$	jsr buf_sol		position buffer at start of this line
+;
+40$	jsr buf_char		do	if	no more chars in buffer
+	bcs 100$			goto special handler	
+	lda refresh_cur_line		refresh cur_line
+	jsr plot_line
+	jsr buf_advance			point to next line in buffer
+	inc refresh_cur_line		cur_line ++
+	lda refresh_max_line	while	cur_line =< max_line
+	cmp refresh_cur_line	
+	bcs 40$
+	cmp nlines		if	at end of display
+	beq 80$
+	jsr buf_char		orif	not at end of buffer
+	bcs 100$
+80$	rts				return happy
+;
+100$	lda refresh_cur_line	print [EOF] on this line & clear to EOL
+	jsr set_line
+	jsr primm 
+	.byte "[EOF]",27,"Q",0
+110$	lda refresh_cur_line	do	if 	have done last line
+	cmp nlines
+	bcc 120$
+	clc					return happy
+	rts
+120$	inc refresh_cur_line		point to next line
+	lda refresh_cur_line		blank it
+	jsr set_line
+	jsr clear_to_eol
+	jmp 110$		loop
+;
+
+;
+;	Plot line routine
+;
+plot_line
+	jsr set_line	; position display cursor at start of this line
+	lda #0		; set up display_shift
+	sta col_count
+;
+	lda dot_flag	;if	no dots
+	beq 5$			go kill rvs mode
+	jsr set_cut_start_stop	set up the cut pointers
+	ldax buf_pos		if 	after start and before end
+	cmpx cut_start_pos
+	bcc 5$
+	cmpx cut_end_pos
+	bcs 5$
+	lda #rvs_on			turn rvs mode on
+	.byte $2c	
+5$	lda #rvs_off
+	jsr print
+;
+;			
+10$	ldx dot_flag	do	if	dots enabled
+	beq 40$
+	cmpdr cut_start_pos,buf_pos,a	if	at start of marked area
+	bne 30$
+	lda #rvs_on				turn rvs_on
+	jsr print
+30$	cmpdr cut_end_pos,buf_pos,a	if	at end of marked area
+	bne 40$
+	lda #rvs_off				turn rvs_off
+	jsr print
+;
+;
+40$	jsr buf_advance_fast	advance a char ( returns w/ in .a )
+	bcs 80$			if	error
+;					go clear to eol & return
+	cmp #cr			if	went past a <cr>
+	beq 70$				go back,clear to eol & return
+;
+50$	jsr plot_char		plot the char
+	jmp 10$		endo forever
+;
+70$	jsr buf_back_fast
+;
+80$	jmp clear_to_eol blank  rest of line and return
+;
+
+;
+;	***************** PETSCII MODE *********************
+;  charecter	keyboard map			type		print format
+;---------------------------------------------------------------------------
+;$00-1F	0-31	control		normal petscii	( control )	control exp
+;$20-3F	32-63	numerics & punc	"		( text )	numerics
+;$40-5F	64-95	lower_case	"		( text )	lower case
+;$60-7F	96-127	NEVER RXED FROM KYBD		( inv text )	inv upper case
+;$80-9F	128-159	more control	normal		( control )	control exp
+;$A0-BF	160-191	pet graphics 	normal		( text )	pet graphics
+;$C0-DF	192-223	upper case text normal		( text )	upper case
+;$E0-FF	224-225	KEYPAD KEYS	( SPECIAL ) 	( control )	inv pet graphics
+;
+;	**************** ASCII MODE ************************
+;  charecter	keyboard map			type		print format
+;---------------------------------------------------------------------------
+;								printed as
+;$00-1F	0-31	control		normal petscii	( control )	control exp
+;$20-3F	32-63	numerics & punc	"		( text )	numerics
+;$40-5F	64-95	upper_case	"		( text )	upper case
+;$60-7F	96-127	lower case			( text )	lower case
+;$80-9F	128-159	more control	normal		( control )	control exp
+;$A0-BF	160-191	NEVER RXD FROM KYBD		( inv text )	inv numerics
+;$C0-DF	192-223	NEVER RXD FROM KYBD		( inv text )	inv upper case
+;$E0-FF	224-225	KEYPAD KEYS	( SPECIAL ) 	( control )	inv lower case
+;
+; the keyboard remmapping is accomplished in the GET_KEY routine
+; the display codes remapping in accomplished in the PLOT_CHAR routine.
+;
+;
+;commands:
+;	ascii		enter ascii mode  	( display and kybd only )
+;	petscii		enter petscii mode	( display and kybd only )
+;	ptoa		filter text from petscii to ascii ( marked area )
+;	atop		filter text from ascii to petscii ( marked area )
+;	asc_mask	mask ascii text high order bit ( marked area )
+;
+;
+;
+;*****************************************************************************
+;			PLOT A CHAR
+;*****************************************************************************
+;  character	petscii print format		ascii print format
+;---------------------------------------------------------------------------
+;$00-1F	0-31	control exp (excpt cr&tab)	control exp (excpt cr&tab)
+;$20-3F	32-63	text				text
+;$40-5F	64-95	text				case change text
+;$60-7F	96-127	inverse text			case change text
+;
+;$80-9F	128-159	control exp			inverse control exp
+;$A0-BF	160-191	text				inverse text
+;$C0-DF	192-223	text				inverse case change text
+;$E0-FF	224-225	inverse text			inverse case change text
+;
+	zpage plot_temp
+;
+plot_char
+	cmp #tab	if	tab char
+	beq plot_tab		go plot as such
+	bit plot_mode	if	ascii_mode
+	bmi plot_asc		go plot as ascii
+;
+	cmp #$20	if	< 20
+	bcc plot_ctl		go plot as control expansion
+	cmp #$60	if	< 60
+	bcc plot_char_8		go plot normally
+	cmp #$80	if	< 80
+	bcc 70$			go plot mode inverse
+	cmp #$a0	if	< a0
+	bcc plot_ctl		go plot as control
+	cmp #$e0	if	< e0
+	bcc plot_char_8		go plot as normal text
+;	
+70$	pha		save char
+	jsr rvs_tog	toggle rvs_mode
+	pla		recall char
+	jsr plot_char_8	plot char
+	php		save status
+	jsr rvs_tog	restore reverse mode
+	plp		recall status
+	rts
+;
+plot_asc	; plot char as ascii
+	cmp #tab	if	tab
+	beq plot_tab		go plot tab
+	and #$ff	if	char > 128
+	bpl 10$
+	pha			save char
+	jsr rvs_tog		toggle reverse mode
+	pla			recall char
+	jsr 10$			plot as ascii
+	php			save status
+	jsr rvs_tog		restore reverse mode
+	plp			recall status
+	rts
+;
+10$	and #$7f	mask to 7 bits
+	cmp #$20	if	control
+	bcc plot_ctl		plot expansion
+	cmp #$40	if	$40-$7f
+	bcc 20$
+	jsr 			change_case_of_char
+20$	jmp plot_char_8	actually plot the char
+;
+;
+plot_ctl	; plot char as control expansion
+	sta plot_temp	plot_temp <= char
+	lda #'<
+	jsr plot_char_8	plot a '<'
+;
+	lda plot_temp	plot hex value for high order nybble
+	lsr a
+	lsr a
+	lsr a
+	lsr a	
+	jsr plot_char_hex
+	lda plot_temp	plot hex for low order nybble
+	jsr plot_char_hex
+	lda #'>		plot a '>'
+	jmp plot_char_8
+;
+plot_tab	; plot a tab char
+	lda col_count		plot_temp <= #spaces to print
+	and #$07
+	eor #$07
+	sta plot_temp
+	lda #space		do	plot a space
+10$	jsr plot_char_8
+	dec plot_temp		until	all spaces ploted
+	bpl 10$
+	rts			return
+;
+plot_char_hex	; plot  low order nybble as a hex digit
+	and #$0f	mask high order bits
+	ora #$30	make digit
+	cmp #$3a	if	> '9'
+	bcc plot_char_8
+	adc #$06		advance to letters
+;
+plot_char_8	; really and for true plot the char ( if on screen )
+	tax		save .a
+	sec		.a  <= current coloumn - offset
+	lda col_count
+	sbc col_offset
+	bcc 20$		if	positive
+;
+	cmp max_col		if	a >= width of screen
+	bcc 10$
+	bne 90$				if	a == width of screen
+	ldx #191				plot a continuation char
+	jsr 10$
+90$	sec				return c=1
+	rts
+;
+10$	txa			recall a
+	jsr print		print it finally
+20$	inc col_count	increment the display coloumn
+	clc
+	rts		return c=0
+;
+rvs_tog	lda rvs		if the kernal not in reverse mode
+	bne 10$
+	lda #rvs_on		turn rvs mode on
+	.byte $2c	else
+10$	lda #rvs_off		turn rvs mode off
+	jmp print	& return
+;
+;
