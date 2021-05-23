@@ -513,7 +513,10 @@ The OBJ Loader of the C64 Macro Assembler, version V072882. Extracted from [c64_
 
 ### LOADER_C128, LOADER_C65, LOADER_C65_RS232
 
-The OBJ Loader of the HCD65 assembler. Versions for C128 and C65 (disk and RS-232). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
+The OBJ Loader of the HCD65 assembler.
+
+* LOADER_C128, LOADER_C65: for C128 and C65 (disk). Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
+* LOADER_C65_RS232: for C65 (RS-232). Source: [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
 
 ### EDT_C128
 

@@ -1,4 +1,5 @@
-	.nam    C/65 HEX LOADER (03/20/90)
+	.nam    C/65 HEX LOADER (ROM version) v911119
+	.subttl (C)1991 CBM, Inc.
 	.forml 60
 
 ; MOS Technology HEX loader for the C/65  by Fred Bowen
@@ -7,33 +8,36 @@
 ; June  20, 1986  modification:  add 'program overwrite' error check	(FAB)
 ; August 25, 1986 modification:  add bank check to overwrite check	(FAB)
 ; March 20, 1990  conversion to C65 (ver 900214)			(FAB)
+; Nov. 12, 1991   modification:  add CLI, disk & rs232 input		(FAB)
 ;                                
 
 ; system equates
 
-cursor		= $e030	;EDITOR: turn cursor on/off (.c)
-close_all	= $ff50	;KERNEL: close all open files
-stash		= $ff77	;KERNEL: banked indirect store routine
-primm		= $ff7d	;KERNEL: print immediate utility
-setbnk		= $ff6b	;KERNEL: set file name bank
-setlfs		= $ffba	;KERNEL: set la, fa, sa
-setnam		= $ffbd	;KERNEL: set file name
-open		= $ffc0	;KERNEL: open file
-close		= $ffc3	;KERNEL: close file
-chkin		= $ffc6	;KERNEL: open input channel
-clrchn		= $ffcc	;KERNEL: close channel
-basin		= $ffcf	;KERNEL: input character
-bsout		= $ffd2	;KERNEL: output character
-stop		= $ffe1	;KERNEL: test for stop key
-getin		= $ffe4	;KERNEL: input character (keyboard)
-clall		= $ffe7	;KERNEL: init file tables & restore default chnls
+cursor		= $e030		;EDITOR: turn cursor on/off (.c)
+close_all	= $ff50		;KERNEL: close all open files
+stash		= $ff77		;KERNEL: banked indirect store routine
+primm		= $ff7d		;KERNEL: print immediate utility
+setbnk		= $ff6b		;KERNEL: set file name bank
+setlfs		= $ffba		;KERNEL: set la, fa, sa
+setnam		= $ffbd		;KERNEL: set file name
+open		= $ffc0		;KERNEL: open file
+close		= $ffc3		;KERNEL: close file
+chkin		= $ffc6		;KERNEL: open input channel
+clrchn		= $ffcc		;KERNEL: close channel
+basin		= $ffcf		;KERNEL: input character
+bsout		= $ffd2		;KERNEL: output character
+stop		= $ffe1		;KERNEL: test for stop key
+getin		= $ffe4		;KERNEL: input character (keyboard)
+clall		= $ffe7		;KERNEL: init file tables & restore default chnls
 
-;mmucr		= $ff00	;I/O:	 memory configuration register
-;config		= $00	;	 system ROMs, I/O, RAM-0
+;mmucr		= $ff00		;I/O:	 memory configuration register
+;config		= $00		;	 system ROMs, I/O, RAM-0
 
 ; system variables
 
 status		= $90	;I/O status byte
+_color		= $f1	;text color						[910722]
+highlight_color	= $2d8	;color for highlighting text????			[911119]
 
 		*=$59	;use BASIC's domain
 
@@ -50,10 +54,11 @@ index		*=*+1	;temporary (index from record sa to store byte)
 temp		*=*+1	;temporary
 disk		*=*+1	;la/fa/sa used for disk I/O
 stack_ptr	*=*+1	;save for good return to call
+highlight_save	*=*+1	;save text color
 
 		*=$200	;input buffer
 
-buffer		*=*+20	;filename buffer
+buffer		*=*+64	;filename buffer (161 max. size)
 	.page
 ; constants
 
@@ -70,7 +75,7 @@ rvs_off		= $92	;reverse field off character
 bs		= $9d	;backspace character (cursor left)
 
 	.page
-	* = $c400		;loader origin
+	* = $c400		;loader origin (C/65 ROM version)
 
 start	jsr clall		;clear all channels
 ;	sei
@@ -84,53 +89,70 @@ start	jsr clall		;clear all channels
 ;	bcc 5$
 	tsx
 	stx stack_ptr		;save for clean return
-;	cli
-	jsr primm
-	.byte cr,'C/65 HEX LOADER V032090'
-	.byte cr,'(C)1990 BY COMMODORE BUSINESS MACHINES',cr,0
+	stx highlight_save	;ugly but effective most of the time
+	cli			;						[911112]
 
-;	jsr primm
-;	.byte cr,'OBJECT FILE  ([UNIT#,][DRIVE:]FILENAME) ? ',esc,'Q',0
-;	.page
-;	ldx #20			;16 char name + 4 char (8,0:) = 20 total
-;	stx count		;save maximum input character count
-;	ldx #0			;read characters from keyboard until <cr>
-;
-;10$	stx temp		;save buffer pointer
-;	jsr get_key		;get a character from keyboard
-;	ldx temp		;restore buffer pointer
-;	tay			;save character
-;	and #$7f		;mask to 7-bits
-;	cmp #return
-;	beq 40$			;...branch if <cr>
-;	cmp #delete
-;	bne 20$			;...branch if not <delete>
-;	cpx #0			;check buffer pointer
-;	beq 25$			;...branch if at start of line (ignore <delete>)
-;
-;	dex			;decrement buffer pointer
-;	bpl 30$			;...branch always (print <delete>)
-;
-;20$	cmp #space
-;	bcc 25$			;...branch if control code (ignore)
-;	tya			;restore character
-;	sta buffer,x		;put character into buffer
-;	inx			;increment buffer pointer
-;	cpx count		;check buffer pointer
-;	bcc 30$			;...branch if not a end of line
-;
-;	dex			;at end of line (ignore everything but <cr> and <delete>)
-;25$	lda #bell		;substitute <bell> to warn user
-;
-;30$	jsr bsout		;print the character
-;	bra 10$			;loop for next character
-;
-;40$	ldx temp		;character input count
-;	beq done		;...null input, exit to BASIC
-;
-;50$	stx count		;save filename length
 	jsr primm
-	.byte cr,'LOAD ADDRESS ([BANK][4 HEX DIGIT ADDR]) ? ',esc,'Q',0
+	.byte cr,'C65 HEX LOADER  V911119',cr
+;	.byte ' (C)1991 COMMODORE',cr
+
+	.page
+;	jsr primm		;allow disk or rs232 input			[911112]
+	.byte cr,'OBJECT FILE  ([UNIT,] FILE) ? ',esc,'Q',0
+
+	ldx #64			;16 char name + 4 char ("8,0:") = 20 total	[911112]
+	stx count		;save maximum input character count
+
+	ldx #0			;read characters from keyboard until <cr>
+10$	stx temp		;save buffer pointer
+	jsr get_key		;get a character from keyboard
+	ldx temp		;restore buffer pointer
+	tay			;save character
+	and #$7f		;mask to 7-bits
+	cmp #return
+	beq 40$			;...branch if <cr>
+	cmp #delete
+	bne 20$			;...branch if not <delete>
+	cpx #0			;check buffer pointer
+	beq 25$			;...branch if at start of line (ignore <delete>)
+
+	dex			;decrement buffer pointer
+	bpl 30$			;...branch always (print <delete>)
+
+20$	cmp #space
+	bcc 25$			;...branch if control code (ignore)
+	tya			;restore character
+	sta buffer,x		;put character into buffer
+	inx			;increment buffer pointer
+	cpx count		;check buffer pointer
+	bcc 30$			;...branch if not a end of line
+
+	dex			;at end of line (ignore everything but <cr> and <delete>)
+25$	lda #bell		;substitute <bell> to warn user
+
+30$	jsr bsout		;print the character
+	bra 10$			;loop for next character
+
+40$	ldx temp		;character input count
+;	beq done		;...null input, exit to BASIC
+	bne 50$
+	lda #'2'		;null imput, assume unit=2 (rs232)
+	sta buffer
+	inx
+45$	lda #','
+	sta buffer+1
+	inx
+
+50$	stx count		;save filename length
+	cpx #2
+	bcs 55$
+	lda buffer
+	cmp #'2'
+	beq 45$
+
+	.page
+55$	jsr primm
+	.byte cr,'LOAD ADDRESS ([[BANK]ADDR]) ? ',esc,'Q',0
 
 	ldx #0			;read characters from keyboard until <cr>
 	stx load_offset		;init offset value
@@ -156,10 +178,10 @@ start	jsr clall		;clear all channels
 	ror load_offset
 	dey
 	bne 65$
-	beq 80$			;...branch always (print <delete>)
+	bra 80$			;...branch always (print <delete>)
 
-70$	cpx #5
-	bcs 76$			;...branch if 5 digits already input (ignore)
+70$	cpx #6			;							[911112]
+	bcs 76$			;...branch if 6 digits already input (ignore)
 	cmp #'0'
 	bcc 76$			;...branch if control code (ignore)
 	cmp #':'
@@ -184,10 +206,8 @@ start	jsr clall		;clear all channels
 	bne 75$
 	inx			;increment digit counter
 	lda last_index		;recall digit and print it
-	.byte $2c		;skip next instruction
-
+	  .byte $2c		;skip next instruction
 76$	lda #bell		;substitute <bell> to warn user
-
 80$	jsr bsout		;print the character
 	bra 60$			;loop for next character
 
@@ -199,52 +219,58 @@ start	jsr clall		;clear all channels
 ; open object file
 
 open_file
-;	ldx #8
-;	stx disk		;default disk unit
-;
+	ldx #1			;							[911112]
+	stx disk		;default disk unit
+
 ;	ldx #0			;parse filename (look for [unit,])
-;	stx temp		;init
-;1$	lda buffer,x
-;	cmp #'9'+1		;numeric?
-;	bcs 5$			;...no
-;	cmp #'0'
-;	bcc 5$			;...no
-;	sbc #'0'		;convert ascii to binary
-;	sta index		;save digit
-;	lda temp		;convert binary to decimal
-;	asl a
-;	bcs 9$
-;	ldy #3
-;2$	asl temp		;3 shifts (8) + 1 shift (2) -> x10
-;	bcs 9$
-;	dey
-;	bne 2$
-;	adc temp
-;	bcs 9$
-;	adc index		;add current digit
-;	sta temp
-;	bcs 9$
-;	inx
-;	cpx count
-;	bne 1$			;...loop until done or EOL
-;	beq 9$
-;
-;5$	cmp #','		;found non-numeric
-;	bne 9$			;...not <comma>, must not be a unit #
-;	lda temp		;...got <comma>, use as unit #
-;	sta disk
-;	inx
-;	ldy #0			;squish unit# from buffer
-;6$	cpx count
-;	beq 7$
-;	lda buffer,x
-;	sta buffer,y
-;	iny
-;	inx
-;	bne 6$
-;7$	sty count
-;
-;9$	ldx count
+	dex
+	stx temp		;init
+1$	lda buffer,x
+	cmp #'9'+1		;numeric?
+	bcs 5$			;...no
+	cmp #'0'
+	bcc 5$			;...no
+	sbc #'0'		;convert ascii to binary
+	sta index		;save digit
+	lda temp		;convert binary to decimal
+	asl a
+	bcs 9$
+	ldy #3
+2$	asl temp		;3 shifts (8) + 1 shift (2) -> x10
+	bcs 9$
+	dey
+	bne 2$
+	adc temp
+	bcs 9$
+	adc index		;add current digit
+	sta temp
+	bcs 9$
+	inx
+	cpx count
+	bcc 1$			;...loop until done or EOL
+	bra 9$
+
+5$	cmp #','		;found non-numeric
+	bne 9$			;...not <comma>, must not be a unit #
+	lda temp		;...got <comma>, use as unit #
+	sta disk
+	inx
+	ldy #0			;squish unit# from buffer
+6$	cpx count
+	beq 7$
+	lda buffer,x
+	sta buffer,y
+	iny
+	inx
+	bne 6$
+7$	sty count
+
+9$
+	lda disk
+;	beq error5
+;	cmp #2
+;	beq 10$
+;	ldx count
 ;	lda #','		;append ',S' to filename
 ;	sta buffer,x
 ;	inx
@@ -256,18 +282,21 @@ open_file
 ;	lda disk		;la
 ;	cmp #31
 ;	bcs error5		;bad unit #
-;	cmp #8
+;	cmp #2			;							[911112]
 ;	bcc error5		;bad unit #
-	lda #2			;************************************ [910528]
-	sta disk
-	tay			;sa
+;	cmp #3			;							"
+;	beq error5
+
+10$	ldy #2			;sa
 	tax			;fa
 	jsr setlfs
-;	lda count		;fnlen
+	lda count		;fnlen
+	cpx #2
+	bne 20$
 	lda #14			;9600 baud
 	sta buffer
 	lda #1
-	ldx #<buffer		;fnadr
+20$	ldx #<buffer		;fnadr
 	ldy #>buffer
 	jsr setnam
 	ldx #0
@@ -275,19 +304,22 @@ open_file
 	jsr open		;open object file
 	bcs error0		;...report disk error
 
+	ldx disk
+	cpx #2
+	bne 30$
 	jsr primm
-	.byte cr,'START DOWNLOAD NOW...',cr,0
+	.byte cr,'START DOWNLOAD...',cr,0
 
 	.page
 ; begin actual load
 
-20$	lda #0
+30$	lda #0
 	sta last_index		;init previous record index
 	sta next_address+1	;init for contiguity check
 	sta record_count	;init record count
 	sta record_count+1
 
-	ldx disk		;set channel
+;	ldx disk		;set channel
 	jsr chkin
 	bcs error0		;...branch on disk error
 
@@ -309,10 +341,10 @@ next_record
 
 	jsr get_byte		;check record count
 	cmp record_count+1
-	bne error4		;...branch if sums do not match- error
+	bne 20$			;...branch if sums do not match- error
 	jsr get_byte
 	cmp record_count
-	bne error4		;...branch if mismatch (missing record)
+20$	bne error4		;...branch if mismatch (missing record)
 	bra done		;exit to BASIC, all done correctly
 
 
@@ -399,58 +431,93 @@ next_record
 	bra next_record		;continue with next record
 
 	.page
-error0	jsr primm
-	.byte bell,cr,rvs,'DISK ERROR',rvs_off,'  ',0
-	jsr clrchn
-;	lda #0
-;	jsr setnam
-;	ldx disk
-;	ldy #15			;prepare to read disk command channel
-;	jsr setlfs
-;	jsr open
-;	bcs error1		;??? must be device not present
-;	ldx #0
-;	jsr chkin
-;	bcs 20$
-;10$	jsr basin		;input error message from disk
-;	jsr bsout		;print it
-;	cmp #cr
-;	beq 20$
-;	lda status
-;	and #$bf
-;	beq 10$			;loop until EOL or error
-;20$	bra done
+highlight_done			;nasty kludge to colorize error or found text
+	lda highlight_save	;	(unless it's already normal)
+	bmi 10$
+	sta _color		;restore normal color
+	ora #$80
+	sta highlight_save	;mark highlight_save invalid
+10$	rts
 
-error1	jsr primm
-	.byte bell,cr,rvs,'DEVICE NOT PRESENT',cr,0
+
+highlight_text			;nasty kludge to colorize error or found text
+	bbr7 highlight_save,10$	;	(unless it's already highlighted)
+	lda _color		;save current (normal) color
+	sta highlight_save	;	msb=0 to mark highlight_save valid
+	lda highlight_color
+	sta _color		;change color to highlight
+10$	rts
+
+	.page
+error0	jsr clrchn		;restore system channels
+	jsr highlight_text
+	ldx disk		;handle differently per device				[911119]
+	cpx #1
+	beq 1$
+	cpx #4
+	bcs 1$
+
+	jsr primm			;rs232 problem
+	.byte cr,'I/O ERROR',cr,0
 	bra done
 
-error2	jsr primm
-	.byte bell,'   ',rvs,'CHECKSUM ERROR',0
+1$	jsr primm			;serial bus problem
+	.byte cr,'DOS ERROR: ',0
+
+	lda #0			;prepare to read disk command channel
+	jsr setnam
+	ldy #15
+	jsr setlfs
+	jsr open
+	bcs error1		;??? must be device not present
+	ldx #0
+	jsr chkin
+	bcs 20$
+10$	jsr basin		;input error message from disk
+	jsr bsout		;print it
+	cmp #cr
+	beq 20$
+	lda status
+;	and #$bf
+	beq 10$			;loop until EOL or error
+20$	bra done
+
+error1	jsr primm
+	.byte cr,'DEVICE ERROR',cr,0
+	bra done
+
+error2	jsr highlight_text
+	jsr primm
+	.byte '   CHECKSUM ERROR',0
+	jsr highlight_done
 	dec next_address
 	bra next_record		;fake non-contiguous block by trashing next_address
 
-error3	jsr primm
-	.byte bell,cr,rvs,'BREAK',cr,0
-	bra done
+;error3 ;jsr primm		;let BASIC report ?break
+;	.byte bell,cr,rvs,'BREAK',cr,0
+;	bra done
 
-error4	jsr primm
-	.byte bell,cr,rvs,'RECORD COUNT BAD',cr,0
-	bra done
+error4	jsr highlight_text
+	jsr primm
+	.byte cr,'RECORD COUNT BAD',cr,0
+;	bra done
 
-error5	jsr primm
-	.byte bell,cr,rvs,'INVALID DEVICE SPECIFIED',cr,0
-	bra done
+;error5	jsr highlight_text
+;	jsr primm
+;	.byte bell,cr,'BAD DEVICE',cr,0
+;	bra done
 
-error6	jsr primm
-	.byte bell,cr,rvs,'PROGRAM OVERWRITE',cr,0
+;error6	jsr primm
+;	.byte bell,cr,rvs,'PROGRAM OVERWRITE',cr,0
 ;	jmp done
 
 
-
-done	jsr clrchn		;finished with load
+error3				;break: let system report it
+done	jsr highlight_done
+	jsr clrchn		;finished with load
 	lda disk
 	jsr close_all		;close disk channel
+
 ;	sei
 	ldx stack_ptr
 	txs
@@ -484,11 +551,12 @@ get_key
 get_character
 	lda #0
 	sta status		;clean slate
-	jsr basin		;get next character from channel
+10$	jsr getin		;get next character from channel
 	bcs error0			;...branch if I/O error
+	beq 10$
 	pha
 	lda status
-	and #%10111111		;mask EOI bit
+	and #%10000111		;mask EOI bit (disk) or DSR,DCD,CTS (rs232)
 	bne error0			;...branch if I/O error
 	pla
 	rts
@@ -557,8 +625,8 @@ offset_calc
 ; read ASCII hex byte and return binary in .a
 
 get_byte
-	lda #0			;space
-	sta temp
+;	lda #0			;space
+;	sta temp
 	jsr get_character	;get most significant digit
 	jsr get_binary		;convert to binary
 	asl a			;shift to most significant nibble
@@ -574,9 +642,9 @@ get_byte
 
 get_binary
 	cmp #':'		;convert ascii hex digit to binary
-	php
+;	php
 	and #$0f		;mask it
-	plp
+;	plp
 	bcc 10$			;...branch if it was numeric (0-9)
 	adc #8			;else in range (A-F), add 9 (assumes .c=1)
 10$	rts
