@@ -1,0 +1,87 @@
+	.subttl "Global Definitions"
+
+;	basic program interface variables
+
+		* = curram
+
+list_channel 		*=*+1		0,4,5	etc	4
+error_channel		*=*+1		0,4,5	etc	5
+object_channel		*=*+1		0,4-30		6
+
+input_device_low	*=*+1		8-11		8,9,10,11
+input_device_high	*=*+1		8-11
+
+xref_device		*=*+1		0,8,9,10,11	12
+xref_channel = 14
+list_channel_width	*=*+1		= 40,80,132	13
+
+start_file_name		*=*+17		( null terminated string )
+date_string		*=*+33		( null terminated string )
+error_count		*=*+2		; return error count to basic
+phase_error		*=*+1		; counts phase errors each pass
+
+		curram	= *
+
+;	internal global variables.
+;
+	zpage label,2			; pointer to label strint
+	zpage oper,2			; pointer to operand string
+	zpage arg,2			; pointer to argument string
+args	= arg
+
+	zpage nargs			; number of arguments found
+
+
+	zpage pass			; pass 1 or pass 2 ?
+	zpage current_line,2		; 16 bit current line number
+	zpage pc,2			; 16 bit current pc value
+	zpage value,2			; 16 evaluation value
+	ram valflg,1			; quality of value
+
+	zpage list_line_count		; current line on page
+	ram page_number,2		; current page number
+	ram conditional_depth		; depth of nested conditionals
+	ram macro_expansion_depth	; depth of macro expansions
+	ram formln			; number of lines per page
+	ram fatal_error			; caused by read errors, etc
+	ram end_flag
+	ram mid_line_pntr,2		; pointer to midline string
+;					( see list_page_header )
+
+line_max_len = 250
+;	ram line,line_max_len+1		; input line (*** see C65.SRC for alloc)
+subttl_max_len = 132
+;	ram subttl,subttl_max_len+1	; sub title for various pages (*** see C65.SRC for alloc)
+name_max_len = 16			; users name for program....
+	ram name,name_max_len+1		; plus the trailing null
+
+	zpage bank1_pntr,2		; pointer for bank 1 indirection
+
+
+value_ok	= %00000000	; value ok
+value_forward	= %00000001	; value forward reference
+value_overflow	= %00000010	; value overflowed during calulations
+value_undefined	= %00000100	; value is undefined
+value_syntax	= %00001000	; evaluation syntax error
+
+cr		= 13
+lf		= 10
+form_feed	= 12
+tab		= 9
+space		= 32
+
+global_init .macro
+	lda #66				; formln
+	sta formln
+	ldi $0000
+	std current_line		; input source line
+	std error_count			; error counter
+	std pc				; pc
+	sta phase_error			; phaser error count per pass
+	sta conditional_depth		; depth counter
+	sta macro_expansion_depth	; depth counter
+	sta subttl			; subttl
+	sta file_name			; filename
+	sta end_flag			; flag to indicate end statement
+	.endm
+

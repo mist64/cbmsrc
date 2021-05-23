@@ -1,0 +1,150 @@
+;***************************************************************************
+;			C65CE02 ASSEMBLER FOR C128
+;***************************************************************************
+
+version	.macro		; declare for date of modifications
+	.byte "65CE02 V0.2"
+	.endm
+
+;	REV_LIST
+;
+;	WHO	WHEN	WHAT
+;	---	----	----
+;	fab	03/06/90
+;		E0.2	corrected MAP, changed syntax for BBS7, etc.
+;
+;	fab	09/13/88
+;		E0.1	expanded to process 45E02 instruction set.
+;			now performs (optionally) additional passes to
+;			resolve phase errors.  this was necessary due to
+;			new byte/word relative branch instructions.
+;			fixed misc spelling errors, etc.
+;
+;	hcd	10/02/87
+;		V3.5	added bank0_ram_max to global definitions,
+;			integrated into init_macro.
+;			( gives 16k additional macro expansion space )
+;
+;	hcd	9/28/87	rewrote value_xyzzy which is really the integer divide
+;		V3.4	routine so that it was more clear, less brain damaged,
+;			less likely to hang, and hopefully now returns the
+;			correct result.
+;
+;	hcd	7/27/87 1)	corrected local labels so that leading zeros
+;		v3.3		are insignificant. This done in issymbollegal.
+;			2)	corrected bug where empty symbol table would
+;				make xref puke.
+;			3)	Caused xref and symbol table sort to be bypassed
+;				if no list channel or xref device. This saves
+;				time on object only assemblies.
+;
+;	hcd	9/9/86	moved a page buffer from sprite buffers to basic run
+;			time stack to free sprite buffers for use with
+;			ramdisk.
+;
+;	hcd	9/1/86	removed date string macro, and inserted version
+;		V3.0	string macro. This macro is tied to the 
+;			listing format and the entry point which simply
+;			displayes the assemblers name and copyright message.
+;
+;	hcd 	8/15/86	removed code that disabled basic irqs, and
+;			simply caused interupts to be disabled over entire
+;			assembly process.
+;	
+;			moved error count to place where basic may PEEK it.
+;
+;			made macro names case insenitive
+;				( added TOUPPER call in directive_macro , and
+;				 OPER_TOUPPER call in pass_a routine )
+;
+;			added date declares for version tracking
+;
+;			moved CURRENT_SYMBOL to zero page for speed/codespace
+;
+;			modified parse_macro_args_for_expansion to use
+;			tildes per BSO operation.
+;
+;			changed IS_SYMBOL_DEFINED ( affects .ifdef,.ifndef )
+;			to reply false for all symbols defined after
+;			the current line even though they are  in the
+;			symbol table.
+;
+;***************************************************************************
+
+curzpg = $0a		; start of zero page variables (lots of em too)
+zero_page_save_bot = $0a
+zero_page_save_top = $84		;was $8F, reduced to save space
+
+down_load_code_base 	= $0240		;place for down loaded code
+down_load_code_max	= $02a2		;first illegal down load addr
+
+storbuf		= $0800	; page buffer in basic run time stack
+xref_buf	= $0900	; page buffer in basic run time stack
+macro_args	= $0B00	; page buffer in cassette buffer
+line		= $0C00	; page buffer in RS232 input buffer
+subttl		= $0D00	; buffer in RS232 output buffer
+;		= $0E00 ; *** reserve for RAMdisk interface page ***
+zero_page_store	= $0F00 ; buffer in upper sprite area
+
+list_data	= zero_page_store+zero_page_save_top-zero_page_save_bot+1
+
+curram 	= $1300		; start of normal ram variables
+
+mmucr 			= $FF00		; address of mmu cr register
+mmucr_bank1_ram		= %01111111	; config for bank 1 ram only
+mmucr_bank0_normal	= %00001110	; config for normal ops 
+;					  ( bank 0, kernal,io )
+bank0_ram_max		= $bfff		; highest address for bank0 ram
+;					; with  mmucr_bank0_normal 
+symbol_table_start 	= $1000		; base of symbol table in bank 1
+symbol_table_end	= $FEFF		; end of symbol table in bank 1
+
+code_start		= $1400		; code is in bit map & bit map color map
+;					; and even below that ...
+
+	.include macros
+	.include kernal
+	.blist
+	.include global
+
+	*=code_start
+
+two_pass_only
+	.byte 0			;set by user.  msb=1 to skip phase correction passes
+
+	jmp init
+
+	jsr $ff7d		; primm....
+	.byte "(C)1986,1988 COMMODORE ELECTRONICS, LTD.",cr
+	.byte "ALL RIGHTS RESERVED	"
+	version
+	.byte cr,0
+	rts
+
+	.include main
+	.include util
+	.include parse
+	.include opcode
+	.include eval
+	.include error
+	.include directive
+	.include ifendif
+ 	.include macro
+	.include input
+	.include output
+	.include symbol
+	.include xref
+
+	.ifgt *-$4000
+	*** error ***  code overlays start of basic
+	.endif
+
+	.ifgt curram-code_start
+	*** error ***  allocated ram overlaps code
+	.endif
+
+	.ifgt curzpg-$85	;was $90, reduced to save space
+	*** error ***  allocated zeropage overlaps kernal area
+	.endif
+
+	.end

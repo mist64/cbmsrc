@@ -1,0 +1,821 @@
+	.page
+	.subttl	"Output utilities"
+	ram current_channel
+;	
+_chkin	cpx current_channel
+	bne 10$
+	clc
+	rts
+10$	stx current_channel
+	jsr clrch
+	ldx current_channel
+chkin	jsr __chkin
+	jmp delay_150
+;
+open_list_channel
+	ldx list_channel
+	jmp _ckout
+;
+open_object_channel
+	ldx object_channel
+	jmp _ckout
+;
+open_error_channel_if_unique
+	ldx error_channel
+	cpx list_channel
+	beq _clrch
+	jmp _ckout
+;
+open_error_channel
+	incd error_count
+	ldx error_channel
+	jmp _ckout
+;
+open_xref_channel
+	ldx #xref_channel
+	jmp _ckout
+;
+_ckout	cpx current_channel
+	bne 10$
+	clc
+	rts
+;
+10$	stx current_channel
+	jsr clrch
+	ldx current_channel
+ckout	jsr __ckout
+	jmp delay_150
+;
+_clrch	lda #0
+	sta current_channel
+clrch	jsr __clrch
+;
+delay_150		; .a, .c preserved
+	ldx #30
+10$	dex
+	bpl 10$
+	rts
+;
+open	jsr __open
+	jmp delay_150
+;
+close	jsr __close
+	jmp delay_150
+;
+;
+	zpage pnts_pntr,2
+;
+
+print_tab
+	lda #tab
+	.byte $2c
+print_space
+	lda #space
+print	ldx current_channel	if	current channel <> 0
+	beq 80$
+	cpx list_channel		if	list channel
+	bne 70$
+;
+	ldx list_line_count			if 	first line on page
+	bne 40$
+	ldx formln				andif	formln <> 0
+	beq 40$
+;
+	pha						stack all temps 
+	ldd pnts_pntr					used by page_header
+	phd
+;
+	ldx #5						greasy greasy greasy
+20$	lda format_decimal_text,x
+	pha
+	dex
+	bpl 20$
+;
+	inc list_line_count
+	jsr print_page_header				print the page header
+	dec list_line_count
+;
+	ldx #0						restore all temps used
+30$	pla						by page header
+	sta format_decimal_text,x
+	inx
+	cpx #6
+	bcc 30$
+;
+	pld
+	std pnts_pntr
+	pla
+;
+40$	cmp #cr					if	<Cr>
+	bne 50$
+	jsr bsout					print it
+;
+	ldx #0						char count <= 0
+	stx list_char_count
+	ldx list_line_count				x <= line count +1
+	inx
+	cpx formln					if	>= formln 
+	bcc 45$
+	ldx #0							x <= 0
+45$	stx list_line_count				line_count <= x
+	jmp 80$						exit
+;
+50$	cmp #tab				if	tab
+	bne 60$
+;
+55$	lda #space					do	.a <= space
+	jsr 60$							cionditionally printit
+	lda list_char_count				until	at tabstop
+	and #%0000111
+	bne 55$	
+	rts						return
+;
+60$	ldx list_char_count			if	char count++ < width 
+	inc list_char_count
+	cpx list_channel_width
+	bcs 80$
+70$	jsr bsout					print the char
+80$	rts					return
+;
+
+	.page
+	.subttl "Utilities" 
+;
+;	UTILS:
+;
+;	strlen	entry: x,a pointer to string
+;		exit: 	if	string longer than 255 chars
+;				c=1, y=0
+;			else	c=0
+;				y = number of chars
+;				z = 1 iff y==0
+;				
+	zpage strlen_pntr,2
+;
+strlen	std strlen_pntr
+	ldy #0
+1$	lda (strlen_pntr),y
+	beq 80$
+	iny
+	bne 1$
+	sec
+	rts
+;
+80$	cpy #0
+	clc
+	rts
+;
+;	ishex:
+;		if	.a is legal hexadecimal digit
+;			retun c=0
+;		else	c  = 1
+;
+ishex	pha		save char
+	jsr toupper	if	.a is alpha , convert to upper case
+	bcs 90$			break is not alhpa
+	cmp #'G			set carry if > G 
+	pla			restore stack
+	rts			return
+;
+90$	pla		restore stack
+;			fall through to isdigit
+;
+;	isdigit:
+;		if	.a is a legal decimal digit
+;			c = 0
+;		else	c=1
+;		x,y preserved
+;
+isdigit	cmp #'0
+	bcc 90$
+	cmp #'9'+1
+	rts
+90$	sec
+	rts
+;
+;	return c=0 iff .a = tab or space	or shifted space !!!!!
+;
+isspace	cmp #$20
+	beq 80$
+	cmp #$9
+	beq 80$
+	cmp #$a0
+	beq 80$
+	sec
+	rts
+;
+80$	clc
+	rts
+;
+;
+islegalsymbolchar	
+	cmp #$a0	if	higher that controls
+	bcs 80$			ok
+	cmp #$80	if	upper set of controls
+	bcs 90$			error
+	cmp #$41	if	'A or above
+	bcs 80$			ok
+	cmp #$3b	if	symbols  ;<=>?@
+	bcs 90$			error
+	cmp #$30	if	digit or colon
+	bcs 80$			ok
+	cmp #$2e	if	period 
+	beq 80$			ok
+	cmp #$27	if	symbols	()*+,-/'
+	bcs 90$			error
+	cmp #$23	if	symbols #$%&
+	bcs 80$			ok
+;			if	controls or space or symbols !"
+90$	sec			error
+	rts
+80$	clc
+	rts
+;
+;
+;
+;
+;
+	zpage str_pntr_y,2
+	zpage str_pntr_xa,2
+;
+;	str_read_args
+;		pntr1 <= (y)
+;		pntr2 <= x,a
+;
+str_read_args
+	std str_pntr_xa
+	lda 0,y
+	ldx 1,y
+	std str_pntr_y
+	rts
+;
+;	strend
+;		entry	y points to a pointer pointing to a string_1
+;			x,a points to a different string_2
+;
+;		returns c=0 iff string_1 ends in string_2
+;
+strend	jsr str_read_args	; pntr_2 <= search string
+;				; pntr_1 <= original long string
+;
+10$	ldy #0			; while pntr_1 does not point to null string
+	lda (str_pntr_y),y
+	beq 90$
+	ldy #0			; do	y <= 0
+15$	lda (str_pntr_xa),y	;	do	if 	(pntr2),y == 0
+	bne 20$
+	clc			;			return happy
+	rts
+;
+20$	cmp (str_pntr_y),y	;		if	(pntr2)<>(pntr1)
+	bne 30$			;			break
+;
+	iny			;		y++
+	jmp 15$			;	loop
+;
+30$	incd str_pntr_y		;	pntr_1 ++
+	jmp 10$
+;
+90$	sec			; return pissed
+	rts
+;
+;
+
+;
+;	str_append
+;		entry	y points to a pointer pointing to a string_1
+;			x,a points to a different string_2
+;
+;		appends string2 to string1
+;
+;		returns c=0 iff ok.
+;		returns c=1 iff composite length > 255 chars.
+;
+str_append
+	jsr str_read_args	read args
+;
+1$	ldy #0			do	if (pntr1) == 0
+	lda (str_pntr_y),y
+	beq str_append_entry			go copy (pntr2) to pntr1)
+	incd str_pntr_y			advance pntr 1
+	jmp 1$			forever
+;
+;
+;
+	.ife 1
+;	str_cpy
+;		copy string pointed to by x,a to location pointed
+;		too by pointer @ y.
+;
+;
+strcpy	jsr str_read_args
+	ldy #0
+	.endif
+
+str_append_entry
+10$	lda (str_pntr_xa),y
+	sta (str_pntr_y),y
+	beq 80$
+	iny
+	bne 10$
+	dey
+	lda #0
+	sta (str_pntr_y),y
+	sec
+	rts
+;
+80$	clc
+	rts
+;
+;
+
+;	strcmp	string copmparision utility
+;
+;		entry	y points to a pointer pointing to a string1
+;			x,a points to a string 2
+;		exit	z=1:c=0	string1 = string 2
+;			z=0:c=1	string1 != string 2
+;
+strcmp	jsr str_read_args
+	ldy #0
+10$	lda (str_pntr_xa),y
+	cmp (str_pntr_y),y
+	bne 90$
+	tax
+	beq 80$
+	iny
+	bne 10$
+;
+	txa
+;
+90$	sec
+	rts
+;
+80$	clc
+	rts
+;
+;	strstrt
+;		returns c=0 if string (Y) starts with contents of string (XA)
+;
+;		entry:	x,a = pointer to start string	
+;			y = address of pointer to long string
+;
+;		return c=0 if long string starts with start string.
+;			else return c=1
+;
+strstrt	jsr strcmp	return results based on last byte of strcmp
+	cmp #0		( set carry )
+	bne 80$		if	last byte was null
+	clc			clear carry
+80$	rts		return
+;
+;
+;	just like strcmp except that
+;		string x,a must be in upper case and
+;		routine is insensitive to case of string y
+;
+strcmp_toupper
+	jsr str_read_args	read args
+;
+	ldy #0			y <= 0
+10$	lda (str_pntr_y),y	do	if	(xapntr) <> toupper ((ypntr))
+	jsr toupper
+	cmp (str_pntr_xa),y
+	bne 90$					puke
+	tax				if	.a == null
+	beq 80$					exit happy
+	iny				y++
+	bne 10$			while	y <> 0
+	txa
+90$	sec			puke
+	rts
+;
+80$	clc			happy exit
+	rts
+;
+;	strstrt_toupper
+;		just like strstrt except that
+;		string x,a must be in upper case and
+;		routine is insensitive to case of string y
+;
+strstrt_toupper
+	jsr strcmp_toupper	if	strcmp_toupper failes
+	bcc 10$
+	lda (str_pntr_xa),y		if	 last byte checked was null
+	bne 10$
+	clc					uh. we were really happy
+10$	rts			return
+;
+;
+;
+;	string_advance
+;		entry: 	.x = zero page address of string pointer
+;		exit:	string pointer advanced to start of next string
+;			.x,.y preserved = unchanged
+;
+;
+string_advance
+1$	lda (0,x)
+	inc 0,x
+	bne 10$
+	inc 1,x
+10$	cmp #0
+	bne 1$
+	rts
+;
+
+;
+	ram effective_address_temp
+;
+effective_address	;	x,a <= x,a + y
+	sty effective_address_temp
+	clc
+	adc effective_address_temp
+	bcc 10$
+	inx
+10$	clc
+	rts
+;
+	.ife 1
+;	isalnum	returns c=0 if .a = a-z or A-Z or 0-9
+;
+isalnum	jsr isdigit
+	bcs isalpha
+	rts
+;
+	.endif
+;	isalpha	if	.a is a-z or A-Z or petscii A-Z
+;			return c=0
+;
+isalpha	cmp #'A
+	bcc 90$
+	cmp #'Z'+1
+	bcc 80$
+	cmp #'a'
+	bcc 90$
+	cmp #'z'+1
+	bcc 80$
+	cmp #193
+	bcc 90$
+80$	cmp #219
+	rts
+;
+90$	sec
+	rts
+;
+;
+;	toupper converts .a from lower case to upper case
+;
+toupper	jsr isalpha	; if its not a letter
+	bcs 90$		;	go return c=1
+80$	and #%00011111	; move to upper case range
+	ora #%01000000	; return c=0
+90$	rts
+;
+	.ife 1
+;	tolower converts .a from lower case to upper case
+;
+tolower	jsr toupper		; greasy isn't it ?
+	cmp #'A
+	bcc 90$
+	cmp #'Z'+1
+	bcs 90$
+;
+80$	ora #%00100000
+90$	clc
+	rts
+;
+	.endif
+exptab	.byte 1,2,4,8,$10,$20,$40,$80
+;
+;
+;
+print_hex_word
+	pha
+	txa
+	jsr print_hex_byte
+	pla
+print_hex_byte
+	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	jsr print_hex_digit
+	pla
+print_hex_digit
+	and #$0f
+	ora #$30
+	cmp #'9'+1
+	bcc 10$
+	adc #6
+10$	jmp print
+;
+;
+;	print_null_terminated_string_cr
+;		prints the ttext string pointed to by x,a followed by cr
+;	print_null_terminated_string
+;		prints the ttext string pointed to by x,a
+;
+;
+print_null_terminated_string_cr
+	jsr print_null_terminated_string
+print_cr lda #$0d
+	jmp print
+print_null_terminated_string
+	std pnts_pntr	; set up pointer
+;
+primm_entry
+10$	ldy #0		; do 	a <= char at pointer
+	lda (pnts_pntr),y
+	bne 20$		;	if	null
+	rts		;		return
+20$	jsr print	;	print the char
+	incd pnts_pntr
+	bne 10$		;loop ( pretty safe bet.. )
+;
+;
+primm_to_error_channel
+	jsr open_error_channel	open the error channel
+	jsr primm		print the first part of the message
+	.byte "ERROR: ",0
+;				fall through to print the rest of the message
+;
+primm	pla			list_pntr <= return address+1
+	sta pnts_pntr
+	pla
+	sta pnts_pntr+1
+	incd pnts_pntr
+;
+	jsr primm_entry		print null terminated from there
+;				restack return address ( points to null at EOS)
+80$	lda pnts_pntr+1		return to it
+	pha
+	lda pnts_pntr
+	pha
+	rts
+;
+;
+;
+;******************************************************************************
+;			format decimal routime
+;******************************************************************************
+;
+;
+;	format_decimal
+;		entry:	x,a <= 16 bit binary number
+;		exit:	loc,loc+4 <= 5 digits to decimal text
+;			with leading zeros suppressed
+;
+	ram format_decimal_text,6
+	ram format_decimal_temp,2
+;
+print_decimal
+	jsr format_decimal
+	ldi format_decimal_text
+	jmp print_null_terminated_string
+;
+;
+format_decimal
+	std format_decimal_temp		temp <= binary
+	ldy #0				y <= 0
+	sty format_decimal_text+5
+	lda #$20			.a <= $20
+10$	sta format_decimal_text,y	do	text,y <= .a
+	
+20$	sec					do	a,x <= temp-100$,y
+	lda format_decimal_temp
+	sbc 100$,y
+	tax
+	lda format_decimal_temp+1
+	sbc 110$,y
+	bcc 30$						if	> 0
+	sta format_decimal_temp+1				temp <= a,x
+	stx format_decimal_temp
+	lda format_decimal_text,y				text ++ or $30
+	adc #00
+	ora #$30
+	sta format_decimal_text,y
+	jmp 20$							loop
+;
+30$	lda format_decimal_text,y		.a <= $30 or $20
+	and #$f0
+	iny					y++
+	cpy #$05			until	y==5
+	bne 10$
+;
+	lda format_decimal_text+4	force last digit to be not a space
+	ora #$30
+	sta format_decimal_text+4
+;
+	clc				return happy
+	rts
+;
+100$	.byte <10000,<1000,<100,<10,<1
+110$	.byte >10000,>1000,>100,>10,>1
+;
+
+;
+;	classify char
+;		sets flags in .a based on value of .a
+;	
+;		this routine checks the char in .a for the delmiting
+;		chars most internal parsers need.
+;		.a is destroyed.
+;
+;		the order of args was chosen carefully for this application.
+;
+;		its not pretty but it is optimized for the charset
+;
+;		input 	char	output
+;		$00	null	%10000000
+;		$3b	;	%01000000
+;		$20	space	%00100000
+;		$09	tab	%00010000
+;		$2c	comma	%00001000
+;		$22	"	%00000100
+;		$27	'	%00000010
+;		$3d	=	%00000001
+;		    other	%00000000
+;
+;
+classify_char
+	cmp #$3d		if	= 
+	beq 80$				ok
+;
+	bcs 90$			if	> '=`, exit unknown
+;
+	cmp #$a0		if	shifted space
+	beq 85$				ok, exit
+;
+	cmp #$20		if	space
+	beq 85$				ok , exit
+;
+	bcs 10$			if	< space
+	cmp #$09			if	tab
+	beq 84$					ok
+;
+	cmp #0				if	null
+	beq 87$					ok
+	bne 90$				unknown
+;
+10$	cmp #$2c		if	comma
+	beq 83$				ok
+	bcs 20$			if	< comma
+;
+	cmp #$27			if	single quote
+	beq 81$					ok
+	cmp #$22			if	double quote
+	beq 82$					ok
+	bne 90$				error
+;
+20$	cmp #$3b		if	;
+	beq 86$				ok
+90$	lda #%00000000		unknown
+	rts
+;
+80$	lda #%00000001		equals
+	rts
+81$	lda #%00000010		single quote
+	rts
+82$	lda #%00000100		double quote
+	rts
+83$	lda #%00001000		comma
+	rts
+84$	lda #%00010000		tab
+	rts
+85$	lda #%00100000		space
+	rts
+86$	lda #%01000000		semi colon
+	rts
+87$	lda #%10000000		null
+	rts
+;
+
+;
+;	ram zero_page_store,zero_page_save_top-zero_page_save_bot+1
+;		(zero_page_store allocated in C65.SRC)
+save_zero_page
+	sec
+	.byte $24
+restore_zero_page
+	clc
+	ldx #zero_page_save_top-zero_page_save_bot
+10$	lda zero_page_store,x
+	bcc 20$	
+	lda zero_page_save_bot,x
+	sta zero_page_store,x
+20$	sta zero_page_save_bot,x
+	dex
+	bne 10$
+	rts
+;
+; 
+;
+;	the page header is roginizeed into several differenent feilds
+;	on several lines as follows:
+;
+;		<name><program><user_message><pagenum>
+;		<subtttl><source_file>
+;		<mid_lines>
+;
+;	where	<name> is either a null name, or a string
+;			supplied by the source code in a .NAME directive.
+;		<program>	the string "HCD65XX  version 0.8"
+;		<user_message>	is text suppied by the basic program at 
+;				run time.  generally this is for the
+;				date feild.
+;		<pagenum>	is the page number.
+;
+;		<subttl>	is text supplied by the users .SUBTTL directive.
+;		<source_file>	is the file which the source is being read from 
+;				at the time the page header was generated.
+;
+;		<mid_lines>	is text which changes based on what is on the
+;				page. I.E. the symbol table, the cross reference
+;				and the actual source code.
+;
+;
+print_page_header
+	lda page_number		if	this is the first page
+	ora page_number+1
+	bne 10$
+;
+	inc list_line_count		fake ourselves into thinking we're
+	inc list_line_count		further down ( make page happen early )
+	jmp 20$			else
+;
+10$	jsr primm			print a pair of crs to move to real page
+	.byte cr,cr,0
+;
+20$	jsr primm		print some crs.
+	.byte cr,cr,0
+;
+	ldi name		print the name
+	jsr print_null_terminated_string
+;
+	jsr primm		print version info
+	.byte tab,"HCD65XX "
+	version
+	.byte tab,0
+;
+	ldi date_string		print user supplied date
+	jsr print_null_terminated_string
+;
+30$	jsr print_tab		do	print a tab
+	lda #15+8			while	theres room for 15 cahrs + tab.
+	jsr is_there_room_on_this_line
+	bcc 30$
+;
+	jsr primm		print the page number
+	.byte "PAGE ",0
+	incd page_number	increment page number
+	ldd page_number
+	jsr print_decimal
+	jsr print_cr		new line..
+;
+	ldi subttl		print subttl
+	jsr print_null_terminated_string
+;
+40$	jsr print_tab		do	print a tab
+	ldi file_name			.a <= 8 + length of file name.
+	jsr strlen
+	tya
+	adc #$08		while	room for that many chars on this line.
+	jsr is_there_room_on_this_line
+	bcc 40$
+;
+;
+	ldi file_name		print filename w/ cr
+	jsr print_null_terminated_string_cr
+;
+	ldd mid_line_pntr	print middle bits w/ a cr
+	jmp print_null_terminated_string_cr
+;
+;
+;	is_there_room_on_this_line	( list channel only of course )
+;		entry: .a = number of chars you're gonna print
+;		exit:	c=0	will fit on line
+;			c=1	will not fit on line
+;			
+;
+is_there_room_on_this_line
+	clc
+	adc list_char_count
+	bcs 90$
+	cmp list_channel_width
+90$	rts
+;	
+kill_basic_irqs
+	lda init_status
+	and #%11111110
+	sta init_status
+	rts
+;
+enable_basic_irqs
+	lda init_status
+	ora #%00000001
+	sta init_status
+	rts
+;
+;

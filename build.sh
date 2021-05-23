@@ -183,3 +183,4 @@ build1 FIG FOR1-1
 # TODO cbm6502asm problems:
 #   build2 RAMDOS a
 #   build2 HCD65_3.5 c65
+#   build2 HCD65_65CE02 c65

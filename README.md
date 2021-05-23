@@ -152,6 +152,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [ASSEMBLER_TED](ASSEMBLER_TED)                               | 1984 | TED version, adds `.OPT LON`, `.OPT MLI` |
 | [ASSEMBLER_C128](ASSEMBLER_C128)                             | 1986 | C128 version, heavily commented |
 | [HCD65_3.5](HCD65_3.5)                                       | 1986 | BSO-compatible rewrite |
+| [HCD65_65CE02](HCD65_65CE02)                                 | 1990 | 65CE02/4510 opcode support |
 | [LOADER_PET](LOADER_PET)                                     | 1979 | OBJ Loader |
 | [LOADER_C64](LOADER_C64)                                     | 1986 | OBJ Loader |
 
@@ -475,6 +476,10 @@ The final version of the Commodore Resident Assembler, for the C128 (V022086; 19
 ### HCD65_3.5
 
 The release version of the C128 HCD65 assembler. Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
+
+### HCD65_65CE02
+
+The internal updated version of the C128 HCD65 assembler with 65CE02/4510 support. Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
 ### LOADER_PET
 

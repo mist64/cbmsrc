@@ -1,0 +1,787 @@
+	.page
+	.subttl "Expression Evaluation"		
+;
+;     2.3.4 EXPRESSION OPERATORS
+;
+;     The operators available for constructing expressions include both
+;     the unary and binary operators listed below:
+;
+;
+;        UNARY:  +       Identity
+;                -       Negation
+;                >       High byte
+;                <       Low byte
+;                !N      Logical one's complement
+;
+;        BINARY: +       Addition
+;                -       Subtraction
+;                *       Multiplication
+;                /       Division.  Any remainder is discarded.
+;                !.      Logical AND
+;                !+      Logical OR
+;                !X      Logical Exclusive OR
+;		 !M	 modulus division
+;				( returns remainder )
+;
+;     Expressions will be evaluated according to the following operator
+;     precedence, and from left to right when of equal precedence:
+;
+;
+;                1)  Unary +, unary -, !N, <, >
+;                2)  *, /, !., !+, !X
+;                3)  Binary +, binary -
+;
+;
+;
+;
+	zpage eval_pntr,2	; pointer for evaluation
+;	ram value,2		; result location	/* global */
+;	ram valflg		; result quality
+	zpage value2,2		; temp result
+;
+	ram binop_loc		; index to binary operator
+	ram plus_minus_loc	; index to binary plus or minus only
+;
+;******************************************************************************
+;		EVAL
+;******************************************************************************
+;
+;	eval	evaluates strings into 16 bit values
+;	
+;		entry:	x,a point to null terminated string
+;		exit:	value = value
+;			c = 0	cool ( valflg = 0 )
+;			c = 1
+;				valflg = 1	forward reference
+;				valflg = 2	value undefined
+;				valflg = 4	value overflow (/0)
+;				valflg = 8	syntax error
+;
+eval	std eval_pntr		eval_pntr <= value
+	cld			peace of mind
+	ldy #0			clear evaluation errors
+	sty valflg
+	jsr sub_eval		eval the entire string
+	ldd value		x,a <= value
+	ldy valflg		y <= value quality flag
+	cpy #$1			set carry if not perfectly ok
+	bcc 90$			if	undefined or syntax error
+	beq 90$
+	lda #$ff			x,a <= -1
+	tax
+	std value			value <= -1
+90$	rts			return
+;
+;
+;
+eval_syntax
+	jsr outerr_s
+	lda #value_syntax
+	bne eval_errset
+;
+eval_undefined
+	jsr outerr_u
+	lda #value_undefined
+	bne eval_errset
+;
+eval_overflow
+	jsr outerr_z
+	lda #value_overflow
+	bne eval_errset
+;
+eval_forward_reference
+	lda #value_forward
+eval_errset
+	ora valflg
+	sta valflg
+	rts
+;
+;
+;
+;	sub_eval
+;	
+;		examines the string looking for operators
+;		determines whether the string has 
+;		a value, and any binary operators in it.
+;		passes control to eval_feature_check
+;
+sub_eval
+	ldy #0			y <= 0
+	sty binop_loc		clear feature flags
+	sty plus_minus_loc
+;
+10$	lda (eval_pntr),y	do	if	at EOS
+	beq eval_feature_check			goto feature check
+	jsr unop_check			if	at a UNOP
+	bcs 20$
+	jsr skip_op				skip it
+	jmp 10$					loop
+;
+20$	lda (eval_pntr),y	if	at the dreaded single quote
+	cmp #''
+	bne 40$
+	ldd eval_pntr
+	jsr range_of_single_quote	eat the appropriate numberr of chars
+	jmp 45$				go look for EOS or binop
+;				if	PC symbol
+40$	cmp #'*
+	bne 48$
+	iny				point to next char
+45$	lda (eval_pntr),y
+	beq eval_feature_check		exit if EOS
+	jsr binop_check			if	not binop
+	bcs 90$					syntax error
+	bcc 60$			else
+;
+48$	jsr binop_check			if	binop
+	bcc 90$					syntax error
+;
+50$	iny				do	read next char
+	lda (eval_pntr),y
+	beq eval_feature_check			EOS -> check features
+	jsr plus_minus_check			if	plus minus
+	bcc 60$						go mark location
+	jsr binop_check			until	at a binop
+	bcs 50$
+;
+	sty binop_loc			mark location of binary operator
+	bcc 70$				skip next operation
+;
+60$	sty plus_minus_loc		mark location of +/_
+;
+70$	jsr skip_op		skip the operator
+	jmp 10$			go to start
+;
+90$	jmp eval_syntax
+;
+;
+eval_feature_check
+	ldy plus_minus_loc	if	+/- found
+	beq 10$
+	jmp eval_split			split evaluation around operater
+10$	ldy binop_loc		if	binop found
+	beq eval_unops
+	jmp eval_split			split evaluation around operater
+;
+;	the entire string has no binary operators in it
+;
+eval_unops
+	ldy #0		if	not a unop at start of string
+	jsr unop_check
+	bcc 10$
+	jmp eval_value		go eval as a straight value
+;
+10$	jsr skip_op	point y pass the operator
+	ldd eval_pntr 	stack <= pntr
+	phd
+	tya		point pntr past operator
+	clc
+	adc eval_pntr
+	sta eval_pntr
+	bne 20$
+	inc eval_pntr+1
+20$	jsr		eval_unops	( value <= value of whats left )
+	pld		restore pntr
+	sta eval_pntr
+;
+;
+;
+	ldy #0		.y <= opertor
+	lda (eval_pntr),y
+	tay
+	ldd value	x,a <= value
+	cpy #'+		if	+
+	beq 80$			go value <= xa
+	cpy #'-		if	-
+	beq 70$			go value = twos_comp(xa)
+	cpy #'>		if	>
+	beq 40$			go do high order only
+	cpy #'<		if	<
+	beq 50$			go do low order only
+	cpy #'!		if	escape
+	beq 30$			go invert xa ( assume NOT )
+	jmp eval_syntax
+;
+30$	jsr invert_xa
+	jmp 80$
+;
+40$	txa
+50$	ldx #0
+	beq 80$
+;
+70$	jsr twos_complement_xa
+80$	std value
+	clc
+	rts
+;
+;
+invert_xa 		;	ones complement of xa
+	eor #$ff
+	pha
+	txa
+	eor #$ff
+	tax
+	pla
+	rts
+;
+absolute_value_xa		; absolute value of xa
+	cpx #$80
+	bcs twos_complement_xa
+	rts
+;
+twos_complement_xa		; twos_complement of xa
+	jsr invert_xa
+inc_xa	clc			; increment xa
+	adc #$01
+	bcc 10$
+	inx
+10$	rts
+;
+;
+;
+;
+;	skip_op
+;		assuming y points to operator
+;		point y past operator
+;
+skip_op
+	jsr get_opr	get the op
+	bcc 10$		if	escape op
+	iny			y++
+10$	iny		y++
+	rts		return
+;
+;
+;	binop_check
+;		returns true if (eval_pntr),y points to binop
+;
+char_ok	.macro %a
+	cmp #'%a
+	beq op_check_ok
+	.endm
+;
+binop_check
+	jsr get_opr	get operator
+	bcs binop_escape_check	if	escape, use that routine
+	char_ok	<*>
+	char_ok </>
+	bne plus_minus_check
+;
+binop_escape_check
+	char_ok <.>
+	char_ok <X>
+	char_ok <M>
+	bne plus_check
+;
+unop_check
+	jsr get_opr	getr opr
+	bcs op_check_N	if	escape, go check for N only
+	char_ok <~<> ;	ok if <
+	char_ok <~>> ;	ok if >
+plus_minus_check
+	char_ok <->	ok if -
+plus_check
+	char_ok <+>	ok if +
+op_check_fail
+	sec
+	rts
+;
+op_check_N
+	char_ok <N>		ok if N
+op_check_ok
+	clc
+	rts
+;
+; get_opr
+;	gets operator at (eval_pntr),y
+;	returns 
+;		.a	= char
+;		.y	= unchanged
+;		c=0	char was not escape
+;		c=1	char was escape ( returns the char, not the escape )
+;
+;
+get_opr	lda (eval_pntr),y
+	beq op_check_ok
+	cmp #'!
+	bne op_check_ok
+	iny
+	lda (eval_pntr),y
+	jsr toupper
+	dey
+	sec		return c=1
+	rts
+
+;
+;
+;
+;
+;
+;	eval_split
+;		entry:	y points to first char of binary operator
+;
+;		calls sub_eval to evaluate right and left hand sides
+;		of string past operator.
+;
+;		then merges result per operator.
+;
+;		exit:	value = result
+;
+eval_split
+	tya			save position
+	pha
+	jsr get_opr		get opr
+	bcc 10$			if	escape
+	iny				point to real operator
+10$	iny			point to first char of left side of string
+;
+	lda eval_pntr+1		stack eval_pntr, x,a <= eval_pntr
+	pha
+	tax
+	lda eval_pntr
+	pha
+;				eval_pntr += y
+	tya
+	clc
+	adc eval_pntr
+	sta eval_pntr
+	bcc 20$
+	inc eval_pntr+1
+;
+20$	jsr sub_eval		( right side in value )
+;
+	pla			recall pntr
+	sta eval_pntr
+	pla
+	sta eval_pntr+1
+	pla			recall index to operator
+	tay
+;
+	ldd value		stack result
+	phd
+	lda (eval_pntr),y	save operator on stack
+	pha
+	tya			save index
+	pha
+	lda #0			operator <= null
+	sta (eval_pntr),y
+;
+	jsr sub_eval		( left side in value)
+;
+	pla			recall index
+	tay
+	pla			restore operator
+	sta (eval_pntr),y
+	pld			recall right side value
+	std value2		value2 <= value for right side
+;
+;
+;
+;	at this point:
+;		value contains result for right side of string
+;		value2 contains result for left hand side of string
+;		valflg set per possible errors
+;		eval_pntr,y points to operator
+;
+40$	jsr get_opr	get operator
+	bcs 50$		if	not escape operator
+;
+	cmp #'+			if	+
+	beq 				value_add
+	cmp #'-			if	-
+	beq 				value_sub
+	cmp #'*			if	*
+	beq 				value_mul
+	cmp #'/			if	/
+	bne 90$
+	jmp 				value_divide
+;				go puke
+;
+50$	cmp #'+		if	!+
+	beq 			value_or
+	cmp #'.		if	!.
+	beq 			value_and
+	cmp #'X		if	!X
+	beq 			value_xor
+	cmp #'M		if	!M
+	bne 90$
+	jmp 			value_modulus
+;
+90$	jmp 		eval_syntax
+;
+value_or
+	lda value2		value <= value or value2
+	ora value
+	sta value
+	lda value2+1
+	ora value+1
+	sta value+1
+	clc
+	rts
+;
+;
+value_and
+130$	lda value2		value <= value and value2
+	and value
+	sta value
+	lda value2+1
+	and value+1
+	sta value+1
+	clc
+	rts
+;
+value_xor
+140$	lda value2		value <= value eor value2
+	eor value
+	sta value
+	lda value2+1
+	eor value+1
+	sta value+1
+	clc
+	rts
+;
+value_sub
+	sec
+	lda value
+	sbc value2
+	sta value
+;
+	lda value+1
+	sbc value2+1
+	sta value+1
+;
+	clc
+	rts
+;
+value_add
+	ldd value2
+value_add_entry
+	clc
+	adc value
+	sta value
+	txa
+	adc value+1
+	sta value+1
+	clc
+	rts
+;
+;	value_mul
+;
+value_mul
+	lda value+1	stack >value
+	pha
+;
+	lda value	.a <= <value
+;
+	ldx #0		value <= 0
+	stx value
+	stx value+1
+;
+	jsr 10$		do mul 8 bits in .a
+	pla		recall high order value
+;
+;
+;
+10$	ldy #7		y <= 7 
+20$	lsr a		do	shift .a right
+	bcc 30$			if	bit set
+	pha				save .a
+	jsr value_add			value <= value + value2
+	pla				recall .a
+30$	asl value2		shift value2 left one bit
+	rol value2+1
+	dey			y <= y - 1
+	bpl 20$		until	y < 0
+	rts		return
+;
+;
+;
+;	value_divide value_mod
+;
+	ram quo,2
+	ram divide_sign
+;
+;
+;	quo	= result
+;
+;	modulus operations:	|value| MOD |value2|
+;		sign of result = sign of divedend ( hp16C )
+;
+;
+;
+value_modulus
+	lda value2+1	y <= 0 + sign bit of value2
+	asl a
+	lda #0
+	rol a
+	tay
+	sec		sec
+	bcs 		value_divide_entry
+;
+value_divide
+	clc		clc
+	ldy #0		y <= 0
+;
+value_divide_entry
+	php		save desired result ( value or mod )
+;
+	ldd value	divend <= abs(value)
+	bpl 10$
+;
+	jsr twos_complement_xa
+	iny
+10$	std value
+;
+	ldd value2	divsor <= abs(value2)
+	bpl 20$
+	jsr twos_complement_xa
+	iny
+20$	std value2
+;
+	sty divide_sign	lsb divide_sign is desired result sign
+;
+	jsr eval_divide_unsigned
+;
+	plp		carry <= save desired result flag
+
+;
+50$	ldd quo		xa <= quotient
+	bcc 60$		if	really wanted MOD
+	ldd value		xa <= whats left
+;
+60$	lsr divide_sign	if	result should be minus
+	bcc 70$
+	jsr 			twos_complement_xa
+70$	std value	save result
+	clc		return happy
+	rts
+;
+;  value_shift value_mul_10 
+;
+;
+value_shift_4
+	jsr value_shift_2
+value_shift_2
+	jsr value_shift
+value_shift
+	asl value
+	rol value+1
+	rts
+;
+value_mul_10
+	jsr value_shift
+	ldd value
+	jsr value_shift_2
+	jmp value_add_entry
+;
+;
+;***********************************************************************
+;		eval_value
+;***********************************************************************
+;
+;	eval_value	evaluate string at (eval_pntr) for value only
+;
+eval_value
+	ldy #0			y <= 0
+	sty value		value <= 0
+	sty value+1
+	lda (eval_pntr),y	a <= first_char
+	cmp #'$			if	$
+	beq eval_hex			go eval_hex
+	cmp #'%			if	%
+	beq eval_binary			go eval_binary
+	jsr isdigit		if	(0-9)
+	bcc eval_decimal_local		eval as decimal or local_label
+;
+	cmp #''			if	DREADED SINGLE QUOTE
+	bne 10$
+	jmp eval_literal		eval as a literal string
+;
+10$	cmp #'*			if	its the damn star
+	bne 20$
+	ldy #1				if	next char null
+	lda (eval_pntr),y
+	bne 90$
+	ldd pc					value <= pc
+	std value
+	rts					return
+;
+90$	jmp eval_syntax			syntax error
+;
+20$	cmp #'@			if	@
+	beq eval_octal			go eval as octal thinging
+	ldd eval_pntr
+	jmp eval_symbol		evaluate as symbol
+;
+eval_binary
+	iny			get next char
+	lda (eval_pntr),y	if	done
+	bne 10$
+	clc				retunr happy
+	rts
+10$	lsr a			if	not binaary digit
+	eor #$18
+	beq 20$
+	jmp eval_syntax			complain about syntax
+20$	php
+	jsr value_shift
+	plp
+	bcc 30$
+	inc value
+30$	jmp eval_binary		go for another digit
+;
+;
+eval_hex
+	iny			point to next digit
+	lda (eval_pntr),y	if	null
+	bne 10$
+	clc				return happy
+	rts
+;
+10$	jsr ishex		if	not hex
+	bcc 20$
+	jmp eval_syntax			syntax error, return
+;
+20$	jsr value_shift_4	shift value left one nybble
+;
+	lda (eval_pntr),y	recall digit
+	jsr isdigit		convert to binary value
+	bcc 50$
+	sbc #'A'-$a
+50$	and #$0f
+	jsr add_to_value
+	jmp eval_hex		go try another digit
+;
+;
+;
+;
+eval_decimal_local
+	lda (eval_pntr),y
+	beq 80$
+	jsr isdigit
+	bcc 20$
+;
+	cmp #'$
+	bne 90$
+	ldd eval_pntr
+	jmp eval_symbol
+;
+90$	jmp eval_syntax
+;
+20$	jsr value_mul_10
+	lda (eval_pntr),y
+	and #$0f
+	jsr add_to_value
+	iny
+	bne eval_decimal_local
+;
+80$	clc
+	rts
+;
+;
+eval_octal
+	iny			point to next digit
+	lda (eval_pntr),y	if	null
+	bne 10$
+	clc				return happy
+	rts
+;
+10$	cmp #'8			if	not 0-7
+	bcs 19$
+	cmp #'0
+	bcs 20$
+19$	jmp eval_syntax			syntax error, return
+;
+20$	jsr value_shift		shift value 3 bits ( ho hum )
+	jsr value_shift_2
+;
+	lda (eval_pntr),y	recall digit
+	and #%00000111		mask to true value
+	jsr add_to_value	add the sucker in
+	jmp eval_octal		go try another digit
+;
+;
+add_to_value
+	clc
+	adc value
+	sta value
+	bcc 10$
+	inc value+1
+10$	rts
+	
+;
+;	eval_literal
+;		entry:	value == 0
+;			eval_pntr points to string 
+;			first char is a single quote
+;
+;		exit:	value = value of char ( 1 or 2 )
+;			syntax error emitted if misterminated
+;
+eval_literal
+	ldy #0		find out what is involved
+	ldd eval_pntr
+	jsr range_of_single_quote
+	bcs 90$		if	honky dory
+	lda (eval_pntr),y	if	terminated by a null
+	bne 90$
+;
+	ldy #1				value  <= first char in string
+	lda (eval_pntr),y
+	sta value
+	iny				.a <= next char in string
+	lda (eval_pntr),y
+	beq 80$				if	not null
+	cmp #''					if	not single quote
+	beq 80$
+	ldx value					value+1 <= value
+	stx value+1
+	sta value					value <= next char
+80$	clc				return happy
+	rts
+
+90$	jmp eval_syntax	syntax error
+;
+;
+;
+
+
+;	divend = value
+;	quo = uninitilized
+;	divsor,divend = positive twos complement numbers
+;
+eval_divide_unsigned
+	lda value2		if	divsor is zero
+	ora value2+1
+	bne 1$
+	jmp eval_overflow		puke
+;
+1$	ldy #0			y <= 0
+	sty quo			quo <= 0
+	sty quo+1
+;
+10$	asl value2		do	shift left divsor
+	rol value2+1
+	iny				y++
+	bcc 10$			while	c=0
+;
+	.byte $24		skip next clc ( c=1 )
+;
+20$	clc			do	clc	
+	ror value2+1			shift right divsor
+	ror value2
+	dey				y--
+	bmi 80$				if	< 0, then exit
+;
+	asl quo				shift quo left
+	rol quo+1
+;
+	cmpdr value,value2,a		if	value >= value2
+	bcc 50$
+	jsr value_sub			divend -= divsor
+	inc quo					set low order bit of quo
+;
+50$	jmp 20$			loop
+;
+80$	rts			return
+;

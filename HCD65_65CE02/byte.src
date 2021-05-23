@@ -1,0 +1,154 @@
+
+;
+directive_byte
+directive_byt
+	lda #0
+	sta byte_cntr
+;
+byte_main_loop
+	ldy #$00
+	jsr byte_classify_this_char	if	dunno
+	beq 50$					go do up normal expression
+	and #%11001110			if	white
+	bne 10$
+	jmp byte_exit				normal exit
+10$	and #%00000110			if	comma or semi colon
+	bne 20$
+	jsr outerr_q				???
+	jmp byte_exit				exit
+20$	and #%00000100			if	not single quote
+	bne byte_interpreter			goto byte interpreter
+;
+	ldy #0				look for terminating single quote
+30$	iny
+	lda (args),y			if	not found
+	beq byte_interpreter			go use interpreter
+	cmp #''
+	bne 30$
+;
+	cpy #4				if	too many chars for an expression
+	bcs byte_interpreter			go use interpreter
+;					if	next char is known terminetor
+	jsr byte_classify_next_char
+	bne byte_interpreter			go	use interpreter
+;
+50$	jsr 				byte_find_end_of_normal_expression
+	lda (args),y			save (),y
+	pha
+	tya				save .y
+	pha
+	lda #0				terminate the argument
+	sta (args),y
+	ldd args			eval args ( eval complains if errors )
+	jsr eval
+	lda value				spit the byte
+	jsr byte_spit_one
+	lda value+1				if	>value <> 0
+	beq 70$
+	jsr outerr_v					V error
+70$ 	pla				restore .y ,(),y
+	tay
+	pla
+	sta (args),y
+	jmp byte_terminator		handle terminator
+;
+;
+;	.byte $00,';',$20,$09,',',$22,$27
+;	.byte $80,$40,$20,$10,$08,$04,$02
+;
+byte_terminator
+	jsr byte_classify_this_char	if	dunno
+	beq 90$					say what ?, exit
+	and #%01001110			if	white or null
+	beq byte_exit				exit
+	and #%01001000			if	quotes
+	beq 80$					goto 80$
+	and #%00001000			if	not be comma
+	beq 90$					go complain 
+;
+20$	jsr byte_classify_next_char	do	read next
+	and #%11111000				if	dunno or quotes
+	beq 80$						break
+	and #%11001000				if	white 
+	beq 20$						loop
+	jmp 90$					question , ; <null>
+;
+80$	ldd args			reset args to point here
+	jsr effective_address
+	std args
+	jmp byte_main_loop		goto main loop
+;
+90$	jsr outerr_f				complain
+	jmp byte_exit				exit
+;
+byte_interpreter
+	ldy #0
+10$	iny
+	lda (args),y
+	beq 90$
+;
+	ldx #0
+	cmp (args,x)
+	beq 30$
+20$	jsr byte_spit_one
+	jmp 10$
+;
+30$	iny
+	cmp (args),y
+	beq 20$
+;
+	jmp byte_terminator
+;
+90$	jsr outerr_b
+;
+byte_exit
+	lda byte_cntr
+	bne 10$
+	jsr outerr_q
+;
+10$	lda byte_cntr		return number of bytes used
+	clc
+	rts
+;
+byte_spit_one		; .y preserved
+	tax
+	tya
+	pha
+	txa
+	ldy byte_cntr
+	jsr outbyte
+	pla
+	tay
+	inc byte_cntr
+	rts
+
+;
+byte_find_end_of_normal_expression
+	ldy #$ff		start at the beginning, please...
+10$	jsr byte_classify_next_char do	classify next char
+	and #%11111010			if not terminitor, or if double quote
+	beq 10$					loop
+	and #%11111000			if	not single quote
+	bne 20$					break
+	ldd args			advance y based on range of singel quote
+	jsr range_of_single_quote
+	dey				back up one char 
+	jmp 10$
+;
+20$	and #%10001111		if	space or semi colon
+	bne 30$
+	sta (args),y			make null ( make terminator )
+30$	rts			return
+;	
+;
+byte_classify_next_char
+	iny
+byte_classify_this_char
+	lda (args),y
+byte_classify_char
+	jsr classify_char
+	and #%11111110	; do not care about '='
+	rts
+;
+;
+;
