@@ -94,6 +94,9 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [GRAPHICS_C65](GRAPHICS_C65)                                 | 1991 | final C65 BASIC Graphics lib |
 | [KERNAL_C65](KERNAL_C65)                                     | 1991 | final C65 KERNAL, EDITOR, MONITOR |
 | [DOS_C65](DOS_C65)                                           | 1991 | final C65 DOS |
+| [BASIC_C64_C65](BASIC_C64_C65)                               | 1991 | final C64 mode BASIC V2 |
+| [KERNAL_C64_C65](KERNAL_C64_C65)                             | 1991 | final C64 mode KERNAL |
+
 
 ## Disk Drives
 

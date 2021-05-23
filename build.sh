@@ -74,6 +74,7 @@ build1 KERNAL_C64_02 kernal
 build1 KERNAL_C64_03 kernal
 build2 KERNAL_C64_03_BSO kernal
 build2 KERNAL_C64GS console
+build2 KERNAL_C64_C65 kernel64
 
 build2 KERNAL_TED_04 kernal
 build2 KERNAL_TED_05 kernal
@@ -110,6 +111,7 @@ build1 BASIC_VIC basic
 build1 BASIC_C64 basic
 build2 BASIC_C64_BSO basic
 build2 BASIC_C64GS basic
+build2 BASIC_C64_C65 basic64
 
 build2 BASIC_TED basic
 
