@@ -1,0 +1,76 @@
+;	SET-UP SHELL COLD-START VARIABLE VALUES & RAM-LINKS TO ROM SUBROUTINES
+;
+;	Define Start-up Values for Shell Variables Later Moved to Zero-Page
+;
+	*=	zpsav	; Start of F-key App. Ram Used to Save Basic Z-Page
+;
+	.byt	-1	; Default Language for Shell Messages (-1 = Un-selected)
+	.byt	4	; Default Printer Device # (0 = None, 4 - 6 Supported)
+	.byt	0	; Default Disk Configuration (0 = Single-Drive)
+	.byt	'A'	; Logical Drive-Name For Single-Drive Config.
+	.byt	8, 8	; Default Device # for Logical Drives A & B
+	.byt	'00'	; Physical Drive # for Logical Drives A & B
+	.byt	1	; Default Source Device/Drive/LFN # Index (1= Drive A)
+	.byt	0	; Temp Logical File Nr. Used to Open Channels
+	.byt	4, 8	; Data-Channel Logical File Nr. for Drives A & B
+;
+;
+;	Define Shell F-Key Data to Replace System Function-Key Definitions
+;
+	*=	pfdef	; Data for F1, F3, F5, F7:  Run/Stop & Help Disabled
+;
+	.byt	1,0,1,0,1,0,1,0,0,0	; Shell F-Key Length Bytes
+;
+	.byt	133,134,135,136,0,0	; Shell F-Key String Values
+;
+;
+	*=	ramlnk	; Code-Origin for Ram-Linkage Subroutines
+;
+;	Shell RAM-code Link Needed for Direct-Calls to Run a Basic Program
+;	Because Runc Trashes System-Stack & Return-Address for Kernal JSRFAR
+;
+runjmp	lda	#0	; Set System Configuration (Std. Bank # 15)
+	sta	mmucr	;
+	jsr	setexc	; set-up various Basic Run-modes & flags
+;
+	jsr	runc	; set-up Basic Text & Variable Pointers & Stacks
+;
+	jsr	lnkprg	; re-build Basic-text Line-link pointers
+;
+	jmp	newstt	; check Stop-key & start executing Basic text
+;
+;
+;	Shell RAM-Code Link to Kernal JSRFAR for Calling Basic Subroutines
+;	Enter With:  pchi, pclo, .S, .A, .X, .Y Pseudo-Regs Set by Caller
+;
+rajsrf	lda	#15	; Set System Default Configuration Bank #
+	sta	bank	;
+	jsr	kjsrfr	; Call the Long-Call Subroutine in Shared RAM
+	lda	#6	;
+	sta	mmucr	; Set Shell ROM Configuration (Std. Bank # 12)
+	rts		;
+;
+;
+;	Shell Ram-Links to Long-Fetch, Long-Store, Long-Compare Subroutines
+;
+kndfet	sei		;
+	jsr	lngfet	; call long-fetch with irq's disabled
+	cli		;
+	rts		; return with irq's enabled
+;
+kndsta	sei		;
+	jsr	lngsta	; call long-store with irq's disabled
+	cli		;
+	rts		; return with irq's enabled
+;
+kndcmp	sei		;
+	jsr	lngcmp	; call long-compare with irq's disabled
+	cli		;
+	rts		; return with irq's enabled
+;
+	*=	bama	; origin for dos shell version message
+;
+	.byt	' c128 dos shell '	;
+	.byt	'version # 1.0 by'	; current shell version #
+	.byt	' dave middleton '	;
+;

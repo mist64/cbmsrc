@@ -1,0 +1,223 @@
+;  ********    C = 1 2 8   D. O. S.   U T I L I T Y   S H E L L    ********
+;
+;
+;	STANDARD I/O LABELS USED IN C=128  D.O.S. SHELL
+;
+vic	=	$d000	; 6567 video controller (40-col)
+mmucr	=	$d500	; system MMU memory configuration register
+ramcr	=	$d506	; system RAM configuration register
+vic80	=	$d600	; 8563 video controller (80-col)
+v8clrg	=	26	; offset to bkgnd color reg of 8563
+random	=	$dc06	; jiffy-clock hardware timer (CIA # 1, Timer B)
+;
+;
+;	VIDEO COLOR CONSTANTS FOR SHELL MESSAGES
+;
+clrbdr	=	14	; light blue border (40-col)
+clrbkg	=	15	; grey3 background (40-col & 80-col)
+clrhl	=	151	; grey1 used for heading line
+clrmu	=	31	; dark blue used for menu area
+clrml	=	28	; red used for query/message line
+clrdl	=	151	; grey1 used for drive/disk id line
+clrwh	=	154	; light blue used for window heading
+clrfl	=	31	; dark blue used for file-list window
+stdbdr	=	13	; system default border color (40-col)
+stdbkg	=	48	; system default background color (40-col & 80-col)
+;
+;
+;	MESSAGE X-COORDINATES FOR COLOR CONTROL
+;
+lynml8	=	6	; 80-col message line
+lyndl8	=	8	; 80-col drive/disk id line
+lynwh8	=	9	; 80-col window heading line
+lynfl4	=	11	; 40-col file-list window starts here
+lynfl8	=	10	; 80-col file-list window starts here
+;
+;
+;	C=128 KERNAL ROM SUBROUTINES CALLED
+;
+chkin	=	$ffc6	; serial talk
+chkout	=	$ffc9	; serial listen
+chrin	=	$ffcf	; input to <cr>
+chrout	=	$ffd2	; put character
+close	=	$ffc3	; close a file
+clrchn	=	$ffcc	; untalk/unlisten
+getin	=	$ffe4	; get character
+load	=	$ffd5	; load ram from device
+open	=	$ffc0	; open a file
+pcint	=	$ff81	; set up screen
+plot	=	$fff0	; read (.C=1) or set (.C=0) cursor position
+restor	=	$ff8a	; restore default i/o vectors
+setlfs	=	$ffba	; set file parameters
+setmsg	=	$ff90	; allow/suppress kernal messages
+setnam	=	$ffbd	; set file-name parameters
+stop	=	$ffe1	; check for stop key
+;
+kswap	=	$ff5f	; swap 40 / 80 column screen display mode
+setbnk	=	$ff68	; set bank # for open / load / save / verify
+kjsrfr	=	$ff6e	; JSR to another bank with RTS to calling bank
+kjmpfr	=	$ff71	; JMP to another bank (no return)
+lngfet	=	$ff74	; Long-Fetch:  LDA (fetvec),y  from another bank
+lngsta	=	$ff77	; Long-Store:  STA (stavec),y  to another bank
+lngcmp	=	$ff7a	; Long-Compare:  CMP (cmpvec),y  to another bank
+;
+;
+;	C=128 BASIC / EDITOR ROM ROUTINES CALLED
+;
+warm	=	$4003	; Basic Warm-Start Entry Point used for Shell Exit
+runc	=	$af7e	; setup basic program text/variable pointers
+lnkprg	=	$af87	; re-build Basic program text link-pointers
+newstt	=	$af90	; check stop key then execute basic stmnt
+setexc	=	$af9c	; setup for Basic program execution
+runprg	=	$af99	; Basic jump-entry to run a program (Beta-7 ROMs)
+wndset	=	$c02d	; Editor jump-table entry to set-up a window
+;
+;
+;	SYSTEM RAM-BASED BANKING ROUTINE PSEUDO-REGISTERS USED
+;
+	*=	$0002	; Pseudo-Registers used by Long-Call / Long-Jump
+;
+bank	*=	*+1	; Standard Bank # used by 'getcfg' (required)
+pchi	*=	*+1	; High-byte of Destination addr (required)
+pclo	*=	*+1	; Low-byte of Destination addr (required)
+sreg	*=	*+1	; Status Register sent / returned (opt)
+areg	*=	*+1	; .A register sent / returned (opt)
+xreg	*=	*+1	; .X register sent / returned (opt)
+yreg	*=	*+1	; .Y register sent / returned (opt)
+;
+stavec	=	$02b9	; Addr of Z-page indirect pointer for Long-Store
+;
+cmpvec	=	$02c8	; Addr of Z-page indirect pointer for Long-Compare
+;
+;
+;	SHELL USAGE OF FUNCTION-KEY APPLICATION RAM AREA & RAM BANKS 0 & 1
+;
+	*=	$1800	; Space Reserved For F-key Applications Use
+;
+zpsav	*=	*+64	; Save-Area for Basic Zero-Page Swap-out
+pfsav	*=	*+16	; Save-area for System Function-key Definitions
+pfdef	*=	*+16	; Shell Function-key Definitions Set by Cold-Start
+lstbf	*=	*+32	; Temp-Hold Buffer for File-List Management
+bfnam	=	lstbf+5	; Relative Offset to File-name for File-list Entry
+fdriv	*=	*+2	; Physical Drive # for Opening / Loading Files
+fnam1	*=	*+20	; Temp Buffer for File-name-1
+	*=	*+2	;
+fnam2	*=	*+16	; Temp Buffer for File-name-2
+dosbf	*=	*+40	; Temp Buffer for Disk Header-Name & Blocks Free
+dsnam	=	dosbf+12	; Relative Offset to Header-name Field
+bfree	=	dosbf+29	; Relative Offset to Blocks-free Field
+ramlnk	*=	*+48	; Ram-Code Links to ROM Calls & Inter-Bank Transfers
+;
+lista	=	$0400	; Primary File-List Buffer-A in Ram Bank # 1
+listb	=	$1600	; Secondary File-List Buffer-B in Ram Bank # 1
+bama	=	$1900	; BAM Image Buffer for Restore / Backup (Both Sides)
+shell	=	$1a00	; Warm-Start Entry-Point to DOS Shell on F-key # 1
+bufra	=	$5b00	; Start of I/O Buffer for Backup / Copy in Bank # 0
+bufrb	=	listb	; Start of I/O Buffer for Backup / Copy in Bank # 1
+bufnd	=	$ff00	; End of I/O Buffer for Backup / Copy in Both Banks
+;
+;
+;	BASIC, EDITOR & KERNAL VARIABLES & MEMORY LOCATIONS REFERENCED
+;
+zpbas	=	$0020	; Start of Basic Z-page used for Shell variables
+stat	=	$0090	; system status word ST for input / output
+jiflo	=	$00a2	; low-byte of system jiffy-clock counter
+mode	=	$00d7	; screen editor 40 / 80 column mode ($80 = 80-col)
+qtsw	=	$00f4	; screen editor quote-mode switch ($01 = quote-mode)
+insrt	=	$00f5	; screen editor insert-mode switch ($01 = insert-mode)
+scroll	=	$00f8	; screen editor scrolling/line-link flag
+rptflg	=	$0a22	; screen editor key-repeat flag ($80 = all, $60 = none)
+pkybuf	=	$1000	; System Prog. Function-key Buffer (length = 256 bytes)
+txtop	=	$1210	; Pointer to Basic Top-of-Text (+1)
+;
+;
+;	SEMI-PERMANENT VARIABLES STORED IN BASIC ZERO-PAGE
+;
+	*=	zpbas	; Origin for Shell Variables in Basic Zero-Page
+;
+lang	*=	*+1	; current language for shell messages
+prdev	*=	*+1	; current device # for printer (0 = none)
+config	*=	*+1	; current system disk configuration type
+drivid	*=	*+1	; selected shell logical drive id
+unita	*=	*+1	; device nr for drive: A
+unitb	*=	*+1	; device nr for drive: B
+driva	*=	*+1	; physical drive # for drive: A
+drivb	*=	*+1	; physical drive # for drive: B
+drivx	*=	*+1	; current active unit/drive/lfn index
+lfnr	*=	*+1	; current active data-file LFN
+lfna	*=	*+1	; data-channel logical file nr. for drive: A
+lfnb	*=	*+1	; data-channel logical file nr. for drive: B
+stsav	*=	*+1	; temp save cell for STatus
+doserr	*=	*+1	; last D.O.S. error code returned
+laskey	*=	*+1	; holds last keystroke for controls
+;
+;	TEMPORARY VARIABLES STORED IN BASIC ZERO-PAGE
+;
+func	*=	*+1	; current shell function in progress
+msgnr	*=	*+1	; current message nr to print
+curmsg	*=	*+2	; pointer to current message group
+msglen	*=	*+1	; length of current message
+msgxy	*=	*+2	; screen coordinates for current message
+work	*=	*+2	; misc. temp work area
+worka	*=	*+2	; misc. temp work area
+workb	*=	*+2	; misc. temp work area
+workc	*=	*+2	; misc. temp work area
+workd	*=	*+2	; misc. temp work area
+worke	*=	*+2	; misc. temp work area
+diska	*=	*+2	; diskette-id code for drive:  A
+diskb	*=	*+2	; diskette-id code for drive:  B
+pntra	*=	*+2	; pointers used
+pntrb	*=	*+2	; 	for file-
+pntrc	*=	*+2	;	    list browse 
+pntrd	*=	*+2	;	         and select
+pntre	*=	*+2	;		     disk I/O and
+pntrf	*=	*+2	;			  screen display
+flen1	*=	*+1	; length of file-name-1
+fadr1	*=	*+2	; file-name-1 address for Open / DOS command
+fpbuf	*=	*+4	; Work-area for Binary-Ascii Number Conversions
+tempa	*=	*+1	; temp work area
+tempb	*=	*+1	; temp work area
+tempc	*=	*+1	; temp work area
+tempd	*=	*+1	; temp work area
+	*=	*+3	;
+;
+zplen	=	*-zpbas-1	; length of Basic zero-page to save before using
+;
+;
+;	CHARACTER VALUES USED FOR CONTROLS
+;
+stpky	=	3	; value to flag stop key pressed
+caret	=	13	; carriage-return character
+crsrd	=	17	; cursor-down character
+rvson	=	18	; reverse-video ON char
+home	=	19	; cursor-home character
+delt	=	20	; screen delete character
+crsrr	=	29	; cursor-right character
+space	=	32	; blank space character
+quote	=	34	; double-quote character	
+acent	=	39	; accent-mark used in messages
+f1	=	133	; function key # 1
+f3	=	134	; function key # 3
+f5	=	135	; function key # 5
+f7	=	136	; function key # 7
+graph	=	141	; start of shifted screen-cntl chars
+crsru	=	145	; cursor-up character
+rvsoff	=	146	; reverse-video OFF char
+clear	=	147	; clear-screen character
+crsrl	=	157	; cursor-left character
+shpac	=	160	; shifted space character
+;
+;
+;	SCREEN EDITOR WINDOW-CONTROL CHARACTERS & MISC. LABEL VALUES
+;
+escap	=	27	; Screen-Editor ESCape character
+erase	=	'@'	; Erase to End-of-Screen
+erlyn	=	'Q'	; Erase to End of Current Line
+scrup	=	'V'	; Scroll the Screen Upwards
+scrdn	=	'W'	; Scroll the Screen Downwards
+swap	=	'X'	; Swap 40 / 80 Column Display Mode
+;
+cent	=	128	; bit 7 set in Y-position = center the message
+blink	=	15	; nr of jiffies for flashing options
+wtsix	=	640	; nr of jiffies for language selection
+;

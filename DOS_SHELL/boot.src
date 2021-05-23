@@ -1,0 +1,80 @@
+;
+;	THIS MODULE SIMULATES ROM COLD-START PROCEDURES FOR THE C=128 DOS SHELL
+;
+;	Ram / Rom Labels Used for Shell Auto-Boot from Disk
+;
+txptr	=	$002d	; Basic Text-Pointer Used to Re-program F-key # 1
+mode	=	$00d7	; Screen-Editor 40 / 80 Column Mode ($80 = 80-Col)
+txtop	=	$1210	; Pointer to Top of Basic Text (txptr + 2)
+nubas	=	$5b00	; New Start-of-Basic Address After Shell is Loaded
+setkey	=	$c021	; Screen Editor Entry to Program a Function-Key
+primm	=	$ff7d	; Kernal Entry to Print an Immediate String
+chrout	=	$ffd2	; Kernal Entry to Output one Character
+plot	=	$fff0	; Kernal Entry to Read / Set Screen Cursor Position
+;
+;
+	*=	$0b00	; Set Origin for Disk Auto-Boot Block # 1
+;
+;	Data Constants for Disk Auto-boot Definition & Cold-Start
+;
+key	.byt	'CBM'	; Key Pattern to Identify an Auto-boot Diskette
+;
+	.byt	0,0,0,0		; To Show No Additional Boot-blocks to Load
+;
+disk	.byt	'C128 DOS SHELL',0	; Display this Disk-Name While Loading
+;
+file	.byt	'DOS SHELL',0	; This File-name is the Shell Application
+;
+;
+;	Shell Cold-Start Code Called by Kernal 'Phoenix' From Basic 'Hard-Reset'
+;
+;	Program F-Key # 1 for Shell Entry, Set-up a Null Basic Program-Link
+;	Set-up New Start-of-Basic Text-Pointer, Display Cold-Start Message
+;
+cold	lda	#<fkey	;
+	sta	txptr	; lo-byte of pointer to new F-key string
+	lda	#>fkey	;
+	sta	txptr+1	; hi-byte of pointer to new F-key string
+	lda	#15	;
+	sta	txptr+2	; Ram Bank # where new F-key string resides
+	lda	#txptr	;
+	ldx	#1	; set addr of F-key pointer, Nr. of F-key to change
+	ldy	#fend-fkey	;
+	jsr	setkey	; set length of new F-key string, call Screen Editor
+;
+	ldy	#3	; set-up to store four null-bytes
+	lda	#0	;
+colda	sta	nubas,y	; to build a null Basic program-link
+	dey		;
+	bpl	colda	; so Basic will work when System shows 'Ready' msg
+	lda	#1	;
+	sta	txptr	; set-up a new Basic Start-of-Text pointer value
+	lda	#>nubas	;
+	sta	txptr+1	; so that Basic programs will Load above the Shell
+	ldx	#3	;
+	stx	txtop	; set-up a new Basic Top-of-Text pointer value
+	sta	txtop+1	;
+	lda	#147	; clear the screen in case Boot command was used
+	jsr	chrout	;
+	clc		; position cursor to display Shell cold-start message
+	ldx	#1	;
+	ldy	#29	; centered on second line of the screen (80-Col Y-Pos)
+	bit	mode	;
+	bmi	coldb	; branch if 80-Col video-display mode
+	ldy	#9	;
+coldb	jsr	plot	; else set 40-Col Y-Pos, then move the cursor
+;
+	jsr	primm	; print the immediately following string
+;
+	.byt	'D.O.S. SHELL ON F-1 KEY',13,0
+;
+	rts		; All Setup!  Return to Basic Cold-Start Sequence
+;
+;
+;	Define Data to Set-up F1-key for Entry to Shell After Auto-Boot
+;
+fkey	.byt	'BANK 12: SYS 6656',13	; Press F1-Key to Enter C=128 Shell
+;
+fend	=	*	; Marks End of Shell Cold-Start Module
+;
+	.end

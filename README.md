@@ -134,6 +134,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [MONITOR_PET_ADDON](MONITOR_PET_ADDON)                       | 1981 | RAM-based monitor for PET 8x92 |
 | [MONITOR_C64](MONITOR_C64)                                   | 1982 | RAM-based monitor for C64 |
 | [DISK_MONITOR](DISK_MONITOR)                                 | 1980 | Monitor extension for PET |
+| [DOS_SHELL](DOS_SHELL)                                       | 1985 | DOS SHELL tool (1571 Test/Demo disk) |
 | [FIG](FIG)                                                   | 1980 | fig-FORTH |
 
 ## Software: Resident Assembler & HCD65
@@ -443,6 +444,10 @@ The source contains a 90 degree rotated 6x8 pixel variant of the PETSCII charact
 ### DISK_MONITOR
 
 "DISK MONITOR 2040 V1.0", an extension to the PET monitor for disk commands (see mon.cmd). Extracted from UNKN008.D80 from [Ruud Baltissen's ICPUG disks](http://www.pagetable.com/docs/CBM2_Sources.zip) and converted to LF line breaks and LST-style indenting.
+
+### DOS_SHELL
+
+The DOS Shell tool from the 1571 Test/Demo disk, autoboot for C128. Source: [c128_dev_pack.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c128/index.html)
 
 ### MATHPACK
 

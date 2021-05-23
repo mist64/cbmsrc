@@ -1,0 +1,789 @@
+;	TABLES AND CONSTANTS USED BY SHELL FUNCTIONS AND SUBROUTINES
+;
+;
+;	DISPATCH TABLE FOR SHELL FUNCTION ENTRY POINTS
+;
+funtbl	.word	confg-1		; change disk/printer setup
+	.word	runpg-1		; run a (basic) program
+	.word	formt-1		; format (header) a disk
+	.word	clean-1		; cleanup (validate BAM) a disk
+	.word	bakup-1		; copy (backup) a disk
+	.word	copy-1		; copy selected files
+	.word	delet-1		; delete (scratch) files
+	.word	restr-1		; restore (un-scratch) files
+	.word	renam-1		; rename selected files
+	.word	reseq-1		; re-order disk directory
+;
+sxfun	.word	exfund-1	; Shell Functions return control to this label
+;
+;
+;	TABLE OF D.O.S. COMMAND STRING PATTERNS
+;
+dostbl	=	*	; start of DOS command table
+;
+dcmd00	.byt	dcmd01-*	; command length byte
+	.byt	'I',1		; initialize the active drive
+dcmd01	.byt	dcmd02-*	;
+	.byt	'I',2		; initialize the other drive
+dcmd02	.byt	dcmd03-*	;
+	.byt	'V',1		; validate bam on the active drive
+dcmd03	.byt	dcmd04-*	;
+	.byt	'V',2		; validate bam on the other drive
+dcmd04	.byt	dcmd05-*	;
+	.byt	'N',1,':',3	; format disk - without ID code
+dcmd05	.byt	dcmd06-*	;
+	.byt	'N',1,':',3,',',5	; format disk - with ID code
+dcmd06	.byt	dcmd07-*	;
+	.byt	'D',2,'=',1	; dual-drive backup
+dcmd07	.byt	dcmd08-*	;
+	.byt	'C',2,':',4,'=',1,':',3	; dual-drive file copy
+dcmd08	.byt	dcmd09-*	;
+	.byt	'R',1,':',4,'=',1,':',3	; rename a file
+dcmd09	.byt	dcmd10-*	;
+	.byt	'S',1,':',3	; scratch a file
+dcmd10	.byt	dcmd11-*	;
+	.byt	'U1:',6		; read a block
+dcmd11	.byt	dcmd12-*	;
+	.byt	'U2:',6		; write a block
+dcmd12	.byt	dcmd13-*	;
+	.byt	'B-P:',6	; set dos buffer pointer
+dcmd13	.byt	dcmd14-*	;
+	.byt	'P',3		; position relative file pointer
+dcmd14	.byt	dcmd15-*	;
+	.byt	'UI'		; soft-reset disk-unit to device # 8
+dcmd15	.byt	dcmd16-*	;
+	.byt	'M-W',12,0,3	; write dos memory (for 4040 device # change)
+dcmd16	.byt	dcmd17-*	;
+	.byt	'M-W',119,0,3	; write dos memory (154x / 2031 device # change)
+;
+dcmd17	.byt	'>0U'		; device # / mode change for 157x unit-type
+;
+;				special pattern for cmnd # 17, stored backwards
+;
+;
+;	FILE-TYPE CODES USED BY COPY-FILES FUNCTION FOR OPENING FILES
+;
+ftype	.byt	' SPUL'	; Sequential, Program, User, Relative (L) Length
+;
+;
+;	BIT PATTERNS USED BY 'RESTORE FILES' AND 'BACKUP' FOR B.A.M. SEARCH
+;
+bits	.byt	1, 2, 4, 8, 16, 32, 64, 128	; to isolate allocated blocks
+;
+;
+;	TRACK / SECTOR LIMITS BY DISK-BAND FOR SINGLE-DRIVE / DUAL-UNIT BACKUP
+;
+band	.byt	17, 20, 24, 18, 30, 17, 35, 16	; Bands 0 - 3 for Side # 0
+	.byt	52, 20, 59, 18, 65, 17, 70, 16	; Bands 4 - 7 for Side # 1
+;
+;
+;	CONSTANTS USED IN BINARY - ASCII CONV FOR SCREEN / PRINTER / DISK
+;
+mask	.byt	'0000'	; four ascii zeros to start the conversion
+;
+dval	.byt	10, 100, 2, 5, 6	; decimal values for conversion
+;
+;
+;	BROWSING-CURSOR IMAGE FOR SCREEN OUTPUT  (Data is Backwards!)
+;
+bzcur	.byt	rvsoff, clrfl, 62, 192, 192, clrml, rvson
+;
+;
+;	TABLE OF USEABLE KEY-STROKE VALUES FOR 'Getky' SUBROUTINE
+;
+kytab	.byt	0,	f7,	f5,	f3,	space	;
+	.byt	crsru,	crsrd,	crsrl,	crsrr	;
+;
+;
+;	SHELL MESSAGE COLOR TABLE:  80-Col., 40-Col.  Within X-Position
+;
+msclr	.byt	clrhl, clrhl, clrmu, clrmu, clrmu, clrmu
+	.byt	clrmu, clrmu, clrmu, clrmu, clrmu, clrmu
+	.byt	clrml, clrmu, clrdl, clrml, clrdl, clrdl
+	.byt	clrwh, clrdl, clrfl, clrwh
+;
+;
+;	SCREEN X-Y COORDINATES FOR TABLE-PLOTTED SHELL MESSAGES
+;
+;	Format:  80-Col. X-Y, 40-Col. X-Y  Within Message-Number (0 - 20)
+;
+xytbl	.byt	1,	5,	1,	1	; msg # 0
+	.byt	2,	5,	2,	1	; msg # 1
+	.byt	3,	5,	3,	1	; msg # 2
+	.byt	4,	5,	4,	1	; msg # 3
+	.byt	2,	31,	5, 	1	; msg # 4
+	.byt	3,	31, 	1,	21	; msg # 5
+	.byt	4,	31, 	2,	21	; msg # 6
+	.byt	2,	57,	3,	21	; msg # 7
+	.byt	3,	57,	4,	21	; msg # 8
+	.byt	4,	57,	5,	21	; msg # 9
+	.byt	1,	cent,	1,	cent	; msg # 10
+	.byt	3,	cent,	3,	cent	; msg # 11
+	.byt	5,	cent,	5,	cent	; msg # 12
+	.byt	0,	40,	0,	0	; msg # 13
+	.byt	8,	cent,	9,	0	; msg # 14
+	.byt	15,	9,	20,	cent	; msg # 15
+	.byt	17,	cent,	13,	cent	; msg # 16
+	.byt	18,	cent,	14,	cent	; msg # 17
+	.byt	21,	25,	17,	5	; msg # 18
+	.byt	23,	cent,	19,	cent	; msg # 19
+	.byt	12,	cent,	13,	cent	; msg # 20
+	.byt	6,	21,	7,	1	; msg # 21
+	.byt	6,	21,	7,	1	; msg # 22
+	.byt	6,	21,	7,	1	; msg # 23
+	.byt	6,	21,	7,	1	; msg # 24
+	.byt	6,	21,	7,	1	; msg # 25
+	.byt	9,	0,	10,	0	; msg # 26
+	.byt	10,	21,	11,	1	; msg # 27
+;
+;
+;	CONSTANTS USED AS SUFFIXES TO SHELL MESSAGES
+;
+contbl	=	*	; Base Address of Message-Suffix List
+;
+	.byt	constb-1-*	; length of constant
+consta	.byt	' N  Y  N  O  N  J  N  S '	; Abbreviations of No & Yes
+;
+	.byt	constc-1-*	; length of constant
+constb	.byt	' A  B '	; Choice of Logical Drive Name 
+;
+	.byt	constd-1-*	; length of constant
+constc	.byt	' 0  1 '	; Choice of Physical Drive Nr.
+;
+	.byt	conste-1-*	; length of constant
+constd	.byt	' 8  9  10 11'	; Choice of Default Device Nr.
+;
+	.byt	msgtbl-*	; length of constant
+conste	.byt	'      SEQ  PRG  USR  REL '	; Choice of File-Type Code
+;
+;
+;	SHELL MESSAGE TABLE:  Segmented By Message-Type Within Language
+;
+msgtbl	=	*	; Base Address Table for Shell Messages
+;
+	.word	msg00a	; English Language
+	.word	msg00b	; French Language
+	.word	msg00c	; German Language
+	.word	msg00d	; Italian Language
+;
+;
+;	English Language Section - All Messages
+;
+;	First Segment:  Messages With Screen Positions Plotted From X-Y Table
+;
+msg00a	.byt	msg01a-*					;
+	.byt	'DISK/PRINTER SETUP'				;
+msg01a	.byt	msg02a-*					;
+	.byt	'RUN A PROGRAM     ' 				;
+msg02a	.byt	msg03a-*					;
+	.byt	'FORMAT A DISK     '				;
+msg03a	.byt	msg04a-*					;
+	.byt	'CLEANUP A DISK    '				;
+msg04a	.byt	msg05a-*					;
+	.byt	'COPY A DISK       '				;
+msg05a	.byt	msg06a-*					;
+	.byt	'COPY FILES        '				;
+msg06a	.byt	msg07a-*					;
+	.byt	'DELETE FILES      '				;
+msg07a	.byt	msg08a-*					;
+	.byt	'RESTORE FILES     '				;
+msg08a	.byt	msg09a-*					;
+	.byt	'RENAME FILES      '				;
+msg09a	.byt	msg10a-*					;
+	.byt	'REORDER DIRECTORY '				;
+msg10a	.byt	msg11a-*					;
+	.byt	'COMMODORE DISK UTILITY SYSTEM'			;
+msg11a	.byt	msg12a-*					;
+	.byt	'PRESS SPACE TO SELECT YOUR LANGUAGE'		;
+msg12a	.byt	msg13a-*					;
+	.byt	'ENGLISH'					;
+msg13a	.byt	msg14a-*					;
+	.byt	' PRESS ',rvsoff,'F5',rvson,' TO UN-SELECT / '	;
+	.byt	rvsoff,'STOP',rvson,' TO CANCEL '		;
+msg14a	.byt	msg15a-*					;
+	.byt	' DRIVE:                            FREE '	;
+msg15a	.byt	msg16a-*					;
+	.byt	'PRINTER DEVICE # =  4  5  6 NONE'		;
+msg16a	.byt	msg17a-*					;
+	.byt	'TURN ON THE DRIVE TO BE CHANGED'		;
+msg17a	.byt	msg18a-*					;
+	.byt	'TURN OFF THE OTHER DRIVE'			;
+msg18a	.byt	msg19a-*					;
+	.byt	'NEW DEVICE # = '				;
+msg19a	.byt	msg20a-*					;
+	.byt	'DONE... TURN ON THE OTHER DRIVE'		;
+msg20a	.byt	msg21a-*					;
+	.byt	'INSERT COPY DISK INTO DRIVE: '			;
+msg21a	.byt	msg22a-*					;
+	.byt	'FILE ALREADY EXISTS: '				;
+msg22a	.byt	msg23a-*					;
+	.byt	'LOADING PROGRAM: '				;
+msg23a	.byt	msg24a-*					;
+	.byt	'CHOOSE FILE TYPE: '				;
+msg24a	.byt	msg25a-*					;
+	.byt	'CANNOT RESTORE FILE: '				;
+msg25a	.byt	msg26a-*					;
+	.byt	'ENTER NEW NAME: '				;
+msg26a	.byt	msg27a-*					;
+	.byt	'     SIZE      FILE NAME       TYPE     '	;
+msg27a	.byt	msg28a-*					;
+	.byt	'ENTER DISK NAME: '				;
+;
+;
+;	Second Segment:  Messages Always Centered At Top Of File-List Window
+;
+msg28a	.byt	msg29a-*					;
+	.byt	'DISK FORMAT WORKING ON DRIVE: '		;
+msg29a	.byt	msg30a-*					;
+	.byt	'DISK CLEANUP WORKING ON DRIVE: '		;
+msg30a	.byt	msg31a-*					;
+	.byt	'PRESS SPACE TO CONTINUE'			;
+msg31a	.byt	msg32a-*					;
+	.byt	'INSERT ORIGINAL DISK INTO DRIVE: '		;
+msg32a	.byt	msg33a-*					;
+	.byt	'DISK COPY WORKING FROM DRIVE: '		;
+msg33a	.byt	msg34a-*					;
+	.byt	'INSERT ORIGINAL DISK THEN PRESS SPACE'		;
+msg34a	.byt	msg35a-*					;
+	.byt	'READING FROM ORIGINAL DISK'			;
+msg35a	.byt	msg36a-*					;
+	.byt	'INSERT COPY DISK THEN PRESS SPACE'		;
+msg36a	.byt	msg37a-*					;
+	.byt	'WRITING TO COPY DISK'				;
+msg37a	.byt	msg38a-*					;
+	.byt	'FILE COPY WORKING FROM DRIVE: '		;
+msg38a	.byt	msg39a-*					;
+	.byt	'FILES RESTORED... CLEANUP WORKING'		;
+;
+;
+;	Third Segment:	Messages Always Centered On Query/Message Line
+;
+msg39a	.byt	msg40a-*					;
+	.byt	'DRIVE NOT READY: '				;
+msg40a	.byt	msg41a-*					;
+	.byt	'BAD DISK IN DRIVE: '				;
+msg41a	.byt	msg42a-*					;
+	.byt	'READ ERROR ON DISK IN DRIVE: '			;
+msg42a	.byt	msg43a-*					;
+	.byt	'WRITE ERROR ON DISK IN DRIVE: '		;
+msg43a	.byt	msg44a-*					;
+	.byt	'DEVICE #     NOT PRESENT'			;
+msg44a	.byt	msg45a-*					;
+	.byt	'FROM WHICH DRIVE: '				;
+msg45a	.byt	msg46a-*					;
+	.byt	'USING WHICH DRIVE: '				;
+msg46a	.byt	msg47a-*					;
+	.byt	'INSERT A BLANK DISK THEN PRESS SPACE'		;
+msg47a	.byt	msg48a-*					;
+	.byt	'PROGRAMS IN MEMORY WILL BE DESTROYED'		;
+msg48a	.byt	msg49a-*					;
+	.byt	'COPY DISK CANNOT HOLD ALL FILES!'		;
+msg49a	.byt	msg50a-*					;
+	.byt	'ERROR:  WRONG DISK - TRY AGAIN'		;
+msg50a	.byt	msg51a-*					;
+	.byt	'ERROR:  FILE NAME NOT UNIQUE - RETRY'		;
+msg51a	.byt	msg52a-*					;
+	.byt	'USE CURSOR TO MOVE FILE / PRESS SPACE '	;
+;
+;
+;	Fourth Segment:  Messages Centered (Minus 3) on Query/Message Line
+;
+msg52a	.byt	msg53a-*					;
+	.byt	'WANT TO FORMAT THE COPY DISK: '		;
+msg53a	.byt	msg54a-*					;
+	.byt	'COPY DISK FILL - ANOTHER DISK: '		;
+msg54a	.byt	msg55a-*					;
+	.byt	'WANT TO ALPHABETIZE DIRECTORY: '		;
+msg55a	.byt	msg56a-*					;
+	.byt	'OK TO COPY FILE-LIST: '			;
+msg56a	.byt	msg57a-*					;
+	.byt	'OK TO DELETE FILE-LIST: '			;
+msg57a	.byt	msg58a-*					;
+	.byt	'OK TO RESTORE FILE-LIST: '			;
+msg58a	.byt	msg59a-*					;
+	.byt	'OK TO CHANGE FILE-LIST: '			;
+msg59a	.byt	msg60a-*					;
+	.byt	'OK TO RE-WRITE DIRECTORY: '			;
+;
+;
+;	Fifth Segment:  Messages With X-Y Positions Passed By Caller
+;
+msg60a	.byt	msg61a-*					;
+	.byt	' MOVE CURSOR THEN PRESS SPACE TO SELECT '	;
+msg61a	.byt	msg62a-*					;
+	.byt	'DRIVE  :  DEVICE # = '				;
+msg62a	.byt	msg63a-*					;
+	.byt	'DRIVE # = '					;
+msg63a	.byt	msg64a-*					;
+	.byt	'CHANGE DISK DEVICE #'				;
+msg64a	.byt	msg00b-*					;
+	.byt	' THEN PRESS SPACE'				;
+;
+;
+;	French Language Section - All Messages
+;
+;	First Segment:  Messages With Screen Positions Plotted From X-Y Table
+;
+msg00b	.byt	msg01b-*					;
+	.byt	'DISQUE/IMPRIMANTE '				;
+msg01b	.byt	msg02b-*					;
+	.byt	'EXECUTER PROGRAMME'				;
+msg02b	.byt	msg03b-*					;
+	.byt	'FORMATER UN DISQUE'				;
+msg03b	.byt	msg04b-*					;
+	.byt	'NETTOYER UN DISQUE'				;
+msg04b	.byt	msg05b-*					;
+	.byt	'COPIER UN DISQUE  '				;
+msg05b	.byt	msg06b-*					;
+	.byt	'COPIER FICHIERS   '				;
+msg06b	.byt	msg07b-*					;
+	.byt	'EFFACER FICHIERS  '				;
+msg07b	.byt	msg08b-*					;
+	.byt	'RESTAURER FICHIERS'				;
+msg08b	.byt	msg09b-*					;
+	.byt	'RENOMMER FICHIERS '				;
+msg09b	.byt	msg10b-*					;
+	.byt	'REFAIRE REPERTOIRE'				;
+msg10b	.byt	msg11b-*					;
+	.byt	'SYSTEME UTILITAIRE DE DISQUE COMMODORE'	;
+msg11b	.byt	msg12b-*					;
+	.byt	'APPUYER ',rvson,'ESPACE',rvsoff		;
+	.byt	' POUR CHOIX DE LANGUE'				;
+msg12b	.byt	msg13b-*					;
+	.byt	'FRANCAIS'					;
+msg13b	.byt	msg14b-*					;
+	.byt	' ',rvsoff,'F5',rvson,' ANNULE CHOIX / '	;
+	.byt	rvsoff,'STOP',rvson,' ANNULE FONCTION '		;
+msg14b	.byt	msg15b-*					;
+	.byt	' UNITE:                           OCTETS'	;
+msg15b	.byt	msg16b-*					;
+	.byt	'# D',acent,'IMPRIMANTE =  4  5  6 AUCUN'	;
+msg16b	.byt	msg17b-*					;
+	.byt	'ALLUMER L',acent,'UNITE DE DISQU A CHANGER'	;
+msg17b	.byt	msg18b-*					;
+	.byt	'ETEINDRE L',acent,'AUTRE UNITE DE DISQUE'	;
+msg18b	.byt	msg19b-*					;
+	.byt	'NOUVEAU DISPOSITIF = '				;
+msg19b	.byt	msg20b-*					;
+	.byt	'TERMINE... ALLUMER L',acent,'AUTRE UNITE'	;
+msg20b	.byt	msg21b-*					;
+	.byt	'INSERER DISQUE-COPIE DANS UNITE: '		;
+msg21b	.byt	msg22b-*					;
+	.byt	'FICHIER DEJA EXISTANT: '			;
+msg22b	.byt	msg23b-*					;
+	.byt	'CHARGE PROGRAMME: '				;
+msg23b	.byt	msg24b-*					;
+	.byt	'TYPE DE FICHIER: '				;
+msg24b	.byt	msg25b-*					;
+	.byt	'NE PEUT RESTAURER: '				;
+msg25b	.byt	msg26b-*					;
+	.byt	'DONNER NOUVEAU NOM: '				;
+msg26b	.byt	msg27b-*					;
+	.byt	'    TAILLE   NOM DU FICHIER     TYPE    '	;
+msg27b	.byt	msg28b-*					;
+	.byt	'NOM DU DISQUE: '				;
+;
+;
+;	Second Segment:  Messages Always Centered At Top Of File-List Window
+;
+msg28b	.byt	msg29b-*					;
+	.byt	'FORMATE DISQUE SUR UNITE: '			;
+msg29b	.byt	msg30b-*					;
+	.byt	'NETTOIE DISQUE SUR UNITE: '			;
+msg30b	.byt	msg31b-*					;
+	.byt	'APPUYER ',rvson,'ESPACE',rvsoff		;
+	.byt	' POUR CONTINUER'				;
+msg31b	.byt	msg32b-*					;
+	.byt	'INSERER DISQUE ORIGINAL DANS UNITE: '		;
+msg32b	.byt	msg33b-*					;
+	.byt	'COPIE DISQUE A PARTIR DE L',acent,'UNITE: '	;
+msg33b	.byt	msg34b-*					;
+	.byt	'INSERER DISQUE ORIGINAL PUIS '			;
+	.byt	rvson,'ESPACE',rvsoff				;
+msg34b	.byt	msg35b-*					;
+	.byt	'LIT A PARTIR DU DISQUE ORIGINAL'		;
+msg35b	.byt	msg36b-*					;
+	.byt	'INSERER DISQUE-COPIE, PUIS '			;
+	.byt	rvson,'ESPACE',rvsoff				;
+msg36b	.byt	msg37b-*					;
+	.byt	'ECRIT SUR DISQUE-COPIE'			;
+msg37b	.byt	msg38b-*					;
+	.byt	'COPIE FICHIER A PARTIR DE L',acent,'UNITE: '	;
+msg38b	.byt	msg39b-*					;
+	.byt	'FICHIERS RESTAURES... NETTOYAGE EN COURS'	;
+;
+;
+;	Third Segment:	Messages Always Centered On Query/Message Line
+;
+msg39b	.byt	msg40b-*					;
+	.byt	'L',acent,'UNITE DE DISQUE N'			;
+	.byt	acent,'EST PAS PRETE: '				;
+msg40b	.byt	msg41b-*					;
+	.byt	'MAUVAIS DISQUE DANS L',acent,'UNITE: '		;
+msg41b	.byt	msg42b-*					;
+	.byt	'ERREUR DE LECTURE - UNITE DE DISUE: '		;
+msg42b	.byt	msg43b-*					;
+	.byt	'ERREUR D',acent,'ECRITURE UNITE DE DISQUE: '	;
+msg43b	.byt	msg44b-*					;
+	.byt	'DE DISPOSITIF MANQUANT #'			;
+msg44b	.byt	msg45b-*					;
+	.byt	'DE QUELLE UNITE DE DISQUE: '			;
+msg45b	.byt	msg46b-*					;
+	.byt	'AVEC QUELLE UNITE DE DISQUE: '			;
+msg46b	.byt	msg47b-*					;
+	.byt	'INSERER DISQ VIERGE PUIS '			;
+	.byt	rvson,'ESPACE',rvsoff				;
+msg47b	.byt	msg48b-*					;
+	.byt	'PROGAMMES EN MEMOIRE SERONT DETRUITS'		;
+msg48b	.byt	msg49b-*					;
+	.byt	'DISQUE-COPIE MANQUE D',acent,'ESPACE'		;
+msg49b	.byt	msg50b-*					;
+	.byt	'ERREUR: MAUVAIS DISQUE; ESSAYER ENCORE'	;
+msg50b	.byt	msg51b-*					;
+	.byt	'ERREUR: NOM FICHIER EN DOUBLE; RESSAYER'	;
+msg51b	.byt	msg52b-*					;
+	.byt	'CURSEUR POUR DEPLACER FICHIER'			;
+	.byt	'/ ',rvson,' ESPACE',rvsoff			;
+;
+;
+;	Fourth Segment:  Messages Centered (Minus 3) on Query/Message Line
+;
+msg52b	.byt	msg53b-*					;
+	.byt	'FORMATER DISQUE-COPIE: '			;
+msg53b	.byt	msg54b-*					;
+	.byt	'DISQUE-COPIE PLEIN; AUTRE DISQUE: '		;
+msg54b	.byt	msg55b-*					;
+	.byt	'REPERTOIRE EN ORDRE ALPHABETIQUE: '		;
+msg55b	.byt	msg56b-*					;
+	.byt	'COPIER LISTE DES FICHIERS: '			;
+msg56b	.byt	msg57b-*					;
+	.byt	'EFFACER LISTE DES FICHIERS: '			;
+msg57b	.byt	msg58b-*					;
+	.byt	'RESTAURER LISTE DES FICHIERS: '		;
+msg58b	.byt	msg59b-*					;
+	.byt	'MODIFIER LISTE DES FICHIERS: '			;
+msg59b	.byt	msg60b-*					;
+	.byt	'REECRIRE REPERTOIRE: '				;
+;
+;
+;	Fifth Segment:  Messages With X-Y Positions Passed By Caller
+;
+msg60b	.byt	msg61b-*					;
+	.byt	'   CURSEUR PUIS (ESPACE) POUR CHOISIR   '	;
+msg61b	.byt	msg62b-*					;
+	.byt	'UNITE  :  DISPOSITIF = '			;
+msg62b	.byt	msg63b-*					;
+	.byt	'UNITE DE DISQUE = '				;
+msg63b	.byt	msg64b-*					;
+	.byt	'CHANGER # DISPOSITIF D',acent,'UNITE'		;
+msg64b	.byt	msg00c-*					;
+	.byt	' PUIS APPUYER ',rvson,'ESPACE',rvsoff		;
+;
+;
+;	German Language Section - All Messages
+;
+;	First Segment:  Messages With Screen Positions Plotted From X-Y Table
+;
+msg00c	.byt	msg01c-*					;
+	.byt	'DISK/DRUCKER SETUP'				;
+msg01c	.byt	msg02c-*					;
+	.byt	'PROGRAMMSTART     '				;
+msg02c	.byt	msg03c-*					;
+	.byt	'DISK FORMATIEREN  '				;
+msg03c	.byt	msg04c-*					;
+	.byt	'BAM ORDNEN        '				;
+msg04c	.byt	msg05c-*					;
+	.byt	'DISK KOPIEREN     '				;
+msg05c	.byt	msg06c-*					;
+	.byt	'FILES KOPIEREN    '				;
+msg06c	.byt	msg07c-*					;
+	.byt	'FILES LOESCHEN    '				;
+msg07c	.byt	msg08c-*					;
+	.byt	'FILES WIEDERHERST '				;
+msg08c	.byt	msg09c-*					;
+	.byt	'FILES UMBENENNEN  '				;
+msg09c	.byt	msg10c-*					;
+	.byt	'DIRECTORY ORDNEN  '				;
+msg10c	.byt	msg11c-*					;
+	.byt	'COMMODORE DISK-UTILITY'			;
+msg11c	.byt	msg12c-*					;
+	.byt	'AUSWAHL IHRER SPRACHE MIT (SPACE)'		;
+msg12c	.byt	msg13c-*					;
+	.byt	'DEUTSCH'					;
+msg13c	.byt	msg14c-*					;
+	.byt	'   NEUWAHL MIT ',rvsoff,'F5',rvson,'  '	;
+	.byt	'  ABBRUCH MIT ',rvsoff,'STOP',rvson,'   '	;
+msg14c	.byt	msg15c-*					;
+	.byt	' LAUFW:                            FREI '	;
+msg15c	.byt	msg16c-*					;
+	.byt	'DRUCKER GERAETE # =  4  5  6 KEINE'		;
+msg16c	.byt	msg17c-*					;
+	.byt	'ZU AENDERNDES LAUFWERK EINSCHALTEN'		;
+msg17c	.byt	msg18c-*					;
+	.byt	'ANDERES LAUFWERK AUSSCHALTEN!'			;
+msg18c	.byt	msg19c-*					;
+	.byt	'NEUE GERAETE # = '				;
+msg19c	.byt	msg20c-*					;
+	.byt	'OK... ANDERES LAUFWERK EINSCHALTEN'		;
+msg20c	.byt	msg21c-*					;
+	.byt	'ZIEL-DISKETTE EINLEGEN IN LAUFWERK: '		;
+msg21c	.byt	msg22c-*					;
+	.byt	'FILE EXISTIERT.: '				;
+msg22c	.byt	msg23c-*					;
+	.byt	'PROGRAM WIRD GELADEN: '			;
+msg23c	.byt	msg24c-*					;
+	.byt	'WAEHLE FILE-TYP: '				;
+msg24c	.byt	msg25c-*					;
+	.byt	'WIEDERHERST UNMOEGLICH: '			;
+msg25c	.byt	msg26c-*					;
+	.byt	'EINGABE NEUER NAME: '				;
+msg26c	.byt	msg27c-*					;
+	.byt	'   GROESSE     FILE-NAME     FILE-TYP   '	;
+msg27c	.byt	msg28c-*					;
+	.byt	'DISK-NAME: '					;
+;
+;
+;	Second Segment:  Messages Always Centered At Top Of File-List Window
+;
+msg28c	.byt	msg29c-*					;
+	.byt	'DISKETTE WIRD FORMATIERT IN LAUFWERK: '	;
+msg29c	.byt	msg30c-*					;
+	.byt	'DISK WIRD NEU GEORDNET IN LAUFW.: '		;
+msg30c	.byt	msg31c-*					;
+	.byt	'WEITER MIT (SPACE)'				;
+msg31c	.byt	msg32c-*					;
+	.byt	'QUELL-DISKETTE EINLEGEN IN LAUFWERK: '		;
+msg32c	.byt	msg33c-*					;
+	.byt	'DISKETTE WIRD KOPIERT VON LAUFWERK: '		;
+msg33c	.byt	msg34c-*					;
+	.byt	'QUELL-DISKETTE EINLEGEN, DANN (SPACE)'		;
+msg34c	.byt	msg35c-*					;
+	.byt	'QUELL-DISKETTE WIRD GELESEN'			;
+msg35c	.byt	msg36c-*					;
+	.byt	'ZIEL-DISKETTE EINLEGEN, DANN (SPACE)'		;
+msg36c	.byt	msg37c-*					;
+	.byt	'ZIEL-DISKETTE WIRD BESCHRIEBEN'		;
+msg37c	.byt	msg38c-*					;
+	.byt	'FILE WIRD KOPIERT VON LAUFWERK: '		;
+msg38c	.byt	msg39c-*					;
+	.byt	'FILES WERDEN WIEDERHERGESTELLT'		;
+;
+;
+;	Third Segment:	Messages Always Centered On Query/Message Line
+;
+msg39c	.byt	msg40c-*					;
+	.byt	'LAUFWERK NICHT BETRIEBSBEREIT: '		;
+msg40c	.byt	msg41c-*					;
+	.byt	'SCHLECHTE DISKETTE IN LAUFWERK: '		;
+msg41c	.byt	msg42c-*					;
+	.byt	'LESEFEHLER AUF DISKETTE IN LAUFWERK: '		;
+msg42c	.byt	msg43c-*					;
+	.byt	'SCHREIBFEHLER AUF DISKETTE IN LAUFW.: '	;
+msg43c	.byt	msg44c-*					;
+	.byt	'GERAET #     NICHT ANGESCHLOSSEN'		;
+msg44c	.byt	msg45c-*					;
+	.byt	'QUELL-LAUFWERK: '				;
+msg45c	.byt	msg46c-*					;
+	.byt	'LAUFWERK: '					;
+msg46c	.byt	msg47c-*					;
+	.byt	'LEERE DISKETTE EINLEGEN DANN (SPACE)'		;
+msg47c	.byt	msg48c-*					;
+	.byt	'PROGRAMM IM SPEICHER WIRD GELOESCHT'		;
+msg48c	.byt	msg49c-*					;
+	.byt	'ZUWENIG SPEICHERPLATZ FUER ALLE FILES'		;
+msg49c	.byt	msg50c-*					;
+	.byt	'FEHLER! FALSCHE DISKETTE - NOCHMAL!'		;
+msg50c	.byt	msg51c-*					;
+	.byt	'FEHLER!  FILE-NAME DOPPELT  BITTE WIDERHOLEN'	;
+msg51c	.byt	msg52c-*					;
+	.byt	'WAEHLE EIN FILE MIT CURSOR / (SPACE)'		;
+;
+;
+;	Fourth Segment:  Messages Centered (Minus 3) on Query/Message Line
+;
+msg52c	.byt	msg53c-*					;
+	.byt	'ZIEL-DISKETTE FORMATIEREN: '			;
+msg53c	.byt	msg54c-*					;
+	.byt	'ZIEL-DISKETTE VOLL! WEITERE DISK: '		;
+msg54c	.byt	msg55c-*					;
+	.byt	'DIRECTORY ALPHABETHISCH ORDNEN: '		;
+msg55c	.byt	msg56c-*					;
+	.byt	'FILE-LISTE OK ZUM KOPIEREN: '			;
+msg56c	.byt	msg57c-*					;
+	.byt	'FILE-LISTE OK ZUM LOESCHEN: '			;
+msg57c	.byt	msg58c-*					;
+	.byt	'FILE-LISTE OK ZUM WIEDERHERST: '		;
+msg58c	.byt	msg59c-*					;
+	.byt	'FILE-LISTE OK ZUM UMBENENNEN: '		;
+msg59c	.byt	msg60c-*					;
+	.byt	'DIRECTORY ZURUECKSCHREIBEN: '			;
+;
+;
+;	Fifth Segment:  Messages With X-Y Positions Passed By Caller
+;
+msg60c	.byt	msg61c-*					;
+	.byt	'AUSWAHL MIT CURSORSTEUERUNG DANN (SPACE)'	;
+msg61c	.byt	msg62c-*					;
+	.byt	'LAUFWERK  :  GERAETE # = '			;
+msg62c	.byt	msg63c-*					;
+	.byt	'LAUFWERK # = '					;
+msg63c	.byt	msg64c-*					;
+	.byt	'AENDERE LAUFWERK #'				;
+msg64c	.byt	msg00d-*					;
+	.byt	' DANN (SPACE) DRUECKEN'			;
+;
+;
+;	Italian Language Section - All Messages
+;
+;	First Segment:  Messages With Screen Positions Plotted From X-Y Table
+;
+msg00d	.byt	msg01d-*					;
+	.byt	'AVVIA DISK/PRINTER'				;
+msg01d	.byt	msg02d-*					;
+	.byt	'ESEGUE PROGRAMMA  '				;
+msg02d	.byt	msg03d-*					;
+	.byt	'FORMATTA DISCO    '				;
+msg03d	.byt	msg04d-*					;
+	.byt	'PULIZIA DISCO     '				;
+msg04d	.byt	msg05d-*					;
+	.byt	'COPIA DISCO       '				;
+msg05d	.byt	msg06d-*					;
+	.byt	'COPIA FILE        '				;
+msg06d	.byt	msg07d-*					;
+	.byt	'RIMUOVI FILE      '				;
+msg07d	.byt	msg08d-*					;
+	.byt	'RIPRISTINA FILE   '				;
+msg08d	.byt	msg09d-*					;
+	.byt	'CAMBIA NOME FILE  '				;
+msg09d	.byt	msg10d-*					;
+	.byt	'RIORDINA DIRECTORY'				;
+msg10d	.byt	msg11d-*					;
+	.byt	'DISCO SISTEMA UTILITY COMMODORE'		;
+msg11d	.byt	msg12d-*					;
+	.byt	'PREMI SPAZIO PER SCEGLIERE LA LINGUA'		;
+msg12d	.byt	msg13d-*					;
+	.byt	'ITALIANO'					;
+msg13d	.byt	msg14d-*					;
+	.byt	'  ',rvsoff,'F5',rvson,' PER SCARTARE / '	;
+	.byt	rvsoff,'STOP',rvson,' PER ANNULLARE  '		;
+msg14d	.byt	msg15d-*					;
+	.byt	' DRIVE:                            LIB. '	;
+msg15d	.byt	msg16d-*					;
+	.byt	'UNITA',acent,' STAMPANTE # =  4  5  6 NESSUNA'	;
+msg16d	.byt	msg17d-*					;
+	.byt	'ACCENDI IL DRIVE DA CAMBIARE'			;
+msg17d	.byt	msg18d-*					;
+	.byt	'SPEGNI L',acent,'ALTRO DRIVE'			;
+msg18d	.byt	msg19d-*					;
+	.byt	'NUOVA UNITA',acent,' # = '			;
+msg19d	.byt	msg20d-*					;
+	.byt	'FATTO... ACCENDI L',acent,'ALTRO DRIVE'		;
+msg20d	.byt	msg21d-*					;
+	.byt	'INSERISCI DISCO COPIA NEL DRIVE: '		;
+msg21d	.byt	msg22d-*					;
+	.byt	'FILE GIA',acent,' ESISTENTE: '			;
+msg22d	.byt	msg23d-*					;
+	.byt	'CARICAMENTO PROG.: '				;
+msg23d	.byt	msg24d-*					;
+	.byt	'SCEGLI TIPO FILE: '				;
+msg24d	.byt	msg25d-*					;
+	.byt	'IMPOS.RIPRISTINO FILE: '			;
+msg25d	.byt	msg26d-*					;
+	.byt	'NUOVO NOME: '					;
+msg26d	.byt	msg27d-*					;
+	.byt	'   BLOCCHI     NOME FILE       TIPO     '	;
+msg27d	.byt	msg28d-*					;
+	.byt	'NOME DISCO: '					;
+;
+;
+;	Second Segment:  Messages Always Centered At Top Of File-List Window
+;
+msg28d	.byt	msg29d-*					;
+	.byt	'STO FORMATTANDO IL DISCO SUL DRIVE: '		;
+msg29d	.byt	msg30d-*					;
+	.byt	'PULIZIA DISCO IN FUNZIONE SUL DRIVE: '		;
+msg30d	.byt	msg31d-*					;
+	.byt	'PREMI SPAZIO PER CONTINUARE'			;
+msg31d	.byt	msg32d-*					;
+	.byt	'INSERISCI DISCO ORIGINALE NEL DRIVE: '		;
+msg32d	.byt	msg33d-*					;
+	.byt	'COPIA DISCO IN FUNZIONE DAL DRIVE: '		;
+msg33d	.byt	msg34d-*					;
+	.byt	'INSERISCI DISCO ORIGINALE-PREMI SPAZIO'	;
+msg34d	.byt	msg35d-*					;
+	.byt	'LETTURA DAL DISCO ORIGINALE'			;
+msg35d	.byt	msg36d-*					;
+	.byt	'INSERISCI DISCO COPIA E PREMI SPAZIO'		;
+msg36d	.byt	msg37d-*					;
+	.byt	'SCRITTURA SUL DISCO COPIA'			;
+msg37d	.byt	msg38d-*					;
+	.byt	'COPIA FILE IN FUNZIONE DAL DRIVE: '		;
+msg38d	.byt	msg39d-*					;
+	.byt	'FILE RIPRISTINATI-RIALLOCO BLOCCHI'		;
+;
+;
+;	Third Segment:	Messages Always Centered On Query/Message Line
+;
+msg39d	.byt	msg40d-*					;
+	.byt	'DRIVE NON PRONTO: '				;
+msg40d	.byt	msg41d-*					;
+	.byt	'ERRORE DISCO NEL DRIVE: '			;
+msg41d	.byt	msg42d-*					;
+	.byt	'ERRORE LETTURA SU DISCO NEL DRIVE: '		;
+msg42d	.byt	msg43d-*					;
+	.byt	'ERRORE SCRITTURA SU DISCO NEL DRIVE: '		;
+msg43d	.byt	msg44d-*					;
+	.byt	'UNITA',acent,' #     NON PRONTA'			;
+msg44d	.byt	msg45d-*					;
+	.byt	'DA QUALE DRIVE: '				;
+msg45d	.byt	msg46d-*					;
+	.byt	'UTILIZZANDO QUALE DRIVE: '			;
+msg46d	.byt	msg47d-*					;
+	.byt	'INSERIRE DISCO NUOVO E PREMERE SPAZIO'		;
+msg47d	.byt	msg48d-*					;
+	.byt	'I PROGRAMMI IN MEMORIA SARANNO PERDUTI'	;
+msg48d	.byt	msg49d-*					;
+	.byt	'DISO COPIA NON CONTIENE TUTTI I FILE!'		;
+msg49d	.byt	msg50d-*					;
+	.byt	'ERRORE:  DISCO DANNEGGIATO - RIPROVA'		;
+msg50d	.byt	msg51d-*					;
+	.byt	'ERRORE:  NOME FILE ESISTENTE - RIPROVA'	;
+msg51d	.byt	msg52d-*					;
+	.byt	'SPOSTA FILE COL CURSORE / PREMI SPAZIO'	;
+;
+;
+;	Fourth Segment:  Messages Centered (Minus 3) on Query/Message Line
+;
+msg52d	.byt	msg53d-*					;
+	.byt	'VUOI FORMATTARE IL DISCO COPIA: '		;
+msg53d	.byt	msg54d-*					;
+	.byt	'DISO COPIA PIENO - ALTRO DISCO: '		;
+msg54d	.byt	msg55d-*					;
+	.byt	'DIRECTORY IN ORDINE ALFABETICO: '		;
+msg55d	.byt	msg56d-*					;
+	.byt	'OK PER COPIARE LISTA FILE: '			;
+msg56d	.byt	msg57d-*					;
+	.byt	'OK PER RIMUOVERE LISTA FILE: '			;
+msg57d	.byt	msg58d-*					;
+	.byt	'OK PER RIPRISTINARE LISTA FILE: '		;
+msg58d	.byt	msg59d-*					;
+	.byt	'OK PER CAMBIARE LISTA FILE: '			;
+msg59d	.byt	msg60d-*					;
+	.byt	'OK PER RISCRIVERE LA DIRECTORY: '		;
+;
+;
+;	Fifth Segment:  Messages With X-Y Positions Passed By Caller
+;
+msg60d	.byt	msg61d-*					;
+	.byt	' SCEGLI COL CURSORE E POI PREMI SPAZIO  '	;
+msg61d	.byt	msg62d-*					;
+	.byt	'DRIVE  :  UNITA',acent,' # = '			;
+msg62d	.byt	msg63d-*					;
+	.byt	'DRIVE # = '					;
+msg63d	.byt	msg64d-*					;
+	.byt	'CAMBIO UNITA',acent,' DISCO #'			;
+msg64d	.byt	msgend-*					;
+	.byt	' POI PREMI SPAZIO'				;
+;
+msgend	=	*	; Marks End of Shell Message Tables
+;

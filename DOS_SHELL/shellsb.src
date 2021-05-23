@@ -1,0 +1,1418 @@
+;	THIS MODULE CONTAINS THE SHELL FILE-LIST BROWSE & SELECT ROUTINES
+;	CALLED FOR FUNCTIONS:  RUNPG, COPY, DELET, RESTR, RENAM, RESEQ, AND 
+;	CALLS SUBROUTINES IN MODULE SHELLSA FOR KEYBOARD, SCREEN & DISK I/O
+;
+;	read bam/directory, display first screen, set-up for keyboard input
+;
+brows	jsr	opndos	; open DOS command channel, branch on error
+	bne	browsz	;
+	jsr	opndc1	; open direct-access channel for data, branch on error
+	bne	browsz	;
+	lda	func	; pick-up shell function code
+	cmp	#7	;
+	bne	select	; if function not = restore-files
+	jsr	rdbam	;
+	bne	browsz	; fetch source-disk BAM into buffer, branch on error
+select	jsr	rdlst	;
+	beq	browsa	; read source-disk directory into file-list buffer (A)
+;
+;			  exit here on error / when done browsing
+browsz	jsr	bcmsgj	;
+	lda	stsav	; close all files, pick-up ST / DOS error status
+	ora	doserr	;
+	rts		; return to shell control module
+;
+browsa	dec	worka	; set # of files = highest legal file #
+	lda	worka	;
+	cmp	#-1	; check # of files in buffer, branch if none
+	beq	browsz	;
+	lda	#0	; pre-set # files selected = zero
+	sta	workb	;
+	sta	worke	; pre-set block-size total of all selected files
+	sta	worke+1	;
+;
+browsb	ldx	#24-lynfl8	; pre-set 80-col X-pos for last window line
+	bit	mode	;
+	bmi	browsc	; on 80-col video
+	dex		; 40-col Cursor X-pos for last window line
+;
+browsc	stx	workb+1	; set-up X-pos for end-of-screen
+	lda	func	;
+	cmp	#9	; branch if function not = Reorder Directory
+	bne	browsy	;
+	jmp	selecg	; ask user for auto/manual re-sequencing choice
+;
+browsy	jsr	crmsg	; print file-select instruction on message-line
+	jsr	pinta	; set-up pointer to prime file-list (A)
+	jsr	dlist	; display the first screen-full of files
+	jsr	pinta	; set-up pointer to prime file-list (A)
+	jsr	ptcsr	; print the browsing-cursor at top of window
+;
+;
+;	main browsing loop - get a keystroke & route control by key-value
+;
+browsd	jsr	getky	; try for a keystroke
+	lda	laskey	;
+	beq	browsd	; try again, if nothing happened
+	cmp	#stpky	;
+	bne	browsf	; if key not = Stop
+;
+browse	jsr	wdoff	; quitting?:  un-set & erase file-list window
+	jsr	wders	;
+	jsr	wdlyn	; erase query/message-line
+;
+	lda	laskey	; pick-up last keystroke value
+	cmp	#stpky	;
+	beq	browsz	; exit browse if Stop key pressed
+	lda	func	;
+	cmp	#1	; branch on F7 key if function not = Run a Program
+	bne	selecv	;
+	jmp	seleck	; skip exit-confirmation if function = Run a Program
+;
+selecv	jmp	browsq	; check for browse exit-confirmation for all others
+;
+browsf	cmp	#f7	;
+	bne	browsg	; branch if key not = F7
+	lda	func	;
+	cmp	#9	; branch if function = Reorder Directory
+	beq	browse	;
+	lda	workb	; else, ignore F7 key if # files selected = zero
+	beq	browsd	;
+	bne	browse	; quit browsing on F7 key if any files selected
+;
+browsg	cmp	#f3	; branch if key not = F3
+	bne	browsh	;
+	lda	prdev	; pick-up printer device #
+	cmp	#7	;
+	beq	browsd	; branch if no printer-device is configured
+	jsr	prlst	;
+	jmp	browsd	; on F3 key print the file-list, then continue browsing
+;
+;	check for F5 key - to Un-select the current file-entry
+;
+browsh	cmp	#f5	; branch if key not = F5
+	bne	browsj	;
+	lda	func	; if function = Reorder Directory
+	cmp	#9	;
+	beq	browsd	; then files cannot be Un-selected
+;
+	jsr	getfla	; fetch current entry from prime file-list
+	bpl	browsd	; if current file not selected, then can't un-select
+	lda	#0	;
+	sta	lstbf	; to mark current file as Un-selected
+	ldx	func	;
+	cpx	#7	; branch if function not = Restore Files
+	bne	browsi	;
+	sta	lstbf+2	; to mark current file as Scratched
+;
+browsi	sec		;
+	lda	worke	; subtract block-size of the un-selected file
+	sbc	lstbf+30	;
+	sta	worke	; from accumulated block-total of all selected files
+	lda	worke+1	;
+	sbc	lstbf+31	; for the Copy Files function
+	sta	worke+1	;
+	dec	workb	; decrement count of selected files
+	jsr	putfla	; store the updated file-entry into file-list buffer
+	jsr	dsfyl	;
+	jmp	browsd	; turn rvs-video OFF for un-selected file, continue
+;
+;	check for Space key - to Select the current file
+;
+browsj	cmp	#space	; branch if key not = space
+	bne	browsm	;
+	jsr	getfla	; fetch the current entry from file-list buffer
+	lda	func	;
+	cmp	#9	; branch if function not = Reorder Directory
+	bne	seleca	;
+	jmp	dragp	; select & move file-entry, then continue browsing
+;
+seleca	bit	lstbf	; branch if the file-entry is not yet selected
+	bpl	selecp	;
+	jmp	browsd	; can't select a file that is already selected
+selecp	lda	func	;
+	cmp	#1	; branch if function not = Run a Program
+	bne	browsk	;
+	ldx	workb	; pick-up # of files selected
+	beq	browsl	;
+	jmp	browsd	; can't select more than one program to RUN
+;
+browsk	cmp	#8	; branch if function not = Rename Files
+	bne	selecb	;
+	jsr	cknam	; get new file-name, check for unique name
+	bcc	browsl	;
+	bcs	selecd	; go check keystroke response to error-msg
+selecb	cmp	#7	;
+	bne	browsl	; if function not = Restore Files
+	jsr	ckrst	;
+	bcc	browsl	; if all is OK to restore this file
+;
+	beq	selecf	; if ST / DOS status is OK
+selecd	lda	laskey	;
+	cmp	#stpky	; check keystroke response to error-msg
+	bne	selecf	;
+	jmp	browse	; if key was Stop (for either error-msg type)
+selecf	jmp	browsd	; continue browsing if response-key not = Stop
+;
+browsl	clc		;
+	lda	worke	; add the block-size of the current file
+	adc	lstbf+30	;
+	sta	worke	; to accumulated block-total of all selected files
+	lda	worke+1	;
+	adc	lstbf+31	; for the Copy Files function
+	sta	worke+1	;
+	lda	#128	; to mark current file as Selected
+	sta	lstbf	;
+	jsr	putfla	; store the updated file-entry into file-list buffer
+	inc	workb	; increment count of selected files
+	jsr	dsfyl	;
+	jmp	browsd	; turn rvs-video ON for selected file, continue
+;
+;	check for cursor up-down keys - to view other files
+;
+browsm	jsr	filtra	; pass cursor-keys thru the filter first
+	cmp	#crsru	;
+	bne	browsn	; if key not = cursor-up
+	jsr	fylup	;
+	jmp	browsd	; handle cursor-up key, then continue
+browsn	cmp	#crsrd	;
+	bne	browsp	; if key not = cursor-down (ignore all others)
+	jsr	fyldn	;
+browsp	jmp	browsd	; handle cursor-down key, then continue
+;
+;
+;	handle the cusor-up key for file-list browsing
+;
+fylup	lda	worka+1	; branch to ignore cursor-up when at top-of-list
+	beq	fylupq	;
+	jsr	ercsr	; erase the browsing-cursor before it moves
+	bit	mode	;
+	bmi	fylupc	; on 80-column video
+;
+	lda	workc+1	;
+	beq	fylupa	; to scroll down when at top-of-window (40-col)
+	dec	workc+1	;
+	jmp	fylupb	; not at top-of-window, so decrement cursor X-pos
+fylupa	ldy	#scrdn	;
+	jsr	wdcntl	; tell Editor to scroll the 40-col Window Down
+fylupb	jsr	fylupk	;
+	bmi	fylupn	; display the new entry, then go print the cursor
+;
+fylupc	bit	workc	;
+	bmi	fylupd	; skip scrolling if file-entry on right-side
+	lda	workc+1	;
+	beq	fylupf	; to scroll down when at top-of-window (80-col)
+	jsr	fylupg	;
+	bmi	fylupn	; decr cursor X-pos, show new entry, go print cursor
+fylupd	jsr	fylupj	;
+	bmi	fylupn	; flip-side, show new entry, go print cursor
+;
+fylupf	ldy	#scrdn	; tell Editor to scroll the 80-col Window Down
+	jsr	wdcntl	;
+	jsr	fylupj	; display two new entries when scrolling down
+	jsr	fylupj	;
+	jsr	fylupm	; set side-flag = right-side (where it belongs) 
+	jsr	incpta	;
+	bne	fylupn	; point to the right-side entry, go print cursor
+;
+fylupg	dec	workc+1	; decrement browsing-cursor X-position
+fylupj	jsr	fylupm	; flip the right-left screen-side flag
+fylupk	jsr	decpta	; decr file-list pointer, current file #
+	jsr	getfla	; fetch the new current entry from file-list buffer
+	jsr	dsfyl	; display the new current file-entry
+	rts		;
+;
+fylupm	lda	workc	; pick-up the screen-side flag
+	eor	#128	;
+	sta	workc	; flip the right-left screen-side flag
+	rts		;
+;
+fylupn	jsr	ptcsr	; display the browsing-cursor
+fylupq	rts		; all done with cursor-up key
+;
+;
+;	handle the cursor-down key for file-list browsing
+;
+fyldn	lda	worka+1	;
+	cmp	worka	; branch to ignore cursor-down when at bottom-of-list
+	beq	fyldnp	;
+	jsr	ercsr	; erase the browsing-cursor before it moves
+	bit	mode	;
+	bmi	fyldnc	; on 80-column video
+;
+	lda	workc+1	; pick-up current 40-col cursor X-pos
+	cmp	workb+1	;
+	beq	fyldna	; to scroll when at bottom-of-screen (40-col)
+	inc	workc+1	;
+	bne	fyldnb	; not at bottom-of-screen, bump cursor X-pos
+fyldna	ldy	#scrup	;
+	jsr	wdcntl	; tell Editor to scroll the 40-col Window Up
+fyldnb	jsr	fyldnk	;
+	bmi	fyldnm	; bump pointers, show new entry, go print cursor
+;
+fyldnc	lda	workc	; pick-up 80-col left-right screen-side flag
+	bmi	fyldnd	; entry on right-side, check for bottom-of-screen
+	jsr	fyldnj	;
+	bmi	fyldnm	; flip screen-side, show new entry, go print cursor
+;
+fyldnd	lda	workc+1	; pick-up current cursor X-pos (80-col)
+	cmp	workb+1	;
+	beq	fyldnf	; to scroll when at bottom-of-screen (80-col)
+	jsr	fyldng	;
+	bmi	fyldnm	; bump cursor X-pos, show new entry, go print cursor
+;
+fyldnf	ldy	#scrup	; tell Editor to scroll the 80-col Window Up
+	jsr	wdcntl	;
+	jsr	fyldnj	; flip 80-col screen-side, show one new entry
+;
+	lda	worka+1	; pick-up new current file #
+	cmp	worka	;
+	beq	fyldnm	; can't show two entries when at bottom-of-file-list
+	jsr	fyldnj	; flip screen-side, show second new entry
+;
+	jsr	decpta	; set pointers back to first new entry
+	jsr	fylupm	;
+	jmp	fyldnm	; flip back to left-side of screen, go print cursor
+;
+fyldng	inc	workc+1	; increment browsing-cursor X-position
+fyldnj	lda	workc	;
+	eor	#128	; flip the left-right screen-side flag
+	sta	workc	;
+fyldnk	jsr	incpta	; bump buffer-pointer, current file #
+	jsr	getfla	; fetch the new current entry from file-list buffer
+	jsr	dsfyl	; display the new current file-entry
+	rts		;
+;
+fyldnm	jsr	ptcsr	; display the browsing-cursor
+fyldnp	rts		; all done with cursor-down key
+;
+;	ask user for choice of manual / auto-sort of directory
+;	or get confirmation from user to process the file-list
+;
+selecg	lda	#54	; msg = want to alphabetize directory:  N  Y
+	bne	selech	;
+browsq	clc		; function-code plus the constant (50)
+	adc	#50	;
+selech	sta	pntrc	; forms message # for ' N  Y ' confirmation query
+	jsr	fndmsb	;
+	lda	#0	;
+	jsr	pick	; display ' N  Y ' suffix, get user's choice
+	cmp	#space	;
+	beq	browst	; if key = Space, an answer has been selected
+	cmp	#f5	;
+	bne	browsr	; if key not = F5, then it must be = Stop
+	jsr	browsz	;
+	jmp	brows	; on key = F5, re-start browse at the top
+browsr	jmp	browsz	; on key = Stop, cancel the function
+;
+browst	jsr	wdlyn	;
+	lda	pntrc	; if saved msg # = 54, function = Re-order Directory
+	cmp	#54	;
+	beq	selecj	; check answer for 'Alphabetize Directory' choice
+;
+	lda	tempa	; branch if answer = Y, ok to process file-list
+	bne	seleck	;
+	jmp	browsb	; go continue browsing when answer = N
+;
+selecj	lda	tempa	; branch to sort directory if answer = Y
+	bne	drag	;
+browsv	jmp	browsy	; when answer = N user wants to re-order manually
+;
+;	set file-list pointer, current file # to the first selected entry
+;
+seleck	jsr	pinta	; pre-set pointer & file # to start-of-list
+	ldx	func	;
+	cpx	#9	; branch if function = Re-order Directory
+	beq	selecn	;
+	tay		;
+selecm	lda	#pntra	; else, set-up index, indir-pointer addr and Bank #
+	ldx	#1	;
+	jsr	kndfet	; then LDA (pntra),y from RAM Bank # 1
+;
+	bmi	selecn	; if this entry is Selected
+	jsr	incpta	;
+	bne	selecm	; bump the pointer & file #, try the next one
+selecn	jsr	getfla	;
+	jmp	browsz	; fetch current List-A entry, exit to control module
+;
+;
+;	perform a bubble-sort to re-sequence directory for the user
+;
+drag	jsr	wdlyn	; erase the message-line before sorting
+;
+draga	jsr	pinta	; set-up pointers to the first two file-entries
+	jsr	movfld	;
+	inc	worka+1	; set current file # to the second entry
+	jsr	dragb	;
+	bit	workc	; test whether any swaps were done on this pass
+	bmi	draga	;
+	bpl	browsv	; neine, alles ist in ordnung!
+;
+dragb	ldy	#5	; set-up data index for comparing two entries
+	lda	#pntrb	;
+	sta	cmpvec	; set-up ind-pntr-addr for Long-Compare
+;
+dragc	lda	#pntra	; set ind-pntr-addr, Bank # for Long-Fetch
+	ldx	#1	;
+	jsr	kndfet	; do LDA (pntra),y to fetch a file-entry byte
+	ldx	#1	;
+	jsr	kndcmp	; then do CMP (pntrb),y to compare the byte
+	bne	dragd	;
+	iny		; check the whole file-name if needed
+	cpy	#21	;
+	bne	dragc	; while more name to compare
+;
+dragd	bcc	dragf	; if no swap for the two current entries
+	lda	#128	;
+	sta	workc	; show that a swap occured on this pass
+;
+	jsr	getfla	; first, fetch the entry to be moved upward
+	jsr	movflb	;
+	jsr	movfld	; swap the entries, adjust pointer to following entry
+	bne	dragj	;
+;
+dragf	jsr	incpta	; bump both pointers to the next pair of entries
+	jsr	movfld	;
+dragj	lda	worka	; pick-up highest file # for the file-list
+	cmp	worka+1	;
+	bcs	dragb	; if more entries to compare yet
+	rts		;
+;
+;
+;	keyboard / screen control to drag an entry thru the file-list
+;
+dragp	lda	#128	; first, mark the file-entry as Selected
+	sta	lstbf	;
+	jsr	putfla	; stash the entry, then show its name in lights
+	jsr	dsfyl	;
+	jsr	wdoff	; turn the window Off, then erase message-line
+	jsr	wdlyn	;
+	lda	#51	; msg = Use Cursor to Move File / Press Space
+	jsr	fndmsb	;
+	jsr	wdset	; re-set the window after displaying the message
+;
+dragr	jsr	getky	;
+	cmp	#space	; try for a keystroke, branch if key not = Space
+	bne	dragt	;
+	jsr	wdoff	;
+	jsr	crmsg	; put the normal browse instruction back
+	jsr	wdset	;
+	jmp	browsd	; file-entry is positioned, continue normal browse
+;
+dragt	jsr	filtra	; pass cursor-keys thru the filter first
+;
+	cmp	#crsrd	; branch if key = cursor-down
+	bne	dragv	;
+	jsr	movdn	; on key = cursor-down, go move the entry down
+	jmp	dragr	;
+dragv	cmp	#crsru	; branch to ignore key if not = cursor-up
+	bne	dragr	;
+	jsr	movup	; on key = cursor-up, go move the entry upward
+	jmp	dragr	;
+;
+;	handle cursor-up key - to drag a file-entry upwards
+;
+movup	lda	worka+1	; ignore cursor-up when at top-of-list
+	beq	movupk	;
+	jsr	movfl	; move the file-entry upward in the list
+;
+	jsr	ercsr	; erase the browsing cursor before it moves
+	bit	mode	;
+	bmi	movupc	; on 80-column video
+;
+	lda	workc+1	;
+	bne	movupa	; skip scrolling if not at top-of-window 40-col
+	ldy	#scrdn	;
+	jsr	wdcntl	; tell Editor to scroll 40-col screen Down
+	inc	workc+1	;
+movupa	jsr	fyldnk	; display swapped file-entry after 40-col scroll
+	dec	workc+1	;
+	jsr	fylupk	; fetch & display selected file-entry, print cursor
+	bmi	movupj	;
+;
+movupc	bit	workc	;
+	bmi	movupf	; skip scrolling if selected entry on right-side
+	lda	workc+1	;
+	bne	movupd	; skip scrolling if not at top-of-window 80-col
+	ldy	#scrdn	;
+	jsr	wdcntl	; tell Editor to scroll 80-col screen Down
+;
+	inc	workc+1	; display swapped file-entry after 80-col scroll
+	jsr	fyldnk	;
+	dec	workc+1	; back pointers off to previous entry
+	jsr	decpta	;
+	jsr	fylupk	; display previous file-entry after 80-col scroll
+	jsr	fyldnj	;
+	bmi	movupj	; fetch & display selected file-entry, print cursor
+;
+movupd	jsr	fyldnk	; display swapped file-entry on left-side
+	jsr	fylupg	;
+	bmi	movupj	; display selected file-entry - no scroll, print cursor
+;
+movupf	jsr	fyldnk	; display swapped file-entry on right-side
+	jsr	fylupj	; display selected file-entry - no scroll, print cursor
+;
+movupj	jsr	ptcsr	; display the browsing cursor
+movupk	rts		;
+;
+;	handle cursor-down key - to drag a file-entry downwards
+;
+movdn	lda	worka
+	cmp	worka+1	; ignore cursor-down when at end-of-list
+	beq	movdnk	;
+	jsr	movfla	; move the file-entry downward in the list
+;
+	jsr	ercsr	; erase the browsing cursor before it moves
+	bit	mode	;
+	bmi	movdnc	; on 80-column video
+;
+	lda	workc+1	; test current cursor X-pos vs. end-of-window
+	cmp	workb+1	;
+	bne	movdna	; skip scrolling if not at end-of-window 40-col
+	ldy	#scrup	;
+	jsr	wdcntl	; tell Editor to scroll 40-col screen Up
+	dec	workc+1	;
+movdna	jsr	fylupk	; display swapped file-entry after 40-col scroll
+	inc	workc+1	;
+	jsr	fyldnk	; fetch & display selected file-entry, print cursor
+	bmi	movdnj	;
+;
+movdnc	bit	workc	;
+	bpl	movdng	; skip scrolling if selected entry on left-side
+	lda	workc+1	;
+	cmp	workb+1	;
+	bne	movdnf	; skip scrolling if not at end-of-window 80-col
+	ldy	#scrup	;
+	jsr	wdcntl	; tell Editor to scroll 80-col screen Up
+;
+	dec	workc+1	;
+	jsr	fylupk	; display swapped file-entry after 80-col scroll
+	ldx	worka	;
+	dex		; test end-of-list vs. current entry #
+	cpx	worka+1	;
+	bcs	movdnd	; if another entry follows the selected entry
+	jsr	fyldng	;
+	bmi	movdnj	; fetch & display selected file-entry, print cursor
+;
+movdnd	inc	workc+1	; set pointers forward to following entry
+	jsr	incpta	;
+	jsr	fyldnk	; display following file-entry after 80-col scroll
+	jsr	fylupj	;
+	bmi	movdnj	; fetch & display selected file-entry, print cursor
+;
+movdnf	jsr	fylupk	; display swapped file-entry on right-side
+	jsr	fyldng	;
+	bmi	movdnj	; fetch & display selected file-entry, print cursor
+;
+movdng	jsr	fylupk	; display swapped file-entry on left-side
+	jsr	fyldnj	; fetch & display selected file-entry, print cursor
+;
+movdnj	jsr	ptcsr	; display the browsing cursor
+movdnk	rts		;
+;
+;	move an entry up / down within the file-list (buffer A)
+;
+movfl	jsr	movflc	; moving an entry upwards within the file-list
+	jsr	movflj	;
+	jsr	decpta	; move previous entry into slot of current entry
+	jsr	putfla	;
+	rts		; move current entry into slot of previous entry
+;
+movfla	jsr	movfld	; moving an entry downwards within the file-list
+movflb	jsr	movflj	;
+	jsr	incpta	; move following entry into slot of current entry
+	jsr	putfla	;
+	rts		; move current entry into slot of following entry
+;
+movflc	lda	pntra	; moving an entry upwards within the file-list
+	sec		;
+	sbc	#32	; set-up pointer to the previous entry
+	sta	pntrb	;
+	lda	pntra+1	; set pntrb = pntra minus 32
+	sbc	#0	;
+	sta	pntrb+1	; set pointer hi-byte
+	rts		;
+;
+movfld	lda	pntra	; moving an entry downwards within the file-list
+	clc		;
+	adc	#32	; set-up pointer to the following entry
+	sta	pntrb	;
+	lda	pntra+1	; pntrb = pntra plus 32
+	adc	#0	;
+	sta	pntrb+1	; set pointer hi-byte
+	rts		;
+;
+movflj	ldy	#31	; set-up data index for moving an entry in Bank # 1
+	lda	#pntra	;
+	sta	stavec	; set-up ind-pntr-address for Long-Store
+;
+movflk	lda	#pntrb	; set ind-pntr-addr, Bank # for Long-Fetch
+	ldx	#1	;
+	jsr	kndfet	; do LDA (pntrb),y to fetch a file-entry byte
+	ldx	#1	;
+	jsr	kndsta	; then do STA (pntra),y to store a file-entry byte
+	dey		;
+	bpl	movflk	; while more data to move
+	rts		;
+;
+;	print the browsing cursor before accepting another keystroke
+;
+ptcsr	ldy	#40	; pre-set Y-position for right-side (80-cols)
+	bit	workc	;
+	bmi	ptcsra	; if printing on right-side
+	ldy	#0	; on left-side of screen (or 40-cols)
+ptcsra	clc		;
+	ldx	workc+1	; pick-up the current X-position
+	jsr	plot	; locate the browsing-cursor
+	ldy	#7	;
+ptcsrb	lda	bzcur-1,y	; print the browsing-cursor image
+	jsr	chrout	;
+	dey		; the cursor-image data is backwards
+	bne	ptcsrb	;
+	rts		; when done with browsing-cursor
+;
+;	erase the browsing cursor before moving to another file
+;
+ercsr	ldy	#40	; pre-set Y-position for right-side (80-cols)
+	bit	workc	;
+	bmi	ercsra	; if printing on right-side
+	ldy	#0	; on left-side of screen (or 40-cols)
+ercsra	clc		;
+	ldx	workc+1	; pick-up the current X-position
+	jsr	plot	; locate the browsing-cursor
+	ldx	#4	;
+	lda	#rvsoff	; turn reverse-video OFF (just in case)
+	bne	ercsrc	;
+ercsrb	lda	#space	;
+ercsrc	jsr	chrout	; print spaces on top of the browsing-cursor
+	dex		;
+	bne	ercsrb	; if more spaces to print
+	rts		;
+;
+;	produce a hard-copy print-out of the file-list buffer
+;	called by pressing F3 key during file-list browse-select
+;
+prlst	ldx	prdev	; pick-up the printer device number
+	cpx	#6	;
+	bne	prlstc	; if device # is not Printer-Plotter
+prlsta	ldy	#7	;
+	jsr	prlstv	; send SA = 7 to reset Printer-Plotter, branch to re-try
+	bcs	prlsta	;
+	lda	#0	; tell the Printer-Plotter to Reset itself
+	jsr	chrout	;
+	jsr	prlsts	; close the Plotter-Reset channel
+prlstb	ldy	#2	;
+	jsr	prlstv	; send SA = 2 to select pen-color, branch to re-try
+	bcs	prlstb	;
+	lda	#1	; select printer-plotter pen-color = blue
+	jsr	chrout	;
+	jsr	prlsts	; close the Plotter pen-color channel
+;
+prlstc	ldy	#0	; open the printer (or plotter) data-channel
+	jsr	prlstv	;	
+	bcs	prlstc	; branch to re-try if printer-device not present
+	lda	#<lista	;
+	sta	pntrd	; set-up buffer-pointer to current file-entry
+	lda	#>lista	;
+	sta	pntrd+1	; file-entry pointer hi-byte
+	lda	#0	;
+	sta	workd	; set-up current file # being printed
+	lda	#quote	;
+	sta	dosbf+11	; set-up quote-marks for disk-name
+	sta	dosbf+28	;
+;
+;	print-out the page-headings for hard-copy file-list output
+;
+prlstd	ldy	#0	;
+	sty	workd+1	; set-up initial line-counter value for paging
+prlstf	lda	dosbf,y	;
+	jsr	chrout	; print the diskette-name field
+	iny		;
+	cpy	#39	; branch if more diskette-name to print
+	bne	prlstf	;
+	lda	#caret	; else, print carriage-return at end-of-line
+	jsr	chrout	;
+	lda	#26	; print msg =    Size   File-Name   Type
+	jsr	fndmsb	;
+	lda	prdev	; pick-up the printer device #
+	cmp	#6	;
+	beq	prlstg	; just print one carriage-return for printer-plotter
+	lda	#caret	;
+	jsr	chrout	; else, print carriage-return at end-of-line
+prlstg	lda	#caret	;
+	jsr	chrout	; and again to double-space before the listing
+;
+;	print-out (hard-copy) one file-entry from the buffer at (pntrd)
+;
+prlsth	lda	#pntrd	; fetch the current file-list entry
+	jsr	getflc	;
+	ldy	#4	; print four blanks to position to file-size field
+	jsr	prlstq	;
+	lda	lstbf+31	; pick-up file-size from the entry
+	ldy	lstbf+30	;
+	jsr	stcna	; print the four-digit file-size, then print 3 blanks
+	jsr	prlstp	;
+	lda	#quote	; put printer into quote-mode before file-name
+	jsr	chrout	;
+	jsr	dpnam	; then print the file-name field
+	lda	#quote	;
+	jsr	chrout	; turn quote-mode off after file-name
+	jsr	prlstp	;
+	jsr	dptyp	; print three blanks, then print the file-type field
+	lda	#caret	;
+	jsr	chrout	; done, print carriage-return at end-of-line
+	inc	workd+1	;
+	lda	workd	; bump the line-counter, pick-up current file #
+	cmp	worka	;
+	beq	prlstr	; branch if just printed last file-entry
+;
+;	Point to the next file-entry, Check for printer page-overflow
+;
+	inc	workd	; increment current file-entry number
+	clc		;
+	lda	pntrd	; low-byte of current file-entry buffer-pointer
+	adc	#32	;
+	sta	pntrd	; pointer = pointer plus 32 (to next entry)
+	bcc	prlstk	;
+	inc	pntrd+1	; bump hi-byte on carry
+;
+prlstk	lda	workd+1	; pick-up printer-paging line-counter
+	cmp	#57	;
+	bne	prlsth	; if more lines on the page (assumes 66 lines)
+	ldy	#6	;
+	jsr	prlstn	; skip to top-of-form, then go print heading-lines
+	beq	prlstd	;
+;
+;	printer-output subroutines called for file-list hard-copy
+;
+prlstn	lda	#caret	;
+	jsr	chrout	; print carriage-returns to skip to top-of-form
+	dey		;
+	bne	prlstn	; branch if more lines to skip
+	rts		;
+;
+prlstp	ldy	#3	; print three blanks before file-name or file-type
+;
+prlstq	lda	#space	; print blanks to line-up on the next field
+	jsr	chrout	;
+	dey		; branch if more blanks to print
+	bne	prlstq	;
+	rts		; ready to print next field now
+;
+prlstr	ldy	#6	;
+	cpy	prdev	; branch to print six blank lines if Printer-Plotter
+	beq	prlstt	;
+	sec		; else skip to top-of-form for all other printers
+	lda	#63	;
+	sbc	workd+1	; subtract current line-count from lines-per-page (-3)
+	tay		;
+prlstt	jsr	prlstn	; then go do the 'form-feed'
+;
+prlsts	jsr	clrchn	; close the printer-file on device not present
+	lda	#6	;
+	jsr	close	; or after using special SA, and when done printing
+	rts		;
+;
+;	open printer device for hard-copy output using the SA passed in .Y
+;
+prlstv	lda	#6	; printer device uses LFN = 6 always
+	ldx	prdev	;
+	jsr	setlfs	; set LFN, Device #, SA (passed in .Y)
+	lda	#0	;
+	jsr	setnam	; no name used to open printer-files
+	jsr	open	;
+	ldx	#6	; set-up printer as current output device
+	jsr	chkout	;
+	bcs	prlstx	; branch on error:  assume printer device not present
+	rts		;
+;
+prlstx	jsr	prlsts	; close printer-file on error, turn off file-list window
+	jsr	wdoff	;
+	jsr	wdlyn	; erase the message-line, msg = device #xx not present
+	lda	#43	;
+	jsr	errmsf	; show message & get key, display browse instructions
+	jsr	crmsg	;
+	jsr	wdset	; set-up file-list window, pick-up error-response key
+	lda	laskey	;
+	cmp	#stpky	; branch to re-try the Open if key = Space or F5
+	bne	prlstz	;
+	pla		; on key = Stop, throw away return-addr to abort print
+	pla		;
+prlstz	sec		; return .C set = re-try Open unless Stop key pressed
+	lda	#f3	;
+	sta	laskey	; restore last key = F3 to cover multiple re-tries
+	rts		;
+;
+;
+;	display the file-list heading and the first screen-full of files
+;
+dlist	lda	#26	;
+	jsr	fndmsa	; print file-list window heading in rvs-video
+	bit	mode	;
+	bpl	dlistb	; on 40-column video
+	lda	#rvson	;
+	jsr	prtmsd	; print the file-list heading twice on 80-cols
+;
+dlistb	jsr	wdset	; set-up the file-list window for browsing
+;
+dlistc	jsr	getfla	; fetch and display an entry from prime buffer (A)
+	jsr	dsfyl	;
+	lda	worka+1	; pick-up current file-entry #
+	cmp	worka	;
+	beq	dliste	; if all entries have been displayed
+;
+	jsr	incpta	; bump pointer & entry # to next file
+	bit	mode	;
+	bpl	dlistd	; on 40-col video, go check if screen is full
+	lda	#128	;
+	eor	workc	; flip left-right side flag (80-col video only)
+	sta	workc	;
+	bmi	dlistc	; if next entry goes on right-side of screen
+;
+dlistd	lda	workb+1	;
+	cmp	workc+1	; branch if no more lines available to display entries
+	beq	dliste	;
+	inc	workc+1	; increment current cursor X-position
+	bne	dlistc	;
+dliste	rts		; done with initial entry display
+;
+;
+;	display the current file-entry in 'lstbf' - 40 / 80 column screen
+;
+dsfyl	lda	#rvsoff	; turn reverse-video = off
+	jsr	chrout	;
+	lda	#clrfl	; set text-color for file-list display
+	jsr	chrout	;
+	ldy	#5	; pre-set Y-position for left-side
+	bit	workc	;
+	bpl	dsfyla	; on left-side (or 40-col video)
+	ldy	#45	; Y-position for right-side (80-col video only)
+dsfyla	clc		;
+	ldx	workc+1	; move the cursor to file-size field
+	jsr	plot	;
+	lda	lstbf+31	; pick-up file-size from the entry
+	ldy	lstbf+30	;
+	jsr	stcna	; display file-size field for the entry in 'lstbf'
+;
+	ldy	#12	; pre-set Y-position for left-side
+	bit	workc	;
+	bpl	dsfylb	; on left-side (or 40 cols)
+	ldy	#52	; Y-position for right-side (80-col video only)
+dsfylb	clc		;
+	ldx	workc+1	;
+	jsr	plot	; move the cursor to file-name field
+	bit	lstbf	;
+	bpl	dsfylc	; if current file is not selected
+	lda	#rvson	;
+	jsr	chrout	; set rvs-video = ON for selected files
+;
+dsfylc	jsr	dpnam	; display file-name field for the entry in 'lstbf'
+	lda	#rvsoff	;
+	jsr	chrout	; turn rvs-video OFF, in case file is selected
+;
+	ldy	#31	; pre-set Y-position for left-side
+	bit	workc	;
+	bpl	dsfyld	; on left-side (or 40-cols)
+	ldy	#71	; Y-position for right-side (80-col video only)
+dsfyld	clc		;
+	ldx	workc+1	; move the cursor to the file-type field
+	jsr	plot	;
+	jsr	dptyp	; display file-type field for the entry in 'lstbf'
+	rts		;
+;
+;
+;	display / print file-name field for current file-entry in 'lstbf'
+;
+dpnam	ldy	#5	; index to the first byte of file-name
+dpnama	lda	lstbf,y	;
+	jsr	namot	; print the current file-name
+	iny		;
+	cpy	#21	; branch if more file-name to print
+	bne	dpnama	;
+	rts		; done with file-name field
+;
+;
+;	display / print file-type field for current file-entry in 'lstbf'
+;
+dptyp	lda	lstbf+2	;
+	and	#7	; clear bits 7-3 from file-type code
+	sta	work	;
+	asl	a	; multiply file-type times five
+	asl	a	;
+	adc	work	; forms index to file-type strings in table
+	tax		;
+	ldy	#4	; set-up nr of bytes (-1) to display / print
+dptypa	lda	conste,x	;
+	jsr	chrout	; display the five-byte file-type string
+	inx		;
+	dey		;
+	bpl	dptypa	; if more file-type to print
+	rts		;
+;
+;	set-up indir-pointer, curr. file #, cursor-side for prime file-list (A)
+;
+pinta	lda	#<lista	;
+	sta	pntra	; set-up pointer to base of prime file-list buffer
+	lda	#>lista	;
+	sta	pntra+1	; high-byte of prime file-list pointer
+	lda	#0	;
+	sta	worka+1	; set current file # = zero
+	sta	workc	; set left-right side flag = left
+	sta	workc+1	; set current cursor X-pos = top-of-window
+	rts		;
+;
+;	increment current file-entry pointer & current file #  (buffer A)
+;
+incpta	clc		; pick-up current file-entry pointer
+	lda	pntra	;
+	adc	#32	; pointer = pointer plus 32 (to next entry)
+	sta	pntra	;
+	bcc	incptc	; skip high-byte if no carry
+	inc	pntra+1	;
+incptc	inc	worka+1	; increment current file # within the list
+	rts		;
+;
+;	decrement current file-entry pointer & current file # (buffer A)
+;
+decpta	dec	worka+1	; decrement current file # within the list
+	sec		;
+	lda	pntra	; pick-up current file-entry pointer
+	sbc	#32	;
+	sta	pntra	; pointer = pointer minus 32 (to previous entry)
+	bcs	decptc	;
+	dec	pntra+1	; decr hi-byte on borrow
+decptc	rts		;
+;
+;	fetch a file-entry from either file-list buffer into 'lstbf'
+;
+getfla	lda	#pntra	; entry to fetch from prime file-list buffer
+;
+getflc	pha		; entry to fetch from indir-pointer found at (.A)
+	ldy	#31	;
+getfld	pla		; set-up ind-pntr, Bank # for long-fetch
+	pha		;
+	ldx	#1	; then do LDA (xx),y: to fetch file-entry
+	jsr	kndfet	;
+	sta	lstbf,y	; store file-entry data into 'lstbf'
+	dey		;
+	bpl	getfld	; if more data to fetch
+	pla		;
+	lda	lstbf	; even-up stack, return flag-byte of entry to caller
+	rts		;
+;
+;	store a file-entry from 'lstbf' into either file-list buffer
+;
+putfla	lda	#pntra	; entry to store into prime file-list buffer
+;
+	sta	stavec	; set-up indirect-pointer address, data index
+	ldy	#31	;
+putflc	lda	lstbf,y	; pick-up data to store, Bank # for long-store
+	ldx	#1	;
+	jsr	kndsta	; then do STA (xx),y: to store file-entry
+	dey		;
+	bpl	putflc	; if more data to store
+	rts		;
+;
+;
+;	Rename Files:  get new file-name from user, check for unique name
+;	Move new name to buffer B.  Return .C = clear if OK, .C = set if Bad
+;
+cknam	jsr	wdoff	;
+	jsr	wdlyn	; turn window Off, erase message-line
+	lda	#25	;
+	jsr	fndmsb	; msg = enter new name:  old-file-name
+	clc		;
+	lda	msgxy+1	; message Y-position plus message-length
+	adc	msglen	;
+	sta	msgxy+1	; gives file-name Y-position
+	lda	#rvson	;
+	jsr	chrout	; set reverse-video = ON to print file-name
+	ldy	#0	;
+cknama	lda	bfnam,y	; set-up old-file-name as default name
+	sta	fnam1,y	;
+	jsr	namot	; and display old-name with 'enter new name' msg
+	iny		;
+	cpy	#16	; all file-names are 16 bytes long
+	bne	cknama	;
+	jsr	enter	; get the new file-name from the keyboard
+;
+	cmp	#caret	; branch if user hit Return, I got a name
+	beq	cknamd	;
+cknamb	sec		; forget it, the user hit Stop / F5 key
+;
+cknamc	php		;
+	jsr	crmsg	; re-display instructions, set window again
+	jsr	wdset	;
+	plp		; no name / name not unique, return .C set = No-Go
+	rts		;
+;
+cknamd	lda	#>lista	; set-up pointer to base of prime file-list
+	sta	pntrb+1	;
+	lda	#<lista	; to scan for a matching name in List-A
+	sta	pntrb	;
+	sta	work+1	; set current file # = zero (first entry)
+	jsr	cknamp	;
+	beq	cknamg	; if the new name is not unique vs. both lists
+;
+	lda	pntra	; pick-up addr-pointer to the current List-A 
+	sta	pntrc	;
+	lda	pntra+1	; file-entry that the user wants to select
+	sta	pntrc+1	;
+	jsr	cknamz	; set-up pointer to corresponding name-entry in List-B
+;
+	ldy	#15	; set index to name-entry in List-B
+	lda	#pntrc	;
+	sta	stavec	; set-up addr of indir. pointer for Long-Store
+cknamf	lda	fnam1,y	;
+	ldx	#1	; set Bank Config # for Long-Store
+	jsr	kndsta	;
+	dey		;
+	bpl	cknamf	; if more new name to move into List-B
+	clc		;
+	bcc	cknamc	; move new-name to buffer B, return .C clear = All OK
+;
+cknamg	jsr	wdlyn	; first, erase the message-line
+	lda	#50	;
+	jsr	fndmsb	; msg = Error:  file-name not unique - retry
+	jsr	errmsp	;
+	cmp	#space	; branch on key = Space, try for another name
+	beq	cknam	;
+	bne	cknamb	; key not = Space - bag it, continue browsing
+;
+cknamp	ldy	#5	; set index to name field in List-A file-entry
+	lda	#pntrb	;
+	sta	cmpvec	; set-up addr of indir. pointer for Long-compare
+cknamq	lda	fnam1-5,y	;
+	ldx	#1	; set Bank Config # for Long-compare
+	jsr	kndcmp	;
+	bne	cknamr	; if file-name-1 not = name in file-list buffer A
+	iny		;
+	cpy	#21	; branch if more name to compare
+	bne	cknamq	;
+	rts		; return No-Go, name not unique
+;
+cknamr	ldy	#0	; set-up data-index, Bank # for Long-Fetch
+	ldx	#1	;
+	lda	#pntrb	; set-up ind-pointer addr, fetch select-flag of entry
+	jsr	kndfet	;
+	bpl	cknamt	; if current entry in List-A is not already selected
+;
+	jsr	cknamx	; set-up pointer to name-entry in List-B
+;
+	ldy	#0	; set index to name-entry in List-B
+	lda	#pntrc	;
+	sta	cmpvec	; set-up addr of indir. pointer for Long-compare
+cknams	lda	fnam1,y	;
+	ldx	#1	; set Bank Config # for Long-compare
+	jsr	kndcmp	;
+	bne	cknamt	; if file-name-1 not = name in buffer B
+	iny		;
+	cpy	#16	; branch if more name to compare
+	bne	cknams	;
+	rts		; return No-Go, name not unique
+;
+cknamt	lda	work+1	; pick-up current file # (just compared)
+	cmp	worka	;
+	beq	cknamw	; if current file # is the last file
+;
+	clc		; pick-up current List-A file-entry pointer
+	lda	pntrb	;
+	adc	#32	; pointer = pointer plus 32 (to next entry)
+	sta	pntrb	;
+	bcc	cknamv	; skip high-byte if no carry
+	inc	pntrb+1	;
+cknamv	inc	work+1	; bump current List-A file #, continue scanning
+	bne	cknamp	;
+cknamw	lda	#1	; return All OK, new name is unique
+	rts		;
+;
+cknamx	lda	pntrb	; set-up List-B addr-pointer to same relative file #
+	sta	pntrc	;
+	lda	pntrb+1	; as the current selected file-entry in buffer A
+cknamz	sec		;
+	sbc	#>lista	; addr of curr List-A entry minus List-A base-addr
+	clc		;
+	ror	a	; divide offset to List-A entry by two
+	ror	pntrc	;
+	adc	#>listb	; then add base-addr of List-B buffer
+	sta	pntrc+1	;
+	rts		; return 'pntrc' = addr of current List-B entry
+;
+;
+;	check current entry in 'lstbf' legal to Restore:  if yes, set file-type
+;	return ST/DOS status in .A:  return .C clear if OK, else return .C set
+;
+ckrst	jsr	wdoff	; turn window OFF so messages can be shown
+	jmp	ckrstc	;
+ckrsta	jsr	clrchn	;
+	lda	stsav	; return ST / DOS status from last disk i/o
+	ora	doserr	;
+	sec		; on error, or not OK to Restore, set flag = No-Go
+ckrstb	pha		;
+	php		; Save Go / No-Go Flag & I/O status or error-keystroke
+	jsr	crmsg	;
+	jsr	wdset	; restore message-line and file-list window
+	plp		;
+	pla		; return Go / No-Go Flag & I/O status or error-key
+	rts		;
+;
+;	trace the file block-links to check that all data-blocks are free
+;
+ckrstc	lda	lstbf+3	;
+	sta	workd	; set-up first track # to check
+	lda	lstbf+4	;
+	sta	workd+1	; set-up first sector # to check
+;
+ckrstd	lda	workd	;
+	beq	ckrsth	; all data-blocks OK when track-link = zero
+	jsr	ckrst0	;
+	beq	ckrste	; if the current block is allocated
+;
+	jsr	ckrst1	; read next block, branch on error
+	bne	ckrsta	;
+	jsr	ckrst3	; read and save track-sector link-pointer
+	jmp	ckrstd	;
+;
+;	tell user the file cannot be restored if any allocated block found
+;
+ckrste	jsr	wdlyn	; erase the message-line first
+	lda	#24	;
+	jsr	fndmsb	; msg = cannot restore file:  file-name-xx
+	lda	#rvson	;
+	jsr	chrout	; set reverse-video = ON for file-name
+	ldy	#5	;
+ckrstf	lda	lstbf,y	; print the file-name of the entry in 'lstbf'
+	jsr	chrout	;
+	iny		;
+	cpy	#21	; branch if more file-name to print
+	bne	ckrstf	;
+	jsr	errmsp	; get keystroke response to the error-message
+	sec		;
+	bcs	ckrstb	; set No-Go flag, return error-keystroke
+;
+;	check for intact & un-allocated side-sectors if Relative file-type
+;
+ckrsth	lda	lstbf+23	; if not relative-file (record-size = zero)
+	beq	ckrstk	;
+	lda	lstbf+22	; save sector-link to side-sectors
+	sta	workd+1	;
+	lda	lstbf+21	; save track-link to side-sectors
+	sta	workd	;
+	jsr	ckrst0	; branch if No-Go, first side-sector is allocated
+	beq	ckrste	;
+	jsr	ckrst1	; else, read first side-sector, branch on Error
+	bne	ckrsta	;
+	jsr	ckrst3	; skip link-pointer, get side-sector # & record-length
+	jsr	ckrst3	;
+	lda	workd	; must be = zero, else this is not a side-sector
+	bne	ckrste	;
+	lda	workd+1	; pick-up record-length from side-sector # 0
+	cmp	lstbf+23	;
+	bne	ckrste	; may be side-sector, but rec-len doesn't match entry
+	jsr	ckrst3	;
+	lda	workd+1	; should be sector # of first side-sector
+	cmp	lstbf+22	;
+	bne	ckrste	; doesn't match sector-pointer in file-entry
+;
+	lda	workd	; should be track # of first side-sector
+	cmp	lstbf+21	;
+	bne	ckrste	; doesn't match track-pointer in file-entry
+;
+	lda	#5	; set-up to check next five side-sector pointers
+	sta	work	;
+ckrstj	jsr	ckrst3	; read next side-sector pointer
+	lda	workd	;
+	beq	ckrst4	; if zero, then no more side-sectors exist
+	jsr	ckrst0	;
+	beq	ckrste	; if side-sector is allocated
+	dec	work	;
+	bne	ckrstj	; if more side-sectors to check
+ckrst4	ldx	#3	;
+	jmp	ckrstx	; all OK, set-up to show Relative file-type
+;
+;	all OK to restore the current file:  get file-type from user
+;
+ckrstk	jsr	wdlyn	; erase the message-line first
+	lda	#23	;
+	jsr	fndmsb	; msg = choose file-type:
+	ldy	#0	;
+ckrst6	lda	conste+5,y	; display the choices of file-type
+	jsr	chrout	;
+	iny		; available to the user ( SEQ  PRG  USR )
+	cpy	#15	;
+	bne	ckrst6	; while more message sub-string to display
+	clc		;
+	lda	msgxy+1	; original message Y-position plus message-length
+	adc	msglen	;
+	sta	workd	; gives Y-position of choice sub-string
+	lda	#5	;
+	sta	msglen	; set-up length for each sub-string line-item
+	adc	#<conste	;
+	sta	worke	; set-up lo-byte of sub-string address
+	lda	#0	;
+	sta	workd+1	; index to current choice of file-types
+	adc	#>conste	;
+	sta	worke+1	; and hi-byte of sub-string address
+;
+;	calc cursor-position & message-addr for file-type to flash next
+;
+ckrstm	lda	workd	; pick-up Y-pos of first sub-string item
+	ldx	workd+1	;
+	beq	ckrstp	; if sub-string index = zero
+	clc		;
+ckrstn	adc	msglen	; add offset for each line-item
+	dex		;
+	bne	ckrstn	; if more to add
+;
+ckrstp	sta	msgxy+1	; set Y-position for curr line-item
+	lda	worke	;
+	sta	curmsg	; set-up base addr of sub-string
+	lda	worke+1	;
+	sta	curmsg+1	; but it still needs line-item offset
+	ldx	workd+1	;
+	beq	ckrstr	; if line-item index = zero
+ckrstq	clc		;
+	lda	curmsg	; base-addr of the sub-string
+	adc	msglen	;
+	sta	curmsg	; plus offset for each line-item
+	lda	#0	;
+	adc	curmsg+1	;
+	sta	curmsg+1	; forms addr of curr sub-string item
+	dex		;
+	bne	ckrstq	; if more to add
+;
+;	flash current file-type, get a key, decide what to do with it
+;
+ckrstr	jsr	flash	; blinks a message and gets a keystroke
+	lda	laskey	;
+	ldx	workd+1	; pick-up last keystroke and sub-string index
+	cmp	#crsrl	;
+	beq	ckrsts	; if key = cursor-left
+	cmp	#crsrr	;
+	beq	ckrstt	; if key = cursor-right
+	cmp	#space	;
+	beq	ckrstx	; if key = Space, file-type selected
+	cmp	#stpky	;
+	bne	ckrstr	; if key not = Stop (ignore all others)
+	sec		;
+	jmp	ckrstb	; key = Stop, set No-Go Flag, return Stop key pressed
+;
+ckrsts	dex		; on cursor-left, decrement sub-string index
+	bpl	ckrstv	;
+	ldx	#2	; make the index wrap-around
+	bne	ckrstv	;
+;
+ckrstt	inx		;
+	cpx	#3	; on cursor-right, increment sub-string index
+	bne	ckrstv	;
+	ldx	#0	; make the index wrap-around
+;
+ckrstv	stx	workd+1	; save the new sub-string index value
+	jsr	prtmsk	;
+	jmp	ckrstm	; clear old line-item, go set-up to flash next one
+;
+ckrstx	inx		; convert sub-string index into file-type
+	txa		;
+	ora	#128	; set file-type, showing as a closed file
+	sta	lstbf+2	;
+	lda	laskey	; pick-up last keystroke value
+	clc		;
+	jmp	ckrstb	; set Flag = all OK, go continue browsing
+;
+;	check whether the track-sector at (workd, workd+1) is allocated
+;
+ckrst0	lda	workd	;
+	asl	a	; pick-up the track # to be checked
+	adc	workd	;
+	sta	work	; and multiply the track # times 3
+	lda	workd+1	;
+	lsr	a	; pick-up the sector # to be checked
+	lsr	a	;
+	lsr	a	; then divide the sector # by 8
+	clc		;
+	adc	work	; track * 3 + int(sector / 8) = index into BAM
+	tay		;
+	lda	bama,y	; for the byte that holds the map-bits for this track
+	sta	work	;
+	lda	workd+1	; then use the lower 3 bits of the sector #
+	and	#7	;
+	tax		; for an index to isolate the map-bit for this block
+	lda	work	;
+	and	bits,x	; return .Z flag set if the block is allocated
+	rts		;
+;
+ckrst1	jsr	rdblk	; read the next block of the file
+	bne	ckrst2	;
+	rts		; return .Z flag set if status OK
+;
+ckrst2	jsr	errms	; show error-message if status is bad
+	cmp	#f5	; try the read again if key = F5
+	beq	ckrst1	;
+	rts		; return .Z flag clear on error
+;
+ckrst3	ldx	lfnr	; set-up direct-access channel as curr input
+	jsr	chkin	;
+	jsr	chrin	; save track-link to next block of file
+	sta	workd	;
+	jsr	chrin	; save sector-link to next block of file
+	sta	workd+1	;
+	jsr	clrchn	; return to default i/o
+	rts		;
+;
+;	Read and Store Disk BAM Image for the Restore-Files & Backup functions
+;
+rdbam	lda	#18	; set-up starting track # to read Side # 0
+	sta	workd	;
+	lda	#0	; set-up starting sector # to read Side # 0
+	sta	workd+1	;
+	jsr	rdblk	; read Side # 0 BAM block, branch on error
+	bcs	rdbamg	;
+	ldx	lfnr	; set-up direct-access channel as current input
+	jsr	chkin	;
+	ldy	#4	; waste the first four bytes of the BAM block
+	jsr	updrlk	;
+;
+rdbama	jsr	chrin	; waste first byte of each group of four for Side # 0
+	jsr	chrin	;
+	sta	bama+3,y	; then store the next three bit-map bytes
+	iny		;
+	jsr	chrin	; Side # 0 of 157x format is same as 154x/2031/4040
+	sta	bama+3,y	;
+	iny		; so first byte tells # of free sectors on the track
+	jsr	chrin	;
+	sta	bama+3,y	; and next three bytes are its sector bit-map
+	iny		;
+	cpy	#105	; branch while more Side # 0 BAM to fetch & store
+	bne	rdbama	;
+	jsr	clrchn	; clear channels to default i/o
+	lda	#53	;
+	sta	workd	; set-up track # for reading Side # 1 BAM block
+;
+	jsr	rdblk	; read Side # 1 BAM block, branch if status OK
+	beq	rdbamc	;
+	lda	#0	; on any error, assume Side # 1 was never formatted
+	sta	stsav	;
+	sta	doserr	; so clear ST / DOS error status-codes and
+	sta	bama	;
+	rts		; set BAM flag = 1541 format, return status = OK
+;
+rdbamc	lda	#128	; set BAM flag = 157x format ($80 if Side # 1 exists)
+	sta	bama	;
+	ldx	lfnr	; set-up direct-access channel as current input
+	jsr	chkin	;
+	ldy	#105	; set-up index to store Side # 1 Bam image
+;
+rdbamd	jsr	chrin	; fetch & store all bytes for Side # 1 (157x format)
+	sta	bama+3,y	;
+	iny		; use next 105 bytes for Side # 1 BAM
+	cpy	#210	;
+	bne	rdbamd	; while more Side # 1 BAM data to fetch & store
+	jsr	clrchn	;
+rdbamf	ldy	#0	; return .Z flag set, unless error on U1: or B-P: cmnd
+rdbamg	rts		;
+;
+;	 read directory of the selected drive into prime file-list buffer (A)
+;
+rdlst	jsr	pinta	; set-up buff-pointer, # entries in file-list = zero
+	sta	worka	;
+	lda	#18	; set-up track # to read directory
+	sta	workd	;
+	lda	#1	; set-up starting sector # to read directory
+	sta	workd+1	;
+;
+rdlsta	lda	workd	; branch if track-link not = zero 
+	bne	rdlstc	;
+rdlstb	jsr	clrchn	; on error / no more blocks, clear the channel
+	lda	stsav	;
+	ora	doserr	; return ST / DOS error status to caller
+	rts		;
+;
+rdlstc	jsr	rdblk	; perform U1 and B-P commands, branch on error
+	bne	rdlstb	;
+	ldx	lfnr	; set-up direct-access channel for input
+	jsr	chkin	;
+rdlstd	ldy	#0	; set-up index for storing data
+;
+rdlstf	jsr	chrin	;
+	sta	lstbf,y	; read one entry into temp storage
+	iny		;
+	cpy	#32	; branch if more to read
+	bne	rdlstf	;
+	ldy	#0	; check current entry # within the block
+	cpy	worka+1	;
+	bne	rdlstg	; branch if not the first entry
+	lda	lstbf	;
+	sta	workd	; save the new track link-pointer
+	lda	lstbf+1	;
+	sta	workd+1	; save the new sector link-pointer
+;
+rdlstg	sty	lstbf	; pre-set these bytes for later use as flags
+	sty	lstbf+1	;
+	lda	lstbf+3	; end-of-dir found if track-pointer to file = zero
+	beq	rdlstb	;
+	ldx	func	; pick-up shell function code
+	lda	lstbf+2	;
+	beq	rdlstp	; if a scratched file-entry, check Restore function
+;
+	bpl	rdlstr	; if the file was never closed, don't use it
+	cpx	#7	;
+	beq	rdlstr	; use only scratched entries for Restore Files
+	cpx	#1	;
+	bne	rdlstk	; if function not = Run Program, use any file-type
+	and	#7	; clear bits 7 - 3 of file-type
+	cmp	#2	;
+	bne	rdlstr	; if not program file-type
+;
+rdlstk	jsr	putfla	; store the entry into prime file-list buffer (A)
+	inc	worka	; increment # of entries in the file-list
+	jsr	incpta	; bump file-list pointer, # of entries in curr-block
+;
+rdlstn	lda	worka+1	; pick-up # entries read from this block
+	cmp	#8	;
+	bne	rdlstd	; branch if more entries in the block
+	jsr	clrchn	;	
+	lda	#0	; reset count of entries per block
+	sta	worka+1	;
+	beq	rdlsta	; go try for another block
+rdlstp	cpx	#7	;
+	beq	rdlstk	; if function = Restore Files, store scratched entry
+rdlstr	inc	worka+1	;
+	bne	rdlstn	; bump # entries read from this block
+;
+;	read disk block using file-name-1, set buffer-pointer = zero
+;
+rdblk	lda	workd	; set track # to read
+	sta	fnam1+2	;
+	lda	workd+1	; set sector # to read
+	sta	fnam1+3	;
+	ldx	drivx	; pick-up index to current active logical drive
+	lda	lfnr,x	;
+	sta	fnam1	; set data channel # for U1
+	lda	driva-1,x	;
+	and	#1	; set physical drive # to read as a binary number
+	sta	fnam1+1	;
+;
+	lda	#10	; send U1: command to read a block
+	jsr	sendos	;
+	bcs	rdblkb	; if U1: read status was bad
+;
+rdblka	ldx	drivx	;
+	lda	lfnr,x	; set data-channel # for B-P:
+	sta	fnam1	;
+	lda	#0	; set byte # position for B-P:
+	sta	fnam1+1	;
+	lda	#12	; send B-P: command to position DOS buffer-pntr
+	jsr	sendos	;
+rdblkb	rts		; return with status in .A
+;
+filtra	tax		; save original keystroke, then clear bit-7
+	and	#127	;
+	cmp	#crsrr	; branch to modify if key = cursor right / left
+	beq	filtrc	;
+	txa		; else return original value to caller
+	rts		;
+filtrc	txa		; restore original keystroke, then clear bits 0-6
+	and	#128	;
+	ora	#crsrd	; change cursor right / left into cursor up / down
+	rts		;
+;

@@ -1,0 +1,1464 @@
+;	SHELL FUNCTION CODES 4 - 9 ARE FOUND IN THIS MODULE.  THEY ARE
+;	CALLED BY SHELL-CONTROL, AND IN TURN CALL SUBROUTINES WITHIN
+;	THE SHELLSA AND SHELLSB MODULES TO PERFORM STANDARDIZED TASKS.
+;---------------------------------------------------------------------------
+;
+;
+;	FUNCTION CODE = 4:  BACKUP A DISK  (Single-Drive, Dual-Drive, Dual-Unit)
+;
+bakup	lda	#0	; set record-length for shell backup
+	sta	pntrd+1	;
+	lda	config	; pick-up drive-configuration code
+	bne	bakupa	;
+	jmp	sdbak	; if single-drive configuration defined
+;
+;	display start-up messages for dual-drive / dual-unit disk backup
+;
+bakupa	lda	#31	; msg = insert original disk into drive:  x
+	jsr	bcmsg	;
+	jsr	bcmsga	; tell user put copy-disk in output drive, hit space
+;
+	jsr	bcmsgv	; switch drive-index, drive-name back to original
+	jsr	bcsub	;
+	jsr	bcsubc	; open DOS command channel, fetch source disk-name & id
+	lda	config	;
+	lsr	a	; branch if dual-unit disk-configuration
+	bne	bakupd	;
+;
+;	Send Backup DOS Command for Dual-Drive Configuration
+;
+bakupb	lda	#32	; msg = disk copy working from drive:  x
+	jsr	bcmsg	;
+	lda	#6	; send DOS command for Dual-Drive Backup 
+	jsr	sendos	;
+	beq	bakupc	; branch if status = OK, function completed
+	jsr	bcmsgf	;
+	bcc	bakupb	; display error-message, re-try on Space / F5 key
+bakupc	jmp	bcmsgk	;
+;
+;	perform initial set-up for Bam-Directed dual-unit disk backup
+;
+bakupd	jsr	bcsubf	; open direct-access channel, fetch source-disk BAM
+	jsr	bcsubj	;
+	lda	drivx	; index to source logical drive used to 
+	asl	a	;
+	and	#3	; form index to source disk-id code
+	tax		;
+	beq	bakupf	; if the selected logical source-drive is = B 
+	lda	diska-2,x	;
+	ldy	diska-1,x	; pick-up source disk-id code for drive:  A
+	jmp	bakupg		;
+;
+bakupf	lda	diskb,x		; pick-up source disk-id code for drive:  B
+	ldy	diskb+1,x	;
+bakupg	sta	diska,x		; set-up output-disk id-code for formatting
+	sty	diska+1,x	;
+;
+;	format output disk, open output channels for dual-unit disk backup
+;
+	jsr	bcmsgv	; switch to output-unit, open DOS command channel
+	jsr	bcsub	;
+	jsr	bcsubq	; set-up output disk-name & format the disk
+	jsr	bcsubs	;
+	jsr	bcsubf	; open direct-access channel to output-unit
+;
+	jsr	bcsubm	; set-up starting track # / sector # / band #
+	jsr	bcsubn	;
+	jsr	bcmsgv	; set-up I/O buffer-pointer, switch to original drive
+	lda	#32	;
+	jsr	bcmsg	; msg = disk copy working from drive:  x
+;
+;	copy all allocated blocks from source-unit to output-unit
+;
+bakupn	jsr	bscan	; search for next allocated block, branch if found
+	bcc	bakupr	;
+	jmp	bcmsgj	; dual-unit backup done, go close all channels & exit
+bakupr	jsr	rdblk	;
+	beq	bakups	; read the block into DOS Ram, branch if status OK
+	jsr	bcmsgf	;
+	bcc	bakupr	; else, display error-message, re-try on Space / F5 key
+;
+bakups	jsr	cbsub	; set-up the source-drive as current input
+;
+bakupt	jsr	chrin	; fetch the block of source data from DOS Ram
+	sta	(pntrf),y	;
+	iny		; branch while more data to fetch & store
+	bne	bakupt	;
+	jsr	clrchn	; re-set to default i/o
+;
+	jsr	bcmsgv	; switch drive-index & drive-name to output drive
+;
+	jsr	wrtbkg	; set-up track #, sector # for output
+bakupv	jsr	wrtbk	;
+	beq	bakupx	; send & write the output block, branch if status OK
+	jsr	bcmsgf	;
+	bcc	bakupv	; else, display error-message, re-try on Space / F5 key
+bakupx	jsr	bcmsgv	;
+	bne	bakupn	; switch back to original drive, go find next sector
+;
+;
+;	display start-up messages, set-up variables for single-drive backup
+;
+sdbak	jsr	bcmsgm	; tell user I'm gonna nuke programs if he hits space
+;
+	jsr	bcmsgo	; ask user for original disk & space key
+	jsr	bcsub	;
+	jsr	bcsubc	; open DOS command chan, fetch source disk-name & id
+;
+	ldy	#15	; set-up index to disk-name
+sdbak1	lda	dsnam,y	;
+	sta	fnam2,y	; save the disk-name for formatting output disk
+	dey		;
+	bpl	sdbak1	; keep going for 16 bytes
+;
+	lda	diska	;
+	sta	workb	; save the source-disk id-code for later use
+	ldx	diska+1	;
+	stx	workb+1	; to check id-code after swap to original disk
+;
+	sta	diskb	; first-byte of output id-code is same as source-id
+	inx		;
+	txa		; make sure second-byte of output id-code is unique
+	and	#127	;
+	cmp	#48	; and second-byte is within range 48 - 127
+	bcs	sdbaka	;
+	adc	#48	; then save id-code for check after swap to output disk
+sdbaka	sta	diskb+1	;
+;	sta	diska+1	; set-up id-code to format output disk
+;
+	jsr	bcsubf	; open direct-access channel, fetch source-disk BAM
+	jsr	bcsubj	;
+	jsr	bcsubm	; init track/sector/band, flag = output not formatted
+	stx	worka	;
+	jsr	bscan	; find the first allocated block in source BAM
+	lda	pntrc+1	;
+	sta	pntrc	; save first band # for Ram-fill / Ram-dump
+	lda	workd	;
+	sta	pntrb	; save first track # for Ram-fill / Ram-dump
+	lda	workd+1	;
+	sta	pntrb+1	; save first sector # for Ram-fill / Ram-dump
+	bpl	sdbake	;
+;
+;	Swap Back to Original Disk, fetch & check id-code, setup I/O buffer
+;
+sdbakb	jsr	bcmsgj	; close all channels, ask user for original disk
+	jsr	bcmsgo	;
+	jsr	bcsub	; re-open DOS command channel after disk-swap
+	jsr	bcsubc	;
+	lda	diska	; update drive-line, pick-up source id-code (I hope) 
+	cmp	workb	;
+	bne	sdbakc	; if this is not the original source id-code
+	lda	diska+1	;
+	cmp	workb+1	; branch if the id-code matches the original
+	beq	sdbakd	;
+sdbakc	jsr	bcmsgn	; msg = wrong disk - try again (on F5 / Space key)
+	bcc	sdbakb	;
+;
+sdbakd	lda	pntrc	; set-up starting band # for ram-fill
+	sta	pntrc+1	;
+	lda	pntrb	; set-up starting track # for ram-fill
+	sta	workd	;
+	lda	pntrb+1	; set-up starting sector # for ram-fill
+	sta	workd+1	;
+	jsr	bcsubf	; open direct-access channel for data
+sdbake	jsr	bcsubn	;
+	jsr	bcmsgs	; set-up I/O buffer-pointer, msg = reading original disk
+	beq	sdbakg	;
+;
+;	Fetch data from the Source disk until none left or Ram is Filled
+;
+sdbakf	jsr	bscan	; search for next allocated block, branch if none found
+	bcs	sdbakj	;
+	jsr	cbsubj	; also branch if I/O buffer space exhausted
+	bcs	sdbakj	;
+sdbakg	jsr	rdblk	; read the current block into DOS Ram, branch if OK
+	bcc	sdbakh	;
+	jsr	bcmsgf	; else, display error-message, re-try on Space / F5 key
+	bcc	sdbakg	;
+sdbakh	jsr	cbsubc	; fetch the block into RAM buffer
+	inc	pntrf+1	;
+	bne	sdbakf	; increment buffer-pointer, go get next block
+;
+;	Swap to output disk, format disk if first time, fetch & check id-code
+;
+sdbakj	jsr	bcmsgj	; close all channels, ask user for output-disk
+	jsr	bcmsgp	;
+	jsr	bcsub	; re-open dos command channel after disk-swap
+	bit	worka	;
+	bmi	sdbakn	; branch if output-disk has already been formatted
+;
+	jsr	updrl	; try to display header-info, branch if unformatted disk
+	bcs	sdbakm	;
+	lda	workb	; check the output-disk id-code before formatting it
+	cmp	diska	;
+	bne	sdbakm	; branch if the nice person really did swap disks
+	lda	workb+1	;
+	cmp	diska+1	; branch here if the dummy can't follow instructions
+	beq	sdbako	;
+sdbakm	ldy	#0	; set-up index to disk-name
+sdbak3	lda	fnam2,y	;
+	sta	fnam1,y	; move the disk-name for formatting
+	iny		;
+	cpy #16
+	bne	sdbak3	; keep going for 16 bytes, set-up disk-name length
+	sty	flen1	;
+	lda diskb
+	sta diska
+	lda diskb+1
+	sta diska+1
+	jsr	bcsubs	; format the output-disk, else don't come back
+;
+sdbakn	jsr	bcsubc	;
+	lda	diskb	; display output-disk header info, pick-up id-code
+	cmp	diska	;
+	bne	sdbako	; branch if id-code does not match for the output-disk
+	lda	diskb+1	;
+	cmp	diska+1	; branch here if the current disk id-code matches
+	beq	sdbakp	;
+sdbako	jsr	bcmsgn	; msg = wrong disk - try again (on F5 / Space key)
+	bcc	sdbakj	;
+;
+;	perform initial set-up to begin dumping Ram to output disk
+;
+sdbakp	bit	worka	; branch if output disk already formatted
+	bmi	sdbakq	;
+	lda	#128	; set flag to show output-disk formatted
+	sta	worka	;
+	lda	#0	; pre-set flag = output-disk is single-sided
+	ldx	work+1	;
+	cpx	#3	; branch if blocks-free < 768:  single-sided
+	bcc	sdbak2	;
+	ror	a	; set flag = output-disk is double-sided
+sdbak2	sta	worka+1	;
+;
+sdbakq	lda	pntrc+1	; save starting band # for next ram-fill
+	ldx	pntrc	;
+	stx	pntrc+1	; pick-up starting band # for ram-dump
+	sta	pntrc	;
+	lda	workd	; save starting track # for next ram-fill
+	ldx	pntrb	;
+	stx	workd	; pick-up starting track # for ram-dump
+	sta	pntrb	;
+	lda	workd+1	; save starting sector # for next ram-fill
+	ldx	pntrb+1	;
+	stx	workd+1	; pick-up starting sector # for ram-dump
+	sta	pntrb+1	;
+	jsr	bcsubn	; set-up I/O buffer-pointer to Ram Bank # 0
+	jsr	bcsubf	;
+	jsr	bcmsgt	; open direct-access chan, msg = writing to copy disk
+	beq	sdbaks	;
+;
+;	Send & Write data to the output disk until none left or Ram is Empty
+;
+sdbakr	jsr	bscan	; find the next allocated block, branch if none found
+	bcs	sdbakz	;
+	inc	pntrf+1	; increment buffer-pointer, test whether dump finished
+	jsr	cbsubj	;
+	bcs	sdbakx	; branch on End-of-Ram:  current dump-pass finished
+;
+sdbaks	jsr	wrtbkg	; set-up track # / sector # for output
+	lda	workc+1	;
+	bne	sdbakt	; if current sector # not = BAM sector
+	lda	workc	;
+	cmp	#18	; branch if current track not = BAM track
+	bne	sdbakt	;
+	lda	diskb+1	; pick-up output id-code lo-byte, offset into BAM block
+	ldy	#163	;
+	jsr	sdsubk	; set copy-disk id-code into Ram I/O buffer
+	lda	worka+1	;
+	ldy	#3	; set copy-disk # of sides flag into Ram I/O buffer
+	jsr	sdsubk	;
+;
+sdbakt	jsr	rdblka	;
+	jsr	cbsubf	; set DOS buffer-pointer, send the block to DOS Ram
+sdbakv	jsr	wrtbkc	;
+	bcc	sdbakr	; write the output block, branch if status OK
+	jsr	bcmsgf	;
+	bcc	sdbakv	; else, display an error-message, re-try on F5 / Space
+;
+sdbakx	jsr	wdlyna	; erase old 'writing output' message, go swap disks
+	jmp	sdbakb	;
+sdbakz	jsr	bcsubv	; all done, set-up null Basic prog, go close channels
+	jmp	bcmsgj	;
+;
+;
+;
+;	FUNCTION CODE = 5:  COPY FILES (Single-Drive, Dual-Drive, Dual-Unit)
+;
+;	Select Type of Copy Required, Dual Drive / Unit Copy Follows
+;
+copy	jsr	bcmsgj	; close all Files & DOS channels
+	lda	config	;
+	bne	copya	; jump if single-drive disk-configuration defined
+	jmp	scopy	;
+;
+;	Prompt for Dual Drive-Unit Copy-Disk and Format it as Requested
+;
+copya	jsr	bcsub	; open source DOS-channel display source disk-info
+	jsr	bcsubc	;
+	jsr	bcmsgk	; close source DOS-channel, ask user for output-disk
+	jsr	bcmsga	;
+	jsr	bcsub	; open DOS-channel to output unit / drive
+	jsr	updrl	;
+	bcs	copyb	; display header-info, branch if unformatted disk
+;
+	jsr	cbsubm	; ask whether to format output-disk, branch if not
+	beq	copyc	;
+copyb	jsr	formtf	; format the output-disk, branch if format status OK
+	bcc	copyc	;
+	jsr	bcmsgv	; else flip back to source-drive & go start all over
+	jmp	copy	;
+copyc	jsr	bcsubc	; display output-disk header-name & blocks-free info
+;
+	jsr	bcmsgj	; close all DOS channels / files
+;
+;	Check Fit of All-files / Next-file on Copy-Disk, Open DOS Channels
+;
+	jsr	cbsubp	; branch if output-disk can hold all files to copy
+	bcs	copyd	;
+	cmp	#space	; on key = Space continue with the same copy-disk
+	beq	copyd	;
+	jsr	bcmsgv	; key = F5:  re-start with another copy-disk
+	jmp	copy	;
+copyd	lda	config	;
+	lsr	a	; branch to avoid opening output DOS chan for dual-drive
+	beq	copye	;
+	jsr	bcsub	; open output DOS channel, flip back to source-drive
+copye	jsr	bcmsgv	;
+	jsr	bcsub	; open DOS command channel to the source-drive
+	lda	#37	;
+	jsr	bcmsg	; msg = File Copy Working from Drive:  x
+;
+copyf	jsr	cpsub	; branch if output-disk can hold next file to copy
+	bcs	copyg	;
+	lda	tempa	; branch to continue with another copy-disk
+	bne	copy	;
+	jmp	bcmsgj	; else, cancel the function
+;
+copyg	lda	config	;
+	lsr	a	; branch if dual-unit disk-configuration
+	bne	copyk	;
+;
+;	Copy the Current File for Dual Drive Configuration
+
+copyh	jsr	cpsubc	; set-up the file-name for DOS Copy command
+;
+	lda	#7	; send DOS Copy command for current file
+	jsr	sendos	;
+	bcc	copyj	; if ST/DOS status is OK, go check for more files
+	jsr	bcmsgf	;
+	bcc	copyh	; else display error-message, branch if OK to re-try
+;
+copyj	jsr	cpsubt	; subtract file-size from blocks-to-copy & blocks-free
+;
+	jsr	scan	; scan file-list for next selected file, branch if found
+	bcs	copyf	;
+	jmp	bcmsgj	; else Copy is finished, terminate the function
+;
+;	Set-up to Copy the Current File for a Dual Unit Configuration
+;
+copyk	lda	#0	; clear Relative-File and End-of-File flags = OFF
+	sta	pntrc	;
+	jsr	cpsubc	; set-up file-name for Open, flip drive-index to output
+	jsr	bcmsgv	;
+	jsr	cpsubh	; open the file for output, flip drive-index to original
+	jsr	bcmsgv	;
+	jsr	sdsubc	; back-up & set-up starting point for all file-types
+;
+	bit	pntrc	; test file-type flag, branch if relative file
+	bvs	copym	;
+	jsr	bcsubf	; open direct-access channel to the original disk
+	beq	copyn	;
+copym	jsr	cpsubh	; open an input relative-file on the original disk
+;
+copyn	jsr	bcsubo	; reset RAM buffer-pointer to start of Bank # 1
+;
+;
+;	Test End-of-RAM / End-of-File, Read Sectors / Records Until Full or EOF
+;
+copyp	jsr	cpsubm	; branch if current record will not fit into Ram buffer
+	bcc	dcopyb	;
+	bit	pntrc	; branch to test for Seq, Prg, Usr End-of-File
+	bvc	copyt	;
+;
+copyr	jsr	cpsubo	; position to current record, branch if status OK
+	bcc	copys	;
+	cmp	#50	; branch if error = 50:  end-of-relative-file
+	beq	dcopya	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	copyr	;
+copys	jsr	cbsubc	; fetch current record into RAM buffer
+	jsr	cpsubr	;
+	bcc	copyp	; update buffer-pointer & record-number, try for another
+;
+;	Read one Sector & Test for End-of-File:  Seq, Prg, Usr Files
+;
+copyt	jsr	rdblk	; read current block into DOS Ram, branch if status OK
+	bcc	copyv	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	copyt	;
+copyv	jsr	cpsubp	; fetch link to the next track / sector to read
+;
+	jsr	cbsubd	; fetch the record into RAM, update buffer-pointer
+	jsr	cpsubs	;
+	lda	workd	; branch while more blocks to read
+	bne	copyp	;	
+;
+;	Mark End-of-File / End-of-Ram, Set-up Output Data-Pointers
+;
+dcopya	lda	pntrc	;
+	ora	#128	; set flag = end of input file on read
+	sta	pntrc	;
+dcopyb	lda	pntrf	; save current buffer-pointer address
+	sta	pntre	;
+	lda	pntrf+1	; to mark End-of-Ram for writing output file
+	sta	pntre+1	;
+	jsr	bcsubo	; reset RAM buffer-pointer to start of Bank # 1
+	lda	workc	;
+	ldx	workd	; save next Track # / Record # (low) to read
+	stx	workc	;
+	sta	workd	; set-up first Track # / Record # (low) to write
+	lda	workc+1	;
+	ldx	workd+1	; save next Sector # / Record # (high) to read
+	stx	workc+1	;
+	sta	workd+1	; set-up first Sector # / Record # (high) to write
+	lda	lstbf+23	;
+	sta	pntrd+1	; restore block / record length, flip to output-drive
+	jsr	bcmsgv	;
+;
+;	Test for End-of-Ram / End-of-File, Check Type-of-File to Write
+;
+dcopyd	ldx	pntre+1	; pick-up Dual-Unit End-of-Ram / File Address
+	lda	pntre	;
+	jsr	cpsubx	; branch if End-of-Ram reached: check for End-of-File
+	beq	dcopym	;
+	bit	pntrc	; test file-type flag, branch if relative-file
+	bvs	dcopyj	;
+;
+;	Write Current Output Block for Seq, Prg, Usr Files
+;
+	jsr	cpsubz	; check for short (last) block on output file
+;
+	jsr	cbsubf	; fetch data-block from RAM & write to output-file
+	jsr	cpsubs	;
+	bcc	dcopyd	; update RAM buffer-pointer, go try for another block
+;
+;	Write Current Output Record for Relative Files
+;
+dcopyj	jsr	cpsubo	; position relative file-pointer, branch if status OK
+	bcc	dcopyk	;
+	cmp	#50	; branch if error = Record Not Present (still OK)
+	beq	dcopyk	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	dcopyj	;
+dcopyk	jsr	cbsubf	; write the current record, update RAM buffer-pointer
+	jsr	cpsubr	;
+	bcc	dcopyd	; update buffer-pointer & record-number, try for another
+;
+;	End-of-Ram Found on Output, Test for End-of-File / Continuation
+;
+dcopym	jsr	bcmsgv	; flip to input-drive, pick-up End-of-File flag
+	bit	pntrc	;
+	bmi	dcopyn	; branch if E-O-F, else pick-up file-entry flag-byte
+	lda	lstbf+1	;
+	ora	#64	; set flag = Open-Append on next output phase
+	sta	lstbf+1	;
+	jmp	copyn	; then loop to continue reading the current file
+dcopyn	jsr	bcmsgl	;
+	jmp	copyj	; close all data files, go check for more files
+;
+;
+;	Start-up & Disk-Swap Messages, Set-up for Single-Drive File-Copy
+;
+scopy	jsr	bcmsgm	; msg = programs in memory will be destroyed
+;
+	lda	pntra	;
+	sta	pntrb	; save initial file-list position for Copy controls
+	lda	pntra+1	;
+	sta	pntrb+1	; save address of first selected file-entry
+	lda	worka+1	;
+	sta	pntrc+1	; save file # of first selected file-entry
+	lda	#0	;
+	sta	pntrc	; clear Output-Disk Formatted, Relative File-Type flags
+;
+scopya	jsr	bcmsgj	; close all channels, msg = insert original disk
+	jsr	bcmsgo	;
+	jsr	bcsub	; open DOS command chan, display source-disk info
+	jsr	bcsubc	;
+	jsr	bcmsgs	; msg = reading original disk, re-set RAM buffer-pointer
+	jsr	bcsubn	;
+	bit	lstbf+1	; branch if current file is being continued on input
+	bvs	scopyb	;
+	lda	pntrb	; pick-up start of file-list position for input phase
+	sta	pntra	;
+	lda	pntrb+1	; pick-up saved pointer to current file-list entry
+	sta	pntra+1	;
+	lda	pntrc+1	; pick-up saved file # for current file-list entry
+	sta	worka+1	;
+	jsr	getfla	; fetch the first file-list entry for the input phase
+;
+;	Setup File Name & Record-Length, Save File-Start Pointers, Open the File
+;
+scopyb	jsr	cpsubc	; set-up file-name, type and record-length for open
+;
+	jsr	sdsubc	; set-up starting block / record # for input phase
+	lda	workd	;
+	sta	lstbf+3	; save first track / record-low for output phase
+	lda	workd+1	;
+	sta	lstbf+4	; save first sector / record-high for output phase
+;
+	lda	pntrd	; save starting Bank # for the current file-segment
+	sta	lstbf+24	;
+	lda	pntrf	; save starting-address of the current file-segment
+	sta	lstbf+25	;
+	lda	pntrf+1	; within the RAM copy-buffer for the output phase
+	sta	lstbf+26	;
+	bit	pntrc	; branch to open a relative-file for input
+	bvs	scopyc	;
+	jsr	bcsubf	; open the data-channel for Seq, Prg, Usr files
+	beq	scopyd	;
+scopyc	jsr	cpsubh	; open the relative file for input phase
+;
+;	Test End-of-RAM / End-of-File, Read Sectors / Records Until Full or EOF
+;
+scopyd	jsr	cpsubm	; test for End-of-Ram, branch if not enough space
+	bcc	scopyp	;
+	bit	pntrc	; branch to test for Seq, Prg, Usr End-of-File
+	bvc	scopyj	;
+;
+scopyf	jsr	cpsubo	; position to current record, branch if status OK
+	bcc	scopyg	;
+	cmp	#50	; branch if error = 50:  end-of-relative-file
+	beq	scopyn	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	scopyf	;
+scopyg	jsr	cbsubc	; fetch current record into RAM, update buffer-pointer
+	jsr	cpsubr	;
+	bcc	scopyd	; update buffer-pointer & record-number, try for another
+;
+;	Read one Sector & Test for End-of-File:  Seq, Prg, Usr Files
+;
+scopyj	jsr	rdblk	; read current block into DOS Ram, branch if status OK
+	bcc	scopyk	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	scopyj	;
+scopyk	jsr	cpsubp	; fetch link to the next track / sector to read
+;
+	jsr	cbsubd	; fetch the record into RAM, update buffer-pointer
+	jsr	cpsubs	;
+	lda	workd	; branch while more blocks to read
+	bne	scopyd	;	
+;
+;	Mark End-of-File / Ram, Save File-List Entry, Check for End-of-List
+;
+scopyn	jsr	bcmsgl	; close the file, set-up file-entry flag = End-of-File
+	lda	#128	;
+	jsr	sdsubj	; update & save the file-list entry for output phase
+	jsr	scan	;
+	bcs	scopyb	; branch (bcs) if more files, else start output phase
+	bcc	scopyq	;
+;
+scopyp	lda	#0	; set file-entry flag-byte = No Flags to Set
+;
+	jsr	sdsubj	; update & save the file-list entry for output phase
+;
+;	Set-up First File-List Entry for Output Phase of Single-Drive File-Copy
+;
+scopyq	lda	pntra	; save file-list address-low for next input phase
+	ldx	pntrb	;
+	stx	pntra	; set-up file-list address-low for this output phase
+	sta	pntrb	;
+	lda	pntra+1	; save file-list address-high for next input phase
+	ldx	pntrb+1	;
+	stx	pntra+1	; set-up file-list address-low for this output phase
+	sta	pntrb+1	;
+	lda	worka+1	; save file-list file # for next input phase
+	ldx	pntrc+1	;
+	stx	worka+1	; set-up file-list file # for this output phase
+	sta	pntrc+1	;
+	jsr	getfla	; fetch the first file-list entry for output
+;
+;	Swap to Output-Disk & Ask User Whether to Format the Copy-Disk
+;
+scopyr	jsr	bcmsgj	; close all channels / files, msg = insert copy disk
+	jsr	bcmsgp	;
+	jsr	bcsub	; re-open DOS command channel after disk-swap
+	bit	pntrc	;
+	bmi	scopyw	; if copy-disk already formatted or user said 'No'
+	jsr	updrl	;
+	bcs	scopyv	; try to display header-info, branch if never formatted
+;
+	jsr	cbsubm	; ask whether to format copy-disk, branch if 'No'
+	beq	scopyt	;
+scopyv	jsr	formtf	; format the copy-disk, branch if status is OK
+	bcc	scopyt	;
+scopys	lda	#0	; set the copy-disk formatted flag = No
+	sta	pntrc	;
+	beq	scopyr	; then go ask for a different copy-disk
+;
+scopyw	jsr	bcsubc	; display copy-disk header info, branch if status OK
+	bcc	scopyx	;
+;
+scopyt	jsr	bcsubc	; display copy-disk header-info after formatting it
+;
+scopyz	lda	#128	; then set copy-disk formatted flag = Yes
+	sta	pntrc	;
+;
+;	Check Whether All-files / Next-file Will Fit on Current Copy-Disk
+;
+	jsr	cbsubp	; branch if output-disk can hold all files to copy
+	bcs	scopyx	;
+	cmp	#f5	; branch on F5-key, else continue with same disk
+	beq	scopys	;
+scopyx	jsr	bcmsgt	; msg = writing to copy-disk
+;
+sdcopa	bit	lstbf+1	; skip file-size test if Append-File flag = Yes
+	bvs	sdcopb	;
+	jsr	cpsub	; branch if output-disk can hold next file to copy
+	bcs	sdcopb	;
+	lda	tempa	; branch to continue with another copy-disk
+	bne	scopyr	;
+	jmp	bcmsgj	; else, cancel the function
+;
+;	Set-up Current File Pointers & Open the File for Output
+;
+sdcopb	jsr	cpsubc	; set-up file-name, file-type, record-length for Open
+	lda	lstbf+3	;
+	sta	workd	; pick-up starting record # for relative-file output
+	lda	lstbf+4	;
+	sta	workd+1	; note:  Seq, Prg, Usr block-link not used on output
+	lda	lstbf+24	;
+	sta	pntrd	; pick-up starting Ram Bank # for the file-segment
+	lda	lstbf+25	;
+	sta	pntrf	; pick-up starting Ram-buffer address for the file
+	lda	lstbf+26	;
+	sta	pntrf+1	; pick-up starting Ram-buffer address high-byte
+;
+	jsr	cpsubh	; open all file-types for output
+;
+;	Test for End of File-Segment in Ram for Current Output File
+;
+sdcopd	jsr	cpsubm	; switch to Bank #1 if record does not fit in Bank #0
+	ldy	lstbf+27	;
+	lda	lstbf+28	; pick-up End-of-File Bank #, Ram-Address
+	ldx	lstbf+29	;
+	jsr	cpsubv	; branch if at End-of-File (segment) in Ram
+	beq	sdcopk	;
+;
+;	Write Current Output Block for Seq, Prg, Usr Files
+;
+	bit	pntrc	; test file-type flag, branch if relative-file
+	bvs	sdcoph	;
+	jsr	cpsuby	; check for short (last) block on output file
+;
+	jsr	cbsubf	; fetch data-block from RAM & write to output-file
+	jsr	cpsubs	;
+	bcc	sdcopd	; update RAM buffer-pointer, go try for another block
+;
+;	Write Current Output Record for Relative Files
+;
+sdcoph	jsr	cpsubo	; position relative file-pointer, branch if status OK
+	bcc	sdcopj	;
+	cmp	#50	; branch if error = Record Not Present (still OK)
+	beq	sdcopj	;
+	jsr	bcmsgf	; else, display error-message, branch if OK to re-try
+	bcc	sdcoph	;
+sdcopj	jsr	cbsubf	; write the current record, update RAM buffer-pointer
+	jsr	cpsubr	;
+	bcc	sdcopd	; update buffer-pointer & record-number, try for another
+;
+;	End-of-File in Ram Found, Test for Next-File / Disk-Swap / End-Copy 
+;
+sdcopk	jsr	bcmsgl	; End-of-File in Ram for output phase:  close the file
+	lda	lstbf+1	;
+	bmi	sdcopn	; branch if physical End-of-File reached on input
+	ora	#64	;
+	sta	lstbf+1	; set file-entry flag-byte = Open-Append for next pass
+	lda	lstbf+21	;
+	sta	lstbf+3	; set-up current track, sector / record-number to read
+	lda	lstbf+22	;
+	sta	lstbf+4	; for the starting-point of the next input phase
+	jsr	putfla	;
+	jmp	scopya	; go swap back to original disk & read more file(s)
+;
+sdcopn	jsr	cpsubt	; subtract file-size from blocks-to-copy & blocks-free
+;
+	jsr	scan	; check for more output files, branch if none found
+	bcc	sdcopt	;
+	jmp	sdcopa	; else go set-up to write the next output-file
+;
+sdcopt	jsr	bcsubv	; Copy Finished:  build dummy Basic program-links
+;
+	jmp	bcmsgj	; close DOS command channel & exit to control
+;
+;
+;	Search BAM for Next Allocated Block:  Return .C set = None Found
+;
+bscan	lda	pntrc+1	;
+	asl	a	; current band # * 2 = index to track/sector limits
+	tay		;
+	inc	workd+1	; bump forward to the next sector #
+	lda	band+1,y	;
+	cmp	workd+1	; branch if next sector # within limit for this track
+	bcs	bscanb	;
+	lda	workd	; else, pick-up the current track #
+	cmp	band,y	;
+	beq	bscanc	; if current track # is last one for this band
+;
+bscana	inc	workd	; bump forward to the next track #
+	ldx	#0	;
+	stx	workd+1	; re-set sector # to zero
+bscanb	jsr	ckrst0	;
+	bne	bscan	; if current track / sector is free
+	clc		;
+	rts		; flag = .C clear to show current block allocated
+;
+bscanc	cpy	#6	; branch if current band is last one for Side # 0
+	bcs	bscane	;
+bscand	inc	pntrc+1	; bump to next band #, go set-up next track/sector
+	bne	bscana	;
+bscane	bit	bama	; branch if Side # 1 does not exist
+	bpl	bscanf	;
+	cpy	#14	; branch if not done with Side # 1
+	bcc	bscand	;
+bscanf	rts		; flag .C = set to show no more allocated blocks
+;
+;
+;	Message-Display Related Subroutines used by Backup and Copy Functions
+;
+bcmsg	jsr	fndmsb	; display the message # passed in .A reg
+	lda	drivid	;
+	jsr	chrout	; display the current logical drive name
+	rts		;
+;
+bcmsga	jsr	bcmsgv	; switch drive-index, drive-name to the other drive
+	lda	#20	;
+	jsr	bcmsg	; msg = insert copy disk into drive:  x
+	ldy	#cent	;
+	lda	#64	; msg = then press space
+	ldx	#lynfl8+4	;
+	bit	mode	; branch on 80-column video
+	bmi	bcmsgb	;
+	inx		; bump X-position on 40-column video
+bcmsgb	jsr	fndmsb	;
+;
+bcmsgc	jsr	errmsp	; show disk-swap message, wait for Space / F5 / Stop key
+	cmp	#space	;
+	bne	bcmsgh	; on F5 or Stop-key, exit to Shell control-module
+	jsr	wders	;
+	clc		; key = Space, erase window, return .C clear to caller
+	rts		;
+;
+bcmsge	sec		; entry for two return-addresses on the stack
+	.byt	$24	;
+bcmsgf	clc		; entry for one return-address on the stack
+	php
+	jsr	errms	; display an error-message for last disk operation
+	cmp	#stpky	;
+	beq	bcmsgg	; on key = Stop, cancel function, else allow re-try
+	plp		;
+	clc		; clean-up stack, return .C clear to caller
+	rts		;
+;
+bcmsgg	plp		; pick-up saved .S reg, branch if stack-depth = one
+	bcc	bcmsgh	;
+	pla		; throw away second return-addr to cancel function
+	pla
+bcmsgh	pla		; throw away first return-addr to cancel function
+	pla		;
+bcmsgj	jsr	bcmsgl	; close direct-access channels for logical drives A & B
+;
+bcmsgk	lda	#2	; close DOS command channel for logical drive:  B
+	jsr	close	;
+	lda	#1	; close DOS command channel for logical drive:  A
+	jsr	close	;
+	rts		; return to Shell-control module
+;
+bcmsgl	lda	#8	; close direct-access channel for logical drive:  B
+	jsr	close	;
+	lda	#4	; close direct-access channel for logical drive:  A
+	jsr	close	;
+	rts		; return to caller
+;
+bcmsgm	lda	#47	; msg = programs in memory will be destroyed
+	.byt	$2c	;
+bcmsgn	lda	#49	; msg = error:  wrong disk - try again
+	jsr	fndmsb	;
+	lda	#30	; msg = press space to continue
+
+; fix: 13 sept 85 terry ryan - 'press space bar to continue' message was
+; not erasing previous message. changed:
+;	jsr	fndmsb	;
+; with:
+	jsr	bcmsgu
+;
+
+	beq	bcmsgc	; go wait for user to hit Space / F5 / Stop
+;
+bcmsgo	lda	#33	; msg = insert original disk then press space
+	.byt	$2c	;
+bcmsgp	lda	#35	; msg = insert copy disk then press space
+	jsr	bcmsgu	;
+bcmsgq	jsr	flash	; flash the message until user hits any key
+	lda	laskey	;
+	cmp	#stpky	; on key = Stop, go cancel the function
+	beq	bcmsgh	;
+	cmp	#space	; else if key not = Space, keep on flashing
+	bne	bcmsgq	;
+	jsr	wdlyna	; erase the message, return to caller
+	rts		;
+;
+bcmsgs	lda	#34	; msg = reading from original disk
+	.byt	$2c	;
+bcmsgt	lda	#36	; msg = writing to copy disk
+;
+bcmsgu	pha		; save the message number first
+	jsr	wdlyna	;
+	pla		; then erase the line at top-of-window area
+	jsr	fndmsb	;
+	rts		; leave message on screen, return to caller
+;
+bcmsgv	ldx	drivx	; pick-up current logical drive-index
+	dex		;
+	bne	bcmsgx	; if drive-index was = B, now make it = A
+	ldx	#2	;
+bcmsgx	stx	drivx	; else, drive-index was = A, now make it = B
+	clc		;
+	txa		; new value of logical drive-index
+	adc	#64	;
+	sta	drivid	; plus '@' gives new logical drive-name
+	rts		;
+;
+;
+;	Disk-Access Related Subroutines Used by Backup and Copy Functions
+;
+bcsub	jsr	opndos	; open DOS command channel, branch if status OK
+	beq	bcsuba	;
+	jsr	bcmsge	; else display error-message, re-try on Space / F5 key
+	bcc	bcsub	;
+bcsuba	rts		; status OK, return to caller
+;
+bcsubc	jsr	updrl	; fetch active disk-name & id-code, branch if OK
+	bcc	bcsubd	;
+	jsr	bcmsge	; else display error-message, re-try on Space / F5 key
+	bcc	bcsubc	;
+bcsubd	rts		; status OK, return to caller
+;
+bcsubf	jsr	opndc1	; open direct-access chan to active drive, branch if OK
+	beq	bcsubg	;
+	jsr	bcmsge	; else, display error-message, re-try on Space / F5 key
+	bcc	bcsubf	;
+bcsubg	rts		; status OK, return to caller
+;
+bcsubj	jsr	rdbam	; read source-disk BAM, branch if status = OK
+	beq	bcsubk	;
+	jsr	bcmsge	; else display error-message, re-try on Space / F5 key
+	bcc	bcsubj	;
+bcsubk	rts		; status OK, return to caller
+;
+bcsubm	lda	#1	;
+	sta	workd	; starting track # for dual-unit / single-drive backup
+	ldx	#-1	;
+	stx	workd+1	; starting sector # for dual-unit / single-drive backup
+	inx		;
+	stx	pntrc+1	; first disk-band # for dual-unit / single-drive backup
+	rts		;
+;
+bcsubn	lda	#>bufra	; set hi-byte of indir-pointer to I/O area in Bank # 0
+	sta	pntrf+1	;
+	lda	#0	; set lo-byte of indir-pointer to I/O area in Bank # 0
+	sta	pntrf	;
+	sta	pntrd	; set flag = Ram Bank # 0 now in use
+	rts		;
+;
+bcsubo	lda	#>lista	; pre-set hi-byte of indir-pointer for Backup function
+	ldx	func	;
+	cpx	#4	; branch if function is Backup a Disk
+	beq	bcsubp	;
+	lda	#>bufrb	; else, set hi-byte of indir-pointer for Copy Files
+bcsubp	sta	pntrf+1	;
+	ldx	#0	; set lo-byte of indir-pointer to I/O area in Bank # 1
+	stx	pntrf	;
+	inx		; set flag = Ram Bank # 1 now in use
+	stx	pntrd	;
+	rts		; return to caller
+;
+bcsubq	ldy	#0	; set-up index to disk-name
+bcsubr	lda	dsnam,y	;
+	sta	fnam1,y	; move the disk-name for formatting
+	iny		;
+	cpy	#16	; keep going for 16 bytes
+	bne	bcsubr	;
+	sty	flen1	; set-up disk-name length
+	rts		;
+;
+bcsubs	lda	#28	;
+
+; fix: 13 sept 85 terry ryan - format was not being performed, resulting
+; in new i.d. number not being installed on disk. caused test if new disk
+; is in drive to fail. replaced:
+;	jmp	bcmsg	; msg = disk format working on drive:  x
+; with:
+	jsr	bcmsg	; msg = disk format working on drive:  x
+;
+
+	lda	#5	;
+	jsr	sendos	; send long-format cmnd to destin drive, branch if OK
+	bcc	bcsubt	;
+	jsr	bcmsge	; else, display error-message, re-try on Space / F5 key
+	bcc	bcsubs	;
+bcsubt	jsr	wdlyna	; erase format message, return to caller
+	rts		;
+;
+bcsubv	ldy	#3	;
+	sty	txtop	; set-up Basic Top-of-Text pointer-value
+	lda	#>bufra	;
+	sta	txtop+1	; for a null Basic program just above the Shell
+	lda	#0	;
+bcsubx	sta	bufra,y	; and set-up null Basic program-link bytes
+	dey		;
+	bpl	bcsubx	; so Basic will work when user exits the Shell
+	rts		;
+;
+cbsub	ldy	drivx	; pick-up index to current active logical drive
+	ldx	lfnr,y	;
+	jsr	chkin	; set-up source drive as current input
+	ldy	#0	;
+	rts		; set-up index to fetch data, return to caller
+;
+cbsuba	ldy	drivx	; pick-up index to current active logical drive
+	ldx	lfnr,y	;
+	jsr	chkout	; set-up destination-drive as current output
+	ldy	#0	;
+	rts		; set-up index to send data, return to caller
+;
+cbsubc	jsr	cbsub	; set-up source-drive as current input
+cbsubd	jsr	chrin	;
+	jsr	sdsubk	; fetch a byte from the drive, store it in Ram-buffer
+	iny		;
+	cpy	pntrd+1	; branch (bne) while more data to fetch & store
+	bne	cbsubd	;
+	beq	cbsubh	; re-set to default i/o, return to caller
+;
+cbsubf	jsr	cbsuba	; set-up destination-drive as current output
+cbsubg	lda	#pntrf	;
+	ldx	pntrd	; set-up indir-pntr-addr, Bank # for Long-Fetch
+	jsr	kndfet	;
+	jsr	chrout	; fetch a byte from I/O buffer, send it to DOS Ram
+	iny		;
+	cpy	pntrd+1	; branch while more data to fetch & send
+	bne	cbsubg	;
+cbsubh	jsr	clrchn	; re-set to default i/o, return to caller
+	rts		;
+;
+cbsubj	lda	pntrf+1	; pick-up hi-byte of current I/O buffer-pointer
+	cmp	#>bufnd	;
+	bcc	cbsubk	; if the block will fit into the current Ram Bank
+	lda	pntrd	;
+	bne	cbsubk	; if Ram Bank # 1 buffer-space is exhausted
+;
+	jsr	bcsubo	; else, set-up I/O buffer-pointer for Bank # 1
+	clc		;
+cbsubk	rts		; flag .C set = No Ram Left, .C clear = Ram Available
+;
+cbsubm	lda	#52	; msg = Want to Format the Copy Disk:
+	jsr	fndmsb	;
+	lda	#0	; get user to choose No / Yes
+	jsr	pick	;
+	cmp	#stpky	; branch when a choice is made
+	bne	cbsubn	;
+	jmp	bcmsgh	; Stop-key pressed, so cancel the function
+cbsubn	jsr	wdlyn	;
+	lda	tempa	; else erase message, return user's choice:  zero = No
+	rts		;
+;
+cbsubp	sec		; test whether output-disk can hold all files to copy
+	lda	work	;
+	sta	workb	; save blocks-free-low, subtract copy-blocks-low
+	sbc	worke	;
+	lda	work+1	; save blocks-free-high, subtract copy-blocks-high
+	sta	workb+1	;
+	sbc	worke+1	; branch if not enough room for all copy-blocks
+	bcc	cbsubr	;
+	rts		; return .C set:  blocks-free => copy-blocks
+;
+cbsubr	lda	#48	; msg = copy disk cannot hold all files!
+	jsr	fndmsb	;
+	lda	#30	; msg = press Space to continue
+	jsr	fndmsb	;
+	jsr	errmsp	; wait for Space / F5 / Stop key
+	cmp	#stpky	;
+	bne	cbsubt	; if key = Stop, cancel the function, else continue
+	jmp	bcmsgh	;
+cbsubt	jsr	wdlyna	; erase the top-line of window display-area
+	lda	laskey	;
+	clc		; return keystroke value and .C clear to caller
+	rts		;
+;
+cpsub	sec		; test whether current file will fit onto copy-disk
+	lda	workb	;
+	sbc	lstbf+30	; copy-disk blocks-free less current file-size
+	lda	workb+1	;
+	sbc	lstbf+31	; branch if copy-disk cannot hold current file
+	bcc	cpsuba	;
+	rts		; return .C set = blocks-free => file-size
+;
+cpsuba	lda	#53	; msg = Copy Disk Full - Another Disk:
+	jsr	fndmsb	;
+	lda	#0	; msg suffix =  No  Yes
+	jsr	pick	;
+	cmp	#stpky	; branch on F5-key or Space (a choice was made)
+	bne	cbsubt	;
+	jmp	bcmsgh	; on Stop-key, cancel the function
+;
+cpsubc	lda	pntrc	; pick-up flag-byte for File-Copy
+	and	#128	;
+	sta	pntrc	; clear Relative File-type flag to OFF
+	ldy	#0	;
+cpsubd	lda	bfnam,y	; move name in temp file-list buffer to file-name-1
+	sta	fnam1,y	;
+	sta	fnam2,y	; move name in temp file-list buffer to file-name-2
+	iny		;
+	cpy	#16	; branch if more name to move for Copy / Open
+	bne	cpsubd	;
+	ldx	config	; pick-up shell disk configuration
+	cpx	#1	;
+	beq	cpsubg	; if dual-drive config, finish set-up for Copy Cmnd
+;
+	ldy	#22	; pre-set file-name length for all file-types
+	lda	#':'	;
+	sta	fdriv+1	; pre-set colon in front of file-name for drive #
+	lda	#','	;
+	sta	fnam1+16	; pre-set commas into the file-name string
+	sta	fnam1+18	;
+	lda	lstbf+2	; pick-up file-type code from file-entry
+	and	#7	;
+	tax		; set-up index to file-type code for File-Open
+	lda	ftype,x	;
+	sta	fnam1+17	; set file-type code for for File-Open
+	cpx	#4	;
+	beq	cpsubf	; branch if file-type = relative
+	lda	#'W'	;
+	bit	lstbf+1	; branch if file is not being continued
+	bvc	cpsube	;
+	lda	#'A'	; else set-up file-name for Open-Append
+;
+cpsube	sta	fnam1+19	; set data-direction to write the file
+	ldx	#254	;
+	bne	cpsubg	; set record-length for Seq, Prg, Usr Files
+;
+cpsubf	lda	pntrc	;
+	ora	#64	; set relative-file flag for Shell Copy control
+	sta	pntrc	;
+	ldx	lstbf+23	; pick-up relative record-length for Open
+	stx	fnam1+19	;
+cpsubg	sty	flen1	; set-up file-name length for file Copy / Open
+	stx	lstbf+23	;
+	stx	pntrd+1	; set-up block / record length for the file
+	rts		;
+;	
+cpsubh	ldx	drivx	; pick-up index to current active physical drive
+	lda	driva-1,x	;
+	sta	fdriv	; set-up physical drive # with file-name for Open
+;
+	jsr	opnf1	; open the file, branch if status is OK
+	bcc	cpsubk	;
+	lda	lfnr	; close the file on any error
+	jsr	close	;
+	lda	doserr	; for relative files a 'record not present' error
+	cmp	#50	;
+	bne	cpsubj	; means output file exists & record-length is wrong
+	lda	#63	;
+	sta	doserr	; so set error-code 63:  file already exists
+;
+cpsubj	jsr	bcmsge	; display the error-message, allow re-try on F5 or Space
+	bcc	cpsubh	;
+cpsubk	rts		; status OK, return to caller
+;
+cpsubm	sec		;
+	lda	#<bufnd	; subtract record-length from Ram-End address
+	sbc	pntrd+1	;
+	sbc	pntrf	; subtract current buffer-pointer low-byte
+	lda	#>bufnd	;
+	sbc	pntrf+1	; and buffer-pointer high-byte, branch if space left
+	bcs	cpsubn	;
+	lda	pntrd	; branch if RAM Bank # 1 also exhausted
+	bne	cpsubn	;
+	jsr	bcsubo	; else, set buffer-pointer to start of Bank # 1
+	sec		;
+cpsubn	rts		; flag .C set = Space Available, .C clear = No Room
+;
+cpsubo	ldx	drivx	; set-up parameters to position relative file-pointer
+	lda	lfnr,x	;
+	sta	fnam1	; set logical file # / DOS channel
+	lda	workd	;
+	sta	fnam1+1	; set record-number low-byte
+	lda	workd+1	;
+	sta	fnam1+2	; set record-number high-byte
+	lda	#1	;
+	sta	fnam1+3	; set byte-position within record
+	lda	#13	;
+	jsr	sendos	; send DOS Position-file-pointer command
+	rts		;
+;
+cpsubp	jsr	cbsub	; set-up source-drive as current input
+	jsr	chrin	;
+	sta	workd	; save next track # to read
+	jsr	chrin	;
+	sta	workd+1	; save next sector # to read
+;
+	ldx	workd	; pick-up track-link, branch if not last block
+	bne	cpsubq	;
+	ldx	workd+1	; else decrement 'sector-link' = actual data-length
+	dex		;
+	sta	pntrd+1	; for last input block, set block-length = data-length
+cpsubq	rts		;
+;
+cpsubr	inc	workd	; increment record-number for relative files
+	bne	cpsubs	;
+	inc	workd+1	; returns next relative record # to read / write
+cpsubs	clc		;
+	lda	pntrf	; increment buffer-pointer to next record-address
+	adc	pntrd+1	;
+	sta	pntrf	; add block / record length to buffer-pointer
+	lda	pntrf+1	;
+	adc	#0	; return updated buffer-pointer address
+	sta	pntrf+1	;
+	clc		; return with .C flag clear
+	rts		;
+;
+cpsubt	ldx	#worke	;
+	jsr	cpsubu	; first subtract file-size from total blocks-to-copy
+	ldx	#workb	;
+cpsubu	sec		; then subtract file-size from copy-disk blocks-free
+	lda	0,x	;
+	sbc	lstbf+30	; subtract current file-size low-byte
+	sta	0,x	;
+	lda	1,x	; update blocks-to-copy / blocks-free low-byte
+	sbc	lstbf+31	;
+	sta	1,x	; update blocks-to-copy / blocks-free high-byte
+	rts		;
+;
+cpsubv	cpy	pntrd	; compare End-of-Ram Bank # and Buffer-Address
+	bne	sdsuba	;
+cpsubx	cpx	pntrf+1	; with current Bank # and Buffer-Pointer-Address
+	bne	sdsuba	;
+	cmp	pntrf	; return .Z flag set if End-of-Ram = buffer-pointer
+	rts		;
+;
+cpsuby	cpy	pntrd	; branch if End-of-File Bank # not = current Bank #
+	bne	sdsuba	;
+cpsubz	sec		; End-of-File Addr-low minus current buffer-pointer-low
+	sbc	pntrf	;
+	tay		; save low-byte of result, subtract buffer-pointer-high
+	txa		;
+	sbc	pntrf+1	; branch if result => curent data-block length
+	bne	sdsuba	;
+	sty	pntrd+1	; else set new output block-length for short last block
+sdsuba	rts		;
+;
+sdsubc 	bit	pntrc	; branch if file-type is Seq, Prg, Usr
+	bvc	sdsubd	;
+	bit	lstbf+1	; branch if current file-segment is continuation
+	bvs	sdsubd	;
+	lda	#1	; set-up starting record # for relative files
+	ldx	#0	;
+	beq	sdsube	; for the first time the file is opened
+;
+sdsubd	lda	lstbf+3	; pick-up starting block # for Seq, Prg, Usr files
+	ldx	lstbf+4	;
+sdsube	sta	workc	; save starting track/sector for Seq, Prg, Usr files
+	sta	workd	;
+	stx	workc+1	; or starting record # for continued relative-files
+	stx	workd+1	;
+	rts		;
+;
+sdsubj	ora	lstbf+1	; set End-of-File / Append-Output flags
+	sta	lstbf+1	;
+	lda	workd	; save ending track / record-low for next input phase
+	sta	lstbf+21	;
+	lda	workd+1	; save ending sector / record-high for next input phase
+	sta	lstbf+22	;
+	lda	pntrd	; save End-of-File Bank # for writing output file
+	sta	lstbf+27	;
+	lda	pntrf	; save current input buffer-pointer address
+	sta	lstbf+28	;
+	lda	pntrf+1	; to mark End-of-File in Ram for output phase
+	sta	lstbf+29	;
+	jsr	putfla	; save the updated file-list entry for output phase
+	rts		;
+;
+sdsubk	ldx	#pntrf	;
+	stx	stavec	; set-up indir-pntr-addr, Bank # for Long-Store
+	ldx	pntrd	;
+	jsr	kndsta	; store the byte in .A into I/O buffer Ram
+	rts		;
+;
+;
+;
+;	FUNCTION CODE = 6:  DELETE FILES
+;
+delet	jsr	bcsub	; open DOS command channel, else don't come back
+;
+deleta	jsr	movfa	; set-up to send command using file-name-1
+;
+deletb	lda	#9	; send scratch-file DOS command
+	jsr	sendos	;
+	bcc	deletc	; if ST / DOS status OK
+	jsr	bcmsgf	;
+	bcc	deletb	; else display error-message, re-try on F5 / Space key
+;
+deletc	jsr	scan	; search for next selected entry, branch if found
+	bcs	deleta	;
+	rts		; return to control module when done
+;
+;
+;	FUNCTION CODE = 7:  RESTORE SCRATCHED FILES
+;
+restr	jsr	bcsub	; open DOS command channel, else don't come back
+;
+	jsr	bcsubf	; open direct-access buffer, else don't come back
+;
+	jsr	wrtbkf	; set-up buffer-pointer for direct-access output
+;
+	lda	#18	; set-up starting track #
+	sta	workd	;
+	lda	#1	; set-up starting sector #
+	sta	workd+1	;
+restrc	jsr	wrtbkg	; save track / sector for U2: cmnd use later
+;
+restrd	jsr	rdblk	; read a block into DOS Ram, branch on error
+	bne	restrm	;
+	ldx	lfnr	; set-up direct-access channel for input
+	jsr	chkin	;
+	ldy	#0	; set-up index to fetch the directory block
+restrf	jsr	chrin	;
+	sta	bama,y	; from the disk-unit & store into Bank # 0 Ram
+	iny		;
+	bne	restrf	; while more data to fetch & store
+	jsr	clrchn	;
+;
+	lda	bama	; save the track # of the next block to read
+	sta	workd	;
+	lda	bama+1	; save the sector # of the next block to read
+	sta	workd+1	;
+	sty	workb	; set flag = 0 to show no files restored in this block
+	ldy	#5	;
+restrg	sty	worke	; set-up indexes to name-fields for searching
+	ldx	#0	;
+;
+restrh	lda	bama,y	; compare file-name from disk vs. selected entry
+	cmp	bfnam,x	;
+	bne	restrj	; if this file is not the one to restore
+	iny		;
+	inx		; bump the index pointers
+	cpx	#16	;
+	bne	restrh	; if more file-name to check
+;
+	lda	#128	; set flag to show file(s) restored in this block
+	sta	workb	;
+	sec		; the file-name from disk matches the file-list entry
+	tya		;
+	sbc	#19	; set-up index-pointer to file-type
+	tax		;
+	lda	lstbf+2	; put user-selected file-type into the block-image
+	sta	bama,x	;
+	jsr	scan	; find next selected entry, branch if end-of-list
+	bcc	restrk	;
+;
+restrj	clc		; point to file-name of next entry from disk
+	lda	worke	;
+	adc	#32	; index = index plus 32
+	tay		;
+	bcc	restrg	; if more file-names to check in this block
+	lda	workb	;
+	beq	restrc	; if no files were restored in this block
+;
+restrk	jsr	wrtbk	; write the block to disk, branch if status OK
+	bcc	restrp	;
+restrm	lda	msgnr	; save the DOS command #
+	sta	workb+1	;
+	jsr	bcmsgf	; display an error-message, re-try on F5 / Space key
+	lda	workb+1	;
+	cmp	#11	; branch if command was U2:
+	beq	restrk	;
+	bne	restrd	; if command sequence was U1: and B-P:
+;
+restrp	lda	worka	; test current file # vs. last file #
+	cmp	worka+1	;
+	bcc	restrv	; if no more files to restore
+	jmp	restrc	;
+restrv	lda	#38	; msg = files restored... cleanup working
+	jsr	fndmsb	;
+	jmp	cleana	; send cleanup cmnd, erase message, exit to control
+;
+;
+;	FUNCTION CODE = 8:  RENAME FILES
+;
+renam	jsr	bcsub	; open DOS command channel, else don't come back
+;
+renamb	lda	pntra	; find the new file-name for current List-A entry
+	sta	pntrc	;
+	lda	pntra+1	; this is ugly, but better than copying all of it
+	sta	pntrc+1	;
+	jsr	cknamz	; locates new file-name entry in List-B
+;
+	jsr	movfa	; set-up both file-names for rename cmnd
+	jsr	movfb	;
+renamc	lda	#8	; send rename-file Dos command
+	jsr	sendos	;
+	bcc	renamd	; if ST / DOS status OK
+	jsr	bcmsgf	;
+	bcc	renamc	; else display error-message, re-try on F5 / Space key
+;
+renamd	jsr	scan	; search for next selected entry, branch if found
+	bcs	renamb	;
+	rts		; to control module when done
+;
+;
+;	FUNCTION CODE = 9:  RE-ORDER DISK DIRECTORY
+;
+reseq	jsr	bcsub	; open DOS command channel, else don't come back
+;
+	jsr	bcsubf	; open direct-access buffer, else don't come back
+;
+	jsr	wrtbkf	; set-up pointer for direct-access output
+;
+	lda	#18	; set-up starting track #
+	sta	workd	;
+	lda	#1	; set-up starting sector #
+	sta	workd+1	;
+reseqc	jsr	wrtbkg	; save track / sector for U2: cmnd use later
+;
+reseqd	jsr	rdblk	; read a block into DOS Ram, branch on error
+	bne	reseqr	;
+	jsr	ckrst3	; read & store track-sector links for this block
+;
+	ldy	#0	;
+reseqf	lda	#pntra	; set-up index, ind-pntr-addr, Bank # for Long-Fetch
+	ldx	#1	;
+	jsr	kndfet	; do LDA (pntra),y to move a block of
+	sta	bama,y	;
+	iny		; directory entries into Bank # 0 Ram
+	bne	reseqf	;
+;
+reseqh	lda	#0	;
+	sta	bama,y	; clear the select-flag for the entry
+	clc		;
+	tya		; set index forward to next file-entry
+	adc	#32	;
+	tay		; index = index plus 32
+	lda	worka	;
+	cmp	worka+1	; branch if previous file # was the last one
+	beq	reseqj	;
+	inc	worka+1	; else, bump the current file #
+;
+	cpy	#0	; branch when all entries are done
+	beq	reseqn	;
+	bne	reseqh	; while more entries to clean up
+;
+reseqj	inc	worka+1	; bump file # to force quit after last block written
+	cpy	#0	;
+	beq	reseqm	; if the last block holds eight entries
+	lda	#0	;
+reseqk	sta	bama,y	; clear the rest of the last block to zeros
+	iny		;
+	bne	reseqk	; while more block to clear
+reseqm	sty	bama	;
+	dey		; set link-pointers = $00, $ff for the last block
+	sty	bama+1	;
+	bmi	reseqp	; then go send the directory block-image
+;
+reseqn	lda	workd	; this is not the last directory block
+	sta	bama	;
+	lda	workd+1	; so use the link-pointers read from disk
+	sta	bama+1	;
+reseqp	jsr	wrtbk	; write the block to disk, branch if status Bad
+	bcc	reseqr	;
+	lda	msgnr	; save the DOS command #
+	sta	workb+1	;
+	jsr	bcmsgf	; display an error-message, re-try on F5 / Space key
+	lda	workb+1	;
+	cmp	#11	; branch if DOS command was U2:
+	beq	reseqp	;
+	bne	reseqd	; if command was U1: and B-P:
+;
+reseqr	inc	pntra+1	; set file-list pointer to next block of entries
+	lda	worka	;
+	cmp	worka+1	; branch if more directory to re-write
+	bcs	reseqc	;
+	rts		; all done, return to control module
+;
+;
+;	Subroutines Called by Scratch, Rename, Restore, Resequence Functions
+;
+;	set-up file-name-1 from 'lstbf' before sending DOS command
+;
+movfa	ldy	#0	; set-up index to move file-name
+movfc	lda	bfnam,y	;
+	sta	fnam1,y	; move into file-name-1 to setup DOS cmnd
+	iny		;
+	cpy	#16	; branch while more name to move
+	bne	movfc	;
+	sty	flen1	; set file-name-1 length for DOS cmnd
+	rts		;
+;
+;	set-up file-name-2 from List-B before sending DOS command
+;
+movfb	ldy	#0	; set-up index to move file-name
+movfd	lda	#pntrc	;
+	ldx	#1	; from Bank #1 via Long-Fetch
+	jsr	kndfet	;
+	sta	fnam2,y	; move into file-name-2 to setup DOS cmnd
+	iny		;
+	cpy	#16	; branch while more name to move
+	bne	movfd	;
+	rts		;
+;
+;	search for next selected file-entry in List-A
+;
+scan	jsr	incpta	; bump pointer-addr & file # to the next entry
+	lda	worka	;
+	cmp	worka+1	; branch if current file # is past the last file
+	bcc	scana	;
+	jsr	getfla	; fetch next entry, branch if not selected
+	bpl	scan	;
+	sec		; return .C set if selected entry found, else .C clear
+scana	rts		;
+;
+;	send a sector of data to the drive, then write the block to disk
+;
+wrtbk	jsr	rdblka	; set DOS buffer-pointer to zero, branch on error
+	bne	wrtbkd	;
+	jsr	cbsuba	; set-up direct-access channel as current output
+wrtbka	lda	(pntrf),y	;
+	jsr	chrout	; send the block to DOS Ram buffer
+	iny		;
+	bne	wrtbka	; while more data to send
+	jsr	clrchn	;
+wrtbkc	lda	workc	; set track # to write
+	sta	fnam1+2	;
+	lda	workc+1	; set sector # to write
+	sta	fnam1+3	;
+	ldx	drivx	; pick-up index to current active logical drive
+	lda	lfnr,x	;
+	sta	fnam1	; set logical buffer # for U2: cmnd
+	lda	driva-1,x	;
+	and	#1	;  set physical drive # to write (binary drive number)
+	sta	fnam1+1	;
+	lda	#11	; send U2: command to write a block
+	jsr	sendos	;
+wrtbkd	rts		; return status to caller
+;
+wrtbkf	lda	#<bama	; set-up indir-pointer to directory block data
+	sta	pntrf	;
+	lda	#>bama	; set-up indir-pointer hi-byte
+	sta	pntrf+1	;
+	rts		; so 'wrtbk' can be called as a general subroutine
+;
+wrtbkg	lda	workd	; save the track # for later use by U2: cmnd
+	sta	workc	;
+	lda	workd+1	; save the sector # for later use by U2: cmnd
+	sta	workc+1	;
+	rts		; return to caller
+;

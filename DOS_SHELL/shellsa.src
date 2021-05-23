@@ -1,0 +1,1153 @@
+;	MOST D.O.S. SHELL SUBROUTINES ARE FOUND IN THIS MODULE AND ARE
+;	CALLED EITHER FROM SHELL-CONTROL OR SHELL FUNCTION-DRIVERS
+;
+;	locate a shell message, plot cursor to start-position & print it
+;	params passed:  message-number, X-Y position / Y-flag
+;
+fndmsa	sec		; entry to locate and print in reverse-video
+	.byt	$24	;
+fndmsb	clc		; entry to locate and print in normal-video
+	php		;
+	sta	msgnr	; save message group to look for
+	stx	msgxy	;
+	sty	msgxy+1	; save possible passed X-Y position / Y-flag
+	lda	lang	;
+	asl	a	; forms index to table of base addresses by language
+	tax		;
+	lda	msgtbl,x	; set-up base-addr of msg-table for curr lang
+	sta	curmsg	;
+	lda	msgtbl+1,x	; hi-byte of message-table base-address
+	sta	curmsg+1	;
+	jsr	fndmsc	; find the message, set msg-addr and length
+;
+;	position the cursor to the desired X-Y coordinates
+;
+	lda	msgnr	; pick-up requested message group #
+	cmp	#28	;
+	bcc	fndmsk	; if X-Y position taken from 'xytbl' (First Seg.)
+	ldx	msgxy	;
+	ldy	msgxy+1	; pick-up possible passed X-Y position / Y-flag
+	cmp	#60	;
+	bcs	fndmsn	; if X-Y position / Y-flag passed (Fifth Seg.)
+	ldy	#cent	;
+	ldx	#lynml8	; pre-set X-Y position for 80-col message-line
+	cmp	#39	;
+	bcs	fndmsj	; if X-position is on message-line (Third/Fourth Seg.)
+;
+	ldx	#lynfl8	; pre-set X-position for 80-col top-of-window
+fndmsj	bit	mode	;
+	bmi	fndmsn	; on 80-column video
+	inx		;
+	bne	fndmsn	; bump X-position for 40-column video
+;
+fndmsk	asl	a	; message number times four
+	asl	a	;
+	tay		; forms index into X-Y table for 80-col video
+	bit	mode	;
+	bmi	fndmsm	; on 80-column video
+	iny		;
+	iny		; plus two gives 40-column X-Y table index
+fndmsm	ldx	xytbl,y	;
+	lda	xytbl+1,y	;
+	tay		; pick-up X-Y position from table
+;
+fndmsn	cpy	#cent	; branch if absolute Y-position passed / found
+	bne	fndmst	;
+	lda	#80	; pre-set for centered message on 80-col video
+	bit	mode	;
+	bmi	fndmsp	; on 80-column video
+;
+	lsr	a	; screen line-length on 40-column video
+fndmsp	sec		;
+	sbc	msglen	; screen line-length less message length
+	lsr	a	;
+	ldy	msgnr	; check whether message is of Fourth Seg.
+	cpy	#60	;
+	bcs	fndmsq	; if message is in Fifth Seg.
+	cpy	#52	;
+	bcc	fndmsq	; if message is in Seg. One - Three
+	sbc	#3	;
+fndmsq	tay		; set-up Y-position for all centered messages
+;
+fndmst	stx	msgxy	; store the final X-Y position values
+	sty	msgxy+1	;
+fndmsv	clc		;
+	ldx	msgxy	; pick-up X-Y position & plot cursor
+	ldy	msgxy+1	;
+	jsr	plot	; moves the cursor to X-Y position
+;
+;	find rvs/norm-video status & text-color for, and print a shell message
+;	params passed:  msg-address, length, X-Y position, rvs-video flag
+;
+	plp		; pick-up reverse / normal video flag
+	lda	#rvsoff	;
+	bcc	prtmsd	; branch if printing in normal-video
+	lda	#rvson	;
+prtmsd	jsr	chrout	; entry with cursor plotted and video-state in .A
+;
+	lda	#clrfl	; pre-set for file-list window color
+	ldx	msgxy	;
+	cpx	#lynfl4	; branch if message is in the window
+	bcs	prtmsf	;
+	txa		; multiply message X-pos times two
+	asl	a	;
+	tax		; forms index into color-table
+	bit	mode	;
+	bmi	prtmse	; on 80-column video
+	inx		;
+prtmse	lda	msclr,x	; pick-up message-color from color-table
+;
+prtmsf	jsr	chrout	; set color for the message
+	ldy	#0	; 
+prtmsg	lda	(curmsg),y	; print a message character
+	jsr	chrout	;
+	iny		; bump the message-string index
+	cpy	msglen	;
+	bne	prtmsg	; if more message to print
+	rts		;
+;
+prtmsj	sec		; entry to print rvs-video msg (X-Y pos already set)
+	.byt	$24	;
+prtmsk	clc		; entry to print norm-video msg (X-Y pos already set)
+	php		;
+	jmp	fndmsv	; go plot cursor to X-Y and print the message
+;
+;
+;	set-up the address and length for message-suffix constants
+;
+prcon	sta	msgnr	; save the message-suffix id-number
+	clc		;
+	php		; set rvs/norm video flag = normal
+	lda	msglen	;
+	adc	msgxy+1	; set-up Y-position for the message-suffix
+	sta	msgxy+1	;
+	lda	#<contbl	;
+	sta	curmsg	; set-up base-address of suffix constants
+	lda	#>contbl	;
+	sta	curmsg+1	; hi-byte of base-address
+	lda	msgnr	;
+	beq	prcona	; special handling for Yes/No Choice suffixes
+	jsr	fndmsc	;
+	bne 	fndmsv	; set addr & length for other suffixes, then go display
+;
+prcona	lda	#6	;
+	sta	msglen	; set-up message-length for ' N  Y ' suffixes
+	lda	lang	;
+	asl	a	; language # times six plus one forms offset
+	sta	work	;
+	asl	a	; from base-address of constant-table
+	sec		;
+	adc	work	; to the ' N  Y ' abbreviations for
+	adc	curmsg	;
+	sta	curmsg	; the current language in use by the Shell
+	bcc	fndmsv	;
+	inc	curmsg+1	; bump address hi-byte on carry
+	bne	fndmsv	;
+;
+;
+;	look-up messages / suffixes, set message-address and length
+;
+fndmsc	ldy	#0	; set index to msg-length bytes, current message #
+	ldx	#0	;
+fndmsd	lda	(curmsg),y	; pick-up length-byte for current message
+	cpx	msgnr	;
+	beq	fndmsf	; when the desired message has been found
+	clc		;
+	adc	curmsg	; set message-pointer forward to next length-byte
+	sta	curmsg	;
+	bcc	fndmse	; if no carry from adding previous message-length
+	inc	curmsg+1	;
+fndmse	inx		; bump current message #, go check the next one
+	bne	fndmsd	;
+;
+fndmsf	inc	curmsg	; set pointer to first byte of message-text
+	bne	fndmsg	;
+	inc	curmsg+1	; bump pointer hi-byte on overflow
+;
+fndmsg	sta	msglen	; length-byte less one = actual message-length
+	dec	msglen	;
+	rts		; return message-address & length to caller
+;
+;
+;	update menu-area of the screen:  called by function select module
+;	params passed:  previous function code, current keystroke in .A
+;
+updmen	ldx	func	;
+	stx	msgnr	; save old function code for later
+	cmp	#crsrd	;
+	bne	updmua	; if key not = cursor-down
+	inc	func	;
+	lda	func	; check new func value out of range
+	cmp	#10	;
+	bcc	updmum	; range of new function code is ok
+	lda	#0	; wrap around to zero
+	beq	updmum	;
+;
+updmua	cmp	#crsru	;
+	bne	updmub	; if key not = cursor-up
+	dec	func	; decrement function on cursor-up
+	lda	func	;
+	bpl	updmum	; range of new function code is ok
+	lda	#9	; wrap around to nine
+	bne	updmum	;
+;
+updmub	cmp	#crsrr	;
+	bne	updmuf	; if key not = cursor-right
+	bit	mode	;
+	bmi	updmuc	; on 80-col mode
+	clc		; on 40-col mode
+	lda	#5	;
+	adc	func	; function = function plus five
+	cmp	#10	;
+	bcc	updmum	; range of new function code is ok
+	sbc	#10	;
+	jmp	updmum	; wrap around on same line
+;
+updmuc	lda	func	; 80-col mode, key = cursor-right
+	bne	updmud	;
+	lda	#4	; if function = 0, then function = 4
+	bne	updmum	;
+updmud	clc		;
+	adc	#3	; function = function plus three
+	cmp	#10	;
+	bcc	updmum	; range of new function code is ok
+	sbc	#9	; wrap around on same line
+	jmp	updmum	;
+;
+updmuf	cmp	#crsrl	;
+	bne	updmun	; if key not = cursor-left
+	bit	mode	;
+	bmi	updmug	; on 80-col mode
+	sec		; on 40-col mode
+	lda	func	;
+	sbc	#5	; function = function minus five
+	bcs	updmum	; range of new function code is ok
+	adc	#10	;  wrap around on same line
+	jmp	updmum	;
+;
+updmug	lda	func	; 80-col mode, key = cursor-left
+	bne	updmuh	;
+	lda	#7	; if function = 0, then function = 7
+	bne	updmum	;
+updmuh	sec		;
+	sbc	#3	; function = function minus three
+	beq	updmuk	;
+	bcs	updmum	; range of new function code is ok
+updmuk	clc		;
+	adc	#9	; wrap around on same line
+;
+updmum	sta	func	; save new function code
+	lda	msgnr	;
+	jsr	fndmsa	; print old function in reverse-video
+	lda	func	;
+	jsr	fndmsb	; print new function in normal-video
+updmun	rts		;
+;
+;	fill a screen area, using a given character, in normal or rvs-video
+;	params passed:  starting X-pos (msgxy), # of rows to fill in .X
+;
+fill	sec		;
+	lda	#space	; entry to fill with rvs-video spaces
+	bne	filld	;
+filla	sec		; entry to fill with rvs-video chr$(162)
+	.byt	$24	;
+fillb	clc		; entry to fill with normal-video chr$(162)
+	lda	#162	;
+filld	php		; save reverse-video state flag
+	sta	work	;
+	stx	workb	; save fill-character and # of rows
+	clc		;
+	ldx	msgxy	; pick-up fill coordinates
+	ldy	#0	;
+	jsr	plot	; move the cursor to start of fill-area
+;
+	lda	#rvsoff	; pre-set for normal video
+	plp		;
+	bcc	fillf	; on normal video
+	lda	#rvson	;
+fillf	jsr	chrout	; set rvs-normal video state
+	lda	msgxy	;
+	asl	a	; X-position times two = index into color table
+	tax		;
+	lda	#80	; pre-set # of columns per row
+	bit	mode	;
+	bmi	fillg	; on 80-col video
+	lsr	a	;
+	inx		; set # of columns & color-table index on 40-cols
+;
+fillg	sta	workb+1	; save # of columns per row
+	lda	msclr,x	;	
+	jsr	chrout	; pick-up & set the fill-color
+	ldx	#0	;
+	lda	work	; pick-up saved fill character
+;
+fillj	ldy	#0	;
+fillk	jsr	chrout	; print the fill-character
+	iny		;
+	cpy	workb+1	;
+	bne	fillk	; need to fill some more columns
+	inx		;
+	cpx	workb	;
+	bne	fillj	; need to fill some more rows
+	rts		;
+;
+;	print msg # 60 centered on message-line in normal-video - 40 / 80 Cols.
+;
+crmsg	ldy	#cent	;
+	ldx	#lynml8	; pre-set X-position for 80-column video
+	bit	mode	;
+	bmi	crmsga	; on 80-column video
+	inx		;
+crmsga	lda	#60	; msg = move cursor then press space to select
+	jmp	fndmsb	;
+;
+;	display an error message and get a keystroke to control re-tries
+;	params passed:  saved ST status, DOS error code, active drive
+;
+errms	jsr	wdlyn	; erase the message-line first
+	lda	stsav	;
+	bpl	errmsa	; if ST says device is present
+	lda	#43	;
+	bne	errmsf	; error-msg = device # xx  not present
+;
+errmsa	lda	doserr	; pick-up DOS error-status code
+	cmp	#74	;
+	beq	errmsb	; if diskette is not in place
+	cmp	#66	;
+	beq	errmsb	; if illegal track / sector error
+	cmp	#40	;
+	bcs	errmsc	; if not a DOS syntax error
+	cmp	#30	;
+	bcc	errmsc	; if not a DOS syntax error
+errmsb	lda	#39	;
+	bne	errmsf	; error-msg = drive:  x  not ready
+;
+errmsc	cmp	#63	;
+	bne	errmsd	; if no file-name conflict
+	lda	#21	;
+	bne	errmsf	; error-msg = file already exists:  file-name
+;
+errmsd	cmp	#27	;
+	beq	errmse	; if block-header checksum read error
+	cmp	#25	;
+	bcc	errmse	; if any read-error type 20 - 24
+	lda	#42	;
+	bne	errmsf	; error-msg = write error on disk in drive:  x
+;
+errmse	cmp	#22	;
+	lda	#40	; error-msg = bad disk in drive:  x
+	bcc	errmsf	;
+	lda	#41	; error-msg = read error on disk in drive:  x
+;
+;	display the error-message and its variable portion
+;
+errmsf	jsr	fndmsb	; print the error-message in normal-video
+	ldy	#4	;
+	lda	msgnr	; pick-up the error-message number
+	cmp	#43	;
+	beq	errmsg	; if msgnr = 43, go locate device # part
+	ldy	#0	;
+	cmp	#21	; branch if msgnr = 21 to display file-name part
+	beq	errmsk	;
+	lda	drivid	; display current active logical drive-name
+	jsr	chrout	;
+	jmp	errmsp	; go fetch error-response keystroke
+;
+errmsg	lda	(curmsg),y	;
+	iny		; bump .Y to point one char current message-char
+	cmp	#'#'	;
+	bne	errmsg	; if position of '#' not found yet
+	iny		;
+	tya		; offset to one char beyond the #
+;
+	clc		; .A has offset to device # part of the message
+	ldx	msgxy	;
+	adc	msgxy+1	; plus original Y-position of message
+	tay		;
+	jsr	plot	; move cursor to the device # field
+;
+	ldy	prdev	; pick-up printer device #, previous keystroke value
+	lda	laskey	;
+	cmp	#f3	; branch if user was trying to print-out the file-list
+	beq	errmsj	;
+	ldx	drivx	; else pick-up index to current active disk device #
+	ldy	unita-1,x	;
+errmsj	lda	#0	; for msg # 43:  pick-up current active device #
+	jsr	stcn	;
+	jmp	errmsp	; print the active device #, go get a keystroke
+;
+errmsk	lda	fnam2,y	; use file-name-2 for the file-name part
+	jsr	namot	;
+	iny		; treat all file-names as 16 chars
+	cpy	#16	;
+	bne	errmsk	; while more file-name-2 to display
+;
+;	fetch & return a keystroke to caller, in response to the error-message
+;
+errmsp	jsr	getky	; try for a keystroke
+	cmp	#space	;
+	beq	errmsq	; on keystroke = space
+	cmp	#f5	;
+	beq	errmsq	; on keystroke = F5
+	cmp	#stpky	;
+	bne	errmsp	; if keystroke not = Stop
+;
+errmsq	jsr	wdlyn	; clear the message-query line
+	lda	laskey	;
+	rts		; return keystroke response to caller
+;
+;
+;	update drive-line with diskette-name and number of blocks free
+;	called from 'select-function', format function & copy/backup
+;
+;	initialize current active drive and open the directory header
+;
+updrl	lda	#0	; send 'Ix' command to current active drive
+	jsr	sendos	;
+	bcs	updrlb	; branch if ST or DOS Status is Bad
+;
+	lda	#'$'	; set up file-name to read header
+	sta	fnam1	;
+	ldy	drivx	; index to active drive
+	lda	driva-1,y	;
+	sta	fnam1+1	; set active drive number
+	lda	#':'	;
+	sta	fnam1+2	;
+	lda	#3	; set file-name length
+	sta	flen1	;
+	jsr	opnf1	; open directory-header as file, branch if status OK
+	bcc	updrlc	;
+updrlb	rts		; return to caller with error-status
+;
+;	read the directory header into buffer, then close the file
+;
+updrlc	ldx	lfnr	; saved active data channel LFN
+	jsr	chkin	;
+	ldy	#8	; waste first 8 bytes of header
+	jsr	updrlk	;
+updrld	jsr	chrin	; read diskette-name from directory header
+	sta	dsnam,y	;
+	iny		; and store into the DOS buffer
+	cpy	#16	;
+	bne	updrld	; if more diskette-name to read and store
+;
+	ldy	#3	; waste next two bytes of header
+	jsr	updrlk	;
+	ldy	drivx	; index to active drivce
+	cpy	#2	;
+	beq	updrlf	; if active drive is:  B
+	dey		;
+updrlf	sta	diska,y	; save first byte of diskette-id code
+	jsr	chrin	;
+	sta	diska+1,y	; save second byte of diskette-id code
+	ldy	#7	
+	jsr	updrlk	; waste next six bytes of header
+	sta	work	;
+	jsr	chrin	; save number of free blocks for printing
+	sta	work+1	;
+	lda	lfnr	; close header file when done reading
+	jsr	close	;
+	jsr	clrchn	; re-set to system-default i/o-channels
+;
+;	set-up the buffer in shell message format for printing
+;
+	lda	drivid	;
+	sta	dsnam-3	; put selected drive-name in for hard-copy
+	lda	#<dsnam-3	;
+	sta	curmsg	; set-up message pointer to the disk-name
+	lda	#>dsnam	;
+	sta	curmsg+1	; high-byte of pointer to dos buffer
+	lda	#20	;
+	sta	msglen	; set final length of message buffer
+	ldx	#lyndl8	;
+	ldy	#29	; pre-set X-Y position for 80-col mode
+	bit	mode	;
+	bmi	updrlg	; on 80-col mode
+	inx		;
+	ldy	#9	; set X-Y position for 40-col video
+updrlg	stx	msgxy	;
+	sty	msgxy+1	; set-up the X-Y position
+	jsr	prtmsj	; print the drive-name & diskette-name in rvs-video
+;
+	ldy	work	; pick-up free-blocks:  .Y = Lo  .A = Hi
+	lda	work+1	;
+	jsr	stcna	; print the number of blocks free
+	ldx	#-1	;
+;
+;	 save blocks-free string left by 'stcna' for hard-copy heading
+;
+updrlh	inx		;
+	lda	fpbuf,x	; pick-up blocks-free string
+	cmp	#'0'	;
+	bne	updrlj	; on first non-zero digit
+	lda	#space	;
+	sta	bfree,x	; to suppress leading-zeros
+	cpx	#3	;
+	bne	updrlh	; if more leading-zeros to suppress
+	lda	#'0'	;
+updrlj	sta	bfree,x	; save the rest of the string
+	inx		;
+	lda	fpbuf,x	; fetch another string-digit
+	cpx	#4	;
+	bcc	updrlj	; if more string-data to save
+	clc		;
+	rts		; return to caller with error-flag = OK
+;
+updrlk	jsr	chrin	; read .Y header bytes and waste them
+	dey		;
+	bne	updrlk	; if more header to waste
+	rts		;
+;
+;	find any DOS command and send it to the disk-unit
+;	params passed:  active drive index, DOS command number
+;
+sendos	sta	msgnr	; save DOS command number
+	lda	#<dostbl	;
+	sta	curmsg	;
+	lda	#>dostbl	;
+	sta	curmsg+1	; pointer to start of command table
+	ldx	#0	;
+	ldy	#0	;
+;
+sndosa	lda	(curmsg),y	; command length
+	sta	msglen	; save length to calc offset into table
+	cpx	msgnr	;
+	beq	sndosb	; when desired command has been found
+	tya		;
+	clc		;
+	adc	msglen	; previous offset plus current length
+	tay		;
+	inx		; bump the command count
+	bne	sndosa	; 
+;
+sndosb	dec	msglen	; this is the real command length
+	iny		;
+	tya		; make offset point to first cmnd byte
+	clc		;
+	adc	curmsg	; set message pointer to first cmnd byte
+	sta	curmsg	;
+	bcc	sndosc	;
+	inc	curmsg+1	; bump high-byte of message pointer
+;
+;	send the command, filling in the cmnd-mask blanks as we go
+;
+sndosc	ldx	drivx	; set up DOS command channel as current output
+	jsr	chkout	;
+	bcc	sndose	; branch if Kernal status is OK
+	ora	stat	;
+	sta	stsav	; save the system ST status word
+	jsr	clrchn	;
+	lda	stsav	; re-set to defualt i/o, pick-up saved status
+	sec		;
+	rts		; return .C set = Kernal error
+;
+sndose	ldy	#0	; set-up command-byte index for de-coding commands
+;
+sndosf	lda	(curmsg),y	; fetch next command byte to send
+	beq	sndosm	; no special handling, go send the byte
+	cmp	#6	;
+	beq	sndost	; mask-byte = 6, convert U1 / U2 / B-P params
+	bcs	sndosm	; no special handling, go send the byte
+	cmp	#5	;
+	beq	sndosk	; mask-byte = 5, send disk-id for active drive
+	ldx	#0	;
+	cmp	#3	;
+	beq	sndosi	; mask-byte = 3, go send file-name-1
+	bcs	sndosj	; mask-byte = 4, go send file-name-2
+	ldx	drivx	;
+	cmp	#2	;
+	beq	sndosh	; mask-byte = 2, go send other drive #
+sndosg	lda	driva-1,x	;
+	bne	sndosm	; mask byte = 1, go send active drive #
+;
+sndosh	dex		;
+	bne	sndosg	; active drive is B, send A drive #
+	ldx	#2	;
+	bne	sndosg	; active drive is A, send B drive #
+;
+sndosi	lda	fnam1,x	;
+	jsr	chrout	; send file-name-1 byte
+	inx		;
+	cpx	flen1	; check if more file-name-1 to send
+	bne	sndosi	;
+	beq	sndosn	; when done sending file-name-1
+;
+sndosj	lda	fnam2,x	;
+	jsr	chrout	; send file-name-2 byte
+	inx		;
+	cpx	#16	; check if more file-name-2 to send
+	bne	sndosj	;
+	beq	sndosn	; when done sending file-name-2
+;
+sndosk	lda	drivx	; index to current active drive
+	asl	a	; forms index to disk-id for active drive
+	tax		;
+	lda	diska-2,x	; first char of ID code
+	jsr	chrout	;
+	lda	diska-1,x	; second char of ID code
+;	
+sndosm	jsr	chrout	;
+sndosn	iny		; count off one comand byte
+	cpy	msglen	;
+	bne	sndosf	; if more dos command to send
+;
+sndosp	jsr	clrchn	; reset to default i/o, pick-up the DOS command #
+	lda	msgnr	;
+	cmp	#14	; branch = don't fetch DOS status for cmnds # 14 - 17
+	bcs	sndosq	;
+	jmp	dstat	; else go fetch ST / DOS error status
+;
+sndosq	clc		; return .C clear:  error-flag = OK
+	rts		;
+;
+;	convert U1 / U2 / B-P params to output string for DOS
+;
+sndost	lda	#4	; pre-set to send U1 / U2 params
+	ldy	msgnr	;
+	cpy	#12	; branch if sending U1 / U2 command
+	bcc	sndosv	;
+	lsr	a	; set parameter count for B-P command
+sndosv	sta	work+1	;
+	ldx	#0	; set-up index to file-name-1 binary data
+sndosx	stx	work	;
+	lda	#space	; send a blank before each param
+	jsr	chrout	;
+	ldy	fnam1,x	; pick-up parameter byte, print two digits
+	jsr	stcn	;
+	ldx	work	; bump index to param bytes
+	inx		;
+	cpx	work+1	; take first branch when done
+	bcs	sndosp	;
+	bcc	sndosx	; while more param-bytes to send
+;
+;
+;	open DOS command channel to active drive, check for device present
+;
+opndos	lda	drivx	; index to current active drive is LFN
+	sta	lfnr	; save LFN here for a while
+	tay		;
+	ldx	unita-1,y	; get current active device #
+	ldy	#15	;
+	jsr	setlfs	; set LFN, Device, SA
+	lda	#0	;
+opndot	jsr	setnam	; no file-name for open (unless opening data-file)
+;
+	lda	#12	; set-up system Bank # for data-file Open
+	tax		;
+	jsr	setbnk	; not needed for Cmnd-Chan, but should not hurt
+	jsr	open	;
+	ldx	lfnr	; define the file / channel as the current output
+	jsr	chkout	;
+	lda	#0	; pre-set to show status OK, branch if status OK
+	bcc	opndov	;
+	lda	#128	; else, set device not present error
+opndov	sta	stsav	;
+	beq	opndox	; branch to return status = OK to caller (.A = 0)
+	lda	lfnr	;
+	jsr	close	; close the command-channel / data-file on error
+opndox	jsr	clrchn	;
+	lda	stsav	; return error-status in .A for caller
+	rts		;
+;
+;	open direct-access channel using file-name-1
+;
+opndc1	lda	#1	;
+	sta	flen1	; set-up file-name length
+	lda	#'#'	;
+	sta	fnam1	; set-up file-name-1 for direct-access buffer
+;
+;	open data file using file-name-1:  called by most Shell functions
+;
+opnf1	ldy	drivx	; index to current active drive
+ 	ldx	unita-1,y	; pick-up current active device #
+	lda	lfnr,y	; pick-up current active logical file #
+	tay		; pre-set SA for normal data-channel
+	sta	lfnr	; save the data channel LFN for later
+	lda	fnam1	;
+	cmp	#'$'	; check for opening directory-header as file
+	bne	opnf1a	;
+	ldy	#0	; directory-header uses special-case SA = zero
+opnf1a	lda	lfnr	;
+	jsr	setlfs	; set LFN, Device #, SA for the file
+;
+	ldy	#>fnam1	;
+	ldx	#<fnam1	; pre-set for normal file-name address
+	lda	fnam1	;
+	cmp	#'$'	; branch if opening directory-header
+	beq	opnf1b	;
+	cmp	#'#'	; branch if opening direct-access channel
+	beq	opnf1b	;
+	dex		; set-up file-name address for opening data-files
+	dex		;
+opnf1b	lda	flen1	; pick-up file-name-1 length for the open
+	stx	fadr1	;
+	sty	fadr1+1	; save the file-name address for de-bugging
+;
+	jsr	opndot	; open the file, branch if 'device not present' error
+	bmi	dstatc	;
+;
+;	fetch ST status and DOS error code (assumes DOS cmnd chan open)
+;
+dstat	ldx	drivx	; active drive = command channel LFN
+	jsr	chkin	;
+	jsr	chrin	; fetch first byte of DOS error code
+	sec		;
+	sbc	#48	;
+	beq	dstata	; first byte = '0' so all is OK
+	asl	a	;
+	sta	doserr	; convert error code to binary (code times two)
+	asl	a	;
+	asl	a	; multiply times eight
+	adc	doserr	; then add for multiply by ten
+	sta	doserr	;
+	jsr	chrin	; fetch second error-code byte
+	sec		;
+	sbc	#48	; convert second error-code byte to binary
+	clc		;
+	adc	doserr	; now the DOS error-code is a single-byte code
+	cmp	#73	;
+	bne	dstata	; branch if not DOS-version 'error-message'
+	lda	#0	;
+dstata	sta	doserr	; save the binary DOS error-code
+;
+dstatb	jsr	chrin	; flush all bytes left in cmnd channel
+	lda	stat	;
+	beq	dstatb	; keep going until EOI recieved
+	jsr	clrchn	;
+	lda	stsav	; return ST / DOS error-status code in .A
+	ora	doserr	;
+	bne	dstatc	; branch if ST / DOS status is Bad
+	clc		;
+	rts		; return .C clear:  flag = Status is OK
+dstatc	sec		;
+	rts		; return .C set:  flag = Status is Bad
+;
+;	convert one-two binary bytes into two / four ascii digits for output
+;	params:  low-byte (or only) in .Y, high-byte in .A
+;
+stcn	clc		; entry to convert & print two digits
+	.byt	$24	;
+stcna	sec		; entry to convert & print four digits
+;
+	pha		; save two-digit / four-digit flag
+	php		;
+	ldx	#4	; index to set-up string mask
+stcnd	lda	mask-1,x	;
+	sta	fpbuf-1,x	; set-up the string mask
+	dex		;
+	bne	stcnd	; of four ascii zeros
+	inx		;
+	tya		; low-byte - or only one
+;
+	ldy	#1	; index to decimal values for low-byte
+stcnf	cmp	dval,y	;
+	bcc	stcng	; when value becomes < 100 or < 10
+	sbc	dval,y	;
+	inc	fpbuf,x	; bump hundreds / tens digit, go try again
+	bne	stcnf	;
+;
+stcng	inx		; advance both indexes
+	dey		;
+	bpl	stcnf	; until the tens digit is done
+	adc	fpbuf+3	;
+	sta	fpbuf+3	; set the units digit
+;
+	plp		; pick-up high-byte (if any) and two-four flag
+	pla		;
+	bcc	stcnt	; exit to print if two digits or hi-byte = zero
+	beq	stcnt	;
+	php		; else, keep the flag for a while yet
+;
+	tax		;
+stcnj	ldy	#2	; set index to units digit
+	clc		;
+stcnk	lda	dval+2,y	; pick-up decimal value to add
+	adc	fpbuf+1,y	;
+	sta	fpbuf+1,y	; forms intermediate result
+	cmp	#58		;
+	bcc	stcnp		; if current digit still <= '9'
+	sbc	#10		;
+	sta	fpbuf+1,y	; when current digit carries
+stcnp	dey		;
+	bpl	stcnk	; if more digits to add
+;
+	bcc	stcnq	; if result still <= 'x999'
+	inc	fpbuf	;
+stcnq	dex		; branch to add '256' for .X times
+	bne	stcnj	;
+	plp		; pick-up two-four digit flag
+;
+stcnt	ldy	#2	; set-up to print two digits
+	bcc	stcnv	;
+	ldy	#0	; set-up to print four digits
+;
+stcnv	lda	fpbuf,y	; print two or four ascii digits
+	cmp	#'0'	;
+	bne	stcnx	; on first non-zero character
+	cpy	#3	;
+	beq	stcnx	; branch if last character to print
+	lda	#space	;
+	jsr	chrout	; else, suppress all leading zeros
+	iny		;
+	bne	stcnv	; go print another digit
+;
+stcnx	jsr	chrout	; print the rest of the string
+	iny		;
+	lda	fpbuf,y	;
+	cpy	#4	; branch if more string to print
+	bcc	stcnx	;
+	rts		; exit - all done now
+;
+;
+;	accept a name-field (+ disk-id) of 1-19 characters, from the keyboard
+;	params passed:  X-Y pos (msgxy), return name (fnam1), disk-id (diska-b)
+;
+enter	jsr	enterp	; plot cursor to start of name-field
+	lda	#0	;
+	sta	work	; initialize keystroke counter
+	lda	#16	;
+	sta	work+1	; set max # chars for name-field
+	lda	#>fnam1	;
+	sta	tempb	; set-up addr-pointer for name-field entry
+	lda	#<fnam1	;
+	sta	tempa	; addr-pointer low-byte
+;
+entera	jsr	stop	;
+	bne	enterc	; if Stop key was not pressed
+	lda	#3	;
+enterb	sta	laskey	; return the last keystroke value
+	rts		;
+;
+enterc	jsr	getin	;
+	beq	enterc	; wait for any keystroke
+	cmp	#f5	;
+	beq	enterb	; quit entry if key = F5
+	cmp	#caret	;
+	beq	enterb	; key = carriage-return, user is thru typing
+	ldy	work	;
+	beq	enterd	; don't allow delete-key on first char
+	cmp	#delt	;
+	bne	enterd	; if char not = delete-key
+;
+	dey		; key = delete, decrement the keystroke count
+	sty	work	;
+	lda	#crsrl	; move the cursor back one column
+	jsr	chrout	;
+	lda	#shpac	; then erase last char from name buffer and screen
+	sta	(tempa),y	;
+	jsr	chrout	;
+	lda	#crsrl	; move the cursor back one column again
+	jsr	chrout	;
+enterj	jmp	entera	; then go get another key
+;
+enterd	cmp	#quote	;
+	beq	entera	; quotes do funny things to the screen
+	cmp	#space	;
+	bcc	entera	; ignore control-codes below #32
+	cmp	#128	;
+	bcc	entere	; chars in ranges 32-127 and 160-255 are OK
+	cmp	#shpac	;
+	bcc	entera	; but not chars in range 128 - 159
+entere	cpy	#0	;
+	bne	enterg	; if this is not the first keystroke
+;
+	sta	laskey	; save the keystroke value
+	ldy	#0	;
+enterf	lda	#shpac	; erase default name to shifted spaces
+	sta	(tempa),y	;
+	jsr	chrout	; on the screen and in parameter area
+	iny		;
+	cpy	work+1	; branch if more name to erase
+	bne	enterf	;
+	jsr	enterp	; plot cursor back to start of field again
+	lda	laskey	;
+;
+enterg	cmp	#44	; branch if the char is a comma to start id-code field
+	beq	enterk	;
+	cpy	work+1	; branch if max # chars already typed
+	beq	entera	;
+	ldy	work	; pick-up index to name-field (or disk-id)
+	sta	(tempa),y	;
+	jsr	namot	; store and print the character
+	inc	work	;
+	bne	entera	; increment keystroke count and try for more
+;
+enterk	ldx	func	; pick-up Shell Function code
+	cpx	#2	;
+	beq	enterm	; branch to allow comma & ID if func = Format Disk
+	cpx	#5	;
+	bne	enterj	; branch to disallow comma & ID if func not = Copy Files
+enterm	ldx	#2	;
+	cpx	work+1	; branch if already keying disk-id field
+	beq	enterj	;
+	stx	work+1	; else set-up max # chars for disk-id field
+;
+	lda	#0	; re-set keystroke counter for disk-id field
+	sta	work	;
+	sta	tempb	; set hi-byte of disk-id field address
+	lda	#diska	;
+	ldx	drivx	; pick-up current active drive index
+	cpx	#1	;
+	beq	entern	; if drive: A is the active drive
+	lda	#diskb	;
+entern	sta	tempa	; set lo-byte of disk-id field address
+	clc		;
+	lda	msgxy+1	; define cursor Y-pos = one char past comma
+	adc	#17	;
+	sta	msgxy+1	; by adding 17 to start of name-field Y-pos
+	jsr	enterp	;
+	jmp	entera	; move cursor to disk-id field, go get disk-id chars
+;
+enterp	clc		;
+	ldx	msgxy	; pick-up the screen X-Y position
+	ldy	msgxy+1	;
+	jsr	plot	; move the cursor to the field
+	rts		;
+;
+;	Trap Screen-control-chars in File-names for Print in Quote / Insert Mode
+;
+namot	cmp	#space	; branch if char is below space - got a funny one
+	bcc	namotc	;
+	cmp	#shpac	; branch if normal graphic-char 160 - 255
+	bcs	namotf	;
+	cmp	graph	; branch if normal-char 32 - 140
+	bcc	namotf	;
+namotc	ldx	#1	; tell screen editor quote-mode is ON
+	stx	qtsw	;
+	cmp	#delt	; branch if not a delete-character
+	bne	namotf	;
+	stx	insrt	; tell screen editor insert-mode is ON
+namotf	jsr	chrout	;
+	ldx	#0	; print the character to the screen, then 
+	stx	qtsw	;
+	stx	insrt	; tell editor quote-mode & insert-mode are OFF
+	rts		;
+;
+;
+;	Get User's Choice of Yes/No Answer, Logical Source Drive, Physical Drive
+;
+pick	jsr	prcon	; find and display the Choice-constant sub-string
+	lda	curmsg+1	;
+	sta	tempd	; save base-addr of choice sub-string
+	lda	curmsg	;
+	sta	tempc	; low-byte of sub-string base-addr
+	lda	msgxy+1	;
+	sta	tempb	; save Y-position for first char of choice sub-string
+	lda	#3	;
+	sta	msglen	; set-up length for each of the choices
+	lda	#0	;
+	sta	tempa	; set-up line-item index to current choice
+;
+;	calc cursor-position & message-addr for the line-item to flash next
+;
+picka	lda	tempb	; pre-set Y-position for current choice
+	sta	msgxy+1	;
+	lda	tempc	; set-up base-addr of choice sub-string
+	sta	curmsg	;
+	lda	tempd	; but they still need line-item offsets
+	sta	curmsg+1	;
+	ldx	tempa	; branch if no line-item offset needed
+	beq	pickb	;
+	clc		; add Y-pos offset for line-item index = 1
+	lda	msgxy+1	;
+	adc	msglen	; set Y-pos for current choice = Y / B / 1
+	sta	msgxy+1	;
+	lda	curmsg	; base-addr of the choice sub-string
+	adc	msglen	;
+	sta	curmsg	; plus offset for line-item index = 1
+	bcc	pickb	;
+	inc	curmsg+1	; forms addr of answer = Y / B / 1
+;
+;	flash the current choice, get a keystroke, decipher what user wants
+;
+pickb	jsr	flash	; flash the current choice, pick-up keystroke response
+	lda	laskey	;
+	cmp	#crsrl	; branch if key = cursor-left
+	beq	pickd	;
+	cmp	#crsrr	; branch if key = cursor-right
+	beq	pickd	;
+	cmp	#space	; if key = Space, user has made a choice
+	beq	pickc	;
+	cmp	#f5	; if key = F5, user wants to Un-do
+	beq	pickc	;
+	cmp	#stpky	; if key = Stop, then Abort function, ignore all others
+	bne	pickb	;
+pickc	rts		; return exit-keystroke value to caller
+;
+pickd	lda	tempa	; on key = cursor left / right
+	eor	#1	;
+	sta	tempa	; toggle between the two choices of answer
+	jsr	prtmsk	;
+	beq	picka	; clear the old answer, go set-up to flash the other
+;
+;
+;	flash one of a set of values on the screen for user selection
+;	params passed:  curmsg (address), msglen (length), msgxy (screen pos)
+;
+flash	lda	#rvson	; set flag to reverse video
+flasha	sta	work	; entry for pre-set video state
+	jsr	enterp	; move cursor to start of message
+	lda	work	;
+	jsr	prtmsd	; print the message in reverse or normal video
+	lda	#blink	;
+	sta	work+1	; used as count-down timer to flash message
+;
+flashb	jsr	getky	; try for a keystroke
+	lda	laskey	;
+	beq	flashc	; if no useable key has been struck
+	jmp	prtmsj	; exit, showing the option in rvs-video
+;
+flashc	lda	jiflo	; check for a tick of the jiffy-clock
+flashd	cmp	jiflo	;
+	beq	flashd	; wait one jiffy then try keyboard again
+	dec	work+1	;
+	bne	flashb	; unless the timer has expired
+	lda	work	;
+	eor	#128	; toggle reverse/normal video flag
+	jmp	flasha	; then go flash the message
+;
+;	get a key, check for useable keystroke values, ignoring bad ones
+;	params passed: none - leaves keystroke value in 'laskey'
+;
+getky	jsr	stop	;
+	bne	getkya	; Stop key not pressed, check for keystroke
+	lda	#stpky	;
+	bne	getkyd	; set Stop key value and exit
+getkya	jsr	getin	;
+	ldx	#8	; set-up index to table of legal keystroke values
+getkyb	cmp	kytab,x	;
+	beq	getkyd	; when a legal keystroke is found
+	dex		;
+	bpl	getkyb	; if more keys to check for
+	lda	#0	;
+getkyd	sta	laskey	; save last keystroke value
+	lda	laskey	;
+	rts		; and return the char with condition flags set
+;
+;	set-up the file-list window for the browse & select function
+;
+wdset	ldx	#0	;
+	lda	#lynfl8	; pre-set X-Y positions for 80-col video
+	bit	mode	;
+	bmi	wdseta	; on 80-col video
+	lda	#lynfl4	; X-position on 40-col video
+wdseta	clc		;
+	jsr	wndset	; tell editor to set top-left window corner
+	lda	#24	;
+	ldx	#79	; pre-set X-Y positions for 80-col video
+	bit	mode	;
+	bmi	wdsetb	; on 80-col video
+	ldx	#39	; Y-position on 40-col video
+wdsetb	sec		;
+	jmp	wndset	; tell editor to set bottom-right window corner
+;
+;	clear the file-list window to end-of-screen - 40 / 80 cols
+;
+wders	ldx	#lynwh8	; pre-set X-position for 80-col video
+	bit	mode	;
+	bmi	wdersa	; on 80-col video
+	inx		; X-position on 40-col video
+;
+wdersa	clc		; alternate entry with starting line # passed in .X
+	ldy	#0	;
+	jsr	plot	; move the cursor to start first line to erase
+	ldy	#erase	;
+	bne	wdcntl	; tell editor to erase to end-of-screen
+;
+;	erase message-line or top-line of file-list area - 40 / 80 columns
+;
+wdlyn	ldx	#lynml8	; entry to clear message-line (pre-set for 80-col)
+	.byt	$2c	;
+wdlyna	ldx	#lynfl8	; clear top line of file-list (pre-set for 80-col)
+	bit	mode	;
+	bmi	wdlynb	; on 80-column video
+	inx		;
+wdlynb	clc		; entry with line # to erase passed in .X
+	ldy	#0	;
+	jsr	plot	; move the cursor to start-of-line
+	ldy	#erlyn	;
+	bne	wdcntl	; tell editor to erase the line
+;
+;	un-set the file-list window (and send all Editor ESCape Functions)
+;
+wdoff	lda	#home	; home-cursor twice to clear the file-list window
+	tay		;
+	.byt	$2c	; skip next instr. to turn off window
+;
+wdcntl	lda	#escap	; other window-control ESCape functions enter here
+	jsr	chrout	;
+	tya		; with Screen-Editor ESC function-char passed in .Y
+	jmp	chrout	;
+;
+;
+;	un-set any window, set 40-80 column colors, clear current screen
+;
+color	jsr	wdoff	; un-set any possible screen window
+	lda	#clrbdr	;
+	sta	vic+32	; set 40-column border color
+	lda	#clrbkg	;
+	sta	vic+33	; set 40-column background color
+	ldx	#v8clrg	;
+	stx	vic80	; point to 80-column color-cntl register
+;
+	sta	vic80+1	; set 80-column background color
+	lda	#192	;
+	sta	scroll	; disable screen editor scrolling & line-links
+	lda	#clear	;
+	jmp	chrout	; erase the current (40/80 col) screen
+;
+;	initialize both screens & editor variables, restore default colors
+;
+stdclr	jsr	pcint	; call Editor to initialize both screens
+	lda	#stdbdr	;
+	sta	vic+32	; restore 40-col border color
+	lda	#stdbkg	;
+	sta	vic+33	; restore 40-col background color
+	ldx	#v8clrg	;
+	stx	vic80	; restore 80-col background color
+	sta	vic80+1	;
+	rts		; to caller
+;
+;
+;	Restore System Z-page area & F-key Defs, Save Shell Z-page
+;
+pagin	ldx	#zplen		; set # of bytes (-1) to swap
+pagina	lda	zpsav,x		; pick-up saved z-page byte
+	ldy	zpbas,x		; pick-up shell zero-page byte
+	sta	zpbas,x		; restore original byte into z-page
+	tya			;
+	sta	zpsav,x		; set save-area to shell z-page contents
+	dex			;
+	bpl	pagina		; if more Basic z-page to restore
+	inx			;
+	stx	scroll		; enable Editor scrolling & line-links
+	ldy	#15		;
+paginb	lda	pfsav,y		; pick-up saved system F-key definition byte
+	sta	pkybuf,y	; restore to system F-key area
+	dey			;
+	bpl	paginb		; if more system F-key data to restore
+	rts		;
+;
+;
+;	Save System Z-page area & F-key Defs, Set-up Shell Z-page & F-keys
+;
+pagot	lda	#4		; set MMU to 1k shared RAM at bottom
+	sta	ramcr		;
+	ldx	#zplen		; set # of bytes (-1) to swap
+pagota	lda	zpbas,x		; pick-up Basic zero-page byte
+	ldy	zpsav,x		; pick-up Shell save-area byte
+	sta	zpsav,x		; store Basic z-page byte in Shell save-area
+	sty	zpbas,x		; set z-page to Shell save-area contents
+	dex			;
+	bpl	pagota		; if more Basic Z-page to swap out
+;
+	ldx	#15		;
+pagotb	lda	pkybuf,x	; pick-up system Function-key byte
+	ldy	pfdef,x		; pick-up Shell F-key definition byte
+	sta	pfsav,x		; save system F-key byte in Shell work area
+	tya			;
+	sta	pkybuf,x	; store Shell F-key byte into system defs
+	dex			;
+	bpl	pagotb		; if more system F-key data to swap out
+	rts		;
+;

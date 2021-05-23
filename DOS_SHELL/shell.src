@@ -1,0 +1,28 @@
+;	C=128 VERSION OF D.O.S. UTILITY SHELL
+;
+	.page
+	.subttl		** C=128 **  LABEL DEFINITIONS
+	.include	shelleq
+	.page
+	.subttl		** C=128 **  SHELL COLD START-UP
+	.include	shellam
+	.page
+	.subttl		** C=128 **  SHELL CONTROL MODULE
+	.include	shellct
+	.page
+	.subttl		** C=128 **  FUNCTION CONTROL MODULE I
+	.include	shellfa
+	.page
+	.subttl		** C=128 **  FUNCTION CONTROL MODULE II
+	.include	shellfb
+	.page
+	.subttl		** C=128 **  GENERAL UTILITY SUBROUTINES
+	.include	shellsa
+	.page
+	.subttl		** C=128 **  FILE-LIST BROWSE-SELECT / PRINT
+	.include	shellsb
+	.page
+	.subttl		** C=128 **  DOS COMMAND / SHELL MESSAGE TABLES
+	.include	shelltb
+;
+	.end

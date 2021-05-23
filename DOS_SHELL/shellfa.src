@@ -1,0 +1,758 @@
+;
+;	SHELL FUNCTION CODES 0 - 3 ARE FOUND IN THIS MODULE.  THEY ARE
+;	CALLED BY SHELL-CONTROL, AND IN TURN CALL SUBROUTINES WITHIN
+;	THE SHELLSA AND SHELLSB MODULES TO PERFORM STANDARDIZED TASKS.
+;____________________________________________________________________________
+;
+;	FUNCTION CODE = 0:  CHANGE DISK / PRINTER SETUP
+;
+;	display page-1 messages, save X-Y positions and sub-strings needed
+;
+confg	lda	#64	; disable auto-repeat on all keys for this function
+	sta	rptflg	;
+	jsr	crmsg	; print msg = move cursor then press space to select
+;
+	lda	#61	; msg = drive X:  device # =
+	ldx	#lynfl8	;
+	ldy	#11	; X-Y positions for 80-col video
+	bit	mode	; 
+	bmi	confgb	; on 80-col video
+	ldy	#2	; X-Y positions for 40-col video
+	inx		;
+confgb	stx	diskb	; save message X-position for later
+	jsr	fndmsb	; find and print the message in normal-video
+	lda	#'A'	;
+	jsr	confg2	; plot cursor to the drive name and print it
+	lda	#3	;
+	jsr	prcon	; display suffix ' 8  9  10 11'
+	lda	msgxy+1	;
+	sta	diskb+1	; save Y-position of suffix sub-string
+	lda	curmsg	;
+	sta	worka	; save address of suffix sub-string
+	lda	curmsg+1	;
+	sta	worka+1	; suffix address hi-byte
+;
+	lda	#62	; msg = drive # =
+	ldx	#lynfl8	;
+	ldy	#54	; X-Y positions for 80-col video
+	bit	mode	; 
+	bmi	confgc	; on 80-col video
+	ldy	#12	; X-Y positions for 40-col video
+	ldx	#lynfl4+2	;
+confgc	stx	pntra	; save message X-position for later
+	jsr	fndmsb	; find and print the message in normal-video
+	lda	#2	;
+	jsr	prcon	; display suffix ' 0 1 '
+	lda	msgxy+1	;
+	sta	pntra+1	; save Y-position of suffix sub-string
+	lda	curmsg	;
+	sta	workb	; save address of suffix sub-string
+	lda	curmsg+1	;
+	sta	workb+1	; suffix address hi-byte
+;
+	lda	#61	; msg = drive X:  device # =
+	ldx	#lynfl8+2	;
+	ldy	#11	; X-Y positions for 80-col video
+	bit	mode	; 
+	bmi	confgd	; on 80-col video
+	ldy	#2	; X-Y positions for 40-col video
+	ldx	#lynfl4+4	;
+confgd	stx	pntrb	; save message X-position for later
+	jsr	fndmsb	; find and print the message in normal-video
+	lda	#'B'	;
+	jsr	confg2	; plot the cursor to the drive name and print it
+	lda	#3	;
+	jsr	prcon	; display suffix ' 8  9  10 11'
+	lda	msgxy+1	;
+	sta	pntrb+1	; save msg Y-position of suffix sub-string
+;
+	lda	#62	; msg = drive # =
+	ldx	#lynfl8+2	;
+	ldy	#54	; X-Y positions for 80-col video
+	bit	mode	; 
+	bmi	confge	; on 80-col video
+	ldy	#12	; X-Y positions for 40-col video
+	ldx	#lynfl4+6	;
+confge	stx	pntrc	; save message X-position for later
+	jsr	fndmsb	; find and print the message
+	lda	#2	;
+	jsr	prcon	; display suffix ' 0  1 '
+	lda	msgxy+1	;
+	sta	pntrc+1	; msg Y-position of sub-string
+;
+	lda	#15	; msg = printer device # = 4  5  6 none  
+	jsr	fndmsb	; find and print the message in normal-video
+	ldx	msgxy	;
+	stx	pntrd	; save message X-position for later
+	ldy	#8	;
+confgf	lda	(curmsg),y	; search for start of the sub-string
+	iny		;
+	cmp	#'='	; this char is two before the sub-string
+	bne	confgf	;
+	iny		; so bump the string-index before using it
+	tya		;
+	clc		; message Y-position plus offset to sub-string
+	adc	msgxy+1	;
+	sta	pntrd+1	; give Y-position for first sub-string character
+	tya		;
+	adc	curmsg	; message table-addr plus offset to sub-string
+	sta	workc	;
+	lda	#0	;
+	adc	curmsg+1	; sub-string = ' 4  5  6 none'
+	sta	workc+1	;
+	jsr	confg0	; print msg # 63 = change disk device #
+;
+;	set-up indexes to current default units/drives within sub-strings
+;
+	lda	#0	;
+	sta	msgnr	; used as index to current message-line
+	lda	unita	;
+	and	#7	;
+	sta	workd	; used as index to device # for drive: A
+	lda	unitb	;
+	and	#7	;
+	sta	worke	; used as index to device # for drive: B
+	lda	driva	;
+	and	#1	;
+	sta	workd+1	; used as index to physical drive for drive: A
+	lda	drivb	;
+	and	#1	;
+	sta	worke+1	; used as index to physical drive for drive: B
+	lda	prdev	;
+	and	#3	; used as index to device # for printer
+	sta	diska	;
+	lda	#rvsoff	; initial pre-set for message flasher
+;
+;	control routine for default device / drive set-up changes
+;
+confgg	sta	work	; store pre-set value for message-flasher
+	ldy	msgnr	;
+	cpy	#5	; branch if not msg-line # 5 (device # change)
+	bne	confgh	;
+	jsr	confg0	; special setup on msg-line = #5
+	bne	confgn	;
+confgh	lda	#3	;
+	sta	msglen	; length to print for all other default selections
+	tya		;
+	asl	a	; forms index to screen X-Y pairs
+	tax		;
+	lda	diskb,x	; X-position for curr msg line
+	sta	msgxy	;
+	lda	diskb+1,x	; Y-position of first line-item
+	ldx	workd,y	; index-value for current line-item
+	beq	confgj	; if line-item index = zero
+	clc		;
+confgi	adc	msglen	; add Y-offset for each line-item
+	dex		;
+	bne	confgi	; if more to add
+;
+confgj	sta	msgxy+1	; set Y-position for line-item
+	ldx	#2	;
+	tya		; current msg line to update
+	ror	a	;
+	bcs	confgk	; if current line = 1 or 3
+	ldx	#4	;
+	ror	a	; test for current line = 4
+	ror	a	;
+	bcs	confgk	; on current line index = 4
+	ldx	#0	; current line = 0 or 2
+confgk	lda	worka,x	;
+	sta	curmsg	; set base addres of sub-string
+	lda	worka+1,x	;
+	sta	curmsg+1	; but it still needs line-item offset
+;
+	ldx	workd,y	; index to current line-item
+	beq	confgn	; if line-item index = zero
+confgl	clc		;
+	lda	curmsg	; base address of sub-string
+	adc	msglen	;
+	sta	curmsg	; plus offset for each line-item
+	bcc	confgm	;
+	inc	curmsg+1	; bump sub-string addr on carry
+confgm	dex		;
+	bne	confgl	; if more to add
+;
+;	flash current line-item, get a key, decide what to do with it
+;
+confgn	lda	work	; pick-up rvs/norm video pre-set
+	jsr	flasha	; blinks a message and gets a keystroke
+	lda	laskey	;
+	cmp	#stpky	; check values of key returned from flasher
+	beq	confgp	; exit to function-menu, Stop key was pressed
+	cmp	#f7	;
+	bne	confgr	; if key not = F7
+	jsr	dpset	; quitting time, save new defaults, re-calc config
+confgp	jsr	wdlyn	;
+	jmp	wders	; clear msg-line, file-list window, then return
+;
+confgr	cmp	#f5	;
+	beq	confgn	; ignore the f5 key here
+	ldy	msgnr	; pick-up index to current msg-line
+	ldx	workd,y	; pick-up line-item value
+	cmp	#space	;
+	bne	confgs	; if key not = space
+	lda	#crsrd	; key = space, check current message line #
+	cpy	#5	;
+	bne	confgs	; for lines < #5, treat space like cursor-down
+	jmp	dvchg	; for line #5, change disk device # was selected
+;
+confgs	sta	laskey	; save key value in case it changed
+	cmp	#crsrd	;
+	beq	confgx	; on key = cursor-down (or Space)
+	cmp	#crsru	;
+	beq	confgw	; on key = cursor-up
+	cpy	#5	;
+	beq	confgn	; on msg-line #5, ignore cursor left / right key
+;
+;	change message line-nr / line-item values according to key values
+;
+	tya		; curr msg line-nr (key = cursor left / right)
+	ror	a	;
+	bcc	confgt	; message line-nr = 0, 2, or 4
+	txa		;
+	eor	#1	; toggle the physical drive #
+	tax		;
+	bcs	confgv	; on msg-line = 1 or 3
+confgt	lda	laskey	;
+	bmi	confgu	; key must be = cursor-left
+	inx		;
+	txa		; on cursor-right bump line-item index
+	and	#3	;
+	tax		; make the index wrap-around 0 - 3 values
+	jmp	confgv	;
+confgu	dex		; on cursor-left decrement line-item index
+	bpl	confgv	;
+	ldx	#3	; make the index wrap-around 0 - 3 values
+;
+confgv	stx	workd,y	; set new line-item index value
+	jsr	prtmsk	; clear old default value to normal-video
+	lda	#rvson	; to pre-set message flasher for rvs-video
+	jmp	confgg	; go setup to flash new line-item default
+;
+confgw	tya		; save old message line-nr (key = cursor-up)
+	dey		;
+	bpl	confgy	; on key = cursor-up decrement line-nr
+	ldy	#5	;
+	bne	confgy	; make line-nr wrap around 0 - 5 values
+;
+confgx	tya		; save old message line-nr (key = cursor-down)
+	iny		;
+	cpy	#6	; on key = cursor-down bump line-nr
+	bne	confgy	;
+	ldy	#0	; make line-nr wrap around 0 - 5 values
+;
+confgy	sty	msgnr	; set new message line-nr
+	cmp	#5	;
+	bne	confgz	; if old msg-line not #5, leave item in rvs-video
+	jsr	prtmsk	; clear msg-line #5 to normal-video
+confgz	lda	#rvsoff	;
+	jmp	confgg	;pick-up flasher pre-set, go flash new msg-line
+;
+confg0	lda	#63	; msg = change disk device #
+	ldx	#lynfl8+5	;
+	ldy	#52	; X-Y positions for 80-col video
+	bit	mode	;
+	bmi	confg1	; on 80-col video
+	ldy	#cent	; X-Y positions for 40-col video
+	ldx	#lynfl4+12	;
+confg1	jsr	fndmsb	; find and print the message in normal-video
+	ldy	#5	;
+	sty	msgnr	; used as index to current message-line
+	lda	#rvsoff	;
+	sta	work	; pre-set flasher for normal-video
+	rts		;
+;
+confg2	pha		; save the drive name for later
+	ldy	#3	;
+confg3	iny		; search for position of drive name in message
+	lda	(curmsg),y	;
+	cmp	#':'	; this char is one byte beyond drive name
+	bne	confg3	;
+	dey		; so back-up one char position
+	clc		;
+	tya		;
+	adc	msgxy+1	; start of message plus offset to drive name
+	ldx	msgxy	;
+	tay		;
+	jsr	plot	; move the cursor to the drive name
+	pla		;
+	jmp	chrout	; print the drive name
+;
+;	on F7 key, lock in new defaults, re-calc config, return to menu
+;
+dpset	lda	workd	; convert line-item indexes to shell defaults
+	ora	#8	;
+	sta	unita	; new default device # for drive: A
+	lda	worke	;
+	ora	#8	;
+	sta	unitb	; new default device # for drive: B
+	lda	workd+1	;
+	ora	#48	;
+	sta	driva	; new physical drive # for drive: A
+	lda	worke+1	;
+	ora	#48	;
+	sta	drivb	; new physical drive # for drive: A
+	lda	diska	;
+	ora	#4	;
+	sta	prdev	; new default printer device # (0 = None)
+;
+	ldx	#0	; pre-set for single-drive configuration
+	lda	unita	;
+	cmp	unitb	; check for differing device nrs.
+	beq	dpsetb	;
+	ldx	#2	; set dual-unit configuration
+	bne	dpsetc	;
+dpsetb	lda	driva	; check for differing drive nrs.
+	cmp	drivb	;
+	beq	dpsetc	; set single-drive configuration
+	inx		;
+dpsetc	stx	config	; set new configuration value
+	rts		;
+;
+;	DISK / PRINTER SETUP (PAGE 2) CHANGE DISK DEVICE # WAS SELECTED
+;
+;	print the messages to start changing the device #
+;
+dvchg	jsr	dpset	; set-up the new default configuration
+	jsr	wdlyn	; erase the query-message line
+	bit	mode	;
+	bmi	dvchgb	; on 80-col video
+	jsr	wders	; erase the 40-col file-list window
+	ldx	#lynfl4	;
+	ldy	#cent	; set-up X-Y position for 40-cols
+	lda	#63	;
+	jsr	fndmsb	; msg = change disk device #
+;
+dvchgb	lda	#16	; msg = turn on the drive to be changed
+	jsr	fndmsb	;
+	lda	#17	; msg = turn off the other drive
+	jsr	fndmsb	;
+	ldx	#lynfl8+9	; pre-set X-position for 80-column video
+	bit	mode	;
+	bmi	dvchgd	;
+	ldx	#lynfl4+4	; set X-position for 40-column video
+dvchgd	ldy	#cent	;
+	lda	#64	; msg = then press space
+	jsr	fndmsb	;
+;
+dvchgf	jsr	getky	; fetch a keystroke
+	lda	laskey	;
+	cmp	#space	;
+	beq	dvchgj	; proceed on key = space
+	cmp	#stpky	;
+	bne	dvchgg	; if not Stop key, go check for F5
+	rts		;
+dvchgg	cmp	#f5	;
+	bne	dvchgf	; ignore all keys except space, Stop, or F5
+	jsr	confgp	;
+	jmp	confg	; on key = F5, go start over at the top
+;
+;	hunt for any disk device # present on the buss
+;
+dvchgj	lda	unita	;
+	sta	worka	; save current device # for drive A
+	lda	#8	;
+	sta	unita	; set-up first device # to hunt for
+;
+dvchgk	jsr	opndos	; open DOS command channel, branch if device is present
+	beq	dvchgm	;
+	inc	unita	; else, bump the device nr, check for last device #
+	lda	unita	;
+	cmp	#12	; branch if no device found yet, to try the next one
+	bne	dvchgk	;
+	lda	#8	; when all possible devices are dead
+	sta	unita	;
+	jsr	errms	; tell the user nobody is home (device # 8 not present)
+	lda	worka	;
+	sta	unita	; restore the original device # for drive A
+;
+	lda	laskey	; pick-up the keystroke from the error-message
+	cmp	#space	;
+	beq	dvchgj	; if key = space, try the device hunt again
+	cmp	#stpky	;
+	beq	dvchgl	; if Stop key pressed, bail out to function menu
+	jsr	confgp	;
+	jmp	confg	; on key = F5, start over again at the top
+dvchgl	rts		; 
+;
+;	reset the live unit, then ask the user to select the new device #
+;
+dvchgm	lda	#14	; send 'UI' command (soft-reset) to the live unit
+	jsr	sendos	;
+	jsr	crmsg	; print msg = move cursor then press space to select
+	lda	#18	;
+	jsr	fndmsb	; msg = 'new device # = '
+	lda	#3	;
+	jsr	prcon	; display suffix ' 8  9  10 11 '
+	lda	msgxy+1	;
+	sta	workb+1	; save Y-position of suffix sub-string
+;
+	lda	unita	; pick-up the device # that responded
+	and	#7	;
+	sta	workb	; set index into the sub-string
+	lda	#3	;
+	sta	msglen	; set length for each device in sub-string
+;
+dvchgp	lda	#<constd	; set base address of sub-string
+	sta	curmsg		;
+	lda	#>constd	; but it still needs line-item offset
+	sta	curmsg+1	;
+	lda	workb+1	; Y-position of first device #
+	ldx	workb	; current line-item index into the sub-string
+	beq	dvchgr	; if line-item index = zero
+	clc		;
+dvchgq	adc	msglen	; add offset for each line-item
+	dex		;
+	bne	dvchgq	; if more to add
+;
+dvchgr	sta	msgxy+1	; set Y-position for current line-item
+	ldx	workb	;
+	beq	dvchgu	; if line-item index = zero
+dvchgs	clc		;
+	lda	curmsg	; base address of sub-string
+	adc	msglen	;
+	sta	curmsg	; plus offset for each line-item
+	bcc	dvchgt	;
+	inc	curmsg+1	; bump sub-string addr on carry
+dvchgt	dex		;
+	bne	dvchgs	; if more to add
+;
+;	flash the current device as the default then select new device
+;
+dvchgu	jsr	flash	; blinks the current option and gets a keystroke
+	lda	laskey	;
+	cmp	#stpky	; check keystroke value returned from flasher
+	bne	dvchgv	;
+	jmp	dxchgv	; bail out, Stop key was pressed
+;
+dvchgv	cmp	#space	;
+	beq	dxchgc	; on key = space, a new device # has been selected
+	cmp	#f5	;
+	bne	dvchgx	; if key not = F5, go check for cursor right-left
+	jsr	confgp	;
+	jmp	confg	; key = F5, start over again at the top
+;
+dvchgx	ldx	workb	; pick-up current line-item index to new device #
+	cmp	#crsrr	;
+	beq	dxchga	; if key = cursor-right
+	cmp	#crsrl	;
+	bne	dvchgu	; if key not = cursor-left (ignore all others)
+;
+	dex		; key = cursor-left, decrement line-item index
+	bpl	dxchgb	;
+	ldx	#3	; make index wrap around values 0 - 3
+	bne	dxchgb	;
+dxchga	inx		; key = cursor-right, increment line-item index
+	txa		;
+	and	#3	; make index wrap around values 0 - 3
+	tax		;
+dxchgb	stx	workb	; set the new line-item index value
+	jsr	prtmsk	;
+	beq	dvchgp	; clear old option, go flash the new one
+;
+;	change the device that responded to the selected new device #
+;
+dxchgc	lda	drivx	; close the command channel for the old device #
+	jsr	close	;
+	lda	#8	; set-up to hunt for its device # after soft-reset
+	sta	unita	;
+dxchgd	jsr	opndos	; try to open command channel, branch when status OK
+	beq	dxchge	;
+	inc	unita	; else, bump the device #, continue the hunt
+	bne	dxchgd	;
+;
+dxchge	ldx	drivx	; found it, set-up DOS cmnd chan as current input
+	jsr	chkin	;
+dxchgf	jsr	chrin	; fetch & waste status-bytes until the first
+	cmp	#'V'	;
+	bne	dxchgf	; char of the DOS version string is found
+	ldy	#0	;
+dxchgg	jsr	chrin	; then save the next three bytes for reference
+	sta	fnam2,y	;
+	iny		;
+	cpy	#3	; branch while more bytes to save
+	bne	dxchgg	;
+dxchgh	jsr	chrin	; then waste the rest until EOI recvd
+	lda	stat	;
+	beq	dxchgh	; if not end-of-message yet
+	jsr	clrchn	;
+;
+	lda	fnam2	; pick-up first byte of DOS-type identifier
+	cmp	#'3'	;
+	beq	dxchgj	; if unit-type is 1571 / 1572 DOS 3.0
+	ldy	#16	;
+	lda	fnam2+2	; else, pre-set DOS cmnd # for 154x / 2031 unit-types
+	cmp	#'6'	;
+	beq	dxchgm	; if unit-type is 154x / 2031 DOS 2.6
+	ldy	#15	;
+	bne	dxchgm	; else, pre-set DOS cmnd # for 4040-type units
+;
+dxchgj	ldx	drivx	; set-up DOS cmnd chan as current output
+	jsr	chkout	;
+	ldy	#2	; set-up index for 157x unit-type DOS cmnd
+dxchgk	lda	dcmd17,y	;
+	jsr	chrout	; send canned device # / mode change cmnd for 157x
+	dey		;
+	bpl	dxchgk	; while more canned string to send
+	clc		;
+	lda	workb	; pick-up index to user-selected new device #
+	adc	#8	;
+	jsr	chrout	; index plus 8 = new device  #
+	jsr	clrchn	;
+	jmp	dxchgn	; return to default i/o, go close DOS cmnd chan
+;
+dxchgm	lda	#2	;
+	sta	fnam1	; nr of bytes for M-W cmnd
+	clc		;
+	lda	workb	; line-item index for selected new device #
+	adc	#40	;
+	sta	fnam1+1	; plus 8 plus 32 yields new device #
+	adc	#32	;
+	sta	fnam1+2	; plus 32 again for last byte of M-R
+	lda	#3	;
+	sta	flen1	; set file-name length for M-R command
+	tya		;
+	jsr	sendos	; send the M-W command to change the device #
+;
+dxchgn	lda	#19	; msg = done... turn on the other drive
+	jsr	fndmsb	;
+	ldx	#lynfl8+14	; pre-set X-position for 80-column video
+	bit	mode	;
+	bmi	dxchgp	;
+	ldx	#lynfl4+9	; set X-position for 40-column video
+dxchgp	ldy	#cent	;
+	lda	#64	; msg = then press space
+	jsr	fndmsb	;
+;
+dxchgt	jsr	getin	; wait for any keystroke
+	beq	dxchgt	;
+	lda	#stpky	; but don't care what it really was
+	sta	laskey	;
+dxchgv	lda	drivx	; close the DOS cmnd chan for the old device #
+	jsr	close	;
+	lda	worka	; restore original default device # for drive A
+	sta	unita	;
+	rts		; go re-display function menu
+;
+;
+;	FUNCTION CODE = 1:  LOAD & RUN A BASIC PROGRAM
+;
+runpg	lda	#22	;
+	jsr	fndmsb	; msg = loading program:  file-name-xx
+	ldy	#0	;
+runpga	lda	bfnam,y	; set-up the file-name for loading
+	sta	fnam1,y	;
+	jsr	namot	; and print the file-name being loaded
+	iny		;
+	cpy	#16	; branch if more file-name to move and print
+	bne	runpga	;
+;
+;	setup kernal and DOS, load the selected program, check for Stop-key
+;
+	ldy	drivx	;
+	lda	driva-1,y	; set-up physical drive # to load from
+	sta	fdriv	;
+	lda	#':'	; set-up drive # and colon in front of file-name
+	sta	fdriv+1	;
+	lda	lfnr,y	; set-up LFN and device # for the load
+	ldx	unita-1,y	;
+	ldy	#0	; set-up Secondary-Addr for Basic program load
+	jsr	setlfs	;
+	lda	#18	; set-up file-name length for the load
+	ldx	#<fdriv	;
+	ldy	#>fdriv	; set-up pointer to file-name
+	jsr	setnam	;
+	lda	#12	; set-up the 'load' and 'file-name' bank #s
+	tax		;
+	jsr	setbnk	; before calling Kernal Load routine
+;
+	jsr	pagin	; restore Basic zero-page before loading
+;
+	lda	#<load	; set-up address of Kernal Load routine
+	sta	pclo	;
+	lda	#>load	; for a Long-Call via Shell RAM code
+	sta	pchi	;
+	lda	#0	; tell Kernal we want to load a program
+	sta	areg	;
+	ldx	#$01	; pick-up Start-of-Basic address set by Cold-start
+	stx	xreg	;
+	ldy	#>bufra	; so the program loads above the Shell in Bank # 0
+	sty	yreg	;
+	jsr	rajsrf	; to return here instead of somewhere inside Basic
+	bcc	runpgc	;
+	jsr	pagot	; Stop pressed while loading, restore Shell zero-page
+;
+	lda	#stpky	; show Stop key as the last keystroke
+	sta	laskey	;
+	rts		; bail out to re-display function menu
+;
+;	No stop-key during load, set-up Basic environment, then run the program
+;
+runpgc	pla		; throw away normal return-addr to control module
+	pla		;
+	lda	xreg	; pick-up saved end-of-load address from Long-call
+	sta	txtop	;
+	lda	yreg	; leave word for basic, where program-text ends
+	sta	txtop+1	;
+	lda	#128	; enable Kernal control-messages
+	jsr	setmsg	;
+	jsr	stdclr	; clear both screens and restore default colors
+;
+	jmp	runjmp	; go make direct-calls from Ram to Run Basic Program
+;
+;
+;	FUNCTION CODE = 2:  FORMAT A DISKETTE
+;
+;	ask user for blank disk - abort on key = f5 / Stop
+;
+formt	jsr	opndos	;
+	bne	formte	;
+formta	lda	#46	; msg = insert a blank disk then press space
+	jsr	fndmsb	;
+formtb	jsr	getky	; try for a keystroke
+	cmp	#space	;
+	beq	formtc	; on key = space
+	cmp	#f5	;
+	beq	formtc	; on key = F5
+	cmp	#stpky	;
+	bne	formtb	; if key not = Stop
+;
+formtc	jsr	wdlyn	; erase the message-line
+	lda	laskey	;
+	cmp	#space	; branch if last keystroke = Space
+	beq	formtf	;
+formte	sec		;
+	rts		; key = F5 / Stop, abort format with no action
+;
+;	read the old disk-name, check for error, setup a default name
+;
+formtf	jsr	updrl	; try to update the drive/disk id-line
+	lda	stsav	;
+	bne	formtg	; on ST error, assume drive not ready
+	lda	doserr	;
+	beq	formtj	; no errors found, so proceed with format
+	cmp	#22	;
+	bcc	formth	; unformatted disk, no disk, or drive door open
+;
+formtg	jsr	errms	; show an error-message, get response keystroke
+	cmp	#stpky	;
+	beq	formte	; on key = Stop, abort format with no action
+	cmp	#space	;
+	beq	formtf	; on key = space, just try to read the disk again
+	ldx	func	;
+	cpx	#2	; branch on format func & key = f5, re-start from top
+	beq	formta	;
+	bne	formtf	; else, just try to read the disk again
+;
+formth	lda	drivx	; pick-up current active drive index
+	asl	a	;
+	tay		; forms index to disk-id field for active drive
+	lda	#shpac	;
+	sta	diska-2,y	; set-up disk-id field with shifted spaces
+	sta	diska-1,y	;
+	ldx	#15	;
+formti	sta	dsnam,x	; set-up disk-name field with shifted spaces
+	dex		;
+	bpl	formti	; if more shifted spaces to store
+;
+;	prompt user for new disk-name, showing old-name & ID as default
+;
+formtj	lda	#27	; msg = enter disk name:  diskette-name-xx
+	jsr	fndmsb	;
+	lda	#rvson	; set reverse-video = On to display disk-name
+	jsr	chrout	;
+	ldy	#0	; set-up index to disk-name
+formtk	lda	dsnam,y	;
+	sta	fnam1,y	; set-up current name as default if user hits Return
+	jsr	namot	;
+	iny		; and display the current disk-name
+	cpy	#16	;
+	bne	formtk	; while more disk-name to set-up & display
+;
+	sty	flen1	; set-up length of file-name-1 for DOS command
+	lda	#44	;
+	jsr	chrout	; comma separates disk-name & disk-id fields
+	lda	drivx	;
+	asl	a	; forms index to disk-id for current active drive
+	tay		;
+	lda	diska-2,y	; display first disk-id char
+	jsr	chrout	;
+	lda	diska-1,y	; display second disk-id char
+	jsr	chrout	;
+;
+;	enter disk-name, start over on key = f5, abort on stop-key
+;
+	clc		;message Y-position plus message length
+	lda	msgxy+1	;
+	adc	msglen	; gives Y-position of disk-name field
+	sta	msgxy+1	;
+	jsr	enter	; returns disk-name in fnam1, disk-id in diska(b)
+	jsr	wdlyna	;
+	lda	laskey	; pick-up exit-keystroke from data-entry
+	cmp	#caret	;
+	beq	formtn	; all ok, user likes current name & id-code
+	cmp	#stpky 	;
+	beq	formte	; on key = Stop, user wants to kill function
+;
+	ldx	func	; pick-up shell function code
+	cpx	#2	;
+	beq	formtl	; key = F5 & func not = Format, user don't want format
+	jmp	formte	;
+formtl	jmp	formta	; on func = Format & key = F5, start again from the top
+;
+formtn	lda	#28	;
+	jsr	fndmsb	; msg = disk format working on drive:  X
+	clc		;
+	lda	drivx	; current active drive-index plus 64 gives drive-name
+	adc	#64	;
+	jsr	chrout	; print the active logical-drive name
+;
+;	check for long/short format, generate ID for long format
+;
+	lda	#5	; pre-set for long-format cmnd
+	ldx	work+1	;
+	cpx	#2	; branch if user entered a disk-id code
+	beq	formts	;
+	lda	#4	; pre-set for short-format command 
+	ldx	doserr	;
+	beq	formts	; no read-error on header, so do short format
+	lda	drivx	;
+	asl	a	; active drive times 2 = index for diskette ID variable
+	tay		;
+	lda	random	; pick-up CIA # 1 hardware value for ID char
+;
+	and	#127	; clear bit 7 off ID char
+	cmp	#48	;
+	bcs	formtp	; if char already in range 48 - 127 
+	adc	#48	;
+formtp	sta	diska-2,y	; set char to range (first ID char)
+	lda	random+1	;
+	and	#127	; clear bit 7 off ID char
+	cmp	#48	;
+	bcs	formtq	; if char already in range 48 - 127
+	adc	#48	;
+formtq	sta	diska-1,y	; set char to range (second ID char)
+	lda	#5	; use long-format command with random id-code
+;
+formts	jsr	sendos	; send the format command, save status-flag
+	php		;
+	jsr	wdlyna	; erase the 'format-working' message
+	plp		;
+	bcc	formtv	; return flag .C clear = status OK to caller
+	jmp	formtg	; else, go show error-message, maybe re-try
+formtv	rts		;
+;
+;
+;	FUNCTION CODE = 3: CLEANUP A DISK (VALIDATE BAM)
+;
+clean	jsr	opndos	;
+	bne	cleanb	; open DOS command channel, branch if status bad
+	lda	#29	;
+	jsr	fndmsb	; msg = disk cleanup working on drive:  x
+	lda	drivid	;
+	jsr	chrout	; then print the active drive name
+cleana	lda	#2	;
+	jsr	sendos	; send validate command to active drive
+	jsr	wdlyna	;
+cleanb	rts		; clear the 'working' message & exit to menu
+;

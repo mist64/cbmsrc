@@ -1,0 +1,284 @@
+;	D.O.S. SHELL - PRIMARY CONTROL MODULE  (Entry on F-Key # 1)
+;
+;
+	*=	shell	; RAM origin for shell entry point = decimal 6656
+;
+;
+;	SET-UP SHELL OPERATING ENVIRONMENT & SELECT USER LANGUAGE
+;
+;	init screen editor & I/O, save system z-page & F-key defs
+;
+	jsr	bcmsgj	; close all files - precautionary
+	jsr	restor	; restore Basic and Kernal system vectors
+	jsr	pcint	; initialize video chip & screen editor
+	jsr	pagot	; move system zero-page & F-keys to save-area
+	jsr	color	; un-set window, set bg/fg colors, clear screen
+;
+;	check language flag for first-time entry to shell
+;
+	lda	lang	; set to -1 by Cold-Start
+	bmi	shellb	;
+	jmp	shomu	; go display menu if laguage already selected
+;
+shellb	inc	lang	; bump flag to next language
+	lda	lang	;
+	and	#3	; clear bits for modulo 4 values
+	sta	lang	;
+;
+;	clear screen and print the messages for language selection
+;
+	lda	#clear	; clear the screen
+	jsr	chrout	;
+	lda	#10	;
+	jsr	fndmsb	; msg = cbm disk utility system
+	lda	#11	;
+	jsr	fndmsb	; msg = press space to select your language
+	lda	#12	;
+	jsr	fndmsb	; msg = name of current language
+;
+;	set-up count-down timer for 6-second wait
+;
+	lda	#<wtsix	; low-byte of delay time
+	sta	work	;
+	lda	#>wtsix	; high-byte of delay time
+	sta	work+1	;
+;
+;	get a keystroke and look for crsr-down or space
+;
+shelld	jsr	getin	; try for a keystroke
+	cmp	#space	;
+	beq	shomu	; done when key = space, goto main menu
+	cmp	#crsrd	;
+	beq	shellb	; if key = cursor-down, cycle to next language
+;
+;	check for six-second timer expired
+;
+	lda	work	; delay-counter value
+	ora	work+1	;
+	beq	shellb	; if timer is expired
+	dec	work	;
+	bne	shellg	; timer not expired, decrement timer
+	dec	work+1	;
+;
+;	wait for one jiffy then try keyboard again
+;
+shellg	lda	jiflo	; jiffy-clock low-byte
+shellj	cmp	jiflo	;
+	beq	shellj	; delay until jiffy clock ticks once
+	bne	shelld	;
+;
+;	DISPLAY THE PRIMARY SHELL MENU SCREEN	
+;
+;	clear the screen, display headings, rvs-fill menu-area, display menu
+;
+shomu	lda	#0	;
+	sta	rptflg	; set auto-repeat for space + cursor + inst/del keys
+	jsr	setmsg	;
+	jsr	bcmsgj	; disable Kernal messages, close all files & DOS chans
+	jsr	color	; un-set window, set bg/fg colors, clear the screen
+	lda	#60	; msg = move cursor then press space to select
+	ldx	#0	;
+	ldy	#0	; absolute X-Y position same for 40-80 col. video
+	jsr	fndmsa	; print first heading-message in rvs-video
+	bit	mode	;
+	bpl	shomua	; on 40-col video
+	lda	#13	; msg = press f5 to un-select / stop to cancel
+	jsr	fndmsa	; locate the message and print in reverse-video
+;
+shomua	lda	#1	; X-position for start of fill
+	sta	msgxy	;
+	ldx	#4	; pre-set nr of rows to fill for 80-col video
+	bit	mode	;
+	bmi	shomub	; on 80-col video
+	inx		; nr of rows to fill for 40-col
+shomub	jsr	fill	; fill the menu-area with rvs-video spaces
+;
+;	display primary menu items, showing function = 0 as selected
+;
+	lda	#0	; show func = 0 as selected function
+	sta	func	;
+	jsr	fndmsb	; print first menu-item message in normal-video
+;
+shomuc	inc	msgnr	; print menu-item messages 1 - 9
+	lda	msgnr	;
+	jsr	fndmsa	; locate the message and print rvs-video
+	lda	msgnr	;
+	cmp	#9	; check for last menu message
+	bne	shomuc	; if more messages to print
+;
+	ldx	#lynml8-1	; preset X-position for 80-col video
+	bit	mode	;
+	bmi	shomud	; on 80-col video
+	inx		;
+shomud	stx	msgxy	; set the X-position
+	ldx	#1	; nr of rows to fill
+	jsr	filla	; fill one line below the menu with rvs-chr$(162)
+;
+;	initialize the 40-80 Col. Drive/Disk-ID line
+;
+	ldx	#lyndl8-1	; pre-set X-position for 80-col video
+	bit	mode	;
+	bmi	shomue	; on 80-column video
+	inx		;
+shomue	stx	msgxy	; set 40-80 Col. X-position = 1 above drive-line
+	ldx	#1	;
+	jsr	fillb	; fill one line with rvs-video chr$(162)
+	inc	msgxy	;
+	ldx	#1	;
+	jsr	fill	; fill the drive-ID line with rvs-video spaces
+;
+;
+;	SELECT A FUNCTION, GET THE DRIVE ID, EXECUTE THE FUNCTION
+;
+;	set-up drive-ID line & DOS-buffer for hard-copy, clear error status
+;
+	lda	#14	; msg = drive:  x  diskette-name-xx  nnn free
+	jsr	fndmsa	;
+	ldy	#39	; begin building file-list hard-copy heading
+;
+selfna	lda	(curmsg),y	;
+	sta	dosbf,y	; by storing msg # 14 into DOS msg-buffer
+	dey		;
+	bpl	selfna	; if more message bytes to store
+;
+	iny		;
+	sty	stsav	; clear any previous ST / DOS error status
+	sty	doserr	;
+	sty	laskey	; clear any previous keyboard controls
+;
+;	check for mode-swap / shell-exit, then select function code (0 - 9)
+;
+selfnb	jsr	getin	;
+	beq	selfnb	; wait for any keystroke
+	cmp	#escap	;
+	beq	selfnc	; if key = ESCape (ESC-X Sequence to Swap Mode)
+	cmp	#swap	;
+	beq	selfnd	; if key = 'X' go check for previous ESC
+;
+	sta	laskey	; to prevent any keys between ESC and X
+	cmp	#f1	;
+	beq	selfne	; if key = f1, then go exit from shell
+	cmp	#space	;
+	beq	selfnf	; if key = space-bar, a function has been selected
+	jsr	updmen	;
+	jmp	selfnb	; update menu area to show new func, get another key
+;
+selfnc	sta	laskey	; show ESC as last keystroke to set-up Mode Swap
+	jmp	selfnb	;
+selfnd	lda	laskey	; pick-up last keystroke value
+	cmp	#escap	;
+	bne	selfnb	; if not an ESC-X sequence, then don't swap
+	jsr	kswap	;
+	jmp	shomu	; Swap 40 / 80 column video, re-display shell menu
+;
+selfne	lda	#clear	; quitting time - clear the screen first
+	jsr	chrout	;
+	jsr	pagin	; restore Basic / Kernal operating environment
+	lda	#128	;
+	jsr	setmsg	; enable Kernal control-messages only
+;
+	jsr	stdclr	; clear both screens and restore default colors
+	lda	#15	;
+	sta	bank	; key = F1, set System Bank # for Long-jump
+	lda	#<warm	;
+	sta	pclo	; set-up address for the Long-jump
+	lda	#>warm	;
+	sta	pchi	; bail-out to Basic Warm-Start on key = F1
+	jmp	kjmpfr	;
+;
+selfnf	bit	mode	;
+	bmi	seldr	; skip this message on 80-column video
+	lda	#13	;
+	jsr	fndmsa	; msg = press f5 to un-select / stop to cancel
+;
+;	select logical drive-ID to use, check for abort, set drive-index
+;
+seldr	lda	func	; branch if func = Disk/Printer Setup (Drive = A)
+	beq	seldrd	;
+	lda	config	; branch if single-drive configuration (Drive = A)
+	beq	seldrd	;
+	lda	#44	; pre-set msg = from which drive
+	ldx	func	;
+	cpx	#2	; branch if func = 2 (format)
+	beq	seldra	;
+	cpx	#3	; branch if not func = 3 (cleanup)
+	bne	seldrb	;
+seldra	lda	#45	; msg = using which drive
+;
+seldrb	jsr	fndmsb	; display drive-selection message in normal-video
+	lda	#1	;
+	jsr	pick	; display suffix ' A  B ' and get user's choice
+;
+	cmp	#space	; branch if exit keystroke = Space-bar
+	beq	seldrc	;
+	jmp	shomu	; bail out to menu, Stop or F5 key was pressed
+seldrc	lda	tempa	;
+;
+seldrd	clc		; pick-up drive-selection index (user's choice)
+	adc	#'A'	;
+	sta	drivid	; set-up selected logical drive-name
+	and	#3	;
+	sta	drivx	; set-up index to active unit/drive
+;
+;	update drive/disk id-line, call browse & select as required
+;
+	jsr	wdlyn	; 
+	lda	func	; erase message-line, pick-up shell function code
+	cmp	#5	;
+	bcs	exfuna	; for file / directory oriented functions 5 - 9
+	lsr	a	;
+	bcc	exfunc	; for functions = 0, 2, 4 don't update drive-line yet
+;
+exfuna	jsr	opndos	; open DOS command channel for the selected drive
+	bne	exfung	;
+	jsr	updrl	; init BAM & update ID-line:  disk-name & blocks free
+	lda	drivx	;
+	jsr	close	; close the DOS command channel
+	lda	stsav	;
+	ora	doserr	; branch if ST / DOS status error
+	bne	exfung	;
+	lda	func	; else pick-up shell function-code
+	cmp	#1	;
+	beq	exfunb	; if function = Run a Program
+	cmp	#5	;
+	bcc	exfunc	; if not a file-oriented function, don't browse
+;
+exfunb	jsr	brows	;
+	bne	exfung	; branch if ST / DOS error during browse & select
+	lda	worka	;
+	cmp	#-1	; branch if there were no files on the disk
+	beq	exfunj	;
+	lda	laskey	; pick-up last keystroke from browse & select
+	cmp	#stpky	;
+	beq	exfunj	; branch if Stop key pressed while browsing
+;
+;	execute the selected function via dispatch table
+;
+exfunc	lda	sxfun+1	; set-up a return-addr on the stack
+	pha		;
+	lda	sxfun	; so functions can RTS to 'exfund' label
+	pha		;
+	lda	func	; dispatch control to selected function
+	asl	a	;
+	tax		; index to dispatch table
+	lda	funtbl+1,x	; high-byte of function exec addr
+	pha		;
+	lda	funtbl,x	; low-byte of function exec addr
+	pha		;
+	rts		; to the function
+;
+;	control returns here from all shell functions for error-check
+;
+exfund	jsr	bcmsgj	; close all files on return from functions
+	lda	laskey	; pick-up last keystroke from the function
+	cmp	#stpky	;
+	beq	exfunj	; if Stop key was pressed, re-display menu
+;
+	lda	stsav	; pick-up ST / DOS error status from function
+	ora	doserr	;
+	beq	exfunj	; if ST and DOS status both OK
+;
+exfung	jsr	errms	; find and print error an message
+;
+exfunj	jmp	shomu	; on any key, go re-display shell menu
+;
