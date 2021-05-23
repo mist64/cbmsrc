@@ -171,6 +171,13 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [OMEGA](OMEGA)                                               | 1982 | Omega Race Ultimax Game |
 | [WIZARD](WIZARD)                                             | 1982 | Wizard of Wor Ultimax Game |
 
+## Cross-Platform
+
+| Directory                                                    | Year | Comments    |
+|--------------------------------------------------------------|------|-------------|
+| [6502ASM](6502ASM)                                           | 1989 | VAX/MS-DOS C 65CE02 cross assembler|
+
+
 ## Descriptions
 
 ### BASIC_PET&#x5f;&#x2a;, KERNAL_PET&#x5f;&#x2a;
@@ -545,6 +552,12 @@ The game "Omega Race" (1982) for the Ultimax. Reconstructed from the [BSO-format
 ## WIZARD
 
 The game "Wizard of Wor" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
+
+## 6502ASM
+
+The "6502ASM" cross-assembler, V1.0 (1989-08-23) for VAX and MS-DOS. Reconstructed from the V1.0 LIS/LST files in [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz) and  the B0.0 C files in 4502-asm-for-pc.img from Steve Gray's [Dennis Jarvis Page](http://6502.org/users/sjgray/dj/).
+
+
 
 # Credits
 
