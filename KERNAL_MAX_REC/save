@@ -1,0 +1,72 @@
+.PAG 'SAVE FUNCTION'
+;***********************************
+;* SAVE                            *
+;*                                 *
+;* SAVES TO CASSETTE 1 OR 2, OR    *
+;* IEEE DEVICES 4>=N>=31 AS SELECT-*
+;* ED BY VARIABLE FA.              *
+;*                                 *
+;*START OF SAVE IS INDIRECT AT .A  *
+;*END OF SAVE IS .X,.Y             *
+;***********************************
+.SKI 3
+SAVESP	STX EAL
+	STY EAH
+	TAX             ;SET UP START
+	LDA $00,X
+	STA STAL
+	LDA $01,X
+	STA STAH
+;
+SAVE
+NSAVE	LDA FA  ***MONITOR ENTRY
+	BNE SV20
+;
+SV10	JMP ERROR9      ;BAD DEVICE #
+;
+SV20	CMP #3
+	BEQ SV10
+	BCC SV100
+	JMP ERROR9      ;BAD DEVICE #
+.SKI 5
+SV100	LSR A
+	BCS SV102       ;IF C-SET THEN IT'S CASSETTE
+;
+	JMP ERROR9      ;BAD DEVICE #
+;
+SV102	JSR ZZZ         ;GET ADDR OF TAPE
+	BCC SV10        ;BUFFER IS DEALLOCATED
+	JSR CSTE2
+	BCS SV115       ;STOP KEY PRESSED
+	JSR SAVING      ;TELL USER 'SAVING'
+SV105	LDX #PLF        ;DECIDE TYPE TO SAVE
+	LDA SA          ;1-PLF 0-BLF
+	AND #01
+	BNE SV106
+	LDX #BLF
+SV106	TXA
+	JSR TAPEH
+	BCS SV115       ;STOP KEY PRESSED
+	JSR TWRT
+	BCS SV115       ;STOP KEY PRESSED
+	LDA SA
+	AND #2          ;WRITE END OF TAPE?
+	BEQ SV110       ;NO...
+;
+	LDA #EOT
+	JSR TAPEH
+	.BYT $24        ;SKIP 1 BYTE
+;
+SV110	CLC
+SV115	RTS
+.SKI 3
+;SUBROUTINE TO OUTPUT:
+;'SAVING <FILE NAME>'
+;
+SAVING	LDA MSGFLG
+	BPL SV115       ;NO PRINT
+;
+	LDY #MS11-MS1   ;'SAVING'
+	JSR MSG
+	JMP OUTFN       ;<FILE NAME>
+.END

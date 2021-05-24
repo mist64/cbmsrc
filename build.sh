@@ -69,6 +69,7 @@ build1 KERNAL_PET_4.0_REC ossrc
 
 build1 KERNAL_VIC_04 kernal
 
+build1 KERNAL_MAX_REC kernal
 build1 KERNAL_C64_01 kernal
 build1 KERNAL_C64_02 kernal
 build1 KERNAL_C64_03 kernal
@@ -108,6 +109,7 @@ build1 BASIC_PET_V4R_REC bassrc
 
 build1 BASIC_VIC basic
 
+build1 BASIC_MAX_REC basic
 build1 BASIC_C64 basic
 build2 BASIC_C64_BSO basic
 build2 BASIC_C64GS basic

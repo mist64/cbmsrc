@@ -1,0 +1,48 @@
+;****************************************
+;*                                      *
+;* BBBBB   AAAA   SSS  IIII  CCCC       *
+;* BB  BB AA  AA SS  S  II  CC   C      *
+;* BB  BB AA  AA  SS    II  CC          *
+;* BBBBB  AAAAAA   SS   II  CC          *
+;* BB  BB AA  AA    SS  II  CC          *
+;* BB  BB AA  AA S  SS  II  CC   C      *
+;* BBBBB  AA  AA  SSS  IIII  CCCC       *
+;*                                      *
+;****************************************
+;
+;****************************************
+;*                                      *
+;* PET BASIC VERSION 2.2                *
+;*      THIS VERSION OF PET BASIC IS    *
+;* DESIGNED TO FUNCTION WITH THE KERNAL *
+;* PROVIDED IN THE FOLOWING MACHINES:   *
+;*      2001-4/8 (B/N)                  *
+;*      4016/4032                       *
+;*      8032                            *
+;*      TOY                             *
+;*      VIC-20/VIC-40                   *
+;*    * COMMODORE 10/16/64              *
+;*      MAX                             *
+;* COPYRIGHT (C) 1982 BY                *
+;* COMMODORE BUSINESS MACHINES          *
+;*                                      *
+;****************************************
+.SKI 3
+;*****LISTING DATE -1200 10 APRIL 1982***
+.SKI 3
+;****************************************
+;* THIS SOFTWARE IS FURNISHED FOR USE IN*
+;* THE ABOVE LISTED MACHINES ONLY.      *
+;*                                      *
+;* COPIES THEREOF MAY NOT BE PROVIDED   *
+;* OR MADE AVAILABLE FOR USE ON ANY     *
+;* SYSTEM.                              *
+;*                                      *
+;* THE INFORMATION IN THIS DOCUMENT IS  *
+;* SUBJECT TO CHANGE WITHOUT NOTICE.    *
+;*                                      *
+;* NO RESPONSIBILITY IS ASSUMED FOR     *
+;* RELIABILITY OF THIS SOFTWARE.  RSR   *
+;*                                      *
+;****************************************
+.END

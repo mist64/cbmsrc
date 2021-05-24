@@ -62,6 +62,13 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [KERNAL_C64_03_BSO](KERNAL_C64_03_BSO)                       | 1983 | 901227-03, BSO syntax |
 | [KERNAL_C64GS](KERNAL_C64GS)                                 | 1990 | 390852-01 |
 
+## Ultimax
+
+| Directory                                                    | Year | Comments    |
+|--------------------------------------------------------------|------|-------------|
+| [BASIC_MAX_REC](BASIC_MAX_REC)                               | 1982 | 901230-01 |
+| [KERNAL_MAX_REC](KERNAL_MAX_REC)                             | 1982 | 901231-01 |
+
 ## TED (C16, C116, Plus/4)
 
 | Directory                                                    | Year | Comments    |
@@ -228,6 +235,10 @@ The source contains the ranges
 * $E000-$E4AB
 
 The checksum byte at $BF52 is 0 and will have to be calculated in a later step.
+
+### BASIC_MAX_REC, KERNAL_MAX_REC
+
+The Ultimax BASIC cartridge (901230-01, 901231-01). Contains an adapted version of the C64 KERNAL (-01) and a slightly patched version of BASIC. Reconstructed from BASIC_C64 and KERNAL_C64_01.
 
 ### KERNAL_C64_01
 
