@@ -181,6 +181,9 @@ build2 ASSEMBLER_TED assembler
 build2 ASSEMBLER_C128 assembler
 build1 LOADER_PET loload.4
 build1 LOADER_C64 loload
+build2 LOADER_C128 loader
+build2 LOADER_C65 loader65
+build2 LOADER_C65_RS232 l232
 
 build1 DISK_MONITOR mon.lib
 build1 MATHPACK mathpack
@@ -197,8 +200,5 @@ build1 FIG FOR1-1
 #   build2 HCD65_65CE02_0.1 c65
 #   build2 HCD65_65CE02_0.2 c65
 #   build2 EDT_C128 edt
-#  ldz zp/abs
-#   build2 LOADER_C65 loader65
-#   build2 LOADER_C65_RS232 l232
 #  expression error
 #   build2 DOS_SHELL shell
