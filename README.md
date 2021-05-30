@@ -68,6 +68,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 |--------------------------------------------------------------|------|-------------|
 | [BASIC_MAX_REC](BASIC_MAX_REC)                               | 1982 | 901230-01 |
 | [KERNAL_MAX_REC](KERNAL_MAX_REC)                             | 1982 | 901231-01 |
+| [BASIC_MAX_MINI_REC](BASIC_MAX_MINI_REC)                     | 1982 | 901233-01 (MAX3101) |
 
 ## TED (C16, C116, Plus/4)
 
@@ -238,7 +239,11 @@ The checksum byte at $BF52 is 0 and will have to be calculated in a later step.
 
 ### BASIC_MAX_REC, KERNAL_MAX_REC
 
-The Ultimax BASIC cartridge (901230-01, 901231-01). Contains an adapted version of the C64 KERNAL (-01) and a slightly patched version of BASIC. Reconstructed from BASIC_C64 and KERNAL_C64_01.
+The Ultimax BASIC cartridge (MAX3102, 901230-01/901231-01). Contains an adapted version of the C64 KERNAL (-01) and a slightly patched version of BASIC. Reconstructed from BASIC_C64 and KERNAL_C64_01.
+
+### BASIC_MAX_MINI_REC
+
+The Ultimax MINI BASIC cartridge (MAX3101, 901233-01). Contains a stripped-down version of the C64 BASIC (no arrays, no trigonometry etc.) and a tiny 1.5 KB KERNAL-like OS. Reconstructed from BASIC_C64 and KERNAL_C64_01.
 
 ### KERNAL_C64_01
 

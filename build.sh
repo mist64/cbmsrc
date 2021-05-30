@@ -110,6 +110,7 @@ build1 BASIC_PET_V4R_REC bassrc
 build1 BASIC_VIC basic
 
 build1 BASIC_MAX_REC basic
+build1 BASIC_MAX_MINI_REC basic
 build1 BASIC_C64 basic
 build2 BASIC_C64_BSO basic
 build2 BASIC_C64GS basic
