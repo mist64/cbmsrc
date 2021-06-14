@@ -1,0 +1,822 @@
+	.nam  Multiple Port Serial Card Handler for A2000
+	.subttl Copyright 1988 Commodore Business Machines, Inc.
+	.forml 60
+ 
+;	May 02, 1988	initial version for COMDEX		Fred Bowen
+;	May 11, 1988	revision: add XON/XOFF flow control	FAB
+;	Jul 22, 1988	revision: fix double buffering, etc.	FAB
+;	Aug 24, 1988	revision: modify for new board		FAB
+;	Sep 27, 1988	revision: add XON/XOFF in rvs direction	FAB
+;	Oct 24, 1988	revision: fix flow control, add ver #	FAB
+ 
+; This expansion card for the Amiga 2000 adds 7 RS-232 serial port channels
+; to the Amiga.  The card is a standard auto-configurable board which resides
+; in one of the 100-pin expansion slots of the machine.
+;
+; AMIGA SIDE
+; Once the board is config'ed the Amiga has access to the full 16K bytes of
+; RAM and four other I/O locations:
+;
+;		$0000-$3FFF		16K bytes of RAM
+;		$8000			6502 RESET low
+;		$A000			6502 IRQ   low
+;		$C000			6502 RESET high
+;		$E000			6502 NMI   pulsed low
+;
+; When the Amiga goes through a hardware reset the RESET line to the 6502 is
+; latched low.  This gives the 68000 a chance to download the 6502 code.  The
+; 68000 can then start the 6502 at any time by writing to offset location $C000,
+; allowing the 6502's RESET line to go high.  The 68000 can freeze the 6502 at
+; any time by writing to offset location $8000, again latching the RESET line
+; low.  New code may then be downloaded and the 6502 re-started.
+;
+; 6502 SIDE
+; The 6502 has exclusive control of all 7 6551 ACIA's, minimizing the overhead
+; the Amiga must deal with.  The 6502 memory map is as follows:
+;
+;		$0000-$3FFF		RAM
+;		$4400			ACIA #0
+;		$4C00			ACIA #1
+;		$5400			ACIA #2
+;		$5C00			ACIA #3
+;		$6400			ACIA #4
+;		$6C00			ACIA #5
+;		$7400			ACIA #6
+;		$7800			Interrupt 68000 (*INT2)
+;		$8000			Reset IRQ caused by 68000
+;		$C000-$FFFF		Image of RAM at $0000-$3FFF
+;
+; Note that the 16K bytes of RAM appears in two places.  This allows the same
+; contiguous block of RAM to serve as zero/stack pages and interrupt vectors.
+; The 6502 runs at 1.75 MHz (1/2 of *C1 clock).
+	.page
+; Multiple Port Serial Card Handler for A2000
+;
+;
+;
+;		 6502 Memory Map*
+;
+;	FFFF	_________________
+;		|		|
+;		/		/	Image of RAM from $0000-$3FFF
+;		|		|
+;	C000	|_______________|
+;		|		|
+;		/		/
+;	8000	|_______________|	reset IRQ caused by 68000
+;	7800	|_______________|	68000 *INT2 interrupt low
+;		|		|
+;		|		|
+;		/     ACIA's	/	6551 ACIA's every 2K bytes (4400,4C00,
+;		|		|	etc.), 7 total.
+;	4000	|_______________|
+;	3FFA	|_______________|	6502 hardware vectors (IRQ,NMI,reset)
+;		|		|
+;		/     code	/
+;		|		|
+;	3000	|_______________|
+;		|		|
+;		/ output buffer	/	Server primary and secondary
+;		|     area	|	buffers are 256 bytes each, and are
+;	2000	|_______________|	located on page boundaries.
+;		|		|
+;		/ input buffer	/
+;		|     area	|
+;	1000	|_______________|
+;		|		|
+;		/   6502 work	/
+;		|     space	|
+;	0300	|_______________|
+;		|		|
+;		/		/	6502/68000 interface area.  8 32-byte
+;	0200	|_______________|	structures described below.
+;		|  6502 stack	|
+;	0100	|_______________|
+;		|  6502 page 0	|
+;	0000	|_______________|
+;
+;
+;
+; * All addresses are 6502 addresses.
+ 
+	.page
+; Multiple Port Serial Card Handler for A2000
+;
+;	0200	Line 1
+;	0208	Line 1 Read control
+;	0210	Line 1 Write control
+;	0218	Line 1 ACIA control
+;	
+;	0220	Line 2
+;	0228	Line 2 Read control
+;	0230	Line 2 Write control
+;	0238	Line 2 ACIA control
+;	
+;	0240	Line 3
+;	0248	Line 3 Read control
+;	0250	Line 3 Write control
+;	0258	Line 3 ACIA control
+;	
+;	0260	Line 4
+;	0268	Line 4 Read control
+;	0270	Line 4 Write control
+;	0278	Line 4 ACIA control
+;	
+;	0280	Line 5
+;	0288	Line 5 Read control
+;	0290	Line 5 Write control
+;	0298	Line 5 ACIA control
+;	
+;	02A0	Line 6
+;	02A8	Line 6 Read control
+;	02B0	Line 6 Write control
+;	02B8	Line 6 ACIA control
+;	
+;	02C0	Line 7
+;	02C8	Line 7 Read control
+;	02D0	Line 7 Write control
+;	02D8	Line 7 ACIA control
+;	
+;	02E0	Line 8			(unused)
+;	02E8	Line 8 Read control
+;	02F0	Line 8 Write control
+;	02F8	Line 8 ACIA control
+ 
+	.page
+; Multiple Port Serial Card Handler for A2000
+;
+;		       6502/68000 Server Interface Blocks
+;	    0	    1	    2	    3	    4	    5	    6	    7
+;	-----------------------------------------------------------------
+;Unused |	|	|	| 	|	|	|	|	|
+;	-----------------------------------------------------------------
+;	-----------------------------------------------------------------
+;Read	| Lock	|Status	| Cnt-L	| Cnt-H	| Buf-L	| Buf-H	| Byt-L	| Byt-H	|
+;	-----------------------------------------------------------------
+;	-----------------------------------------------------------------
+;Write	| Lock	|Status	| Cnt-L	| Cnt-H	| Buf-L	| Buf-H	| Byt-L	| Byt-H	|
+;	-----------------------------------------------------------------
+;	-----------------------------------------------------------------
+;Contrl	| Lock	|Status	|Command|Control|	|	|	|	|
+;	-----------------------------------------------------------------
+;
+;Lock:	 Bit 7 indicates who owns the buffer.  If the lock bit is SET, the
+;	 6502 is managing the buffer; if the lock bit is RESET, the 68000 is
+;	 managing the buffer.  The READ buffers are managed by the 6502, which
+;	 will reset the Lock bit to indicate data ready for importing by the
+;	 68000.  The 68000 will set this bit to indicate data has been imported
+;	 and the buffer is again available for use by the server.  The WRITE
+;	 buffers are managed by the 68000, which sets this bit to indicate data
+;	 is ready for exporting by the 6502.  The 6502 resets this bit to 
+;	 indicate data has been exported to ACIA, and the buffer is again
+;	 available for use by the 68000.  The CONTROL BLOCK is managed by the
+;	 68000, which sets this bit to indicate data is present for changing
+;	 the programming for an ACIA.  The 6502 resets this bit when the
+;	 programming has been installed.
+;
+;Status: Currently unused.  May be used for any purpose by owner of buffer.
+;
+;Cnt:	 Currently unused.  May be used for any purpose by owner of buffer.
+;
+;Buffer: The 6502 address of the buffer.  The 6502 will assign buffers for both
+;	 READ and WRITE operations.  The 68000 must not alter this.  The
+;	 address is in low/high byte order, and always on a page boundary such
+;	 that the low byte of this address is always zero.
+;
+;Byte:	 The number of bytes in the associated buffer, in low/high byte order.
+;
+;Commnd: Used to alter ACIA transmit/receive functions.  See 6551 specification.
+;
+;Contrl: Used to alter ACIA modes, such as baud rate described below.  See the
+;	 6551 specification for other details.
+;
+;	00	16x internal clock		08	1200
+;	01	50	baud			09	1800
+;	02	75				0A	2400
+;	03	109.92				0B	3600
+;	04	134.58				0C	4800
+;	05	150				0D	7200
+;	06	300				0E	9600
+;	07	600				0F	19200
+	.page
+; Multiple Port Serial Card Handler for A2000
+;
+; INPUT FROM SERIAL DEVICE -----------------------------------------------------
+;
+;6502:	for ACIA_1 to ACIA_8 do
+;		read a byte from acia
+;		if successful then
+;			if BUFFER_1 not LOCKed then
+;				put byte into BUFFER_1 at COUNT_1
+;				increment COUNT_1
+;				if BUFFER_2 not LOCKed then
+;					LOCK BUFFER_1
+;			else
+;				put byte into BUFFER_2 at COUNT_2
+;				increment COUNT_2
+;				if BUFFER_1 not LOCKed then
+;					LOCK BUFFER_2
+;		if BUFFER not LOCKed and (BUFFER_1 or BUFFER_2 LOCKed) then
+;			copy ready buffer to BUFFER
+;			INTERRUPT 68000
+;		loop
+;
+;
+; 68000:  <interrupt>
+;
+;	clear <interrupt>
+;	for ACIA_1 to ACIA_8 do
+;		if BUFFER LOCKed then
+;			get COUNT bytes from BUFFER
+;			clear COUNT
+;			clear LOCK
+;		loop
+;
+;
+; OUTPUT TO SERIAL DEVICE ------------------------------------------------------
+;
+;6502:	for ACIA_1 to ACIA_8 do
+;		if BUFFER LOCKed then
+;			get byte from BUFFER
+;			put byte into acia
+;			increment BUFFER address
+;			decrement COUNT
+;			if BUFFER empty then
+;				clear COUNT
+;				clear LOCK
+;		loop
+;
+;
+;68000:  if BUFFER not LOCKed then
+;		read BUFFER address
+;		put COUNT bytes into BUFFER
+;		update COUNT
+;		LOCK buffer
+ 
+	.page
+; Multiple Port Serial Card Handler for A2000
+;
+;
+;Notes:	1. The 68000 never interrupts the 6502, except to reset.
+;
+;	2. The 6502 interrupts the 68000 anytime a buffer is ready to export.
+;
+;	3. When the 68000 acknowledges an interrupt, it must first clear
+;	   the interrupt source, then scan for waiting buffer with first line.
+;
+;	4. Before the 68000 acknowledges a new interrupt, it must first
+;	   finish processing current line's buffer.
+;
+;	5. The 68000 should finish the entire loop, even if data was read
+;	   from a particular buffer.
+;
+;	6. The 6502 uses a double buffering scheme for importing data from
+;	   each line.  This will be transparent to the 68000.
+;
+;	7. The 6502 does not double buffer data for export, and will not
+;	   make a buffer available to the 68000 for a particular line until
+;	   the current buffer for that line is exhausted.
+;
+;	8. The LOCK bit indicates the owner of the associated BUFFER and
+;	   the owner of the associated parameter structure:
+;
+;			LOCK = 1 if 68000 (host) is owner
+;			LOCK = 0 if 6502 (server) is owner
+ 
+	.page
+_68000_flags	= $0100
+interface_blks	= $0200
+parameters	= $0400
+input_buffer	= $1000
+output_buffer	= $2000
+code		= $3000
+acia_device	= $4400
+ 
+interrupt_host	= $7800
+reset_host_irq	= $8000
+ 
+control_default	= %00011110	;9600 baud, 1 stop bit, 8-bit word
+command_default	= %00001011	;no parity, no tx IRQ, no rx IRQ, rx on, tx on
+ 
+xon		= $11
+xoff		= $13
+ 
+high_water_mark	= 200		;buffer count at which an XOFF is sent to remote
+ 
+ 
+		* = $0000
+ 
+version		.byte $10,$21,$88,$fb	;10/21/88 F.Bowen
+ 
+line		*=*+1
+data		*=*+1
+count		*=*+1
+bufptr		*=*+1
+status		*=*+1
+param		*=*+2
+interface	*=*+2
+buffer		*=*+2
+buffer_in_use	*=*+1
+ 
+active_buffer	.byte 0,0,0,0,0,0,0,0
+acia_enable	.byte 0,0,0,0,0,0,0,$80	;msb set if line disabled
+acia_xoff	.byte 0,0,0,0,0,0,0,0	;msb set if line XOFF-ed
+xoff_sent	.byte 0,0,0,0,0,0,0,0	;msb set if remote XOFF-ed
+ 
+bits		.byte $01,$02,$04,$08,$10,$20,$40,$80
+	.page
+	* = $0040
+ 
+acia_data
+.var	= acia_device
+	.irpc %d,12345678
+acia_data_%d	.byte <.var,>.var
+.var	= .var+$800
+	.endr
+ 
+acia_status
+.var	= acia_device+2
+	.irpc %d,12345678
+acia_status_%d	.byte <.var,>.var
+.var	= .var+$800
+	.endr
+ 
+acia_command
+.var	= acia_device+4
+	.irpc %d,12345678
+acia_command_%d	.byte <.var,>.var
+.var	= .var+$800
+	.endr
+ 
+acia_control
+.var	= acia_device+6
+	.irpc %d,12345678
+acia_control_%d	.byte <.var,>.var
+.var	= .var+$800
+	.endr
+ 
+	.page
+.var	= input_buffer
+	.irpc %d,12345678
+input_buffer_%da	= .var
+input_buffer_%db	= .var+256
+.var	= .var+512
+	.endr
+ 
+.var	= output_buffer
+	.irpc %d,12345678
+output_buffer_%da	= .var
+output_buffer_%db	= .var+256
+.var	= .var+512
+	.endr
+ 
+	.page
+		* = _68000_flags
+ 
+_68000_rflag	.byte $00	;bits correspond to rcvr line buffer full
+_68000_xflag	.byte $ff	;bits correspond to xmit line buffer empty
+		.byte 0		;spare
+		.byte 0		;spare
+		.byte 0		;spare
+		.byte 0		;spare
+		.byte 0		;spare
+		.byte 0		;spare
+ 
+flow_control	.byte 0,0,0,0,0,0,0,0	;msb set to disable flow control
+ 
+ 
+		* = interface_blks
+ 
+interface_block
+	.irpc %d,12345678
+interface_line_%d
+		.byte 0,0,0,0,0,0,0,0						;unused
+		.byte $80,0,0,0,<input_buffer_%da, >input_buffer_%da, 0,0	;read
+		.byte $00,0,0,0,<output_buffer_%da,>output_buffer_%da,0,0	;write
+		.byte 0,0,0,0,0,0,0,0						;control
+	.endr
+ 
+	.page
+interface_adr_low
+10$	= interface_block
+	.rept 8
+	.byte <10$
+10$	= 10$+32
+	.endr
+ 
+interface_adr_high
+10$	= interface_block
+	.rept 8
+	.byte >10$
+10$	= 10$+32
+	.endr
+ 
+	.page
+		* = parameters
+acia_param
+	.irpc %d,12345678
+acia_%d_params
+		.byte 0, 0, command_default, control_default, 0, 0, 0, 0
+		.byte 0, <input_buffer_%da,  >input_buffer_%da,  0	;read
+		.byte 0, <input_buffer_%db,  >input_buffer_%db,  0
+		.byte 0, <output_buffer_%da, >output_buffer_%da, 0	;write
+		.byte 0, <output_buffer_%db, >output_buffer_%db, 0
+	.endr
+ 
+	.page
+param_adr_low
+10$	= acia_param
+	.rept 8
+	.byte <10$
+10$	= 10$+24
+	.endr
+ 
+param_adr_high
+10$	= acia_param
+	.rept 8
+	.byte >10$
+10$	= 10$+24
+	.endr
+ 
+	.page
+		* = code
+ 
+server_control
+	ldx #6			;7 lines, numbered 0-6
+	stx line
+ 
+10$	ldx line
+	lda acia_enable,x
+	bpl 15$
+	jmp 70$			;this line is disabled
+ 
+;
+; *receiver control	-------------------------------------------------------
+;
+ 
+15$	txa			;make line# an offset to acia address
+	asl a
+	tax
+	ldy #1
+	lda (acia_status,x)	;read status
+	sta status		;save for future reference
+	and #%00001111
+	cmp #%00001000		;anything in acia's receive buffer?
+	bcc 30$			;...nothing to receive- see if buffer ready to ship
+	and #%00000111
+	php
+	lda (acia_data,x)	;read byte
+	plp
+	bne 30$			;...transmission error- ignore data, see if buffer ready to ship
+ 
+	ldx line
+	ldy flow_control,x
+	bmi 19$			;flow control disabled
+	cmp #xoff		;XON/XOFF?
+	beq 18$
+	cmp #xon
+	bne 19$
+	clc
+18$	ror acia_xoff,x		;...yes: set/reset flag, ignore character
+	jmp 30$			;see if buffer ready to ship to host
+ 
+19$	sta data		;buffer data byte
+	jsr get_param_adr
+	ldy #8
+	lda (param),y		;get an available buffer
+	bpl 20$			;...use primary
+	ldy #12			;...use secondary
+ 
+20$	sty buffer_in_use	;and remember which buffer
+	iny
+	jsr get_buffer_adr
+	sty count		;parameter pointer
+	tay			;buffer index (number of characters in buffer)
+	lda data
+	sta (buffer),y		;put byte received into buffer
+	iny			;increment character count
+	beq 30$			;BUFFER FULL.  we lose data
+	tya
+	ldy count
+	sta (param),y		;update character count in parameter block
+ 
+	cmp #high_water_mark	;if buffers full, send XOFF to remote
+	bcc 30$			;...no, plenty of room
+	lda flow_control,x
+	bmi 30$			;...yes, but flow control disabled
+	lda xoff_sent,x
+	bmi 30$			;...yes, but XOFF was already sent
+ 
+	lda buffer_in_use	;...yes, see if other buffer is available
+	eor #$04
+	tay
+	lda (param),y
+	bpl 30$			;......it is, so don't panic yet
+ 
+	txa			;make line# an offset to acia address
+	asl a
+	tax
+25$	lda (acia_status,x)	;busywait for chance to send XOFF
+	sta status
+	and #%00010000
+	beq 25$
+ 
+	lda #xoff
+	sta (acia_data,x)	;send XOFF
+	ldx line
+	sec
+	ror xoff_sent,x		;remember we sent it
+	
+;-----------------------------------
+ 
+30$	ldx line
+	jsr get_param_adr	;setup (param) and (interface) for this line
+	ldy #8
+	lda (interface),y	;copy parameters to interface block?
+	bpl 40$			;...no, it's busy
+ 
+;-----------------------------------
+ 
+	ldy active_buffer,x	;which buffer was shipped last?
+	beq 32$			;...none, so any buffer with data can ship now
+ 
+	lda #0
+	sta active_buffer,x	;reset active buffer for this line
+	sta (param),y		;free local buffer
+	iny
+	iny
+	iny
+	sta (param),y		;reset byte count
+ 
+	lda xoff_sent,x		;was remote XOFFed due to full buffers?
+	bpl 32$			;...no
+	txa			;make line# an offset to acia address
+	asl a
+	tax
+31$	lda (acia_status,x)	;...yes: busywait for chance to send XON
+	sta status
+	and #%00010000
+	beq 31$
+ 
+	lda #xon
+	sta (acia_data,x)	;send XON
+	ldx line
+	sta xoff_sent,x		;remember we sent it (msb=0)
+ 
+32$	ldy #8+3		;find any buffer with data ready to ship
+	lda (param),y
+	bne 35$			;...this buffer is ready
+	ldy #12+3
+	lda (param),y
+	beq 40$			;...nothing ready
+ 
+35$	dey
+	dey
+	dey
+	sty active_buffer,x	;remember which local buffer we're shipping
+	lda #$80
+	sta (param),y		;and lock it so we cannot use it until host reads it
+	iny
+	jsr get_buffer_adr	;setup (buffer) from this line's (param)
+ 
+	ldy #14
+	sta (interface),y	;copy number of characters in buffer
+	dey
+	lda buffer+1
+	sta (interface),y	;copy buffer address
+	dey
+	lda buffer
+	sta (interface),y
+ 
+	lda bits,x		;set bits for 68000 side
+	ora _68000_rflag
+	sta _68000_rflag	;set bit to indicate rcvr buffer with data
+	ldy #8
+	lda #0
+	sta (interface),y	;turn buffer over to 68000
+	sta interrupt_host	;interrupt host!
+ 
+;
+; *transmission control	-------------------------------------------------------
+;
+ 
+40$	lda status
+	and #%00010000
+	beq 70$			;acia is busy
+	ldx line
+	lda acia_xoff,x
+	bmi 70$			;line is XOFF-ed
+	ldy #16
+	lda (interface),y	;buffer accessible?
+	bpl 70$			;...no, locked by host
+ 
+	ldy #22
+	lda (interface),y
+	sta count		;buffer size (number of characters in it)
+	php
+	dey
+	lda (interface),y	;buffer address
+	sta buffer+1
+	dey
+	lda (interface),y
+	sta buffer
+	plp
+	beq 65$			;...exit if buffer empty????
+ 
+	txa			;make line# an offset to acia address
+	asl a
+	tax
+	ldy #0
+	lda (buffer),y		;get byte from output buffer
+	sta (acia_data,x)	;ship it
+	inc buffer		;increment buffer pointer
+	dec count		;decrement character count
+	bne 60$			;...buffer still has unshipped bytes
+	lda #0
+	sta buffer		;reset buffer pointer
+ 
+60$	php			;save buffer status (= if empty, <> if more to do)
+	ldy #22
+	lda count
+	sta (interface),y	;update character count
+	dey
+;	lda buffer+1
+;	sta (interface),y	;update buffer address
+	dey
+	lda buffer
+	sta (interface),y
+	plp			;free buffer?
+	bne 70$			;...no
+ 
+65$	ldx line		;set bits for 68000 side
+	lda bits,x
+	ora _68000_xflag	;set bit to indicate xmit buffer empty
+	sta _68000_xflag
+	ldy #16
+	lda #0
+	sta (interface),y	;turn buffer over to 68000
+	sta interrupt_host	;interrupt host!
+ 
+;
+; control control	-------------------------------------------------------
+;
+ 
+70$	ldx line
+	jsr get_param_adr
+	ldy #24
+	lda (interface),y	;controller command buffered?
+	bpl 99$			;...no, we be done
+	ldy #24+1
+	lda (interface),y
+	sta acia_enable,x	;enable/disable this line
+	ldy #24+2
+	lda (interface),y	;get new control word (parity/echo mode)
+	and #%11110000
+	ora #%00001011		;always want tx & rx enabled, IRQ disabled
+	ldy #2
+	sta (param),y
+	ldy #24+3
+	lda (interface),y
+	ora #%00010000		;always want baud rate clock
+	ldy #3
+	sta (param),y
+	jsr initialize_acia
+	ldy #24
+	lda #0
+	sta (interface),y	;task complete, free interface buffer
+ 
+;-------------------------------------------------------------------------
+ 
+99$	dec line
+	bmi 100$
+	jmp 10$			;...next acia
+100$	jmp server_control	;start over
+ 
+	.page
+get_param_adr			;setup (param) pointer
+	lda param_adr_low,x
+	sta param
+	lda param_adr_high,x
+	sta param+1
+;	rts
+ 
+get_interface_adr		;setup (interface)
+	lda interface_adr_low,x
+	sta interface
+	lda interface_adr_high,x
+	sta interface+1
+	rts
+ 
+ 
+get_buffer_adr
+	lda (param),y		;setup (buffer)
+	sta buffer
+	iny
+	lda (param),y
+	sta buffer+1
+	iny
+	lda (param),y		;buffer index (character count)
+	rts
+ 
+ 
+put_buffer_adr
+	lda buffer
+	sta (param),y		;save (buffer) pointer
+	iny
+	lda buffer+1
+	sta (param),y
+	iny
+	lda count
+	sta (param),y		;save buffer index (character count)
+	rts
+ 
+ 
+initialize_acia
+	lda line
+	asl a
+	tax
+	ldy #1
+	lda (param),y
+	sta (acia_status,x)
+	iny
+	lda (param),y
+	sta (acia_command,x)
+	iny
+	lda (param),y
+	sta (acia_control,x)
+10$	rts
+ 
+	.page
+nmi_handler
+	rti		;not implemented
+ 
+ 
+irq_handler
+	rti		;not implemented
+ 
+ 
+reset_handler
+	sei
+	sta reset_host_irq	;68000 interrupts unused
+ 
+; initialize server
+ 
+	ldx #6			;acia #
+	stx line
+ 
+10$	ldx line
+	lda #0
+	sta acia_enable,x	;enable all lines
+	sta active_buffer,x	;clear buffers
+	sta acia_xoff,x		;xon line
+	sta xoff_sent,x		;reset flow control status
+	sta flow_control,x	;enable flow control
+	jsr get_param_adr
+	jsr initialize_acia
+ 
+	lda #0
+	sta count		;empty all buffers
+	ldy #8			;primary input
+	jsr 20$
+	ldy #12			;secondary input
+	jsr 20$
+	ldy #16			;primary output
+	jsr 20$
+	ldy #20			;secondary output
+	jsr 20$
+ 
+	dec line
+	bpl 10$
+ 
+	lda #$00
+	sta _68000_rflag	;rcvr line buffers empty
+	lda #$ff
+	sta _68000_xflag	;xmit line buffers empty
+	sta interrupt_host	;interrupt host!
+	jmp server_control	;begin
+ 
+ 
+20$	sta (param),y		;free buffer
+	iny
+	sty bufptr
+	jsr get_buffer_adr
+	lda #0			;...buffer now empty
+	sta buffer
+	ldy bufptr
+	jsr put_buffer_adr	;update parameter block
+	rts
+ 
+	.page
+;
+; 6502 hardware vectors
+;
+ 
+ 
+	* = $3ffa			;image duplicated at $FFFA
+ 
+ 
+nmi	.word  nmi_handler
+reset	.word  reset_handler
+irq	.word  irq_handler
+ 
+	.end

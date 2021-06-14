@@ -196,6 +196,8 @@ build1 OMEGA omega
 build1 WIZARD wizard
 build1 FIG FOR1-1
 
+build2 A2232 a2232_6502.src
+
 # TODO cbm6502asm problems:
 #   build2 RAMDOS a
 #   build2 HCD65_3.5 c65

@@ -1,0 +1,1091 @@
+	.nam  A2232 Multiple Port Serial Card Controller
+	.subttl Copyright 1990 Commodore-Amiga, Inc.  All Rights Reserved
+	.forml 60
+
+
+; Revision History
+
+; March 30, 1989........A2232 45E02 control software/interface		Fred Bowen	v0.1
+;			
+; April 27, 1989........Add service_channel flag & send xoff every byte			v0.2	FAB
+;
+; May 5,    1989........Add BREAK and TBE (transmit buffer empty) interrupts		v0.3	FAB
+;			Move DSR/DCD interrupts to same flag as BREAK and TBE
+;			Interrupt timer starts after Amiga acks previous interrupt
+;			Don't reset ACIA when channel closes, don't reset CHANNEL bit
+;			Init break_length
+;			Add flush command, which makes HEAD=TAIL.  Add flush to CLOSE
+;			Fix and embellish documentation various places
+;
+; June 8,   1989........New board. Uses 8520 for DCD and CTS, adds real timer		v0.4	FAB
+;			DSR now back on DSR pin (was swapped with DCD)
+;			Documentation updated.
+;
+; June 26,  1989........Add board status byte, set to $FF upon completion of reset code	v0.5	FAB
+;
+; July 18,  1989........Change order of interrupt logic					v0.6	FAB
+;
+; July 19,  1989........Change revision number because Bryce is confused. It is now 7.	v0.7	FAB
+;
+; Oct 31,   1989........Bytes received with error status no longer affect flow control	v0.8	FAB
+;			[Re]Install command also resets xoff received flag for Bryce
+;
+; Apr 10,   1990........Close no longer closes the channel until xmit buffer empty. 	v1.0	FAB
+;			Change version to 1.0, change all imbedded dates to 1990
+
+	.page
+; A2232 Controller Memory Allocations
+
+acia		* = $0000+14	;$0000-$000D = ACIA mapping
+
+; for controller: (public area)
+
+interrupt_freq		*=*+1	how long between data ready interrupts (0=no int, else milliseconds)
+			*=*+1	spare
+service_channel		*=*+1	[v0.2] which channel(s) have data ready, updated by interrupt
+			*=*+1	[v0.3] which channel(s) have caused BREAK/DSR/CD or TBE interrupts
+channels		*=*+1	-	6	5	4	3	2	1	0   1=OPEN
+			*=*+1	[v0.3] which channels need TBE interrupts
+reset_status		*=*+1	[v0.5] set by Amiga to 0, set by 6502 to $FF after init complete
+			*=*+1	[v0.5] spare
+;			8 bytes
+
+
+; for controller: (6502 private area)
+
+			*=*+1	[v0.4] spare  (was timer)
+tick			*=*+1	msb=1 for 1 cycle through handlers every 1ms
+interrupts		*=*+1	M	6	5	4	3	2	1	0   1=IRQ
+status			*=*+1	temporary storage for acia status
+acia_flags		*=*+1	temporary storage for status bits
+buffer_pointer_low	*=*+1	temporary buffer pointer
+buffer_pointer_high	*=*+1	    "       "       "
+acia_pointer		*=*+2	temporary acia pointer
+command			*=*+1   temporary command buffer
+;			10 bytes
+;			14+8+10=32 bytes total
+
+	.page
+;  A2232 I/O map
+
+interrupt_amiga		= $7000	 	;magic spot to cause an Amiga *int2 interrupt [v0.4]
+interrupt_reset		= $8000		;magic spot to clear IRQ set by Amiga
+
+data_register		= 0		;acia registers (*2 for a2232 decoding)
+status_register		= 2
+command_register	= 4
+control_register	= 6
+
+; 8520  CIA  Complex Interface Adapter  [v0.4 FAB]
+;
+;   pra0 : 	*DCD0
+;   pra1 : 	*DCD1
+;   pra2 : 	*DCD2
+;   pra3 : 	*DCD3
+;   pra4 : 	*DCD4
+;   pra5 : 	*DCD5
+;   pra6 : 	*DCD6
+;   pra7 : 	(no connect)
+;
+;   prb0 : 	*CTS0
+;   prb1 : 	*CTS1
+;   prb2 : 	*CTS2
+;   prb3 : 	*CTS3
+;   prb4 : 	*CTS4
+;   prb5 : 	*CTS5
+;   prb6 : 	*CTS6
+;   prb7 : 	timer B drives TOD
+;
+;   cnt  :	*CTS0 (unused)
+;   sp   :	RXD0  (unused)
+;   flag :	(no connect)
+;   tod  :	driven by timer B via PRB7
+
+cia			= $7c00
+cia_port_dcd		= cia+0		;(*2 for A2232 decoding)
+cia_port_cts		= cia+2
+cia_ddra		= cia+4
+cia_ddrb		= cia+6
+cia_timer_alo		= cia+8
+cia_timer_ahi		= cia+10
+cia_timer_blo		= cia+12
+cia_timer_bhi		= cia+14
+cia_tod_low		= cia+16	;really just a binary counter on 8520
+cia_tod_mid		= cia+18	;
+cia_tod_high		= cia+20	;
+cia_unused		= cia+22
+cia_sdr			= cia+24
+cia_icr			= cia+26
+cia_cra			= cia+28
+cia_crb			= cia+30
+
+cia_default_timer_val	= $0003		;[v0.4] determines TOD rate ($003=1.15 ms at tod_mod)
+	.page
+bit_0	= %00000001	;[v0.4]
+bit_1	= %00000010
+bit_2	= %00000100
+bit_3	= %00001000
+bit_4	= %00010000
+bit_5	= %00100000
+bit_6	= %01000000
+bit_7	= %10000000
+
+
+ ; for each ACIA:
+
+	* = $0200
+
+acia_handler
+pc	= *				;save pc for each acia segment
+
+	.irpc %acia,0123456
+	.page
+	.subttl ACIA-%acia driver
+	* = %acia*32+32		;Page zero memory for acia-%acia
+
+ ;  6502/Amiga public area:
+ ;					7	6	5	4	3	2	1	0
+ ;						/-------- incoming --------\	/--- outgoing ---\
+_%acia_status_channel		*=*+1	busy	dcd	cts	dsr	xoff<	rts	-    xoff>
+_%acia_status_acia   		*=*+1	break	dcd	-	dsr	full   ovrrun frame parity
+
+; Amiga IOStatus word			dtr     rts     dcd     cts     dsr    ri???    -     -
+;					-       -       -       xoff>   xoff<  break<  break> ovrrun  
+
+_%acia_rcvr_head
+_%acia_rcvr_head_low		*=*+1	6502 pointer to end of receive buffer
+_%acia_rcvr_head_high		*=*+1	 (msb=1 if pointer locked)
+_%acia_rcvr_tail
+_%acia_rcvr_tail_low		*=*+1	Amiga pointer to beginning of receive buffer
+_%acia_rcvr_tail_high		*=*+1
+_%acia_xmit_tail
+_%acia_xmit_tail_low		*=*+1	6502 pointer to next byte to transmit
+_%acia_xmit_tail_high		*=*+1	 (msb=1 if pointer locked)
+_%acia_xmit_head
+_%acia_xmit_head_low		*=*+1	Amiga pointer to end of transmit buffer
+_%acia_xmit_head_high		*=*+1
+_%acia_command_flag  		*=*+1	atn   install	close	flushx	flushr dtrhi  dtrlo  break
+_%acia_command			*=*+1	[---parity control---]	echo	[----rts----] irq    dtr
+_%acia_control			*=*+1	stop   [--word size--]	clock	[-------baud rate-------]
+_%acia_break_length   		*=*+1	duration of break in milliseconds (0=disabled, 1=1 chr time)
+_%acia_jam_flag			*=*+1	atn	-	-	-	-	-	-	-
+_%acia_jam_character		*=*+1	character to send
+_%acia_xmit_empty		*=*+1	[v1.0] flags empty xmit buffer for Close (0=empty)
+ ;						/-------- incoming --------\	/--- outgoing ---\
+_%acia_flow_control  		*=*+1	-	-	cts	-	xoff<	rts	-    xoff>
+_%acia_xon_character		*=*+1	normally ^q
+_%acia_xoff_character		*=*+1	normally ^s
+_%acia_high_water    		*=*+1	characters before end of buffer
+_%acia_low_water    		*=*+1	page (1k buffer means 0=25%, 1=50%, 2=75%)
+_%acia_rcvr_buffer_min_page   	*=*+1	lowest page of input buffer
+_%acia_rcvr_buffer_max_page   	*=*+1	highest page+1 of input buffer
+_%acia_xmit_buffer_min_page   	*=*+1	lowest page of output buffer
+_%acia_xmit_buffer_max_page   	*=*+1	highest page+1 of output buffer
+ ;				26 bytes
+
+ ; 6502 private area
+
+_%acia_do_asap			*=*+1	xoff	xon	-	-	-	-	-	-
+_%acia_channel_flags		*=*+1	-	dcd	cts	dsr	xoff<	rts	dtr  xoff>
+_%acia_previous_status		*=*+1	-	dcd	cts	dsr	xoff<	rts	dtr  xoff>
+_%acia_flag_bits      		*=*+1	xoffsent
+_%acia_break_count    		*=*+1	break timer
+_%acia_xmit_special   		*=*+1
+ ;				6 bytes
+ ;				32 bytes per channel total
+	.page
+	* = pc				;code of acia-%acia
+ ;	Acia Control
+
+ctlr_%acia				;[v0.4] hardware timer added
+	bbs%acia channels,10$		;channel enabled?
+	jmp  end_%acia 			;...jump to next channel if not enabled
+
+10$	stz  acia_flags			;init temporary flags
+	smb7 _%acia_status_channel     	;set channel activity flag
+
+	lda  _%acia_command_flag       	;[v0.3] controller command to do?
+	bpl  20$			;[v1.0] ...branch if ATN not set
+	sta  command			;[v0.3] command(s) to perform
+	lda  %acia*2			;[v0.3] 
+	ldy  %acia*2+1			;[v0.3] pointer to channel's physical acia
+	ldx  #%acia*32+32      		;[v0.3] offset to channel's parameter area
+	jsr  command_perform		;[v0.3] parse and perform command(s)
+	lda  #%01011111			;[v1.0] reset all commands except close
+	trb  _%acia_command_flag       	;[v1.0] (Close will reset itself when xmit buffer empty)
+
+20$	lda  _%acia_break_count		;[v0.4] perform break?
+	beq  30$			;...not currently doing a break
+	ldy  #command_register
+	lda  (%acia*2),y
+	pha
+	ora  #%00001100
+	sta  (%acia*2),y      		;transmit break
+	pla
+	sta  (%acia*2),y      		; (restores rts control parameters)
+
+	bbr7 tick,30$			;[v0.4] manage break timer
+	dec  _%acia_break_count		;[v0.4] decrement break timer every 1ms
+30$
+	.page
+ ;	Receiver
+
+rcvr_%acia
+10$	ldx  _%acia_rcvr_tail_low     	;get solid pointer to end of buffer
+	ldy  _%acia_rcvr_tail_high
+;	bmi  200$			;...skip receiver if pointer locked
+	cpx  _%acia_rcvr_tail_low
+	bne  10$
+	cpy  _%acia_rcvr_tail_high
+	bne  10$			;...loop while pointer changes
+	stx  buffer_pointer_low
+	sty  buffer_pointer_high	;save for buffer overflow check later
+
+	ldy  #status_register
+	lda  (%acia*2),y      		;read acia status register
+	sta  status			;...save status for more work later
+	bbs3 status,20$			;...byte received?  branch if yes
+	and  #%11111000			;...else ignore data error of previous byte
+	sta  status
+	bra  100$			;no data received
+
+20$	and  #$07			;[v0.8]...save error bits for later
+	pha				;[v0.8]
+	ldy  #data_register
+	lda  (%acia*2),y      		;read acia data register
+	jsr  break_test			;check for break (null+framing error)
+	bne  25$			;[v0.3] 
+	smb7 interrupts    		;[v0.3] ...yes, set flag to interrupt	
+	smb%acia service_channel+1     	;[v0.3] flag channel for Amiga
+
+25$	ply				;[v0.8]check incoming xon/xoff flow control
+	bne  40$			;[v0.8]...incoming byte had error status, ignore it
+	bbr3 _%acia_flow_control,40$	;...flow control is disabled
+	cmp  _%acia_xoff_character    	;xoff?
+	bne  30$
+	smb3 _%acia_channel_flags    	;...yes, set xoff status & don't buffer
+	bra  100$
+30$	cmp  _%acia_xon_character    	;xon?
+	bne  40$
+	rmb3 _%acia_channel_flags    	;...yes, reset xoff status & don't buffer
+	bra  100$
+
+40$	ldy  _%acia_rcvr_head_high    	;increment head pointer (must do in registers!)
+	ldx  _%acia_rcvr_head_low
+	inx
+	bne  50$
+	iny
+	cpy  _%acia_rcvr_buffer_max_page	;apogee?
+	bcc  50$
+	ldy  _%acia_rcvr_buffer_min_page	;...yes, now perigee.
+
+50$	cpx  buffer_pointer_low		;buffer overflow?	***could be a subroutine
+	bne  60$
+	cpy  buffer_pointer_high
+	bne  60$
+	smb3 acia_flags			;...flag buffer full & don't buffer character
+	bra  100$
+
+60$	sta  (_%acia_rcvr_head),z     	;put character into buffer before changing pointer
+	smb7 _%acia_rcvr_head_high     	;update head pointer- lock it first
+	stx  _%acia_rcvr_head_low
+	sty  _%acia_rcvr_head_high     	;...this completes update & clears lock
+	smb%acia interrupts    		;for data ready interrupt
+
+100$	sec				;manage buffer size: high/low water marks?
+	lda  buffer_pointer_low
+	sbc  _%acia_rcvr_head_low
+	tax				;buffer_left_low
+	lda  buffer_pointer_high
+	sbc  _%acia_rcvr_head_high
+	bpl  110$			;...head > tail
+	clc				;...head < tail
+	adc  _%acia_rcvr_buffer_max_page
+	sbc  _%acia_rcvr_buffer_min_page
+
+110$	tay				;buffer_used_high
+	bne  130$			;...lots of room  ( >1 page )
+	txa				;special case
+	beq  130$			;...pointers =, so buffer is empty
+	cpx  _%acia_high_water		;high water?
+	bcs  130$			;...no
+ ;	bbs7 _%acia_flag_bits,130$     	;...yes, but xoff already sent ([v0.2] bryce wants it sent anyway)
+
+ ;					/-------- incoming --------\	/--- outgoing ---\
+ ; flow_control		(1)	-	-	cts	-	xoff<	rts	-	xoff>
+ ;				7	6	5	4	3	2	1	0
+
+	smb7 _%acia_flag_bits		;perform flow control
+	smb%acia interrupts    		;remember to tell amiga driver about the shitty situation
+	bbr0 _%acia_flow_control,120$	;what kind of flow control is in effect?
+	smb7 _%acia_do_asap    		;...xoff
+	smb0 _%acia_channel_flags     	; (maybe do this after xoff is actually sent?)
+	bra  150$
+120$	bbr2 _%acia_flow_control,150$
+	ldy  #command_register
+	lda  (%acia*2),y
+	and  #%11110111			; rmb3 acia_command_register
+	sta  (%acia*2),y      		;...de-assert rts (make /rts high)
+	smb2 _%acia_channel_flags     	;   (note: this disables 6551 transmitter!)
+	bra  150$
+
+130$	bbr7 _%acia_flag_bits,150$     	;pending an xon?......branch if not
+	cpy  _%acia_low_water		;buffer_left_high.  at low water?
+	bcc  150$			;...not yet, maintain xoff state
+	rmb7 _%acia_flag_bits
+	bbr0 _%acia_flow_control,140$	;what kind of flow control is in effect?
+	smb6 _%acia_do_asap    		;...xon
+	rmb0 _%acia_channel_flags    	; (maybe do this only after xon actually sent?)
+	bra  150$
+140$	bbr2 _%acia_flow_control,150$
+	ldy  #command_register
+	lda  (%acia*2),y
+	ora  #%00001000			; smb3 acia_command_register
+	sta  (%acia*2),y      		;...assert rts (make /rts low)
+	rmb2 _%acia_channel_flags
+ ;	bra  150$
+
+150$	lda  status			;update acia (data) status byte
+	and  #%00000111			; (parity, framing, overrun)
+	ora  acia_flags			; (break, buffer full)
+	ora  _%acia_status_acia		; merge with previous status
+	sta  _%acia_status_acia
+
+	bbr6 status,155$		;update acia (channel) status byte
+	smb4 _%acia_channel_flags    	; (dsr)
+	smb4 _%acia_status_acia		; (does not affect 6551 xmit or rcvr)
+	bra  160$
+155$	rmb4 _%acia_channel_flags
+
+160$	lda  #bit_%acia
+	bit  cia_port_dcd		; (dcd)  [v0.4]
+	beq  165$
+	smb6 _%acia_channel_flags   
+	smb6 _%acia_status_acia
+	bra  170$
+165$	rmb6 _%acia_channel_flags
+
+170$	bit cia_port_cts		; (cts)  [v0.4]
+	beq  175$
+	smb5 _%acia_channel_flags
+	bra  180$
+175$	rmb5 _%acia_channel_flags
+
+180$	lda  _%acia_channel_flags    	; (xoff status, clears lock on status)
+	sta  _%acia_status_channel    	; active levels- don't merge with previous
+
+	and  #%01010000			;has there been a state change on dcd/dsr?
+	tax
+	cmp  _%acia_previous_status
+	beq  200$
+	sta  _%acia_previous_status
+	smb7 interrupts    		;[v0.3] ...yes, set flag to interrupt	
+	smb%acia service_channel+1     	;[v0.3] flag channel for Amiga
+
+200$
+	.page
+ ;	Transmitter
+
+xmit_%acia
+	ldy  #status_register
+	lda  (%acia*2),y
+	sta  status
+	bbr4 status,100$		;transmit register free?...branch if acia xmit busy
+
+	lda  _%acia_channel_flags	;[v0.4]
+	and  #%00100000			;[v0.4] check CTS
+	and  _%acia_flow_control	;[v0.4] (if enabled)
+	bne  100$			;[v0.4] ...................branch if CTS low
+
+	lda  _%acia_channel_flags
+	and  #%00001000			;check xoff
+	and  _%acia_flow_control    	; (if enabled)
+	bne  100$			;..........................branch if xoff-ed
+
+	stz  _%acia_xmit_special
+
+	bbr7 _%acia_do_asap,10$		;send xoff?................branch if not
+	rmb7 _%acia_do_asap
+	lda  _%acia_xoff_character    	;...yes, skip over buffer
+	bra  50$
+10$	bbr6 _%acia_do_asap,20$		;send xon?.................branch if not
+	rmb6 _%acia_do_asap
+	lda  _%acia_xon_character    	;...yes, skip over buffer
+	bra  50$
+20$	bbr7 _%acia_jam_flag,30$    	;send jam character?.......branch if not
+	rmb7 _%acia_jam_flag
+	lda  _%acia_jam_character    	;...yes, skip over buffer
+	bra  50$
+
+30$	ldx  _%acia_xmit_head_low    	;get solid pointer to end of buffer
+	ldy  _%acia_xmit_head_high
+;	bmi  100$			;...skip transmitter if pointer locked
+	cpx  _%acia_xmit_head_low
+	bne  30$
+	cpy  _%acia_xmit_head_high
+	bne  30$			;...loop while pointer changes
+	cpx  _%acia_xmit_tail_low
+	bne  40$
+	cpy  _%acia_xmit_tail_high
+	bne  40$			;[v0.3] ...continue if buffered data present
+
+	rmb7 _%acia_xmit_empty		;[v1.0] flag empty xmit buffer (for Close)
+	bbr%acia channels+1,100$       	;[v0.3] exit if no tbe interrupt requested
+	smb7 interrupts    		;[v0.3] flag tbe interrupt
+	smb%acia service_channel+1     	;[v0.3] flag channel for Amiga
+	bra  100$			;[v0.3] exit
+
+40$	smb7 _%acia_xmit_empty		;[v1.0] flag non-empty xmit buffer (for Close)
+	smb7 _%acia_xmit_special    	;flag buffer as source of byte
+	lda  (_%acia_xmit_tail),z    	;get character to output from output buffer
+
+50$	ldy  #data_register
+	sta  (%acia*2),y      		;transmit byte
+	smb6 _%acia_xmit_special    	;flag that a byte was shipped
+
+	bbr7 _%acia_xmit_special,100$	;increment buffer pointer...skip if char not from buffer
+	ldy  _%acia_xmit_tail_high    	; (must do in registers)
+	ldx  _%acia_xmit_tail_low
+	inx
+	bne  60$
+	iny
+	cpy  _%acia_xmit_buffer_max_page	;apogee?
+	bcc  60$
+	ldy  _%acia_xmit_buffer_min_page
+60$	smb7 _%acia_xmit_tail_high    	;update head pointer- lock it first
+	stx  _%acia_xmit_tail_low
+	sty  _%acia_xmit_tail_high    	;...this completes update & clears lock
+
+100$
+end_%acia
+
+pc	= *				;save pc for each acia segment
+
+	.endr
+
+
+
+	jmp  start			;loop forever
+
+	.page
+	.subttl A2232 reset code
+reset_handler
+	sei				;no interrupts allowed, ever
+	lda  #0
+	tab				;base page = page zero
+	see				;stack pointer = 8 bits
+	ldy #1
+	tys				;stack = page one	
+	ldx  #$ff
+	txs				;init stack pointer
+
+	ldz  #0				;zero all base page (disables everything)
+	ldx  #0
+10$	stz  $00,x
+	inx
+	bne  10$			;note: Z-register always 0 hereafter!
+
+	lda  #%01111111			;[v0.4] init 8520 cia
+	sta  cia_icr			;[v0.4] mask all interrupts
+
+	lda  #%00001000			;
+	sta  cia_cra			;[v0.4] turn off timers, TOD
+	sta  cia_crb			;
+	stz  cia_tod_high		;
+
+	stz  cia_ddra			;[v0.4] set port A inputs (DCD)
+	stz  cia_ddrb			;[v0.4] set port B inputs (CTS, prb7=timer output)
+
+	lda  #<cia_default_timer_val	;
+	sta  cia_timer_blo		;[v0.4] load timer B latch
+	lda  #>cia_default_timer_val	;
+	sta  cia_timer_bhi		;
+
+	lda  #%00010111			;
+	sta  cia_crb			;[v0.4] start timer B output on PB7, toggle mode
+	stz  cia_tod_low		;[v0.4] start TOD
+
+	.irpc %acia,0123456
+
+1$	= %acia*2048+$4400
+	lda  #>1$			;acia I/O address
+	sta  %acia*2+acia+1
+
+	ldy  #status_register		;reset acia (data unimportant)
+	sta  (%acia*2),y
+	ldy  #command_register
+	lda  #%00000010			;no parity, no echo, rts low, irq disabled, dtr low
+	sta  _%acia_command
+	sta  (%acia*2),y
+	ldy  #control_register
+	lda  #%00011110			;1-stop, 8-bit, 9600 baud, baud rate table
+	sta  _%acia_control
+	sta  (%acia*2),y
+
+	lda  #$09			;xon/xoff flow control
+	sta  _%acia_flow_control		
+	lda  #'Q'!.$1f			;control-Q
+	sta  _%acia_xon_character
+	lda  #'S'!.$1f			;control-S
+	sta  _%acia_xoff_character
+
+	lda  #250			;[v0.4] break_length in milliseconds
+	sta  _%acia_break_length
+	lda  #10			;xoff when <10 characters left
+	sta  _%acia_high_water
+	lda  #2
+	sta  _%acia_low_water		;75%
+
+
+2$	= %acia*1024+$1000+1024
+	lda  #>2$
+	sta  _%acia_rcvr_buffer_max_page	;highest page+1 of input buffer
+3$	= %acia*1024+$1000
+	lda  #>3$
+	sta  _%acia_rcvr_buffer_min_page	;lowest page of input buffer
+	sta  _%acia_rcvr_head_high		;init input buffer pointers
+	sta  _%acia_rcvr_tail_high
+
+4$	= %acia*512+$3000+512
+	lda  #>4$
+	sta  _%acia_xmit_buffer_max_page	;highest page+1 of output buffer
+5$	= %acia*512+$3000
+	lda  #>5$
+	sta  _%acia_xmit_buffer_min_page	;lowest page of output buffer
+	sta  _%acia_xmit_head_high		;init output buffer pointers
+	sta  _%acia_xmit_tail_high
+
+	.endr
+
+
+	dec  reset_status		;[v0.5] signal completion of initialization
+	jmp  start			;begin operation
+
+	.page
+	.subttl A2232 subroutines
+	* = $3e00
+
+break_test
+	bne  10$			;break?  (null+framing error?)
+	bbr1 status,10$
+	smb7 acia_flags			;...yes, set flag bit
+	rmb1 status			;...mask framing error bit
+10$	rts				;return BNE if no BREAK, BEQ if BREAK
+
+
+;	[v0.3]  The following routines were created or completely rewritten. FAB
+
+command_perform
+	sta  acia_pointer		;pointer to physical acia
+	sty  acia_pointer+1
+;	stx  parameter_area		;offset to channel's parameter block
+
+	bbr6 command,10$		;branch if not acia register updates
+	ldy  #command_register
+	lda  11,x			;  _acia_command
+	sta  (acia_pointer),y      	;  command register
+	ldy  #control_register
+	lda  12,x			;  _acia_control
+	sta  (acia_pointer),y      	;  control register
+	lda  27,x			;[v0.8] reset xoff status
+	and #%11110111			;[v0.8] 
+	sta 00,x			;[v0.8] 	status_channel
+	sta 27,x			;[v0.8] 	channel_flags
+	sta 28,x			;[v0.8] 	previous_status
+
+10$	bbr2 command,20$		;branch if not assert dtr
+	ldy  #command_register
+	lda  (acia_pointer),y
+	ora  #%00000001
+	sta  (acia_pointer),y      	;  smb0 acia_command_register
+
+20$	bbr1 command,30$		;branch if not de-assert dtr
+	ldy  #command_register
+	lda  (acia_pointer),y
+	and  #%11111110
+	sta  (acia_pointer),y      	;  rmb0 acia_command_register
+
+30$	bbr0 command,40$		;branch if not send break
+	lda  13,x			;  _acia_break_length
+	sta  30,x			;  _acia_break_count
+
+40$	bbr5 command,50$   		;branch if not close channel
+	jsr  close_channel
+
+50$	bbr4 command,60$		;branch if not flush transmit buffer
+	jsr  flush_xmit
+
+60$	bbr3 command,70$		;branch if not flush receive buffer
+	jsr  flush_rcvr
+
+70$	rts
+
+
+
+close_channel
+	lda  16,x			;[v1.0] xmit_empty
+	bmi  10$			;[v1.0] ...don't do full close if data to xmit
+					;[v1.0] ...just flush rcvr (leave Close command active)
+	lda  #0
+	sta  10,x			;command_flags		[v1.0] do full close
+	sta  00,x			;status_channel
+	sta  01,x			;status_acia
+	sta  14,x			;jam_flag
+	sta  26,x			;do_asap		(xoff/xon)
+	sta  27,x			;channel_flags
+	sta  28,x			;previous_status
+	sta  29,x			;flag_bits		(xoffsent)
+
+10$
+;	jsr  flush_xmit			;[v1.0] don't flush xmit buffer
+;	jsr  flush_rcvr			;[v1.0] fall into flush_rcvr
+;	rts				;[v1.0]
+
+
+
+flush_rcvr
+	lda  04,x			;flush receive buffer
+	ldy  05,x
+;	bmi  flush_rcvr			;...loop while tail locked
+	cmp  04,x
+	bne  flush_rcvr			;...loop while tail changes
+	pha
+	tya				;switch a&y 'cause their ain't no cpy,x
+	ply
+	cmp  05,x
+	bne  flush_rcvr
+	sty  02,x			;copy rcvr_tail to rcvr_head
+	sta  03,x
+	rts
+
+
+
+flush_xmit
+	lda  08,x			;flush transmit buffer
+	ldy  09,x
+;	bmi  flush_xmit			;...loop while head locked
+	cmp  08,x
+	bne  flush_xmit			;...loop while head changes
+	pha
+	tya				;switch a&y 'cause their ain't no cpy,x
+	ply
+	cmp  09,x
+	bne  flush_xmit
+	sty  06,x			;copy xmit_head to xmit_tail
+	sta  07,x
+
+	stz  30,x			;reset break_count
+	stz  16,x			;[v1.0] flag xmit_empty
+	rts
+
+	.page
+	.subttl A2232 supervisor
+start					;this is where the fun part begins...
+;	Controller
+
+	rmb7 tick			;[v0.4]
+	lda  cia_tod_mid		;[v0.4] time to consider interrupt?
+	beq  10$			;[v0.4] ...no
+	stz  cia_tod_mid		;[v0.4] ...yes: reset counter for next interrupt
+	smb7 tick			;[v0.4] set for 1 cycle every 1ms (for break timers)
+
+	ldx  interrupts			;[v0.6] any channel need any interrupt?  (any bit means yes)
+	beq  10$			;[v0.6] ...no
+	lda  interrupt_freq		;[v0.4] interrupts enabled?
+	beq  10$			;[v0.4] ...no
+	dec  interrupt_freq		;[v0.4] countdown to interrupt
+	bne  10$			;[v0.4] ...not time to cause interrupt
+	stx  service_channel		;[v0.2] give Amiga a clue which channel(s) caused *INT2
+	stz  interrupts			;reset all interrupt flags
+;	stz  interrupt_freq		;[v0.3] disable interrupts until Amiga acknowledges this one
+	stz  interrupt_amiga		;interrupt Amiga
+
+10$	jmp acia_handler
+
+
+
+nmi_handler	rti			;NMI not implemented on A2232
+
+irq_handler	sta  interrupt_reset	;IRQ not used by this code
+		rti
+		rti
+		rti
+
+
+
+	* = $3fc0
+
+	.byte  'Copyright 1990 Commodore-Amiga, Inc. '	37	[v1.0]
+	.byte  'All Rights Reserved'			19
+
+version	.word  $10						[v1.0]
+
+	* = $3ffa			;6502 hardware vectors
+
+nmi	.word  nmi_handler
+reset	.word  reset_handler
+irq	.word  irq_handler
+
+;	.end
+	.page
+	.subttl A2232 MultiPort Serial Card Software Documentation
+; The A2232 multiport serial card for the Amiga 2000 adds 7 RS-232 serial
+; (6551 ACIA) ports and one dual-port/timer device (8520 CIA) to the Amiga.
+; The card is a standard 100-pin Zorro II auto-configurable expansion board.
+;
+; AMIGA SIDE
+; Once the board is config'ed the Amiga has access to the full 16K bytes of
+; RAM and four other I/O locations:
+;
+;		$0000-$3FFF		16K bytes of RAM (shared with 6502)
+;		$4000			Reset *INT2 interrupt caused by 6502
+;		$8000			6502 *RESET low
+;		$A000			6502 *IRQ   low
+;		$C000			6502 *RESET high
+;
+; When the Amiga goes through a hardware reset, the *RESET line to the 6502 is
+; latched low, allowing the Amiga to download the 6502 code to RAM on the board.
+; The Amiga may then start the 6502 at any time by writing to the A2232 offset
+; location $C000, causing the 6502's *RESET line to go high.  The Amiga can
+; freeze the 6502 at any time by writing to offset location $8000, again latching
+; the RESET line low.  New code may then be downloaded and the 6502 re-started.
+;
+; 6502 SIDE
+; The 6502 has exclusive control of all 6551 ACIA's and the 8520, minimizing the
+; overhead with which the Amiga must deal.  The 6502 memory map is as follows:
+;
+;		$0000-$3FFF		16K bytes of RAM (shared with Amiga)
+;		$4400			ACIA #0
+;		$4C00			ACIA #1
+;		$5400			ACIA #2
+;		$5C00			ACIA #3
+;		$6400			ACIA #4
+;		$6C00			ACIA #5
+;		$7400			ACIA #6
+;		$7C00			CIA 8520
+;		$7000			Cause Amiga *INT2 interrupt
+;		$8000			Reset *IRQ caused by Amiga
+;		$C000-$FFFF		Image of RAM at $0000-$3FFF
+;
+; Note that the 16K bytes of RAM appears to the 6502 in two places, allowing the
+; same contiguous block of RAM to serve as zero/stack pages and interrupt vectors.
+; The 6502 runs at 3.5 MHz (*C1 clock), the 6551 ACIAs and 8520 run at 1.75 MHz.
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+;
+;
+;		 6502 Memory Map
+;
+;	FFFF	_________________
+;		|		|
+;		/		/	Image of RAM from $0000-$3FFF
+;	C000	|_______________|
+;		|		|
+;		/   emptyness	/
+;	8000	|_______________|	reset *IRQ caused by Amiga
+;	7C00	|_______________|	8520 CIA
+;	7000	|_______________|	cause *INT2 interrupt
+;		|		|
+;		|		|
+;		/     ACIA's	/	6551 ACIA's every 2K bytes (4400,4C00,
+;		|		|	etc.), 7 total.
+;	4000	|_______________|
+;	3FFA	|_______________|	6502 hardware vectors (IRQ,NMI,reset)
+;	3E00	|  Reset code	|
+;	3DFF	|_______________|
+;		|		|
+;		/   Transmit	/	512 byte buffers
+;		|    Buffers	|
+;	3000	|_______________|
+;	2BFF	|		|
+;		/    Receive	/	1024 byte buffers
+;		|    Buffers	|
+;	1000	|_______________|
+;		|		|
+;		/   6502 code	/
+;	0200	|_______________|
+;		|		|
+;		|  6502 stack	|
+;		|  & base page	|
+;	0000	|_______________|
+;
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+; 6551 ACIA Register Descriptions
+; 
+; 	Register	0	Data
+; 			1	Status  (soft reset if write operation)
+; 			2	Command
+; 			3	Control				(A2232 note: register adrs *2)
+; 
+; 	Status		7	6	5	4	3	2	1	0
+; 			IRQ*	DSR	DCD**	TDE	RDF	OERR	FERR	PERR
+; 
+;			*	IRQ set if DSR, DCD, TDE, or  RDF set, or if CTS goes low
+;				   (see following note regarding DCD and CTS)
+; 			**	DCD and CTS are no-connects on A2232.  They're read from 8520
+; 				instead, therefore do not affect ACIA xmit/rcvr, IRQ, etc.
+; 
+; 	Command		7	6	5	4	3	2	1	0
+; 			PARITY CTL	PARITY	ECHO	TRANSMIT CTL	RCV IRQ	DTR
+; 			00 odd		0 no	0 norm	00 rts high**	0 yes	0 high***
+; 			01 even		1 yes	1 yes*	01 rts low****	1 no	1 low
+; 			10 mark				10 rts low
+; 			11 space			11 break****
+; 
+; 			note:	high/low refer to logical levels (i.e., the wire, not the chip).
+; 
+; 			*	don't use (bit 2+3 must be low for receiver echo mode).
+; 			**	rts high turns transmitter off too.
+; 			***	terminal not ready disables receiver & all interrupts.
+; 			****	don't use
+; 
+; 
+; 	Control		7	6	5	4	3	2	1	0
+; 			STOP	WORD LENGTH	CLOCK	BAUD RATE SELECTION TABLE
+; 			0 one	  00 8 bits	0 ext	 00	16x internal clock**
+; 			1 two*	  01 7 bits	1 baud	 01	50	baud
+; 				  10 6 bits		 02	75
+; 				  11 5 bits		 03	109.92
+; 							 04	134.58
+; 							 05	150
+; 							 06	300
+; 							 07	600
+; 							 08	1200
+; 							 09	1800
+; 							 0A	2400
+; 							 0B	3600
+; 							 0C	4800
+; 							 0D	7200
+; 							 0E	9600
+; 							 0F	19.2K
+; 
+; 			*  1.5 stop bits if word=5 & no parity, or 1 stop bit if word=8 & parity.
+;			** 1843.2KHz / 16 = 115.2 Kbaud
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+; 6551 ACIA Information-	Control lines
+; 
+;	PERR,FERR,OERR	Parity, Framing, and Overrun Errors.	Cause no interrupts.  Cleared only
+;			after receipt of new data.  OERR is also reset by writing Status register.
+;			Note- BREAK is deduced by receipt of a NULL character plus Framing error.  
+;
+;	RDF	Receiver Data Full.	Set by receipt of data, cleared by reading Data register.
+;	TDE	Transmit Data Empty.	Set when ACIA transmits data, cleared by writing Data reg.
+;	DCD*	Carrier Detect.**	Input only, reflects state of line (0=carrier, 1=no car).
+;					Line must be high (/DSR=0) for ACIA receiver to operate.**
+;	DSR*	Data Set Ready.		Input only, reflects state of line (0=ready, 1=not ready).
+;					This line does not affect ACIA transmitter or reciever.
+;	DTR	Data Terminal Ready.	Controlled from the Command Register.  If set low (/DTR=H),
+;					ACIA transmitter, receiver and all interrupts are disabled.
+;	RTS	Request To Send.	Controlled from Command Register.  If set low (/RTS=H),
+;					the ACIA transmitter is disabled.
+;	CTS	Clear To Send.**	Input only (state must be deduced- IRQ=1, RDF=0, TDE=0,
+;					DSR=0, and DCD=0).  Note, therefore, that CTS cannot be
+;					detected until the ACIA attempts to transmit data.  Line
+;					must be high (/CTS=0) for transmitter to operate.**
+;
+;
+;	*	These lines have a 5V pullup on A2232 board to allow simple 3-wire connections.
+;	**	DCD and CTS are implemented on 8520 as work-around for 6551 bugs indicated, and
+;		therefore in A2232 implementation these lines are connected to +5V.  The description
+;		above applies only to the physical ACIA, and does not apply to A2232 implementation.
+;
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+; Notes on how to use this 6502 code.
+; 
+;	The Amiga must latch 6502 *RESET low by addressing board location $8000, download 6502
+;	code to board RAM, clear RESET_STATUS, and release *RESET to start the 6502 by addressing
+;	board location $C000.
+;
+;	Upon reset the 6502 initializes all A2232 memory, including interface parameters and
+;	buffer pointers, and initializes the 8520 CIA and all ACIA devices.  DTR and RTS for all
+;	ports will be low (not ready), all logical channels will be disabled, and no *INT2
+;	interrupts will be enabled.  Initialization is complete about 1ms after releasing *RESET
+;	at which time the 6502 sets RESET_STATUS to -1 ($FF).  No tests/diagnostics are performed.
+;
+;	After initialization, but before enabling any channel, the Amiga must initialize the
+;	INTERRUPT_FREQUENCY to enable any *INT2 interrupt generation.  At this time the Amiga can
+;	also rearrange the logical/physical ACIA mapping and the buffer allocations, although this
+;	should be reserved for unusual circumstances only.
+;
+;	To enable (open) a channel, the Amiga must first set up that channel's interface area.
+;	Setup includes:
+;
+;	1. Confirm the channel is not active (check that appropriate bit in CHANNELS is 0).
+;	2. Initialize the following.  The defaults AT RESET ONLY are in parens or as noted:
+;
+;		Parameter	Value	    Default at Reset	Comments
+;		--------------	----------  ----------------	---------------------------
+;		STATUS_CHANNEL	= 0
+;		STATUS_ACIA   	= 0
+;		RCVR_HEAD	= RCVR_TAIL			;or COMMAND_FLAG= $D8
+;		XMIT_TAIL	= XMIT_HEAD
+;		COMMAND_FLAG  	= $C0				;(re)install
+;		COMMAND		= parity 	    ($02)	;no echo, RTS+DTR high, no IRQ
+;		CONTROL		= stop+wordlen+baud ($1E)	;baud rate table
+;		BREAK_LENGTH	= ???		    ($FA)	;milliseconds (default=250ms)
+;		JAM_FLAG	= ???		    ($00)	;0 = none
+;		JAM_CHARACTER	= ???               ($00)
+;		FLOW_CONTROL  	= ???		    ($09)	;$09=XON/XOFF, $24=RTS/CTS
+;		XON_CHARACTER	= ^Q normally       ($11)
+;		XOFF_CHARACTER	= ^S normally       ($13)
+;		HIGH_WATER    	= 10 normally	    ($0A)	;XOFF when <10 char space left
+;		LOW_WATER    	= 2  normally	    ($02)	;XON  when buffer 75% full
+;
+;	3. Enable channel by setting appropriate bit in CHANNELS.
+;
+;[v1.0]	To disable (close) a channel, the Amiga must write $A0 to COMMAND_FLAG.  The receive
+;[v1.0]	buffer will be flushed (head pointer made equal to tail pointer) immediately, but the
+;[v1.0]	channel will remain active in every way until the xmit buffer is empty.  The ATN and
+;[v1.0]	Close bits in the COMMAND_FLAG will not be cleared until the xmit buffer is empty.  A
+;[v1.0]	TBE (Transmit Buffer Empty) interrupt will occur at this time if it is enabled for this
+;[v1.0]	channel.  The hardware is unaffected by a plain Close command, so if the Amiga wishes to
+;[v1.0]	drop DTR when the channel is closed it must explicitly do so via the COMMAND_FLAG (eg.,
+;[v1.0]	write $A2).  The Amiga can disable any channel at any time by reseting the appropriate
+;[v1.0]	bit in CHANNELS, but normally this bit should NOT be reset until COMMAND_FLAG ATN=0.
+;
+;	Whenever the 6502 is operating on a particular channel, the activity bit associated with
+;	that channel is set (msb of STATUS_CHANNEL).  It remains set for approximately 100us to
+;	500us, until all channel activity is finished (such as receiving and/or sending data).
+;	The duty cycle is dependent upon the number of enabled channels and their activity.  This
+;	"busy" flag is the only means by which the STATUS bytes can be guaranteed to exactly
+;	correspond to the current buffer contents (test "busy", if clear then read status and
+;	test "busy" again.  If still clear, status is current).
+;
+;	The data transmit and receive buffers are circular buffers with two pointers each.  The
+;	"head" pointer is maintained by the data writer, and the "tail" pointer is maintained by
+;	the data reader.  If the pointers are equal, the buffer is empty.  Otherwise, the "head"
+;	pointer always points to the last byte+1.  The buffer is full when the "head" pointer is
+;	equal to the "tail" pointer-1 (therefore the maximum buffer capacity is one less than the
+;	buffer size).  The pointers are always incremented, never decremented.  The owner of a
+;	pointer must not allow it to ever be invalid without setting the msb "lock" bit.  The
+;	owner of a pointer is responsible for detecting the upper boundary of the buffer and
+;	wrapping the pointer to the lower boundary of the buffer.  See below to FLUSH buffers.
+;
+;	Whenever the 6502 is updating a buffer pointer, it first sets the msb of that pointer
+;	(either RCVR_HEAD or XMIT_TAIL) to lock it, and resets the msb when the pointer is valid.
+;	The maximum amount of time the pointer is locked at any time is less than 70us.  When the
+;	FLUSH buffer command is executed (i.e., when channel is active) the 6502 will assume it
+;	owns both head and tail pointers.  When command ATN(b7) is reset this restriction is over.
+;
+;	When adding or removing data from a buffer, the pointer must first be tested to see if it
+;	is locked or if the buffer is full (if writing data) or empty (if reading data).  The
+;	status bytes should then be read and reset.  The data can then be removed from the buffer.
+;	The buffer pointer must be updated only after the data has been read.
+;
+;	The 6502 will, if interrupts are enabled by the Amiga, interrupt the Amiga when there is
+;	something that requires the Amiga's attention.  Data in any receive buffer, or receipt of
+;	a BREAK character, or a state change on DSR or DCD will cause interrupts to be generated
+;	at a frequency determined by INTERRUPT_FREQ.  If enabled by CHANNELS+1, TBE (transmit
+;	buffer empty) interrupts will also be generated.  The SERVICE_CHANNEL status word will
+;	contain a bit set indicating which channel(s) need service.  The Amiga must clear these
+;[v0.6]	bits as necessary.  After ACKing an interrupt, INTERRUPT_FREQ must be setup again.
+;
+;	The command_flag can contain multiple commands, which will be executed in the following
+;	order:
+;		ACIA parameters		bit 6
+;		assert DTR		bit 2	note it is possible to [de]assert DTR
+;		de-assert DTR		bit 1	     via the ACIA parameters too.
+;		send BREAK		bit 0
+;[v1.0]		close channel		bit 5	flush rcv buffer, wait for xmit buffer to empty
+;		flush transmit buffer	bit 4
+;		flush receive buffer	bit 3
+;
+;	Once all the desired actions have been performed, the command_flag ATN bit (b7) will be
+;	reset.  The time it takes to perform these actions depends upon the number and activity
+;	of other channels.  Measuring from the setting of the channel's BUSY flag to the clearing
+;	of the ATN bit, the time it takes to perform ALL the above functions is about 150us.
+;
+;	Timing issues.  Typically, each function of each channel requires about 150us to perform.
+;	For example, the command function takes about 150us, receiving a byte takes about 150us,
+;	and transmitting a byte takes about 150us.  From this information, a general worse case
+;	timing situation would be 7*(3*150)us, or about 3ms.  But it is unlikely that each channel
+;	would be executing a command, receiving a byte, and transmitting a byte simultaneously.
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+;	Summary of functions:
+;
+;	Open  channel	Set appropriate bit in CHANNELS after writing interface parameters.
+;[v1.0]	Close channel	Write  $A0  to COMMAND_FLAG.  This command will remain active until
+;			 the xmit buffer is empty, at which time the command byte will be reset.
+;	Flush buffers	Write  $90  to COMMAND_FLAG to flush transmit buffer  (This will also
+;[v0.8]			  flush BREAKs.  JAM characters and XON/XOFF state are NOT affected.
+;			Write  $88  to COMMAND_FLAG to flush receive buffer
+;
+; 	send BREAK	Write duration to  BREAK_LENGTH (default=250ms)
+; 			  Write  $81  to COMMAND_FLAG
+;	Receive BREAK	Test  B7  of STATUS_ACIA
+;
+; 	DTR low		Write  $82  to COMMAND_FLAG
+; 	DTR high	Write  $84  to COMMAND_FLAG
+; 
+;	DSR/DCD		Read current status from STATUS_CHANNEL, DCD=b6, DSR=b4
+;			Read status history from STATUS_ACIA,	 DCD=b6, DSR=b4
+;
+; 	Flow Control	XON/XOFF incoming & outgoing	Write  $09  to FLOW_CONTROL
+; 			XON/XOFF outgoing only		Write  $01  to FLOW_CONTROL
+; 			XON/XOFF incoming only		Write  $08  to FLOW_CONTROL
+; 			RTS/CTS  incoming & outgoing	Write  $24  to FLOW_CONTROL
+; 			RTS/CTS  outgoing only		Write  $04  to FLOW_CONTROL
+; 			RTS/CTS  incoming only		Write  $20  to FLOW_CONTROL
+; 			mixed XON/XOFF and RTS/CTS	any combination of above.
+; 
+;			Read current status of flow control from STATUS_CHANNEL:
+;				outgoing XOFF=b0, RTS=b2
+;				incoming XOFF=b3, CTS=b5
+;
+; 	Jam character	Write character (byte) to  JAM_CHARACTER
+; 			Write	$80	       to  JAM_FLAG
+; 
+; 	Interrupt frequency
+;			Write frequency to INTERRUPT_FREQ
+;				0 = no interrupt
+; 			       >0 = number of milliseconds between interrupt
+;[v0.6]			After ACK-ing interrupt, you must re-write INTERRUPT_FREQ
+;
+;	High water	Write the number of bytes remaining in buffer before flow control is
+;			attempted (FLOW_CONTROL must be enabled, both outgoing & incoming) to
+;			HIGH_WATER.  The default at reset time is 10.  If this is changed by
+;			any application it will affect subsequent applications.
+;
+;	Low water	This adjustment is much coarser.  Assuming 1K receive buffer size, then
+;			"xon" will be sent as follows:  0=25% full, 1=50% full, 2=75% full.
+;			The default at reset time is 2 (75%).  If this is changed by any
+;			application it will affect subsequent applications.
+;
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+;[v0.8]	Summary of functions (continued)
+;[v0.8]
+;[v0.8]	Install		This command ($C0) will simply copy ACIA_COMMAND and ACIA_CONTROL bytes
+;[v0.8]			into the appropriate ACIA and reset the XOFF received status.  It can be
+;[v0.8]			used to "unstick" a channel which, for example, received an erroneous
+;[v0.8]			XOFF character.
+;
+	.page
+; A2232 MultiPort Serial Card Handler for A2000
+;
+;	Default ACIA device & buffer map
+;
+;	device		address		receive		transmit
+;	----------	--------	-----------	-----------
+;	ACIA-0		$4400		$1000-$13FF	$3000-$31FF
+;	ACIA-1		$4C00		$1400-$17FF	$3200-$33FF
+;	ACIA-2		$5400		$1800-$1BFF	$3400-$35FF
+;	ACIA-3		$5C00		$1C00-$1FFF	$3600-$37FF
+;	ACIA-4		$6400		$2000-$23FF	$3800-$39FF
+;	ACIA-5		$6C00		$2400-$27FF	$3A00-$3BFF
+;	ACIA-6		$7400		$2800-$2BFF	$3C00-$3DFF
+;
+;	CIA-8520	$7C00		port-A (DCD), port-B (CTS)
+;
+;
+	.end

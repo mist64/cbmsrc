@@ -191,6 +191,12 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [OMEGA](OMEGA)                                               | 1982 | Omega Race Ultimax Game |
 | [WIZARD](WIZARD)                                             | 1982 | Wizard of Wor Ultimax Game |
 
+## Other
+
+| Directory                                                    | Year | Comments    |
+|--------------------------------------------------------------|------|-------------|
+| [A2232](A2232)                                               | 1991 | Amiga A2232 Serial Port Card |
+
 ## Cross-Platform
 
 | Directory                                                    | Year | Comments    |
@@ -600,6 +606,13 @@ The game "Omega Race" (1982) for the Ultimax. Reconstructed from the [BSO-format
 ## WIZARD
 
 The game "Wizard of Wor" (1982) for the Ultimax. Reconstructed from the [BSO-format source](http://www.zimmers.net/anonftp/pub/cbm/src/c64/c64_kernal_bas_src.tar.gz).
+
+## A2232
+
+The 65CE02 source of the firmware of the Amiga A2232 7-port serial card.
+
+* `old.src`: 1988 version. Source: [c65_src.tar.gz](http://www.zimmers.net/anonftp/pub/cbm/src/c65/c65_src.tar.gz)
+* `a2232_6502.src`: Final version (1991).
 
 ## 6502ASM
 
