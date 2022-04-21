@@ -19,7 +19,7 @@ test_tools()
 	    exit
 	fi
 
-	if [ ! -f assembler64.prg ]; then
+	if [ ! -f $ASSEMBLER64 ]; then
 	    echo "Please get assembler64.prg from https://github.com/mist64/kernalemu/tree/main/demo."
 	    exit
 	fi
@@ -32,7 +32,7 @@ build1()
 	mkdir build/$DIR
 	for i in $DIR/*; do cat $i | tr '\n' '\r' | tr '\t' ' ' > build/$i; done
 	cd build/$DIR
-	echo "_tmp_obj\n\n\n$SRC" | $KERNALEMU ../../$ASSEMBLER64
+	echo -e "_tmp_obj\n\n\n$SRC" | $KERNALEMU $ASSEMBLER64
 	mv printer4.txt ../$1.lst
 	tr '\r' '\n' < _tmp_obj > ../$1.obj
 	cd ../..
