@@ -1,26 +1,29 @@
 # This script will build most of the source in this repository.
 # The directory "build" will contain the LST and OBJ files for each project.
 
-KERNALEMU=kernalemu
-CBM6502ASM=asm
-ASSEMBLER64=assembler64.prg
+[ -z "$KERNALEMU" ]   && KERNALEMU=kernalemu
+[ -z "$CBM6502ASM" ]  && CBM6502ASM=asm
+[ -z "$ASSEMBLER64" ] && ASSEMBLER64=assembler64.prg
 
 test_tools()
 {
 	if ! command -v $KERNALEMU &> /dev/null
 	then
-	    echo "Please get https://github.com/mist64/kernalemu and install it in your PATH."
+	    echo "Please get https://github.com/mist64/kernalemu and install it in your PATH,"
+	    echo "or export the \$KERNELEMU variable to point to the binary."
 	    exit
 	fi
 
 	if ! command -v $CBM6502ASM &> /dev/null
 	then
-	    echo "Please get https://github.com/mist64/cbm6502asm and install it in your PATH."
+	    echo "Please get https://github.com/mist64/cbm6502asm and install it in your PATH,"
+	    echo "or export the \$CBM6502ASM variable to point to the binary."
 	    exit
 	fi
 
 	if [ ! -f $ASSEMBLER64 ]; then
-	    echo "Please get assembler64.prg from https://github.com/mist64/kernalemu/tree/main/demo."
+	    echo "Please get assembler64.prg from https://github.com/mist64/kernalemu/tree/main/demo,"
+	    echo "or export the \$ASSEMBLER64 variable to point to the file."
 	    exit
 	fi
 }
