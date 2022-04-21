@@ -33,6 +33,7 @@ build1()
 	for i in $DIR/*; do cat $i | tr '\n' '\r' | tr '\t' ' ' > build/$i; done
 	cd build/$DIR
 	for A in *; do if [ ! -e ${A^^} ]; then ln -s $A ${A^^}; fi; done
+	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
 	echo -e "_tmp_obj\n\n\n$SRC" | $KERNALEMU $ASSEMBLER64
 	mv printer4.txt ../$1.lst
 	tr '\r' '\n' < _tmp_obj > ../$1.obj
@@ -47,6 +48,7 @@ build2()
 	cp -pr $DIR build/
 	cd build/$DIR
 	for A in *; do if [ ! -e ${A^^} ]; then ln -s $A ${A^^}; fi; done
+	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
 	$CBM6502ASM _tmp_obj,_tmp_lst=$SRC
 	mv _tmp_lst.lst ../$1.lst
 	mv _tmp_obj.obj ../$1.obj
