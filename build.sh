@@ -27,6 +27,7 @@ test_tools()
 
 build1()
 {
+	echo build1 $1 $2
 	DIR=$1
 	SRC=$2
 	mkdir build/$DIR
@@ -43,6 +44,7 @@ build1()
 
 build2()
 {
+	echo build2 $1 $2
 	DIR=$1
 	SRC=$2
 	cp -pr $DIR build/
