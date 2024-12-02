@@ -339,11 +339,17 @@ H391	JSR NFNCMP      ;LOOK FOR COMMA & START AGAIN
 
 H8840	LDA ICRD,X      ;ICRD(ICOLP)
 	CMP #','        ;A COMMA?
-	BEQ H8839       ;YES,
-	JMP H990        ;NO,
-H8839	INX
+	BNE $E35F;XXX H990        ;NO,
+	INX
 	STX ICOLP
 	JMP H301
+
+
+
+
+
+
+
 
 ; SKIP ***
 
