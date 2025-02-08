@@ -69,14 +69,6 @@ JD300
 ;XXX
 
 
-
-
-
-
-
-
-
-
 ;
 ; GET INITIAL OPERATION
 ;
@@ -85,21 +77,17 @@ D11	LDY #'+'
 	CMP #'-'        ;UNARY MINUS?
 	BNE D15         ;NO
 	LDY #'-'
-	INX
-D15	STY KOP         ;SAVE OPER
-	CPX IMAXCL      ;END OF CARD
-	BEQ D20         ;NO
-	BCS JD300       ;YES-UNINTERPRETABLE
-
-;
-; SEARCH FOR '<' & '>' FLAG
-;
-
-D20	LDA #0          ;INITIALIZE
+LE6D5	JSR LE5A1
+	BCC D15
+	RTS
+D15	STY $6D
+	STX $79
+	LDA #0          ;INITIALIZE
 	STA KLOW        ;<> FLAGS
 	STA KHIGH
 	JSR ENDTST      ;END OF EXPRESSION?
 	BCS JD300       ;UNINTERPRETABLE
+	RTS
 
 D21	CMP #'<'        ;LOWER BYTE
 	BNE D150
