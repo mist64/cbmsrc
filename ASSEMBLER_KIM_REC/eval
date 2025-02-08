@@ -23,7 +23,6 @@ NUMRC	LDA ICRD,X      ;CHAR TO TEST
 	BCC J30         ;LESS THAN NUMBERS
 	CMP #':'        ;'9' + 1
 	BCC J40
-	BCS J30         ;NOT NUMERIC
     CLC
     RTS
 NUMR2	SEC
