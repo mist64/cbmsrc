@@ -23,6 +23,7 @@ Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://
 | [BASIC_PET_V4_1979-07-23](BASIC_PET_V4_1979-07-23)           | 1979 |
 | [BASIC_PET_V4_REC](BASIC_PET_V4_REC)                         | 1980 |
 | [BASIC_PET_V4R_REC](BASIC_PET_V4R_REC)                       | 1980 |
+| [BASIC_PET_V5](BASIC_PET_V5)                                 | 1980 |
 | [KERNAL_PET_1.0_REC](KERNAL_PET_1.0_REC)                     | 1977 |
 | [KERNAL_PET_2.0_REC](KERNAL_PET_2.0_REC)                     | 1978 |
 | [KERNAL_PET_4.0_1979-10-23](KERNAL_PET_4.0_1979-10-23)       | 1979 |
@@ -220,6 +221,7 @@ The PET BASIC and KERNAL sources in different versions (197-1980). Reconstructed
 	* KERNAL_PET_1.0_REC: 901439-03, 901439-04, 901439-07
 	* KERNAL_PET_2.0_REC: 901447-24, 901465-03
 	* KERNAL_PET_4.0_REC: 901465-21, 901447-29, 901465-22
+* BASIC_PET_V5: Unreleased, from FH disk basic50.d80. Does not build with C64 Resident Assembler (SYMBOL TABLE OVERFLOW).
 
 Note that BASIC V1, V1R and V2 were built by Microsoft (see BASIC_PET_V2_MICROSOFT), and the binary was sent to Commodore. After that, Commodore moved BASIC development in-house and converted Microsoft's V2 source into MDT650 Resident Assembler format. These reconstructed versions of V1 and V1R in "Resident Assembler" format therefore never existed and have only been produced to allow for comparisons against BASIC V2, V4 and V4R (which were built by Commodore with the Resident Assembler).
 

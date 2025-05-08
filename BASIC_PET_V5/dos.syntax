@@ -1,0 +1,87 @@
+.PAGE 'DOS SYNTAX'
+;*******************************
+;*   COMMODORE DOS PARSER      *
+;*                             *
+;*     -MGM  7/11/79-          *
+;*                             *
+;* THIS SET OF ROUTINES TAKES  *
+;* TOKENS AND VALUES AFTER THE *
+;* THE FOLLOWING BASIC KEYWORDS*
+;*  DOPEN; DCLOSE ; RECORD ;   *
+;*  FORMAT ; COLLECT ; BACKUP ;*
+;*  COPY   ; CONCAT  ; DSAVE  ;*
+;* DLOAD  ; CATLOG ; RENAME ;  *
+;* APPEND ; SCRTCH             *
+;*******************************
+;
+;IT THEN PARSES THE FOLLOWING LINE
+; AND FINDS SYNTAX ERRORS, CHECKS
+;FOR OUT OF RANGE VALUES, AND SETS
+; VARIABLES IN THE ZERO-PAGE TO BE
+; PASSED TO THE DISK MESSAGE GEN-
+; ERATOR (DMG)
+;
+;
+;************************************
+;* "RECORD" PARSER & SYNTAX CHECKER *
+;*   NOTE: POSITION DEPENDENT       *
+;************************************
+RECORZ	LDA #01         ;FIX POS
+	STA POS
+	LDA #'#
+	JSR SYNCHR      ;NXT CHR MUST BE '#'
+	JSR GETBYT      ;GET NXT VALUE
+	TXA             ;SET FLAGS
+	BEQ QTYER1      ;ADDR CAN'T BE < 1
+	STX LA          ;STORE LOGICAL ADDR
+	JSR CHKCOM      ;NXT MUST BE COMMA
+	BEQ CHKER1      ;<CR>/<:>  NOT ALLOWED
+	JSR FRMEVL
+	JSR GETADR      ;SEE WHAT NXT IS
+	JSR CHRGOT      ;SEE WHAT NXT IS
+	BEQ DONER       ;<CR>/<:> => DONE
+	JSR CHKCOM      ;ELSE MUST BE COMMA
+	BEQ CHKER1      ; CANT BE <CR> OR <:>
+	JSR GETBYT
+	TXA             ;SET FLAGS
+	BEQ QTYER1      ; OUT OF RANGE
+	INX             ;CHK FOR #$FF
+	BEQ QTYER1      ;OUT OF RANGE
+	STA POS         ;STORE POSITION OF REC
+	JSR CHRGOT
+	BNE CHKER1      ;MUST BE <CR> OR <:>
+DONER	JMP BOBREC
+;
+.PAGE
+;
+;
+QTYER1	JMP QTYERR
+;
+;**********************************
+;*          SYNTAX CHECKER        *
+;* ROUTINES FOR DOS.WRITE         *
+;**********************************
+CHK1	JSR DOSPAR      ;THIS ENTRY PARSES
+	AND #$E6;FOR HEADER,DLOAD,SCRTCH
+	BEQ CHK21       ;CHK OPT PARMS
+CHKER1	JMP SNERR
+;
+CHK2	JSR DOSPAR      ;THIS ENTRY PARSES
+CHK21	LDA PARCHK      ;FOR DSAVE
+	AND #1
+	CMP #1
+CHKRTT	BNE CHKER1      ;ERROR IF 1 MISSING
+	LDA PARCHK      ;RELOAD FOR RETURN
+	RTS
+;
+CHK4	AND #$C4        ;FOR COPY,CONCAT
+	JSR CHKRTT
+CHK5	AND #3          ;FOR RENAME
+	CMP #3          ;CHK REQ'D PARMS
+	JMP CHKRTT
+;
+CHK6	JSR DOSPAR      ;THIS ENTRY PARSES
+	AND #5          ;FOR APPEND,DOPEN
+	CMP #5          ;CHK REQ'D PARMS
+	JMP CHKRTT
+.END
