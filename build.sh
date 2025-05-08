@@ -1,9 +1,11 @@
+#!/bin/bash
+
 # This script will build most of the source in this repository.
 # The directory "build" will contain the LST and OBJ files for each project.
 
 [ -z "$KERNALEMU" ]   && KERNALEMU=kernalemu
 [ -z "$CBM6502ASM" ]  && CBM6502ASM=asm
-[ -z "$ASSEMBLER64" ] && ASSEMBLER64=assembler64.prg
+[ -z "$ASSEMBLER64" ] && ASSEMBLER64=`pwd`/assembler64.prg
 
 test_tools()
 {
@@ -28,6 +30,13 @@ test_tools()
 	fi
 }
 
+link_upper() {
+  for file in *; do
+    upper=$(echo "$file" | tr '[:lower:]' '[:upper:]')
+    [ -e "$upper" ] || ln -s "$file" "$upper"
+  done
+}
+
 build1()
 {
 	echo build1 $1 $2
@@ -36,9 +45,9 @@ build1()
 	mkdir build/$DIR
 	for i in $DIR/*; do cat $i | tr '\n' '\r' | tr '\t' ' ' > build/$i; done
 	cd build/$DIR
-	for A in *; do if [ ! -e ${A^^} ]; then ln -s $A ${A^^}; fi; done
+	link_upper
 	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
-	echo -e "_tmp_obj\n\n\n$SRC" | $KERNALEMU $ASSEMBLER64
+	echo -e "_tmp_obj\n\n\n$SRC" | $KERNALEMU $ASSEMBLER64 -machine c64
 	mv printer4.txt ../$1.lst
 	tr '\r' '\n' < _tmp_obj > ../$1.obj
 	cd ../..
@@ -52,7 +61,7 @@ build2()
 	SRC=$2
 	cp -pr $DIR build/
 	cd build/$DIR
-	for A in *; do if [ ! -e ${A^^} ]; then ln -s $A ${A^^}; fi; done
+	link_upper
 	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
 	$CBM6502ASM _tmp_obj,_tmp_lst=$SRC
 	mv _tmp_lst.lst ../$1.lst
