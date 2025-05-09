@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This script will build most of the source in this repository.
-# The directory "build" will contain the LST and OBJ files for each project.
+# The directory "build" will contain the LST and HEX files for each project.
 
 [ -z "$KERNALEMU" ]   && KERNALEMU=kernalemu
 [ -z "$CBM6502ASM" ]  && CBM6502ASM=asm
@@ -31,10 +31,10 @@ test_tools()
 }
 
 link_upper() {
-  for file in *; do
-    upper=$(echo "$file" | tr '[:lower:]' '[:upper:]')
-    [ -e "$upper" ] || ln -s "$file" "$upper"
-  done
+	for file in *; do
+		upper=$(echo "$file" | tr '[:lower:]' '[:upper:]')
+		[ -e "$upper" ] || ln -s "$file" "$upper"
+	done
 }
 
 build1()
@@ -49,7 +49,8 @@ build1()
 	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
 	echo -e "_tmp_obj\n\n\n$SRC" | $KERNALEMU $ASSEMBLER64 -machine c64
 	mv printer4.txt ../$1.lst
-	tr '\r' '\n' < _tmp_obj > ../$1.obj
+	tr '\r' '\n' < _tmp_obj > ../$1.hex
+	srec_cat ../$1.hex -MOS_Technologies -o ../$1.bin -Binary
 	cd ../..
 	rm -rf build/$DIR
 }
@@ -65,7 +66,8 @@ build2()
 	[ -e $SRC ] || 	echo "$DIR/$SRC does not exist"
 	$CBM6502ASM _tmp_obj,_tmp_lst=$SRC
 	mv _tmp_lst.lst ../$1.lst
-	mv _tmp_obj.obj ../$1.obj
+	mv _tmp_obj.obj ../$1.hex
+	srec_cat ../$1.hex -MOS_Technologies -o ../$1.bin -Binary
 	cd ../..
 	rm -rf build/$DIR
 }

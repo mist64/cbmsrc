@@ -2,7 +2,7 @@
 
 This repository collects the *original* source code of various Commodore Business Machines (CBM) computers converted to a modern encoding (ASCII, LF, indentation).
 
-Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://github.com/mist64/cbm6502asm), almost all source in this repo can be built from the UNIX command line. To build everything, run `build.sh` from the Unix command line, on a case-insensitive filesystem.
+Using [kernalemu](https://github.com/mist64/kernalemu) and [cbm6502asm](https://github.com/mist64/cbm6502asm), almost all source in this repo can be built from the UNIX command line. To build everything, run `build.sh` from the Unix command line, on a case-insensitive filesystem. The script depends on the [srecord](https://srecord.sourceforge.net) package to convert the .hex files into binary.
 
 ## KIM-1/AIM-65
 
