@@ -1,0 +1,8 @@
+// Alpine Linux based dev container with build dependencies for 'cbmsrc' repository.
+// For format details, see https://aka.ms/devcontainer.json.
+{
+	"name": "cbmsrc",
+	"build": {
+        "dockerfile": "Dockerfile"
+    }
+}
