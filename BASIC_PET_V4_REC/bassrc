@@ -47,7 +47,7 @@ COLECT	*=*+3           ;VERIFY DISK BAM
 BACKUP	*=*+3           ;COPY WHOLE DISK
 DCOPY	*=*+3           ;COPY ONE FILE
 APPEND	*=*+3           ;OPEN TO ADD TO FILE
-DSAVE	*=*+3           ;5AVE ERSIC PRG
+DSAVE	*=*+3           ;5AVE BASIC PRG
 DLOAD	*=*+3           ;LOAD BASIC PRG
 DCAT	*=*+3           ;LIST DIRECTORY
 RENAME	*=*+3           ;CHANGE FILE NAME
@@ -55,8 +55,8 @@ SCRATC	*=*+3           ;SCRATCH DISK FILE
 READDS	*=*+3           ;READ DISK STATUS
 COPEN	*=*+3           ;OPEN FILE
 CCLOS	*=*+3           ;CLOSE FILE
-COIN	*=*+3           ;OPEN INPUT CHAHNEL
-COOUT	*=*+3           ;OPEN OUTPUT CHAHHEL
+COIN	*=*+3           ;OPEN INPUT CHANNEL
+COOUT	*=*+3           ;OPEN OUTPUT CHANNEL
 CLSCHN
 CCCHN	*=*+3           ;CLOSE I/O CHANNELS
 INCHR
