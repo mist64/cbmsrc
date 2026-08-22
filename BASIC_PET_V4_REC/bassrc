@@ -27,7 +27,7 @@ ROMLOC	=$3000+OFFSET   ;START THIS VERSION
 ;     2) ADD DISK COMMANDS
 ;     3) ADD DISK STATUS VARS.
 .SKI 3
-;*****LISTING DATE: ??? ??, ????*****
+;*****LISTING DATE: ??? ??,????*****
 .SKI 3
 ;CONSTANTS FROM PET OS
 CTIMR	=$8D            ;(TIME)
@@ -41,7 +41,7 @@ SIGNON	=$DEA4
 CONCAT	*=*+3           ;LINK TWO FILES
 DOPEN	*=*+3           ;OPEN DISK FILE
 DCLOSE	*=*+3           ;CLOSE DISK FILE(S)
-RECORD	*=*+3           ;POSITION REL. RECORD
+RECORD	*=*+3           ;POSITION REL. RECRD
 FORMAT	*=*+3           ;PREPARE MEDIA
 COLECT	*=*+3           ;VERIFY DISK BAM
 BACKUP	*=*+3           ;COPY WHOLE DISK
