@@ -35,10 +35,10 @@ PSLR2
 ;'MATH4' AND 'USING'.
 ;
 PCH402	JSR MLDEXP
-      RTS
+	RTS
 ;
 PCH401	JSR NOS3
-      JMP RNDD
+	JMP RNDD
 ;
 ;R.J.L ---- E AND O.E !
 ;
