@@ -213,7 +213,7 @@ DONE
 	PLA             ;GET ERROR FLAGS
 	JSR     PRMRPT
 	LDA     PARSTS
-	LDX    PARSTX
+	LDX     PARSTX
 	RTS
 ;
 PARSE1	CMP     #'#'
