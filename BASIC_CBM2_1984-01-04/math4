@@ -381,8 +381,8 @@ FDCEND
 ;	.BYT $00,$00,$00,$3C     ;60
 ;TIMEND
 .PAG
-SQR	;SQUARE ROOT FUNCTION  SQR(A)
-;   USES SQR(A) == A**0.5
+SQR	                ;SQUARE ROOT FUNCTION  SQR(A)
+;	                 USES SQR(A) == A**0.5
 	JSR MOVAF
 	LDA #<FHALF
 	LDY #>FHALF
